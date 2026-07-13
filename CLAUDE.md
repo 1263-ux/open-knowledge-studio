@@ -88,6 +88,7 @@ open-knowledge-studio/
 | `/status` | Overview: wiki count, tier distribution, drafts, quality |
 | `/archive` | Extract conversation Q&A → AI summarize → wiki/queries/ |
 | `/promote` | Review drafts/ → promote/reject/edit |
+| `/media-ingest` | Oral video → review bundle → human-approved raw/misc/ |
 
 ## CLI Commands
 
