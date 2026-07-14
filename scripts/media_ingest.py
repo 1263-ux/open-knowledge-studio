@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prepare local oral videos for human-approved Open Knowledge Studio intake.
+"""Prepare local videos for human-approved Open Knowledge Studio intake.
 
 The command has two explicit phases:
 
@@ -61,7 +61,19 @@ def build_parser() -> argparse.ArgumentParser:
     prepare.add_argument("--model", default="small")
     prepare.add_argument("--device", default="cpu")
     prepare.add_argument("--compute-type", default="int8")
+    prepare.add_argument(
+        "--content-kind",
+        choices=("oral", "screen"),
+        default="oral",
+        help="oral keeps sparse evidence; screen captures scene changes.",
+    )
+    prepare.add_argument(
+        "--frame-strategy",
+        choices=("auto", "periodic", "scene"),
+        default="auto",
+    )
     prepare.add_argument("--frame-interval", type=float, default=30.0)
+    prepare.add_argument("--max-frames", type=int, default=12)
     prepare.add_argument("--overwrite", action="store_true")
     prepare.add_argument("--root", type=Path)
 
@@ -266,6 +278,73 @@ def dedupe_times(values: Iterable[float], minimum_gap: float = 1.0) -> list[floa
     return result
 
 
+def _limit_evenly(values: list[float], maximum: int) -> list[float]:
+    if maximum <= 0:
+        raise ValueError("max frames must be positive")
+    if len(values) <= maximum:
+        return values
+    if maximum == 1:
+        return [values[len(values) // 2]]
+    indexes = {
+        round(index * (len(values) - 1) / (maximum - 1))
+        for index in range(maximum)
+    }
+    return [values[index] for index in sorted(indexes)]
+
+
+def scene_frame_times(
+    source: Path,
+    duration: float,
+    interval: float,
+    max_frames: int,
+) -> list[float]:
+    """Select visual evidence using PySceneDetect with periodic fallback.
+
+    Screen recordings can contain long static stretches, so scene midpoints are
+    supplemented with sparse periodic samples when too few transitions exist.
+    """
+    try:
+        from scenedetect import AdaptiveDetector, detect
+    except ImportError as exc:
+        raise RuntimeError(
+            "scene frame selection requires scenedetect; install "
+            "scripts/media_ingest_requirements.txt"
+        ) from exc
+
+    scenes = detect(
+        str(source),
+        AdaptiveDetector(min_scene_len=1.5),
+        show_progress=False,
+        start_in_scene=True,
+    )
+    values = [
+        (start.seconds + end.seconds) / 2
+        for start, end in scenes
+        if end.seconds > start.seconds
+    ]
+    if len(values) < min(4, max_frames):
+        values.extend(periodic_frame_times(duration, interval))
+    return _limit_evenly(dedupe_times(values), max_frames)
+
+
+def select_frame_times(
+    source: Path,
+    duration: float,
+    content_kind: str,
+    strategy: str,
+    interval: float,
+    max_frames: int,
+) -> tuple[str, list[float]]:
+    resolved = strategy
+    if resolved == "auto":
+        resolved = "periodic"
+    if resolved == "scene":
+        return resolved, scene_frame_times(source, duration, interval, max_frames)
+    return resolved, _limit_evenly(
+        periodic_frame_times(duration, interval), max_frames
+    )
+
+
 def extract_frames(
     source: Path, timestamps: list[float], assets_dir: Path
 ) -> list[dict[str, Any]]:
@@ -322,9 +401,13 @@ def render_candidate(
     transcript: dict[str, Any],
     frames: list[dict[str, Any]],
 ) -> str:
-    tags = ["video", "oral", *metadata["tags"]]
+    tags = ["video", metadata["content_kind"], *metadata["tags"]]
     tag_text = ", ".join(yaml_scalar(tag) for tag in dict.fromkeys(tags))
-    warnings = ["ASR未经人工逐字校对", "烧录字幕尚未OCR"]
+    warnings = ["ASR未经人工逐字校对"]
+    if metadata["content_kind"] == "screen":
+        warnings.append("屏幕文字尚未OCR")
+    else:
+        warnings.append("烧录字幕尚未OCR")
     if not metadata["source_complete"]:
         warnings.append("输入只是原来源片段")
     yaml_lines = [
@@ -337,6 +420,8 @@ def render_candidate(
         f"capture_id: {yaml_scalar(metadata['capture_id'])}",
         f"content_sha256: {yaml_scalar(metadata['content_sha256'])}",
         f"source_complete: {yaml_scalar(metadata['source_complete'])}",
+        f"content_kind: {yaml_scalar(metadata['content_kind'])}",
+        f"frame_strategy: {yaml_scalar(metadata['frame_strategy'])}",
         "processing_status: partial",
         "review_status: pending",
         "processing_warnings:",
@@ -358,6 +443,7 @@ def render_candidate(
 - 平台或链接：{metadata.get('source_url') or '本地文件'}
 - 作者（提交者填写）：{metadata.get('source_author') or '未确认'}
 - 输入方式：本地视频文件
+- 内容类型：{metadata['content_kind']}
 - 本地文件：`{metadata['source_path']}`
 - 文件哈希：`{metadata['content_sha256']}`
 - 录制时长：{probe.duration_seconds}秒
@@ -386,7 +472,7 @@ def render_candidate(
 
 {frame_lines}
 
-口播首版不对关键帧做视觉理解；截图只用于确认来源和后续字幕纠错。
+本阶段不对证据帧做视觉理解或OCR；截图用于保留画面证据并支撑后续纠错。
 
 ## 人工纠错记录
 
@@ -409,8 +495,14 @@ def render_quality(
     transcript: dict[str, Any],
     frames: list[dict[str, Any]],
     elapsed: float,
+    total_elapsed: float,
 ) -> str:
-    blockers = ["ASR未经人工校对", "烧录字幕尚未OCR"]
+    blockers = ["ASR未经人工校对"]
+    blockers.append(
+        "屏幕文字尚未OCR"
+        if metadata["content_kind"] == "screen"
+        else "烧录字幕尚未OCR"
+    )
     if not metadata["source_complete"]:
         blockers.append("来源仅为片段")
     return f"""# 媒体录入质量报告
@@ -428,6 +520,8 @@ def render_quality(
 | 时长 | {probe.duration_seconds}秒 |
 | ASR片段 | {len(transcript['segments'])} |
 | ASR耗时 | {elapsed}秒 |
+| 总处理耗时 | {total_elapsed}秒 |
+| 取帧策略 | {metadata['frame_strategy']} |
 | 关键帧 | {len(frames)}张 |
 | OCR | 未执行 |
 | 人工审查 | 未执行 |
@@ -443,12 +537,13 @@ def render_quality(
 
 
 def prepare_capture(args: argparse.Namespace) -> Path:
+    processing_started = time.perf_counter()
     root = repo_root(args.root)
     source = args.video.expanduser().resolve()
     if not source.is_file():
         raise FileNotFoundError(source)
     digest = sha256_file(source)
-    capture_id = f"{date.today():%Y%m%d}-oral-{digest[:12]}"
+    capture_id = f"{date.today():%Y%m%d}-video-{digest[:12]}"
     intake_dir = root / ".oks" / "intake"
     capture_dir = intake_dir / capture_id
     ensure_descendant(capture_dir, intake_dir)
@@ -467,12 +562,21 @@ def prepare_capture(args: argparse.Namespace) -> Path:
     transcript, elapsed = transcribe_video(
         source, args.model, args.device, args.compute_type
     )
-    print(f"[{capture_id}] extract evidence frames", flush=True)
+    print(f"[{capture_id}] select and extract evidence frames", flush=True)
+    frame_strategy, frame_times = select_frame_times(
+        source,
+        probe.duration_seconds,
+        args.content_kind,
+        args.frame_strategy,
+        args.frame_interval,
+        args.max_frames,
+    )
     frames = extract_frames(
         source,
-        periodic_frame_times(probe.duration_seconds, args.frame_interval),
+        frame_times,
         assets_dir,
     )
+    total_elapsed = round(time.perf_counter() - processing_started, 2)
 
     metadata = {
         "capture_id": capture_id,
@@ -485,6 +589,8 @@ def prepare_capture(args: argparse.Namespace) -> Path:
         "question": args.question,
         "relation": args.relation,
         "tags": args.tags,
+        "content_kind": args.content_kind,
+        "frame_strategy": frame_strategy,
         "source_complete": args.source_complete,
         "collected_date": date.today().isoformat(),
         "content_sha256": digest,
@@ -502,12 +608,15 @@ def prepare_capture(args: argparse.Namespace) -> Path:
     )
     atomic_write_text(
         capture_dir / "quality-report.md",
-        render_quality(metadata, probe, transcript, frames, elapsed),
+        render_quality(
+            metadata, probe, transcript, frames, elapsed, total_elapsed
+        ),
     )
     report = {
         **metadata,
         "probe": asdict(probe),
         "asr_elapsed_seconds": elapsed,
+        "processing_elapsed_seconds": total_elapsed,
         "asr_segments": len(transcript["segments"]),
         "frames": frames,
         "generated_at": datetime.now(timezone.utc).isoformat(),

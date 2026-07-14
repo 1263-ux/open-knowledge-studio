@@ -32,6 +32,9 @@ wiki/（策展知识，带衰减）
 | **[快速开始](start-here.md)** | 最短可用路径：保存一条 → 搜索到它 → 验证工作 |
 | **[Memories](memories.md)** | wiki 页面结构、类型、创建路径和搜索模式 |
 | **[Raw Materials](raw-materials.md)** | 原始材料层、A/B/C 分级、蒸馏工作流和导入格式 |
+| **[Raw 多模态录入标准](raw-multimodal-standard.md)** | 网页、文档、图片、音频和视频进入 Raw 的统一证据协议、模态路由与质量要求 |
+| **[Raw 多模态提取基准](raw-multimodal-benchmark-20260714.md)** | 2026-07-14真实样本、成熟组件、性能数据、质量缺口和确定的路由 |
+| **[多模态生产化路线图](multimodal-production-roadmap.md)** | 第二阶段支持分级、生产架构、质量门、SLO、安全、里程碑和完成定义 |
 | **[架构设计](architecture.md)** | 五桶结构 + 记忆生命周期 |
 | **[召回引擎](recall-engine.md)** | 6 因子评分：token overlap + substring + topic trace + type boost + review penalty + memory curve |
 | **[记忆模型](memory-model.md)** | 六型记忆、注入顺序（稳定层在前）、来源标签、冲突优先级 |

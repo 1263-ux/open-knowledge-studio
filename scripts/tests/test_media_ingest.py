@@ -21,6 +21,19 @@ class MediaIngestTests(unittest.TestCase):
             [5.0, 30.0, 60.0],
         )
 
+    def test_limit_evenly_keeps_first_and_last(self):
+        self.assertEqual(
+            media_ingest._limit_evenly([1, 2, 3, 4, 5], 3),
+            [1, 3, 5],
+        )
+
+    def test_auto_strategy_uses_periodic_for_oral(self):
+        strategy, values = media_ingest.select_frame_times(
+            Path("unused.mp4"), 65.0, "oral", "auto", 30.0, 12
+        )
+        self.assertEqual(strategy, "periodic")
+        self.assertEqual(values, [5.0, 30.0, 60.0])
+
     def test_approve_requires_explicit_human_confirmation(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
