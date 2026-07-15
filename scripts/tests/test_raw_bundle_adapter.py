@@ -131,6 +131,93 @@ def test_package_markitdown_preserves_slides_media_and_unresolved_refs(tmp_path)
     assert adapter.validate_bundle(output)["valid"] is True
 
 
+def test_package_markitdown_maps_pptx_placeholders_via_ooxml_relationships(tmp_path):
+    source = tmp_path / "mapped.pptx"
+    relationships = """<?xml version="1.0" encoding="UTF-8"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/slide-image.png"/>
+</Relationships>"""
+    slide = """<?xml version="1.0" encoding="UTF-8"?>
+<p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+       xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+       xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <p:cSld><p:spTree><p:pic>
+    <p:nvPicPr><p:cNvPr id="2" name="Image 0" descr="cover.png"/></p:nvPicPr>
+    <p:blipFill><a:blip r:embed="rId1"/></p:blipFill>
+  </p:pic></p:spTree></p:cSld>
+</p:sld>"""
+    with zipfile.ZipFile(source, "w") as archive:
+        archive.writestr("ppt/media/slide-image.png", b"png")
+        archive.writestr("ppt/slides/slide1.xml", slide)
+        archive.writestr("ppt/slides/_rels/slide1.xml.rels", relationships)
+    markdown = tmp_path / "mapped.md"
+    markdown.write_text(
+        "<!-- Slide number: 1 -->\n\n![cover](Image0.jpg)\n正文\n",
+        encoding="utf-8",
+    )
+    output = tmp_path / "mapped-bundle"
+
+    adapter.package_markitdown(
+        Namespace(
+            source=source,
+            markdown=markdown,
+            output=output,
+            title="映射测试",
+            extractor_version="0.1.6",
+            warning=[],
+            benchmark=True,
+            overwrite=False,
+        )
+    )
+
+    document = (output / "document.md").read_text(encoding="utf-8")
+    quality = json.loads((output / "quality-report.json").read_text(encoding="utf-8"))
+    assert "![cover](assets/ppt-media/slide-image.png)" in document
+    assert quality["mapped_asset_references"] == 1
+    assert quality["unresolved_asset_references"] == 0
+    assert quality["coverage_status"] == "passed"
+    assert adapter.validate_bundle(output)["valid"] is True
+
+
+def test_extract_markdown_data_images_persists_extractor_asset(tmp_path):
+    markdown = "![图](data:image/png;base64,aW1hZ2U=)"
+
+    mapped, assets, failed = adapter.extract_markdown_data_images(markdown, tmp_path)
+
+    assert mapped == "![图](assets/embedded/image-0001.png)"
+    assert len(assets) == 1
+    assert assets[0].read_bytes() == b"image"
+    assert failed == 0
+
+
+def test_package_markitdown_marks_empty_extraction_failed(tmp_path):
+    source = tmp_path / "script-only.html"
+    source.write_text("<script>run()</script>", encoding="utf-8")
+    extracted = tmp_path / "empty.md"
+    extracted.write_text("", encoding="utf-8")
+    output = tmp_path / "empty-bundle"
+
+    adapter.package_markitdown(
+        Namespace(
+            source=source,
+            markdown=extracted,
+            output=output,
+            title="空HTML",
+            extractor_version="0.1.6",
+            warning=[],
+            benchmark=True,
+            overwrite=False,
+        )
+    )
+
+    metadata = json.loads((output / "metadata.json").read_text(encoding="utf-8"))
+    quality = json.loads((output / "quality-report.json").read_text(encoding="utf-8"))
+    assert metadata["processing_status"] == "failed"
+    assert quality["processing_status"] == "failed"
+    assert quality["evidence_count"] == 0
+    assert any("未提取到可见正文" in warning for warning in quality["warnings"])
+
+
 def test_package_watch_payload_keeps_timestamps_ocr_bbox_and_frames(tmp_path):
     source = tmp_path / "lesson.mp4"
     source.write_bytes(b"video")
@@ -219,6 +306,66 @@ def test_package_watch_payload_keeps_timestamps_ocr_bbox_and_frames(tmp_path):
     assert adapter.validate_bundle(output)["valid"] is True
 
 
+def test_watch_transcript_route_distinguishes_captions_asr_and_none():
+    assert adapter.transcript_route(
+        {"transcript": {"source": "captions", "segments": [{"text": "字幕"}]}}
+    ) == "platform_caption"
+    assert adapter.transcript_route(
+        {
+            "transcript": {
+                "source": "whisper-local (small)",
+                "segments": [{"text": "转写"}],
+            }
+        }
+    ) == "asr"
+    assert adapter.transcript_route(
+        {"transcript": {"source": "none", "segments": []}}
+    ) == "none"
+
+
+def test_package_watch_audio_is_transcript_only_raw(tmp_path):
+    source = tmp_path / "interview.mp3"
+    source.write_bytes(b"audio")
+    payload = {
+        "acquisition": {
+            "source": str(source),
+            "kind": "local",
+            "video_path": str(source),
+            "subtitle_path": None,
+            "info": {"title": "访谈音频"},
+            "from_cache": False,
+            "acquirer": "local",
+        },
+        "metadata": {"duration_seconds": 8.0, "has_audio": True, "size_bytes": 5},
+        "transcript": {
+            "source": "whisper-local (small)",
+            "segments": [{"start": 0.2, "end": 2.4, "text": "这是音频内容"}],
+        },
+        "perception": {"engine": "none", "frames": []},
+    }
+    output = tmp_path / "audio-bundle"
+
+    adapter.package_watch_payload(
+        payload,
+        source=str(source),
+        source_file=None,
+        output_path=output,
+        title=None,
+        extractor_version="1.0.0",
+        warnings=[],
+        benchmark=True,
+        overwrite=False,
+    )
+
+    metadata = json.loads((output / "metadata.json").read_text(encoding="utf-8"))
+    assert metadata["source_type"] == "audio"
+    assert metadata["modalities"] == ["speech"]
+    assert "source_type: audio" in (output / "raw.md").read_text(encoding="utf-8")
+    assert not (output / "visual.md").exists()
+    assert not (output / "assets" / "frames").exists()
+    assert adapter.validate_bundle(output)["valid"] is True
+
+
 def test_group_transcript_and_visual_dedupe_are_readability_only():
     groups = adapter.group_transcript_segments(
         [
@@ -240,6 +387,21 @@ def test_group_transcript_and_visual_dedupe_are_readability_only():
     ]
     selected = adapter.select_visual_summaries(frames)
     assert len(selected) == 2
+
+
+def test_order_ocr_blocks_uses_bbox_without_changing_text():
+    blocks = [
+        {"text": "右下", "bbox": [100, 100, 150, 120], "confidence": 0.8},
+        {"text": "右上", "bbox": [100, 10, 150, 30], "confidence": 0.9},
+        {"text": "左下", "bbox": [10, 102, 60, 122], "confidence": 0.7},
+        {"text": "左上", "bbox": [10, 12, 60, 32], "confidence": 0.95},
+    ]
+
+    ordered = adapter.order_ocr_blocks(blocks)
+
+    assert [item["text"] for item in ordered] == ["左上", "右上", "左下", "右下"]
+    assert [item["confidence"] for item in ordered] == [0.95, 0.9, 0.7, 0.8]
+    assert [item["source_index"] for item in ordered] == [3, 1, 2, 0]
 
 
 def test_validate_bundle_reports_broken_evidence_asset(tmp_path):

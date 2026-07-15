@@ -15,7 +15,7 @@
   → Open Knowledge Studio召回
 ```
 
-已在本地视频、公开B站URL、图片、扫描PDF和PPT上完成真实验证。
+已在本地视频、公开B站URL、音频、图片、扫描PDF、PPT、Word和HTML上完成真实验证。
 
 当前边界：
 
@@ -78,7 +78,20 @@ Adapter负责：
 - MinerU PDF Adapter；
 - MarkItDown Office Adapter。
 
-没有真实输入需求时，不提前扩展Word、Excel、动态网页或更多平台。
+音频、Word和HTML已复用现有Watch与MarkItDown路线接入；没有为三种格式另造提取器。每次接入只证明“一条命令能够生成Raw并被基础校验”，不建设额外质量管理系统。
+
+## 2.4 2026-07-14反馈闭环快照
+
+| 能力 | 固定真实样本 | 当前结论 | 保留的真实限制 |
+|---|---|---|---|
+| PPT图片映射 | 15页省赛答辩PPT | 17/17引用映射，校验通过 | 版式语义仍以原PPT为准 |
+| B站字幕路由 | 3个公开B站样本 + 本地Java视频 | `platform_caption/asr/none`路线已显式记录 | 现有公开样本无字幕，且在线请求遇到HTTP 412，真实平台字幕仍阻塞 |
+| OCR阅读顺序 | 会议截图 | 85个OCR块按bbox行序输出，未改写文字 | 多栏、复杂排版仍只保留bbox供回查 |
+| 音频ASR | Java课程60秒音频 | Watch/Whisper输出61段时间戳证据，校验通过 | ASR未人工纠错 |
+| Word正文与图片 | 影海拾光项目计划书DOCX | 正文生成Markdown，6/6内嵌图片映射，校验通过 | 定位仅到文档级，分页版式以原Word为准 |
+| HTML正文 | Open Knowledge Studio官网快照 | UTF-8中文、标题、列表、链接与代码块进入Markdown，校验通过 | 当前保存的是页面快照，不执行JavaScript、不抓取动态渲染结果 |
+
+这里的“通过”只表示能力实际存在、产物完整且没有静默失败，不表示内容质量评级。
 
 ### 2.3 保住基础校验底线
 
@@ -120,16 +133,47 @@ Adapter负责：
 
 ## 4. 下一步执行顺序
 
-1. 整理当前四个成熟提取器的环境和版本；
-2. 实现`doctor`依赖检查；
-3. 将当前统一脚本按四个Adapter做最小拆分；
-4. 保持Raw v0.1和现有命令兼容；
-5. 在干净Windows环境重新跑视频、图片、PDF、PPT；
-6. 执行`validate`和`recall`；
-7. 记录复现过程和真实失败；
-8. 第一批流程稳定后，再根据实际输入需求决定下一个模态。
+1. 建立开发反馈循环：真实样本 → 记录具体缺口 → 修复 → 同样本复跑；
+2. 修复PPT图片关系映射；
+3. 完善B站人工字幕、自动字幕和ASR回退路线；
+4. 根据bbox恢复OCR行与阅读顺序，但不修正OCR文字；
+5. 整理当前四个成熟提取器的环境和版本；
+6. 实现`doctor`依赖检查；
+7. 将当前统一脚本按四个Adapter做最小拆分；
+8. 依次接入音频、Word和HTML；
+9. 在固定真实样本上执行`Raw → validate → recall`；
+10. 记录能力是否存在、实际输出和真实失败，不做等级评分。
 
-## 5. 下一阶段完成定义
+## 5. Loop Engineering反馈机制
+
+反馈日志只服务开发迭代，保存在被Git忽略的`.oks/feedback/`，不进入Raw Schema。
+
+每个循环只记录：
+
+- `cycle`：本轮要修复的具体能力；
+- `sample`：保持不变的真实样本；
+- `capability`：希望确认存在的能力；
+- `status`：`gap`、`fix`、`verified`或`blocked`；
+- `observation`：实际观察；
+- `evidence`：命令、产物或错误位置；
+- `next_action`：下一次最小修改。
+
+示例：
+
+```powershell
+python scripts/multimodal_feedback.py record `
+  --cycle ppt-image-map `
+  --sample "影海拾光-省赛答辩终版-v2.pptx" `
+  --capability "PPT图片关系映射" `
+  --status gap `
+  --observation "17个MarkItDown图片占位符无法映射"
+
+python scripts/multimodal_feedback.py report
+```
+
+只有使用同一样本复跑并取得对应产物，才能记录为`verified`。
+
+## 6. 下一阶段完成定义
 
 以下条件全部满足即可结束，不增加额外平台建设：
 
