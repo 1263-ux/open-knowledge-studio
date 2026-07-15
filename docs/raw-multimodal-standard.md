@@ -365,7 +365,17 @@ Raw提取包
 
 ## 15. 当前可运行入口
 
-第一版统一入口位于 `scripts/raw_bundle_adapter.py`。它只调度成熟提取器、映射证据和执行质量门，不实现ASR、OCR、视频下载或Office解析算法。
+底层打包入口位于 `scripts/raw_bundle_adapter.py`；面向开发者的一键调度入口位于 `scripts/raw_ingest.py`。二者只调用成熟提取器、映射证据和执行机械校验，不实现ASR、OCR、视频下载或Office解析算法。
+
+首次使用先执行：
+
+```powershell
+python scripts/raw_ingest.py doctor --json
+python scripts/raw_ingest.py ingest "D:\sample\lesson.mp4" `
+  --output ".oks\intake\lesson"
+```
+
+完整环境配置和实测结果见[Raw 多模态一键录入](raw-ingest-quickstart.md)。需要单独控制或打包已有提取结果时，再使用以下底层命令：
 
 ```powershell
 # 只探测模态和推荐路线，不执行提取
