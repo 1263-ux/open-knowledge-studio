@@ -303,6 +303,9 @@ def test_package_watch_payload_keeps_timestamps_ocr_bbox_and_frames(tmp_path):
     assert "三元运算符" in content
     assert "watch-speech-000001" in content
     assert "watch-frame-000001" in content
+    raw = (output / "raw.md").read_text(encoding="utf-8")
+    assert "[未校对逐字稿](transcript.md)：1段" in raw
+    assert "{len(transcript_segments)}" not in raw
     assert adapter.validate_bundle(output)["valid"] is True
 
 

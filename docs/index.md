@@ -34,6 +34,8 @@ wiki/（策展知识，带衰减）
 | **[Raw Materials](raw-materials.md)** | 原始材料层、A/B/C 分级、蒸馏工作流和导入格式 |
 | **[Raw 多模态录入标准](raw-multimodal-standard.md)** | 网页、文档、图片、音频和视频进入 Raw 的统一证据协议、模态路由与质量要求 |
 | **[Raw 多模态一键录入](raw-ingest-quickstart.md)** | doctor、本机工具链配置、统一命令、真实闭环结果与登录态入口边界 |
+| **[浏览器登录态与飞书入口](browser-capture-and-feishu.md)** | 浏览器扩展、移动端分享、Capture Envelope、登录态边界和三级回退 |
+| **[Raw 第一阶段复盘](raw-phase-review-20260715.md)** | Codex与Claude对本地多模态能力、真实误差、阶段边界和下一步的联合评审 |
 | **[Raw 多模态提取基准](raw-multimodal-benchmark-20260714.md)** | 2026-07-14真实样本、成熟组件、性能数据、质量缺口和确定的路由 |
 | **[多模态 Raw 下一阶段计划](multimodal-next-step.md)** | 只做环境可复现、Adapter规范化和基础机械校验，知识优化继续留在Draft/Wiki |
 | **[架构设计](architecture.md)** | 五桶结构 + 记忆生命周期 |

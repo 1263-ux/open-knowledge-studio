@@ -1570,7 +1570,7 @@ benchmark: {str(bool(benchmark)).lower()}
 
 - [可读Raw正文](content.md)：{transcript_group_count}个语音段落""" + (
         "" if is_audio else f"，{content_visual_count}个视觉段落"
-    ) + """
+    ) + f"""
 - [未校对逐字稿](transcript.md)：{len(transcript_segments)}段
 """ + (
         "" if is_audio else f"- [视觉证据](visual.md)：{len(image_map)}帧，{ocr_count}个OCR块\n"
