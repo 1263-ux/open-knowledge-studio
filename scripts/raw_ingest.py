@@ -22,11 +22,13 @@ from raw_bundle_adapter import route_plan, validate_bundle
 
 ROOT = Path(__file__).resolve().parents[1]
 ADAPTER = ROOT / "scripts" / "raw_bundle_adapter.py"
+FORMULA_CANDIDATES = ROOT / "scripts" / "formula_candidates.py"
 DEFAULT_CONFIG = ROOT / ".oks" / "raw-tools.json"
 ENV_OVERRIDES = {
     "watch_python": "OKS_WATCH_PYTHON",
     "document_python": "OKS_DOCUMENT_PYTHON",
     "mineru_python": "OKS_MINERU_PYTHON",
+    "formula_python": "OKS_FORMULA_PYTHON",
     "ffmpeg": "OKS_FFMPEG",
     "ffprobe": "OKS_FFPROBE",
 }
@@ -51,8 +53,34 @@ def build_parser() -> argparse.ArgumentParser:
     ingest.add_argument("--benchmark", action="store_true")
     ingest.add_argument("--transcript-only", action="store_true")
     ingest.add_argument("--max-frames", type=int, default=12)
+    ingest.add_argument(
+        "--hotwords",
+        help="Comma-separated domain terms passed to local faster-whisper.",
+    )
+    ingest.add_argument("--initial-prompt", help="Context prompt passed to local faster-whisper.")
+    ingest.add_argument("--asr-model", default="auto", help="Local faster-whisper model name.")
+    ingest.add_argument("--asr-language", help="Optional ASR language code; default is auto-detect.")
+    ingest.add_argument(
+        "--video-profile",
+        choices=("auto", "speech", "shots", "screen"),
+        default="auto",
+        help="Transparent frame-selection route for local video.",
+    )
+    ingest.add_argument(
+        "--ocr-roi",
+        help="OCR region x1,y1,x2,y2 in source/frame pixels.",
+    )
+    ingest.add_argument(
+        "--screen-change-threshold",
+        type=float,
+        default=6.0,
+        help="Mean pixel-difference threshold for screen recordings.",
+    )
+    ingest.add_argument("--screen-sample-seconds", type=float, default=1.0)
     ingest.add_argument("--mineru-method", choices=("auto", "txt", "ocr"), default="auto")
     ingest.add_argument("--mineru-backend", default="pipeline")
+    ingest.add_argument("--formula-secondary", action="store_true")
+    ingest.add_argument("--formula-max-regions", type=int, default=20)
     return parser
 
 
@@ -81,6 +109,7 @@ def load_config(path: Path) -> dict[str, str]:
         "watch_python": sys.executable,
         "document_python": sys.executable,
         "mineru_python": sys.executable,
+        "formula_python": sys.executable,
         "ffmpeg": "ffmpeg",
         "ffprobe": "ffprobe",
     }
@@ -194,6 +223,7 @@ def doctor_report(config: dict[str, str]) -> dict[str, Any]:
         probe_python("watch", config["watch_python"], ["watch_skill", "rapidocr", "faster_whisper", "yt_dlp"]),
         probe_python("document", config["document_python"], ["markitdown"]),
         probe_python("mineru", config["mineru_python"], ["mineru"]),
+        probe_python("formula", config["formula_python"], ["paddleocr", "paddle"]),
         probe_file("mineru-cli", mineru_cli_path(config["mineru_python"])),
         probe_command("ffmpeg", config["ffmpeg"]),
         probe_command("ffprobe", config["ffprobe"]),
@@ -240,11 +270,34 @@ def execute_ingest(args: argparse.Namespace, config: dict[str, str]) -> Path:
         if local_source.is_file():
             command += ["--source-file", str(local_source.resolve())]
         command += ["--max-frames", str(args.max_frames)]
+        command += [
+            "--asr-model", getattr(args, "asr_model", "auto"),
+            "--video-profile", getattr(args, "video_profile", "auto"),
+        ]
+        if getattr(args, "asr_language", None):
+            command += ["--asr-language", args.asr_language]
+        command += [
+            "--screen-change-threshold",
+            str(getattr(args, "screen_change_threshold", 6.0)),
+        ]
+        command += [
+            "--screen-sample-seconds",
+            str(getattr(args, "screen_sample_seconds", 1.0)),
+        ]
+        if getattr(args, "hotwords", None):
+            command += ["--hotwords", args.hotwords]
+        if getattr(args, "initial_prompt", None):
+            command += ["--initial-prompt", args.initial_prompt]
+        if getattr(args, "ocr_roi", None):
+            command += ["--ocr-roi", args.ocr_roi]
         if args.transcript_only or plan["source_type"] == "audio":
             command.append("--transcript-only")
         completed = run(command)
     elif extractor == "rapidocr":
-        completed = run(adapter_command(config["watch_python"], "image", args.source, output, args))
+        command = adapter_command(config["watch_python"], "image", args.source, output, args)
+        if getattr(args, "ocr_roi", None):
+            command += ["--ocr-roi", args.ocr_roi]
+        completed = run(command)
     elif extractor == "markitdown":
         completed = run(adapter_command(config["document_python"], "markitdown", args.source, output, args))
     elif extractor == "mineru":
@@ -264,10 +317,25 @@ def execute_ingest(args: argparse.Namespace, config: dict[str, str]) -> Path:
             if extracted.returncode != 0:
                 raise RuntimeError(f"MinerU failed with exit code {extracted.returncode}")
             result_dir = find_mineru_result(Path(temp))
+            formula_candidates = None
+            if args.formula_secondary:
+                formula_candidates = Path(temp) / "formula-candidates.json"
+                candidate_command = [
+                    config["formula_python"], str(FORMULA_CANDIDATES), str(result_dir),
+                    "--output", str(formula_candidates),
+                    "--max-regions", str(args.formula_max_regions),
+                ]
+                candidate_result = run(candidate_command)
+                if candidate_result.returncode != 0:
+                    raise RuntimeError(
+                        f"formula candidate extractor failed with exit code {candidate_result.returncode}"
+                    )
             command = [
                 sys.executable, str(ADAPTER), "mineru", str(result_dir),
                 "--source", str(source), "--output", str(output),
             ] + common_adapter_args(args)
+            if formula_candidates is not None:
+                command += ["--formula-candidates", str(formula_candidates)]
             completed = run(command)
     else:
         raise RuntimeError(f"unsupported extractor route: {extractor}")

@@ -23,6 +23,7 @@ Windows 实测环境为 Python 3.12，并将重型依赖隔离为三个环境：
 - Watch/图片环境：`scripts/watch_extract_requirements.txt`；
 - 文档环境：`scripts/raw_extract_requirements.txt`；
 - MinerU 环境：`scripts/mineru_extract_requirements.txt`；
+- 可选公式候选环境：`scripts/formula_extract_requirements.txt`；
 - 系统命令：ffmpeg 与 ffprobe。
 
 复制 `settings/raw-tools.example.json` 为 `.oks/raw-tools.json`，填写本机解释器和命令路径。`.oks/` 已被 Git 忽略，本机绝对路径不会提交。
@@ -33,6 +34,7 @@ Windows 实测环境为 Python 3.12，并将重型依赖隔离为三个环境：
 OKS_WATCH_PYTHON
 OKS_DOCUMENT_PYTHON
 OKS_MINERU_PYTHON
+OKS_FORMULA_PYTHON
 OKS_FFMPEG
 OKS_FFPROBE
 ```
@@ -66,9 +68,29 @@ OKS_FFPROBE
 # PDF；扫描件可显式使用 --mineru-method ocr
 .\.venv\Scripts\python.exe scripts\raw_ingest.py ingest "D:\sample\paper.pdf" `
   --output ".oks\intake\paper" --mineru-method auto
+
+# 中文技术音频：主ASR保持不变，额外保存热词上下文候选
+.\.venv\Scripts\python.exe scripts\raw_ingest.py ingest "D:\sample\java.mp3" `
+  --output ".oks\intake\java" --transcript-only `
+  --asr-language zh --hotwords "Java,三元运算符,键盘录入"
+
+# 软件截图：只对用户明确指定的正文区域做OCR，坐标仍回映射到原图
+.\.venv\Scripts\python.exe scripts\raw_ingest.py ingest "D:\sample\screen.png" `
+  --output ".oks\intake\screen" --ocr-roi "650,300,2200,1400"
+
+# 屏幕录制：用内容变化而非均匀时间点选择证据帧
+.\.venv\Scripts\python.exe scripts\raw_ingest.py ingest "D:\sample\ide.mp4" `
+  --output ".oks\intake\ide" --video-profile screen `
+  --screen-sample-seconds 1 --screen-change-threshold 3
+
+# PDF：对MinerU已定位的独立公式图片生成PP-FormulaNet第二候选
+.\.venv\Scripts\python.exe scripts\raw_ingest.py ingest "D:\sample\math.pdf" `
+  --output ".oks\intake\math" --formula-secondary --formula-max-regions 20
 ```
 
 命令会自动执行 `validate`。成功只表示 Raw 结构、证据和资产没有机械断链，不表示 ASR、OCR、公式或表格已经正确。
+
+热词和公式结果均作为候选保存，不自动覆盖主提取结果。OCR ROI外的内容仍存在于原图，但不会进入OCR正文。`screen`路线按显式采样间隔观察变化，短于采样窗口的瞬时画面可能遗漏。
 
 ## 5. 实测闭环（2026-07-15）
 

@@ -44,6 +44,11 @@ def test_package_mineru_preserves_page_bbox_and_assets(tmp_path):
         encoding="utf-8",
     )
     output = tmp_path / "bundle"
+    formula_candidates = tmp_path / "formula-candidates.json"
+    formula_candidates.write_text(
+        json.dumps({"region_count": 1, "selection_policy": "none", "regions": []}),
+        encoding="utf-8",
+    )
 
     adapter.package_mineru(
         Namespace(
@@ -52,6 +57,7 @@ def test_package_mineru_preserves_page_bbox_and_assets(tmp_path):
             output=output,
             title="测试文档",
             extractor_version="3.4.4",
+            formula_candidates=formula_candidates,
             warning=[],
             benchmark=True,
             overwrite=False,
@@ -75,6 +81,8 @@ def test_package_mineru_preserves_page_bbox_and_assets(tmp_path):
     assert quality["unresolved_asset_references"] == 0
     assert quality["processing_status"] == "partial"
     assert quality["coverage_status"] == "passed"
+    assert quality["formula_candidate_region_count"] == 1
+    assert (output / "formula-candidates.json").is_file()
 
 
 def test_route_plan_selects_mature_extractors():
@@ -246,6 +254,12 @@ def test_package_watch_payload_keeps_timestamps_ocr_bbox_and_frames(tmp_path):
             "source": "whisper-local (small)",
             "segments": [{"start": 1.2, "end": 3.4, "text": "三元运算符"}],
         },
+        "transcript_candidates": [
+            {
+                "source": "whisper-local (small;context)",
+                "segments": [{"start": 1.2, "end": 3.4, "text": "键盘录入"}],
+            }
+        ],
         "perception": {
             "source": str(source),
             "engine": "scene",
@@ -306,6 +320,8 @@ def test_package_watch_payload_keeps_timestamps_ocr_bbox_and_frames(tmp_path):
     raw = (output / "raw.md").read_text(encoding="utf-8")
     assert "[未校对逐字稿](transcript.md)：1段" in raw
     assert "{len(transcript_segments)}" not in raw
+    assert "[ASR候选逐字稿](transcript-candidates.md)：1路候选" in raw
+    assert "键盘录入" in (output / "transcript-candidates.md").read_text(encoding="utf-8")
     assert adapter.validate_bundle(output)["valid"] is True
 
 
@@ -405,6 +421,52 @@ def test_order_ocr_blocks_uses_bbox_without_changing_text():
     assert [item["text"] for item in ordered] == ["左上", "右上", "左下", "右下"]
     assert [item["confidence"] for item in ordered] == [0.95, 0.9, 0.7, 0.8]
     assert [item["source_index"] for item in ordered] == [3, 1, 2, 0]
+
+
+def test_parse_ocr_roi_requires_explicit_valid_rectangle():
+    assert adapter.parse_ocr_roi("10,20,300,400") == (10, 20, 300, 400)
+    assert adapter.parse_ocr_roi("10, 20, 300, 400") == (10, 20, 300, 400)
+    assert adapter.parse_ocr_roi(None) is None
+    assert adapter.parse_ocr_roi("") is None
+    for invalid in ("1,2,3", "10,20,5,30", "-1,2,3,4", "a,2,3,4"):
+        try:
+            adapter.parse_ocr_roi(invalid)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"invalid ROI accepted: {invalid}")
+
+
+def test_package_image_result_translates_roi_coordinates(tmp_path):
+    source = tmp_path / "screen.png"
+    source.write_bytes(b"png")
+    result = SimpleNamespace(
+        txts=("正文",),
+        boxes=([[1, 2], [11, 2], [11, 12], [1, 12]],),
+        scores=(0.98,),
+    )
+    output = tmp_path / "roi-bundle"
+    args = Namespace(
+        source=source,
+        output=output,
+        title="选区",
+        extractor_version="3.9.1",
+        min_confidence=0.5,
+        ocr_roi="100,200,500,600",
+        warning=[],
+        benchmark=True,
+        overwrite=False,
+    )
+
+    adapter.package_image_result(args, result, elapsed_seconds=0.1)
+
+    evidence = [
+        json.loads(line)
+        for line in (output / "evidence.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    assert evidence[1]["locator"]["bbox"] == [101.0, 202.0, 111.0, 212.0]
+    extraction = json.loads((output / "extractor-result.json").read_text(encoding="utf-8"))
+    assert extraction["ocr_roi"] == [100, 200, 500, 600]
 
 
 def test_validate_bundle_reports_broken_evidence_asset(tmp_path):

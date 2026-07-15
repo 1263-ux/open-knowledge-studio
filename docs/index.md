@@ -37,6 +37,7 @@ wiki/（策展知识，带衰减）
 | **[浏览器登录态与飞书入口](browser-capture-and-feishu.md)** | 浏览器扩展、移动端分享、Capture Envelope、登录态边界和三级回退 |
 | **[Raw 第一阶段复盘](raw-phase-review-20260715.md)** | Codex与Claude对本地多模态能力、真实误差、阶段边界和下一步的联合评审 |
 | **[Raw 准确性恢复调研](raw-accuracy-recovery-research-20260715.md)** | 公式、ASR、OCR和关键帧的可复用方案、证据对齐边界与最小对比实验 |
+| **[Raw 准确性改进实测](raw-accuracy-improvement-results-20260715.md)** | 四条真实对照、Claude联合评审、成立的提升与剩余边界 |
 | **[Raw 多模态提取基准](raw-multimodal-benchmark-20260714.md)** | 2026-07-14真实样本、成熟组件、性能数据、质量缺口和确定的路由 |
 | **[多模态 Raw 下一阶段计划](multimodal-next-step.md)** | 只做环境可复现、Adapter规范化和基础机械校验，知识优化继续留在Draft/Wiki |
 | **[架构设计](architecture.md)** | 五桶结构 + 记忆生命周期 |

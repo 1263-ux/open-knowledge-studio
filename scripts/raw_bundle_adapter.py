@@ -17,6 +17,7 @@ import os
 import re
 import shutil
 import tempfile
+import threading
 import zipfile
 import xml.etree.ElementTree as ET
 from dataclasses import asdict
@@ -27,6 +28,7 @@ from urllib.parse import urlparse
 
 
 SCHEMA_VERSION = "raw-multimodal/v0.1"
+_WATCH_OVERRIDE_LOCK = threading.Lock()
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -41,6 +43,7 @@ def build_parser() -> argparse.ArgumentParser:
     mineru.add_argument("--output", type=Path, required=True)
     mineru.add_argument("--title")
     mineru.add_argument("--extractor-version", default="unknown")
+    mineru.add_argument("--formula-candidates", type=Path)
     mineru.add_argument("--warning", action="append", default=[])
     mineru.add_argument("--benchmark", action="store_true")
     mineru.add_argument("--overwrite", action="store_true")
@@ -67,6 +70,16 @@ def build_parser() -> argparse.ArgumentParser:
     watch.add_argument("--title")
     watch.add_argument("--extractor-version", default="unknown")
     watch.add_argument("--max-frames", type=int, default=12)
+    watch.add_argument("--hotwords")
+    watch.add_argument("--initial-prompt")
+    watch.add_argument("--asr-model", default="auto")
+    watch.add_argument("--asr-language")
+    watch.add_argument(
+        "--video-profile", choices=("auto", "speech", "shots", "screen"), default="auto"
+    )
+    watch.add_argument("--ocr-roi")
+    watch.add_argument("--screen-change-threshold", type=float, default=6.0)
+    watch.add_argument("--screen-sample-seconds", type=float, default=1.0)
     watch.add_argument("--transcript-only", action="store_true")
     watch.add_argument("--no-local-whisper", action="store_true")
     watch.add_argument(
@@ -99,6 +112,7 @@ def build_parser() -> argparse.ArgumentParser:
     image.add_argument("--title")
     image.add_argument("--extractor-version", default="unknown")
     image.add_argument("--min-confidence", type=float, default=0.5)
+    image.add_argument("--ocr-roi", help="OCR region x1,y1,x2,y2 in source pixels.")
     image.add_argument("--warning", action="append", default=[])
     image.add_argument("--benchmark", action="store_true")
     image.add_argument("--overwrite", action="store_true")
@@ -441,6 +455,13 @@ def package_mineru(args: argparse.Namespace) -> Path:
     evidence_count = write_jsonl(
         output / "evidence.jsonl", mineru_evidence(entries, image_map)
     )
+    formula_candidate_count = 0
+    formula_candidates_path = getattr(args, "formula_candidates", None)
+    if formula_candidates_path is not None:
+        formula_candidates_path = formula_candidates_path.expanduser().resolve()
+        formula_payload = json.loads(formula_candidates_path.read_text(encoding="utf-8"))
+        formula_candidate_count = int(formula_payload.get("region_count", 0))
+        write_json(output / "formula-candidates.json", formula_payload)
 
     warnings = list(args.warning)
     warnings.extend(
@@ -449,6 +470,10 @@ def package_mineru(args: argparse.Namespace) -> Path:
             "公式、上下标、矢量和复杂表格可能误识别；以原PDF页面为准",
         ]
     )
+    if formula_candidate_count:
+        warnings.append(
+            f"{formula_candidate_count}个独立公式块有第二提取候选；未自动选择或覆盖MinerU结果"
+        )
     image_references = len(re.findall(r"(?:!\[|<img\s)", document))
     expected_image_assets = {
         Path(str(item["img_path"])).name
@@ -498,6 +523,7 @@ def package_mineru(args: argparse.Namespace) -> Path:
         "asset_count": len(image_map),
         "markdown_image_references": image_references,
         "unresolved_asset_references": max(0, image_references - len(image_map)),
+        "formula_candidate_region_count": formula_candidate_count,
         "coverage_status": coverage_status,
         "coverage_checks": coverage_checks,
         "warnings": warnings,
@@ -526,6 +552,10 @@ benchmark: {str(bool(args.benchmark)).lower()}
 
 - [可读Raw正文](content.md)
 - [文档正文](document.md)
+""" + (
+        f"- [公式候选](formula-candidates.json)：{formula_candidate_count}个独立公式块\n"
+        if formula_candidate_count else ""
+    ) + f"""
 - [原子证据](evidence.jsonl)：{evidence_count}条，保留页码和可用坐标
 - [元数据](metadata.json)
 - [质量报告](quality-report.json)
@@ -1435,6 +1465,28 @@ def package_watch_payload(
     (output / "transcript.md").write_text(
         render_transcript(payload), encoding="utf-8", newline="\n"
     )
+    transcript_candidates = payload.get("transcript_candidates", [])
+    if transcript_candidates:
+        candidate_lines = [
+            "# ASR候选逐字稿",
+            "",
+            "> 候选仅用于与主逐字稿对照；未经人工真值确认，不自动覆盖主结果。",
+            "",
+        ]
+        for candidate in transcript_candidates:
+            candidate_lines.extend([f"## {candidate.get('source', 'unknown')}", ""])
+            for segment in candidate.get("segments", []):
+                start = float(segment.get("start", 0))
+                end = float(segment.get("end", start))
+                candidate_lines.append(
+                    f"[{start:.3f}–{end:.3f}] {str(segment.get('text', '')).strip()}"
+                )
+            candidate_lines.append("")
+        (output / "transcript-candidates.md").write_text(
+            "\n".join(candidate_lines).rstrip() + "\n",
+            encoding="utf-8",
+            newline="\n",
+        )
     if not is_audio:
         (output / "visual.md").write_text(
             "\n".join(visual_lines).rstrip() + "\n", encoding="utf-8", newline="\n"
@@ -1573,6 +1625,10 @@ benchmark: {str(bool(benchmark)).lower()}
     ) + f"""
 - [未校对逐字稿](transcript.md)：{len(transcript_segments)}段
 """ + (
+        f"- [ASR候选逐字稿](transcript-candidates.md)：{len(transcript_candidates)}路候选\n"
+        if transcript_candidates else ""
+    ) + f"""
+""" + (
         "" if is_audio else f"- [视觉证据](visual.md)：{len(image_map)}帧，{ocr_count}个OCR块\n"
     ) + f"""- [原子证据](evidence.jsonl)：{evidence_count}条
 - [提取器原始结果](extractor-result.json)
@@ -1586,7 +1642,101 @@ benchmark: {str(bool(benchmark)).lower()}
     return output
 
 
+def parse_ocr_roi(value: str | None) -> tuple[int, int, int, int] | None:
+    """Parse an explicit pixel ROI without guessing the user's content area."""
+    if not value:
+        return None
+    try:
+        values = tuple(int(part.strip()) for part in value.split(","))
+    except ValueError as exc:
+        raise ValueError("OCR ROI must be x1,y1,x2,y2 integers") from exc
+    if len(values) != 4:
+        raise ValueError("OCR ROI must contain exactly four integers")
+    x1, y1, x2, y2 = values
+    if min(values) < 0 or x2 <= x1 or y2 <= y1:
+        raise ValueError("OCR ROI must satisfy 0 <= x1 < x2 and 0 <= y1 < y2")
+    return values
+
+
+def _adaptive_scene_detector(video_path: Path, start: float | None, end: float | None):
+    from scenedetect import AdaptiveDetector, detect
+
+    kwargs: dict[str, Any] = {}
+    if start is not None:
+        kwargs["start_time"] = start
+    if end is not None:
+        kwargs["end_time"] = end
+    scenes = detect(str(video_path), AdaptiveDetector(), **kwargs)
+    return [(float(item[0].seconds), float(item[1].seconds)) for item in scenes]
+
+
+def _screen_change_scenes(
+    video_path: Path,
+    start: float | None,
+    end: float | None,
+    *,
+    threshold: float,
+    sample_seconds: float,
+    roi: tuple[int, int, int, int] | None,
+) -> list[tuple[float, float]]:
+    """Find material screen changes with OpenCV; return scene-like spans.
+
+    This is intentionally a transparent sampler, not semantic understanding.
+    It compares one frame every ``sample_seconds`` after resizing and optional
+    content crop. It cannot observe changes shorter than that sampling window.
+    """
+    import cv2
+
+    capture = cv2.VideoCapture(str(video_path))
+    if not capture.isOpened():
+        return []
+    fps = float(capture.get(cv2.CAP_PROP_FPS) or 25.0)
+    total_frames = int(capture.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+    duration = total_frames / fps if total_frames else 0.0
+    lo = max(0.0, float(start or 0.0))
+    hi = min(duration, float(end)) if end is not None and duration else duration
+    boundaries = [lo]
+    if sample_seconds <= 0:
+        raise ValueError("screen sample interval must be positive")
+    previous = None
+    second = lo
+    try:
+        while second <= hi:
+            capture.set(cv2.CAP_PROP_POS_MSEC, second * 1000.0)
+            ok, frame = capture.read()
+            if not ok:
+                second += sample_seconds
+                continue
+            if roi is not None:
+                x1, y1, x2, y2 = roi
+                height, width = frame.shape[:2]
+                frame = frame[min(y1, height):min(y2, height), min(x1, width):min(x2, width)]
+                if frame.size == 0:
+                    raise ValueError(f"OCR ROI {roi} is outside video frame {width}x{height}")
+            sample = cv2.resize(frame, (320, 180), interpolation=cv2.INTER_AREA)
+            sample = cv2.GaussianBlur(sample, (3, 3), 0)
+            if previous is not None:
+                difference = float(cv2.absdiff(sample, previous).mean())
+                if difference >= threshold and second - boundaries[-1] >= 1.0:
+                    boundaries.append(round(second, 3))
+            previous = sample
+            second += sample_seconds
+    finally:
+        capture.release()
+    if hi <= lo or len(boundaries) == 1:
+        return []
+    return list(zip(boundaries, [*boundaries[1:], hi]))
+
+
 def run_watch(args: argparse.Namespace) -> Path:
+    # Watch does not expose detector/OCR strategy injection yet. Serialize the
+    # short-lived module override so concurrent calls in one process cannot
+    # observe each other's strategy.
+    with _WATCH_OVERRIDE_LOCK:
+        return _run_watch_unlocked(args)
+
+
+def _run_watch_unlocked(args: argparse.Namespace) -> Path:
     if args.output.expanduser().exists() and not args.overwrite:
         raise FileExistsError(f"output already exists: {args.output.expanduser().resolve()}")
     try:
@@ -1596,8 +1746,80 @@ def run_watch(args: argparse.Namespace) -> Path:
             "Watch Skill is not installed in this interpreter; run this command with its Python environment"
         ) from exc
     from watch_skill.config import get_settings
+    from watch_skill.perceive import ocr as watch_ocr
+    from watch_skill.perceive import scenes as watch_scenes
+    from watch_skill.transcribe.types import Segment, Transcript
 
     work_dir = Path(tempfile.mkdtemp(prefix="oks-watch-"))
+    roi = parse_ocr_roi(args.ocr_roi)
+    original_scene_detector = watch_scenes.detect_scenes
+    original_ocr = watch_ocr.ocr_frame
+    enhanced_transcribe = None
+    if args.hotwords or args.initial_prompt:
+        def enhanced_transcribe(audio_path, model_size="auto", language=None):
+            from faster_whisper import WhisperModel
+            from watch_skill.transcribe.local import has_cuda_gpu, pick_model_size
+
+            size = pick_model_size() if args.asr_model == "auto" else args.asr_model
+            device = "cuda" if has_cuda_gpu() else "cpu"
+            compute = "float16" if device == "cuda" else "int8"
+            model = WhisperModel(size, device=device, compute_type=compute)
+            raw_segments, _ = model.transcribe(
+                str(audio_path),
+                language=language,
+                vad_filter=True,
+                hotwords=args.hotwords,
+                initial_prompt=args.initial_prompt,
+                word_timestamps=True,
+            )
+            segments = [
+                Segment(round(item.start, 2), round(item.end, 2), item.text.strip())
+                for item in raw_segments if item.text.strip()
+            ]
+            return Transcript(segments, source=f"whisper-local ({size};context)")
+
+    if args.video_profile == "shots":
+        watch_scenes.detect_scenes = _adaptive_scene_detector
+    elif args.video_profile == "screen":
+        def screen_detector(video_path, start_seconds=None, end_seconds=None):
+            return _screen_change_scenes(
+                video_path,
+                start_seconds,
+                end_seconds,
+                threshold=args.screen_change_threshold,
+                sample_seconds=args.screen_sample_seconds,
+                roi=roi,
+            )
+
+        watch_scenes.detect_scenes = screen_detector
+
+    if roi is not None:
+        def roi_ocr(image_path, min_confidence=0.5, lang=None):
+            from PIL import Image
+            from watch_skill.perceive.types import OcrBlock
+
+            with Image.open(image_path) as image:
+                width, height = image.size
+                x1, y1, x2, y2 = roi
+                if x1 >= width or y1 >= height:
+                    raise ValueError(f"OCR ROI {roi} is outside frame {width}x{height}")
+                clipped = (x1, y1, min(x2, width), min(y2, height))
+                crop_path = work_dir / f"roi-{Path(image_path).stem}.png"
+                image.crop(clipped).save(crop_path)
+            blocks = original_ocr(crop_path, min_confidence=min_confidence, lang=lang)
+            return [
+                OcrBlock(
+                    block.text,
+                    (
+                        block.bbox[0] + clipped[0], block.bbox[1] + clipped[1],
+                        block.bbox[2] + clipped[0], block.bbox[3] + clipped[1],
+                    ),
+                    block.confidence,
+                )
+                for block in blocks
+            ]
+
+        watch_ocr.ocr_frame = roi_ocr
     setting_name = "WATCHSKILL_SUBTITLE_LANGS"
     previous_subtitle_langs = os.environ.get(setting_name)
     if args.subtitle_langs:
@@ -1613,9 +1835,37 @@ def run_watch(args: argparse.Namespace) -> Path:
             allow_cloud_stt=False,
             out_dir=work_dir,
             use_cache=True,
+            whisper_model=args.asr_model,
         )
+        payload = watch_payload(result)
+        if (
+            enhanced_transcribe is not None
+            and result.acquisition.video_path is not None
+            and "whisper" in str(payload.get("transcript", {}).get("source", "")).lower()
+        ):
+            context_transcript = enhanced_transcribe(
+                result.acquisition.video_path,
+                model_size=args.asr_model,
+                language=(args.asr_language or result.acquisition.info.get("language")),
+            )
+            payload["transcript_candidates"] = [
+                {
+                    "source": context_transcript.source,
+                    "segments": [item.to_dict() for item in context_transcript.segments],
+                }
+            ]
+        payload["extraction_options"] = {
+            "hotwords": [item.strip() for item in (args.hotwords or "").split(",") if item.strip()],
+            "initial_prompt_present": bool(args.initial_prompt),
+            "asr_model": args.asr_model,
+            "asr_language": args.asr_language,
+            "video_profile": args.video_profile,
+            "ocr_roi": roi,
+            "screen_change_threshold": args.screen_change_threshold,
+            "screen_sample_seconds": args.screen_sample_seconds,
+        }
         return package_watch_payload(
-            watch_payload(result),
+            payload,
             source=args.source,
             source_file=args.source_file,
             output_path=args.output,
@@ -1627,6 +1877,8 @@ def run_watch(args: argparse.Namespace) -> Path:
             frame_fallback_dir=None,
         )
     finally:
+        watch_scenes.detect_scenes = original_scene_detector
+        watch_ocr.ocr_frame = original_ocr
         if previous_subtitle_langs is None:
             os.environ.pop(setting_name, None)
         else:
@@ -1677,6 +1929,20 @@ def package_image_result(
     asset_reference = f"assets/original/{original_asset.name}"
 
     blocks, extractor_block_count = rapidocr_blocks(result, args.min_confidence)
+    roi = parse_ocr_roi(getattr(args, "ocr_roi", None))
+    if roi is not None:
+        x1, y1, _, _ = roi
+        for block in blocks:
+            block["bbox"] = [
+                block["bbox"][0] + x1,
+                block["bbox"][1] + y1,
+                block["bbox"][2] + x1,
+                block["bbox"][3] + y1,
+            ]
+            block["polygon"] = [
+                [float(point[0]) + x1, float(point[1]) + y1]
+                for point in block["polygon"]
+            ]
     evidence: list[dict[str, Any]] = [
         {
             "id": "rapidocr-image-000001",
@@ -1730,6 +1996,7 @@ def package_image_result(
             "retained_block_count": len(blocks),
             "minimum_confidence": args.min_confidence,
             "reading_order": "bbox_line_then_left",
+            "ocr_roi": roi,
             "elapsed_seconds": elapsed_seconds,
             "blocks": blocks,
         },
@@ -1737,6 +2004,8 @@ def package_image_result(
 
     warnings = list(args.warning)
     warnings.append("OCR文字、顺序和坐标未经人工校对；以原图为准")
+    if roi is not None:
+        warnings.append(f"OCR只处理用户明确指定的像素区域{roi}；区域外内容仍保留在原图中")
     rejected = extractor_block_count - len(blocks)
     if rejected:
         warnings.append(
@@ -1776,6 +2045,7 @@ def package_image_result(
         "ocr_block_count": len(blocks),
         "rejected_ocr_block_count": rejected,
         "ocr_reading_order": "bbox_line_then_left",
+        "ocr_roi": roi,
         "evidence_count": evidence_count,
         "asset_count": 1,
         "elapsed_seconds": elapsed_seconds,
@@ -1826,10 +2096,31 @@ def run_image(args: argparse.Namespace) -> Path:
         raise RuntimeError(
             "RapidOCR is not installed in this interpreter; run this command with its Python environment"
         ) from exc
+    source = args.source.expanduser().resolve()
+    roi = parse_ocr_roi(getattr(args, "ocr_roi", None))
+    temporary: Path | None = None
+    target = source
+    if roi is not None:
+        from PIL import Image
+
+        with Image.open(source) as image:
+            width, height = image.size
+            x1, y1, x2, y2 = roi
+            if x1 >= width or y1 >= height:
+                raise ValueError(f"OCR ROI {roi} is outside image {width}x{height}")
+            clipped = (x1, y1, min(x2, width), min(y2, height))
+            fd, name = tempfile.mkstemp(prefix="oks-ocr-roi-", suffix=".png")
+            os.close(fd)
+            temporary = Path(name)
+            image.crop(clipped).save(temporary)
     started = datetime.now(timezone.utc)
-    result = RapidOCR()(str(args.source.expanduser().resolve()))
-    elapsed = (datetime.now(timezone.utc) - started).total_seconds()
-    return package_image_result(args, result, elapsed_seconds=elapsed)
+    try:
+        result = RapidOCR()(str(target if temporary is None else temporary))
+        elapsed = (datetime.now(timezone.utc) - started).total_seconds()
+        return package_image_result(args, result, elapsed_seconds=elapsed)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
 
 
 def validate_bundle(bundle: Path) -> dict[str, Any]:

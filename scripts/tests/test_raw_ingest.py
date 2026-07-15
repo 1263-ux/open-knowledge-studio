@@ -54,10 +54,11 @@ def test_doctor_report_combines_route_checks(monkeypatch):
     monkeypatch.setattr(raw_ingest, "probe_file", lambda name, *_: {"name": name, "status": "ready"})
     report = raw_ingest.doctor_report({
         "watch_python": "watch", "document_python": "doc", "mineru_python": "mineru",
+        "formula_python": "formula",
         "ffmpeg": "ffmpeg", "ffprobe": "ffprobe",
     })
     assert report["ready"] is True
-    assert len(report["checks"]) == 6
+    assert len(report["checks"]) == 7
 
 
 def test_local_bypass_env_preserves_proxy_exclusions(monkeypatch):
@@ -80,6 +81,10 @@ def ingest_args(source, output):
         source=str(source), output=output, title=None, overwrite=False,
         benchmark=False, transcript_only=False, max_frames=3,
         mineru_method="auto", mineru_backend="pipeline",
+        formula_secondary=False, formula_max_regions=20,
+        hotwords=None, initial_prompt=None, asr_model="auto",
+        asr_language=None, video_profile="auto", ocr_roi=None,
+        screen_change_threshold=6.0, screen_sample_seconds=1.0,
     )
 
 
