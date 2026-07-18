@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import sys
 from typing import Optional
 
 import typer
@@ -16,6 +17,25 @@ from rich.markdown import Markdown
 
 from knowledge_studio import store
 from knowledge_studio.recall import recall, recall_episodic, recall_knowledge
+
+
+def _configure_utf8_stdio() -> None:
+    """Keep Unicode Raw evidence printable in Windows legacy code pages."""
+    if sys.platform != "win32":
+        return
+
+    for stream in (sys.stdout, sys.stderr):
+        encoding = (getattr(stream, "encoding", None) or "").lower().replace("-", "")
+        reconfigure = getattr(stream, "reconfigure", None)
+        if encoding not in {"utf8", "utf8sig"} and callable(reconfigure):
+            try:
+                reconfigure(encoding="utf-8", errors="replace")
+            except (OSError, ValueError):
+                # Redirected or already-closed streams may reject reconfiguration.
+                pass
+
+
+_configure_utf8_stdio()
 
 app = typer.Typer(
     name="oks",
