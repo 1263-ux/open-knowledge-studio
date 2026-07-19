@@ -9,8 +9,9 @@ CAPTCHAs, robots controls, or platform restrictions.
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import hashlib
 import json
 import os
@@ -38,6 +39,7 @@ class WorkerConfig:
     connector_python: Path
     output_root: Path
     identity: str = "user"
+    lease_seconds: int = 3600
 
 
 def utc_now() -> str:
@@ -120,6 +122,7 @@ def load_config(args: argparse.Namespace) -> WorkerConfig:
         connector_repo=connector_repo,
         connector_python=connector_python,
         output_root=Path(args.output_root or ROOT / ".oks" / "intake").expanduser().resolve(),
+        lease_seconds=int(args.lease_seconds),
     )
 
 
@@ -190,7 +193,7 @@ def create_record(config: WorkerConfig, fields: dict[str, Any]) -> dict[str, Any
 
 
 def list_records(config: WorkerConfig, limit: int = 100) -> list[dict[str, Any]]:
-    projection = ["内容", "思考", "附件", "运行状态", "运行ID", "来源哈希", "重试"]
+    projection = ["内容", "思考", "附件", "运行状态", "运行ID", "来源哈希", "重试", "租约所有者", "租约到期"]
     command = [
         "base",
         "+record-list",
@@ -222,11 +225,87 @@ def list_records(config: WorkerConfig, limit: int = 100) -> list[dict[str, Any]]
     return records
 
 
-def is_candidate(record: dict[str, Any]) -> bool:
+def parse_base_datetime(value: object) -> datetime | None:
+    value = scalar_cell(value)
+    if not isinstance(value, str) or not value.strip():
+        return None
+    normalized = value.strip().replace("Z", "+00:00")
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+    if parsed.tzinfo is not None:
+        parsed = parsed.astimezone().replace(tzinfo=None)
+    return parsed
+
+
+def is_candidate(record: dict[str, Any], *, now: datetime | None = None) -> bool:
     fields = record["fields"]
     status = scalar_cell(fields.get("运行状态"))
     retry = fields.get("重试") is True
-    return status in (None, "", "待处理") or retry
+    expired = status == "已领取" and (
+        (expires := parse_base_datetime(fields.get("租约到期"))) is not None
+        and expires <= (now or datetime.now().astimezone().replace(tzinfo=None))
+    )
+    return status in (None, "", "待处理") or retry or expired
+
+
+@contextmanager
+def local_claim_lock(config: WorkerConfig):
+    lock_dir = ROOT / ".oks" / "locks"
+    lock_dir.mkdir(parents=True, exist_ok=True)
+    key = hashlib.sha256(f"{config.base_token}/{config.table_id}".encode("utf-8")).hexdigest()[:16]
+    lock_path = lock_dir / f"feishu-base-{key}.lock"
+    with lock_path.open("a+b") as handle:
+        handle.seek(0, os.SEEK_END)
+        if handle.tell() == 0:
+            handle.write(b"0")
+            handle.flush()
+        handle.seek(0)
+        if os.name == "nt":
+            import msvcrt
+
+            msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
+            try:
+                yield
+            finally:
+                handle.seek(0)
+                msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+        else:
+            import fcntl
+
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+
+
+def claim_next_record(config: WorkerConfig, limit: int = 100) -> tuple[dict[str, Any], str, str] | None:
+    with local_claim_lock(config):
+        candidates = [record for record in list_records(config, limit) if is_candidate(record)]
+        if not candidates:
+            return None
+        record = candidates[0]
+        run_id = f"run-{datetime.now():%Y%m%dT%H%M%S}-{uuid.uuid4().hex[:8]}"
+        owner = f"{os.environ.get('COMPUTERNAME', 'local')}:{os.getpid()}:{uuid.uuid4().hex[:8]}"
+        expires = datetime.now().astimezone() + timedelta(seconds=config.lease_seconds)
+        update_record(
+            config,
+            record["record_id"],
+            {
+                "运行状态": "已领取",
+                "运行ID": run_id,
+                "租约所有者": owner,
+                "租约到期": expires.strftime("%Y-%m-%d %H:%M:%S"),
+                "重试": False,
+            },
+        )
+        return record, run_id, owner
+
+
+def release_lease(config: WorkerConfig, record_id: str) -> None:
+    update_record(config, record_id, {"租约所有者": None, "租约到期": None})
 
 
 def scalar_cell(value: object) -> object:
@@ -470,6 +549,55 @@ def package_local_attachment(config: WorkerConfig, source: Path, output: Path) -
     return report
 
 
+def package_routed_source(config: WorkerConfig, source: str, output: Path) -> dict[str, Any]:
+    if output.is_dir():
+        validation = subprocess.run(
+            [sys.executable, str(ROOT / "scripts" / "raw_bundle_adapter.py"), "validate", str(output)],
+            cwd=ROOT,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            capture_output=True,
+            check=False,
+        )
+        report = parse_json_output(validation)
+        if report.get("valid") is True:
+            return report
+        raise RuntimeError(f"existing routed output is invalid: {json.dumps(report, ensure_ascii=False)}")
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "scripts" / "raw_ingest.py"),
+            "ingest",
+            source,
+            "--output",
+            str(output),
+            "--benchmark",
+        ],
+        cwd=ROOT,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise RuntimeError((result.stderr or result.stdout).strip())
+    validation = subprocess.run(
+        [sys.executable, str(ROOT / "scripts" / "raw_bundle_adapter.py"), "validate", str(output)],
+        cwd=ROOT,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        capture_output=True,
+        check=False,
+    )
+    report = parse_json_output(validation)
+    if report.get("valid") is not True:
+        raise RuntimeError(f"routed Raw validation failed: {json.dumps(report, ensure_ascii=False)}")
+    return report
+
+
 def package_public_web(
     config: WorkerConfig,
     url: str,
@@ -576,6 +704,7 @@ def initial_run(run_id: str, capture: dict[str, Any], capability: str = "web.tra
             "text": {"status": "pending", "capability": capability if capability in {"web.trafilatura", "office.markitdown", "pdf.mineru"} else None, "error_code": None, "evidence_count": 0},
             "ocr": {"status": "skipped", "capability": None, "error_code": None, "evidence_count": 0},
             "asr": {"status": "skipped", "capability": None, "error_code": None, "evidence_count": 0},
+            "video": {"status": "skipped", "capability": None, "error_code": None, "evidence_count": 0},
             "visual_observation": {"status": "skipped", "capability": None, "error_code": None, "evidence_count": 0},
         },
         "warnings": [],
@@ -589,13 +718,14 @@ def finish_run(
     *,
     disposition: str = "none",
     error: dict[str, Any] | None = None,
+    error_modality: str = "text",
 ) -> None:
     run["status"] = status
     run["failure_disposition"] = disposition
     run["finished_at"] = utc_now()
     if error:
-        run["errors"].append({"code": error["code"], "message": error["message"], "modality": "text"})
-        run["modalities"]["text"].update({"status": "failed", "error_code": error["code"]})
+        run["errors"].append({"code": error["code"], "message": error["message"], "modality": error_modality})
+        run["modalities"][error_modality].update({"status": "failed", "error_code": error["code"]})
 
 
 def complete_browser_snapshot(config: WorkerConfig, record_id: str, snapshot_dir: Path) -> dict[str, Any]:
@@ -735,12 +865,17 @@ def complete_browser_snapshot(config: WorkerConfig, record_id: str, snapshot_dir
         return run
 
 
-def process_record(config: WorkerConfig, record: dict[str, Any]) -> dict[str, Any]:
+def process_record(
+    config: WorkerConfig,
+    record: dict[str, Any],
+    *,
+    claimed_run_id: str | None = None,
+) -> dict[str, Any]:
     record_id = record["record_id"]
     fields = record["fields"]
     url = extract_url(fields.get("内容"))
     attachment_descriptors = normalize_attachments(fields.get("附件"))
-    run_id = f"run-{datetime.now():%Y%m%dT%H%M%S}-{uuid.uuid4().hex[:8]}"
+    run_id = claimed_run_id or f"run-{datetime.now():%Y%m%dT%H%M%S}-{uuid.uuid4().hex[:8]}"
     capture = capture_envelope(config, record_id, fields)
     source_hash = capture["content_hash"]
     run_dir = ROOT / ".oks" / "runs" / run_id
@@ -906,6 +1041,96 @@ def process_record(config: WorkerConfig, record: dict[str, Any]) -> dict[str, An
         )
         return run
 
+    if receipt.get("next_action") == "platform_extractor":
+        try:
+            route = receipt.get("route_plan") or {}
+            platform_reference = {
+                "schema_version": "oks-platform-source-reference/v0.1",
+                "source_url": url,
+                "final_url": str(receipt.get("final_url") or url),
+                "platform": route.get("platform"),
+                "source_type": route.get("source_type"),
+                "original_media_retained": False,
+                "content_hash_status": "unavailable",
+                "retention_note": "The extractor may acquire temporary media; Raw retains captions, frames, OCR and metadata rather than the full platform media file.",
+            }
+            reference_path = run_dir / "platform-source.json"
+            atomic_write_json(reference_path, platform_reference)
+            capture["source_snapshot"] = {
+                "kind": "reference",
+                "content_hash_status": "unavailable",
+                "final_url": platform_reference["final_url"],
+                "content_type": receipt.get("content_type"),
+                "size": reference_path.stat().st_size,
+                "sha256": sha256_file(reference_path),
+            }
+            source_hash = envelope_content_hash(capture)
+            capture["content_hash"] = source_hash
+            capture["capture_id"] = f"feishu-{record_id}-{source_hash[:12]}"
+            run["capture_id"] = capture["capture_id"]
+            run["recipe_version"] = "feishu-platform-video-v0.1"
+            run["job"]["capability"] = "video.watch"
+            run["inputs"] = [{"dataset_id": capture["capture_id"], "uri": capture["source_uri"], "kind": "capture", "sha256": source_hash}]
+            run["modalities"]["text"].update({"status": "skipped", "capability": None})
+            run["modalities"]["video"].update({"status": "running", "capability": "video.watch"})
+            atomic_write_json(run_dir / "capture-envelope.json", capture)
+            atomic_write_json(run_dir / "processing-run.json", run)
+            update_record(config, record_id, {"运行状态": "探测中", "来源哈希": source_hash, "采集模式": "平台提取器"})
+            output = config.output_root / f"feishu-{record_id}-{source_hash[:10]}-platform-video"
+            report = package_routed_source(config, url, output)
+            metadata_path = output / "metadata.json"
+            metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+            metadata["capture_envelope"] = capture
+            metadata["fetch_receipt"] = str((run_dir / "fetch-receipt.json").resolve())
+            metadata["platform_source_reference"] = str(reference_path.resolve())
+            atomic_write_json(metadata_path, metadata)
+            quality_path = output / "quality-report.json"
+            quality_report = json.loads(quality_path.read_text(encoding="utf-8"))
+            quality = report.get("processing_status") or quality_report.get("processing_status") or metadata.get("processing_status") or "partial"
+            frame_count = int(quality_report.get("frame_count") or 0)
+            transcript_count = int(quality_report.get("transcript_segment_count") or 0)
+            ocr_count = int(quality_report.get("ocr_block_count") or 0)
+            run["modalities"]["video"].update({"status": "succeeded" if frame_count else "skipped", "evidence_count": frame_count})
+            run["modalities"]["asr"].update({"status": "succeeded" if transcript_count else "skipped", "capability": "video.watch" if transcript_count else None, "evidence_count": transcript_count})
+            run["modalities"]["ocr"].update({"status": "succeeded" if ocr_count else "skipped", "capability": "image.rapidocr" if ocr_count else None, "evidence_count": ocr_count})
+            run["warnings"] = [str(item) for item in quality_report.get("warnings", [])]
+            run["outputs"] = [{"dataset_id": f"bundle:{capture['capture_id']}", "uri": str(output), "kind": "bundle", "sha256": None}]
+            finish_run(run, "complete" if quality == "complete" else "partial")
+            atomic_write_json(run_dir / "processing-run.json", run)
+            finalize_raw_v2(config, output, run_dir / "capture-envelope.json", run_dir / "processing-run.json", reference_path)
+            update_record(
+                config,
+                record_id,
+                {
+                    "运行状态": "Raw就绪",
+                    "采集模式": "平台提取器",
+                    "Raw Bundle": str(output),
+                    "质量状态": quality,
+                    "错误码": None,
+                    "错误说明": None,
+                    "总结": f"平台视频 Raw Bundle v0.2 已生成；帧={frame_count}，字幕/ASR段={transcript_count}，OCR块={ocr_count}；未永久保存整段平台媒体。",
+                },
+            )
+        except Exception as error:
+            failure = {"code": "PLATFORM_EXTRACTOR_FAILED", "message": str(error)}
+            run["outputs"] = []
+            finish_run(run, "failed", disposition="retryable", error=failure, error_modality="video")
+            atomic_write_json(run_dir / "processing-run.json", run)
+            update_record(
+                config,
+                record_id,
+                {
+                    "运行状态": "可重试失败",
+                    "采集模式": "平台提取器",
+                    "错误码": failure["code"],
+                    "错误说明": failure["message"][:500],
+                    "质量状态": "failed",
+                    "Raw Bundle": None,
+                    "总结": f"平台提取器未生成 Raw：{failure['message']}"[:1000],
+                },
+            )
+        return run
+
     if not str(receipt.get("content_type", "")).lower().startswith("text/html"):
         try:
             source, acquisition = download_public_source(config, url, receipt, run_dir / "source-downloads")
@@ -1039,6 +1264,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--connector-repo")
     parser.add_argument("--connector-python")
     parser.add_argument("--output-root")
+    parser.add_argument("--lease-seconds", type=int, default=3600)
     subcommands = parser.add_subparsers(dest="command", required=True)
     enqueue = subcommands.add_parser("enqueue", help="Create one pending capture row.")
     enqueue.add_argument("content")
@@ -1053,6 +1279,11 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> int:
+    # Windows PowerShell commonly exposes a GBK console. Raw extraction output
+    # can contain arbitrary Unicode, so a successful run must not fail while
+    # serializing its final machine-readable result.
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     args = parse_args()
     config = load_config(args)
     if args.command == "enqueue":
@@ -1072,11 +1303,15 @@ def main() -> int:
         result = complete_browser_snapshot(config, args.record_id, args.snapshot_dir)
         print(json.dumps({"processed": True, "run": result}, ensure_ascii=False, indent=2))
         return 0 if result.get("status") in {"complete", "partial"} else 2
-    candidates = [record for record in list_records(config, args.limit) if is_candidate(record)]
-    if not candidates:
+    claimed = claim_next_record(config, args.limit)
+    if claimed is None:
         print(json.dumps({"processed": False, "reason": "no_pending_records"}, ensure_ascii=False))
         return 0
-    result = process_record(config, candidates[0])
+    record, run_id, _owner = claimed
+    try:
+        result = process_record(config, record, claimed_run_id=run_id)
+    finally:
+        release_lease(config, record["record_id"])
     print(json.dumps({"processed": True, "run": result}, ensure_ascii=False, indent=2))
     return 0
 

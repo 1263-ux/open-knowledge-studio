@@ -1,3 +1,4 @@
+import json
 import sys
 from pathlib import Path
 
@@ -18,6 +19,33 @@ def test_candidate_requires_pending_or_explicit_retry():
     assert worker.is_candidate({"fields": {"运行状态": ["待处理"], "重试": False}})
     assert worker.is_candidate({"fields": {"运行状态": "最终失败", "重试": True}})
     assert not worker.is_candidate({"fields": {"运行状态": "Raw就绪", "重试": False}})
+
+
+def test_expired_lease_can_be_reclaimed_but_active_lease_cannot():
+    now = worker.datetime(2026, 7, 19, 12, 0, 0)
+    expired = {"fields": {"运行状态": "已领取", "重试": False, "租约到期": "2026-07-19 11:59:59"}}
+    active = {"fields": {"运行状态": "已领取", "重试": False, "租约到期": "2026-07-19 12:00:01"}}
+    assert worker.is_candidate(expired, now=now)
+    assert not worker.is_candidate(active, now=now)
+
+
+def test_claim_next_record_writes_visible_lease(monkeypatch, tmp_path):
+    config = worker.WorkerConfig("base", "table", tmp_path / "lark.exe", tmp_path, tmp_path / "python.exe", tmp_path, lease_seconds=60)
+    record = {"record_id": "rec_lease", "fields": {"运行状态": "待处理", "重试": False}}
+    updates = []
+    monkeypatch.setattr(worker, "list_records", lambda *_: [record])
+    monkeypatch.setattr(worker, "update_record", lambda _c, record_id, patch: updates.append((record_id, patch)) or {})
+    monkeypatch.setattr(worker, "local_claim_lock", lambda _config: worker.contextmanager(lambda: (yield))())
+
+    claimed = worker.claim_next_record(config)
+
+    assert claimed is not None
+    assert claimed[0] == record
+    assert claimed[1].startswith("run-")
+    assert updates[0][0] == "rec_lease"
+    assert updates[0][1]["运行状态"] == "已领取"
+    assert updates[0][1]["租约所有者"]
+    assert updates[0][1]["租约到期"]
 
 
 def test_attachment_change_changes_capture_hash():
@@ -147,3 +175,60 @@ def test_javascript_page_waits_for_browser_snapshot(monkeypatch, tmp_path):
     assert updates[-1]["运行状态"] == "需人工"
     assert updates[-1]["采集模式"] == "公开浏览器"
     assert updates[-1]["Raw Bundle"] is None
+
+
+def test_platform_route_uses_watch_and_reference_snapshot(monkeypatch, tmp_path):
+    config = worker.WorkerConfig("base", "table", tmp_path / "lark.exe", tmp_path, tmp_path / "python.exe", tmp_path / "out")
+    updates = []
+    monkeypatch.setattr(worker, "update_record", lambda _c, _r, patch: updates.append(patch) or {})
+    monkeypatch.setattr(
+        worker,
+        "probe_source",
+        lambda *_: {
+            "status": "ok", "content_type": "text/html", "final_url": "https://www.bilibili.com/video/BV1/",
+            "next_action": "platform_extractor", "route_plan": {"platform": "bilibili", "source_type": "video"},
+        },
+    )
+    def fake_package(_config, _source, output):
+        output.mkdir(parents=True)
+        (output / "metadata.json").write_text('{"processing_status":"partial"}', encoding="utf-8")
+        (output / "quality-report.json").write_text('{"processing_status":"partial","frame_count":1,"transcript_segment_count":0,"ocr_block_count":2,"warnings":[]}', encoding="utf-8")
+        return {"processing_status": "partial"}
+    finalized = []
+    monkeypatch.setattr(worker, "package_routed_source", fake_package)
+    monkeypatch.setattr(worker, "finalize_raw_v2", lambda *_args: finalized.append(_args) or {"valid": True})
+
+    result = worker.process_record(config, {"record_id": "rec_video", "fields": {"内容": "https://www.bilibili.com/video/BV1", "思考": "test"}})
+
+    assert result["status"] == "partial"
+    assert result["job"]["capability"] == "video.watch"
+    assert result["modalities"]["video"]["evidence_count"] == 1
+    assert result["modalities"]["ocr"]["evidence_count"] == 2
+    assert updates[-1]["运行状态"] == "Raw就绪"
+    assert updates[-1]["采集模式"] == "平台提取器"
+    reference = finalized[0][-1]
+    assert json.loads(reference.read_text(encoding="utf-8"))["original_media_retained"] is False
+
+
+def test_platform_failure_is_attributed_to_video_modality(monkeypatch, tmp_path):
+    config = worker.WorkerConfig("base", "table", tmp_path / "lark.exe", tmp_path, tmp_path / "python.exe", tmp_path / "out")
+    updates = []
+    monkeypatch.setattr(worker, "update_record", lambda _c, _r, patch: updates.append(patch) or {})
+    monkeypatch.setattr(
+        worker,
+        "probe_source",
+        lambda *_: {
+            "status": "ok", "content_type": "text/html", "final_url": "https://www.bilibili.com/video/BV1/",
+            "next_action": "platform_extractor", "route_plan": {"platform": "bilibili", "source_type": "video"},
+        },
+    )
+    monkeypatch.setattr(worker, "package_routed_source", lambda *_: (_ for _ in ()).throw(RuntimeError("HTTP 412")))
+
+    result = worker.process_record(config, {"record_id": "rec_video_fail", "fields": {"内容": "https://www.bilibili.com/video/BV1", "思考": "test"}})
+
+    assert result["status"] == "failed"
+    assert result["modalities"]["video"]["status"] == "failed"
+    assert result["modalities"]["video"]["error_code"] == "PLATFORM_EXTRACTOR_FAILED"
+    assert result["modalities"]["text"]["status"] == "skipped"
+    assert result["errors"][0]["modality"] == "video"
+    assert updates[-1]["运行状态"] == "可重试失败"
