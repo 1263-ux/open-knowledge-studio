@@ -1,8 +1,10 @@
 # 浏览器登录态捕获与飞书移动入口
 
 > 讨论日期：2026-07-15  
-> 状态：方向设计，尚未进入实现  
+> 状态：历史设计，已被 2026-07-19 的 Feishu Base Worker 与 v0.2 协议基线部分取代
 > 前提：继续遵守 Raw“只提取、排序、打包、保留证据和暴露失败”的边界。
+
+> 当前事实来源：`oks-connector/docs/protocols-v0.1.md`、`oks-connector/schemas/` 与 `scripts/feishu_base_worker.py`。本文只保留浏览器登录态入口的设计背景，不再作为 Base 字段、状态机或 Raw Bundle 结构的实施规范。
 
 ## 1. 要解决的问题
 

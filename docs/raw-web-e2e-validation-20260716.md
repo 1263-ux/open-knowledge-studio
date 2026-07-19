@@ -1,5 +1,7 @@
 # 公开网页 Raw Inbox 端到端验证（2026-07-16）
 
+> 历史报告（superseded）：本文保留 Trafilatura 与浏览器渲染对照数据，但旧共享 Base、`91403` 和实验脚本未产品化的结论已过期。当前 Base Worker 位于 `scripts/feishu_base_worker.py`，Capture/Run/Raw v0.2 协议以 `oks-connector/schemas/` 为准。
+
 ## 1. 测试目标
 
 验证真实公开网页能否沿下面的路径进入 Open Knowledge Studio：
@@ -201,4 +203,3 @@ Wiki 为空，只包含这一条网页 Raw。以下查询均命中 `raw/misc/bui
 最终判断：
 
 > 公开网页已经能从飞书 Raw Inbox 进入可追溯 Raw Markdown 并被知识库召回；两级路由是必要的，单一 HTTP 正文提取不足以保留现实网页的完整结构和视觉信息。
-

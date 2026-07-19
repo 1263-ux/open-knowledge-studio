@@ -1,8 +1,10 @@
 # Raw 多模态录入核心标准
 
-> 状态：第一阶段规范 v0.1  
+> 状态：v0.1 兼容规范；新增产物使用 connector 的 v0.2 协议基线
 > 更新日期：2026-07-14  
 > 适用范围：现实世界数字内容进入 Open Knowledge Studio 的 `raw/` 之前和落盘时
+
+> v0.2 当前事实来源：`oks-connector/docs/protocols-v0.1.md`、`oks-connector/schemas/` 与 `oks-connector/capabilities/`。本文继续说明旧 Bundle 的读取和现有提取器行为，不再定义新 Capture、Processing Run 或 Bundle 清单字段。
 
 ## 1. 目标与边界
 
