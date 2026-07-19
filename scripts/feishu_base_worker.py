@@ -44,6 +44,14 @@ def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(4 * 1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def atomic_write_json(path: Path, value: object) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = json.dumps(value, ensure_ascii=False, indent=2) + "\n"
@@ -269,6 +277,18 @@ def capture_content_hash(fields: dict[str, Any]) -> str:
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
+def envelope_content_hash(capture: dict[str, Any]) -> str:
+    canonical = {
+        "source_type": capture["source_type"],
+        "source_uri": extract_url(capture.get("content")),
+        "content": capture.get("content"),
+        "user_note": capture.get("user_note"),
+        "attachments": capture.get("attachments", []),
+    }
+    payload = json.dumps(canonical, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
 def capture_envelope(config: WorkerConfig, record_id: str, fields: dict[str, Any]) -> dict[str, Any]:
     content_hash = capture_content_hash(fields)
     return {
@@ -306,6 +326,89 @@ def probe_source(config: WorkerConfig, url: str) -> dict[str, Any]:
         check=False,
     )
     return parse_json_output(result, allow_codes={0, 2})
+
+
+def download_attachments(config: WorkerConfig, record_id: str, output: Path) -> list[Path]:
+    output = output.resolve()
+    try:
+        relative_output = output.relative_to(ROOT)
+    except ValueError as error:
+        raise RuntimeError(f"attachment download target must stay inside Studio: {output}") from error
+    output.mkdir(parents=True, exist_ok=True)
+    lark_json(
+        config,
+        "base",
+        "+record-download-attachment",
+        *base_args(config),
+        "--record-id",
+        record_id,
+        "--output",
+        "./" + relative_output.as_posix(),
+        "--overwrite",
+    )
+    return sorted(path for path in output.iterdir() if path.is_file())
+
+
+def attachment_capability(path: Path) -> tuple[str, str]:
+    suffix = path.suffix.lower()
+    if suffix in {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tiff"}:
+        return "image.rapidocr", "ocr"
+    if suffix == ".pdf":
+        return "pdf.mineru", "text"
+    if suffix in {".mp4", ".webm", ".mov", ".mkv", ".avi"}:
+        return "video.watch", "asr"
+    if suffix in {".mp3", ".wav", ".m4a", ".aac", ".flac", ".ogg"}:
+        return "audio.faster-whisper", "asr"
+    return "office.markitdown", "text"
+
+
+def package_local_attachment(config: WorkerConfig, source: Path, output: Path) -> dict[str, Any]:
+    if output.is_dir():
+        validation = subprocess.run(
+            [sys.executable, str(ROOT / "scripts" / "raw_bundle_adapter.py"), "validate", str(output)],
+            cwd=ROOT,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            capture_output=True,
+            check=False,
+        )
+        report = parse_json_output(validation)
+        if report.get("valid") is True:
+            return report
+        raise RuntimeError(f"existing attachment output is invalid: {json.dumps(report, ensure_ascii=False)}")
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "scripts" / "raw_ingest.py"),
+            "ingest",
+            str(source),
+            "--output",
+            str(output),
+            "--benchmark",
+        ],
+        cwd=ROOT,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise RuntimeError((result.stderr or result.stdout).strip())
+    validation = subprocess.run(
+        [sys.executable, str(ROOT / "scripts" / "raw_bundle_adapter.py"), "validate", str(output)],
+        cwd=ROOT,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        capture_output=True,
+        check=False,
+    )
+    report = parse_json_output(validation)
+    if report.get("valid") is not True:
+        raise RuntimeError(f"attachment Raw validation failed: {json.dumps(report, ensure_ascii=False)}")
+    return report
 
 
 def package_public_web(
@@ -354,10 +457,10 @@ def finalize_raw_v2(
     output: Path,
     capture_path: Path,
     run_path: Path,
+    source_path: Path | None = None,
 ) -> dict[str, Any]:
     script = config.connector_repo / "scripts" / "raw_bundle_adapter.py"
-    result = subprocess.run(
-        [
+    command = [
             str(config.connector_python),
             str(script),
             "finalize-v2",
@@ -366,7 +469,11 @@ def finalize_raw_v2(
             str(capture_path),
             "--processing-run",
             str(run_path),
-        ],
+        ]
+    if source_path is not None:
+        command.extend(["--source", str(source_path)])
+    result = subprocess.run(
+        command,
         cwd=config.connector_repo,
         text=True,
         encoding="utf-8",
@@ -380,18 +487,18 @@ def finalize_raw_v2(
     return report
 
 
-def initial_run(run_id: str, capture: dict[str, Any]) -> dict[str, Any]:
+def initial_run(run_id: str, capture: dict[str, Any], capability: str = "web.trafilatura") -> dict[str, Any]:
     return {
         "schema_version": "oks-processing-run/v0.2",
         "run_id": run_id,
         "parent_run_id": None,
         "capture_id": capture["capture_id"],
-        "recipe_version": "feishu-web-v0.1",
+        "recipe_version": "feishu-web-v0.1" if capability == "web.trafilatura" else "feishu-attachment-v0.1",
         "job": {
             "namespace": "open-knowledge-studio",
             "name": "feishu-base-to-raw",
             "version": "0.1.0",
-            "capability": "web.trafilatura",
+            "capability": capability,
         },
         "started_at": utc_now(),
         "finished_at": None,
@@ -407,7 +514,7 @@ def initial_run(run_id: str, capture: dict[str, Any]) -> dict[str, Any]:
         ],
         "outputs": [],
         "modalities": {
-            "text": {"status": "pending", "capability": "web.trafilatura", "error_code": None, "evidence_count": 0},
+            "text": {"status": "pending", "capability": capability if capability in {"web.trafilatura", "office.markitdown", "pdf.mineru"} else None, "error_code": None, "evidence_count": 0},
             "ocr": {"status": "skipped", "capability": None, "error_code": None, "evidence_count": 0},
             "asr": {"status": "skipped", "capability": None, "error_code": None, "evidence_count": 0},
             "visual_observation": {"status": "skipped", "capability": None, "error_code": None, "evidence_count": 0},
@@ -436,11 +543,15 @@ def process_record(config: WorkerConfig, record: dict[str, Any]) -> dict[str, An
     record_id = record["record_id"]
     fields = record["fields"]
     url = extract_url(fields.get("内容"))
+    attachment_descriptors = normalize_attachments(fields.get("附件"))
     run_id = f"run-{datetime.now():%Y%m%dT%H%M%S}-{uuid.uuid4().hex[:8]}"
     capture = capture_envelope(config, record_id, fields)
     source_hash = capture["content_hash"]
     run_dir = ROOT / ".oks" / "runs" / run_id
-    run = initial_run(run_id, capture)
+    declared_capability = "web.trafilatura"
+    if not url and attachment_descriptors:
+        declared_capability, _ = attachment_capability(Path(attachment_descriptors[0]["name"]))
+    run = initial_run(run_id, capture, declared_capability)
     atomic_write_json(run_dir / "capture-envelope.json", capture)
     atomic_write_json(run_dir / "processing-run.json", run)
     update_record(
@@ -456,6 +567,78 @@ def process_record(config: WorkerConfig, record: dict[str, Any]) -> dict[str, An
             "Wiki状态": "none",
         },
     )
+    if not url and attachment_descriptors:
+        try:
+            downloaded = download_attachments(config, record_id, run_dir / "source-downloads")
+            if len(downloaded) != 1:
+                raise RuntimeError(f"首版附件 Worker 要求恰好 1 个附件，实际下载 {len(downloaded)} 个")
+            source = downloaded[0]
+            capability, modality = attachment_capability(source)
+            capture["attachments"][0]["sha256"] = sha256_file(source)
+            source_hash = envelope_content_hash(capture)
+            capture["content_hash"] = source_hash
+            capture["capture_id"] = f"feishu-{record_id}-{source_hash[:12]}"
+            run["capture_id"] = capture["capture_id"]
+            run["job"]["capability"] = capability
+            run["inputs"] = [{"dataset_id": capture["capture_id"], "uri": capture["source_uri"], "kind": "capture", "sha256": source_hash}]
+            run["modalities"]["text"]["status"] = "skipped" if modality != "text" else "running"
+            run["modalities"][modality].update({"status": "running", "capability": capability})
+            atomic_write_json(run_dir / "capture-envelope.json", capture)
+            atomic_write_json(run_dir / "processing-run.json", run)
+            update_record(config, record_id, {"运行状态": "探测中", "来源哈希": source_hash, "采集模式": "附件"})
+            safe_stem = re.sub(r"[^A-Za-z0-9._-]+", "-", source.stem).strip("-.") or "attachment"
+            output = config.output_root / f"feishu-{record_id}-{source_hash[:10]}-{safe_stem}"
+            report = package_local_attachment(config, source, output)
+            metadata_path = output / "metadata.json"
+            metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+            metadata["capture_envelope"] = capture
+            atomic_write_json(metadata_path, metadata)
+            quality = report.get("processing_status") or metadata.get("processing_status") or "partial"
+            evidence_count = int(report.get("evidence_count") or 0)
+            run["modalities"][modality].update({"status": "succeeded", "evidence_count": evidence_count})
+            run["outputs"] = [{"dataset_id": f"bundle:{capture['capture_id']}", "uri": str(output), "kind": "bundle", "sha256": None}]
+            finish_run(run, "complete" if quality == "complete" else "partial")
+            atomic_write_json(run_dir / "processing-run.json", run)
+            finalize_raw_v2(
+                config,
+                output,
+                run_dir / "capture-envelope.json",
+                run_dir / "processing-run.json",
+                source,
+            )
+            update_record(
+                config,
+                record_id,
+                {
+                    "运行状态": "Raw就绪",
+                    "采集模式": "附件",
+                    "Raw Bundle": str(output),
+                    "质量状态": quality,
+                    "错误码": None,
+                    "错误说明": None,
+                    "总结": f"附件 Raw Bundle v0.2 已生成并通过校验；能力={capability}；质量状态={quality}。",
+                },
+            )
+        except Exception as error:
+            failure = {"code": "ATTACHMENT_PROCESSING_FAILED", "message": str(error)}
+            run["outputs"] = []
+            finish_run(run, "failed", disposition="retryable", error=failure)
+            atomic_write_json(run_dir / "processing-run.json", run)
+            update_record(
+                config,
+                record_id,
+                {
+                    "运行状态": "可重试失败",
+                    "采集模式": "附件",
+                    "错误码": failure["code"],
+                    "错误说明": failure["message"][:500],
+                    "质量状态": "failed",
+                    "Raw Bundle": None,
+                    "总结": f"附件未生成 Raw：{failure['message']}"[:1000],
+                },
+            )
+        return run
+
     if not url:
         error = {"code": "UNSUPPORTED_SOURCE", "message": "内容字段中没有 HTTP(S) URL"}
         finish_run(run, "failed", disposition="final", error=error)

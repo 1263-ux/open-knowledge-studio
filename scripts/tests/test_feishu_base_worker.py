@@ -29,6 +29,35 @@ def test_attachment_change_changes_capture_hash():
     assert worker.capture_content_hash(original) != worker.capture_content_hash(changed)
 
 
+def test_downloaded_attachment_sha_changes_final_envelope_hash(tmp_path):
+    fields = {
+        "内容": "attachment only",
+        "思考": "note",
+        "附件": [{"file_token": "file_1", "name": "sample.txt", "size": 3}],
+    }
+    config = worker.WorkerConfig("base", "table", tmp_path / "lark.exe", tmp_path, tmp_path / "python.exe", tmp_path)
+    capture = worker.capture_envelope(config, "rec_1", fields)
+    before = capture["content_hash"]
+    capture["attachments"][0]["sha256"] = "a" * 64
+    assert worker.envelope_content_hash(capture) != before
+
+
+def test_attachment_capability_routes_existing_adapters():
+    assert worker.attachment_capability(Path("paper.pdf")) == ("pdf.mineru", "text")
+    assert worker.attachment_capability(Path("scan.png")) == ("image.rapidocr", "ocr")
+    assert worker.attachment_capability(Path("notes.txt")) == ("office.markitdown", "text")
+
+
+def test_attachment_download_passes_repository_relative_output(monkeypatch, tmp_path):
+    output = worker.ROOT / ".oks" / "runs" / "test-relative-output"
+    config = worker.WorkerConfig("base", "table", tmp_path / "lark.exe", tmp_path, tmp_path / "python.exe", tmp_path)
+    commands = []
+    monkeypatch.setattr(worker, "lark_json", lambda _config, *args: commands.append(args) or {})
+    worker.download_attachments(config, "rec_1", output)
+    output_arg = commands[0][commands[0].index("--output") + 1]
+    assert output_arg == "./.oks/runs/test-relative-output"
+
+
 def test_list_records_maps_projected_rows(monkeypatch, tmp_path):
     config = worker.WorkerConfig("base", "table", tmp_path / "lark.exe", tmp_path, tmp_path / "python.exe", tmp_path)
     monkeypatch.setattr(

@@ -36,6 +36,10 @@ cli/knowledge_studio.egg-info/
 docs/_site/
 docs/.jekyll-cache/
 
+# Generated document/PDF test artifacts
+output/pdf/
+tmp/pdfs/
+
 # Wiki content (local only — do not push to remote)
 wiki/**/*.md
 !wiki/**/.gitkeep

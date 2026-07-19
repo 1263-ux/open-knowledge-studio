@@ -1,0 +1,5 @@
+Open Knowledge Studio Feishu attachment E2E fixture
+
+This file contains deterministic, non-sensitive test content.
+It verifies that an attachment-only Base record is downloaded, hashed,
+routed through the existing document adapter, and packaged as Raw v0.2.
