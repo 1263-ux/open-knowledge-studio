@@ -284,6 +284,7 @@ def envelope_content_hash(capture: dict[str, Any]) -> str:
         "content": capture.get("content"),
         "user_note": capture.get("user_note"),
         "attachments": capture.get("attachments", []),
+        "source_snapshot": capture.get("source_snapshot"),
     }
     payload = json.dumps(canonical, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
@@ -326,6 +327,64 @@ def probe_source(config: WorkerConfig, url: str) -> dict[str, Any]:
         check=False,
     )
     return parse_json_output(result, allow_codes={0, 2})
+
+
+def content_type_extension(content_type: str | None) -> str:
+    return {
+        "application/pdf": ".pdf",
+        "image/png": ".png",
+        "image/jpeg": ".jpg",
+        "image/webp": ".webp",
+        "image/bmp": ".bmp",
+        "image/tiff": ".tiff",
+        "audio/mpeg": ".mp3",
+        "audio/wav": ".wav",
+        "audio/x-wav": ".wav",
+        "audio/mp4": ".m4a",
+        "video/mp4": ".mp4",
+        "video/webm": ".webm",
+    }.get((content_type or "").split(";", 1)[0].strip().lower(), "")
+
+
+def download_public_source(
+    config: WorkerConfig,
+    url: str,
+    probe_receipt: dict[str, Any],
+    output_dir: Path,
+) -> tuple[Path, dict[str, Any]]:
+    suffix = Path(str(probe_receipt.get("final_url") or url).split("?", 1)[0]).suffix.lower()
+    if not suffix:
+        suffix = content_type_extension(probe_receipt.get("content_type"))
+    if not suffix:
+        raise RuntimeError("public file route has neither a supported URL extension nor MIME type")
+    output_dir.mkdir(parents=True, exist_ok=True)
+    target = output_dir / f"source{suffix}"
+    script = config.connector_repo / "scripts" / "raw_bundle_adapter.py"
+    result = subprocess.run(
+        [
+            str(config.connector_python),
+            str(script),
+            "fetch",
+            url,
+            "--output",
+            str(target),
+            "--overwrite",
+        ],
+        cwd=config.connector_repo,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        capture_output=True,
+        check=False,
+    )
+    receipt = parse_json_output(result, allow_codes={0, 2})
+    if receipt.get("status") != "ok":
+        error = receipt.get("error") or {}
+        raise RuntimeError(f"{error.get('code', 'FETCH_FAILED')}: {error.get('message', 'source download failed')}")
+    downloaded = Path(str(receipt.get("output") or target)).resolve()
+    if not downloaded.is_file():
+        raise RuntimeError(f"fetch reported success without a source snapshot: {downloaded}")
+    return downloaded, receipt
 
 
 def download_attachments(config: WorkerConfig, record_id: str, output: Path) -> list[Path]:
@@ -539,6 +598,143 @@ def finish_run(
         run["modalities"]["text"].update({"status": "failed", "error_code": error["code"]})
 
 
+def complete_browser_snapshot(config: WorkerConfig, record_id: str, snapshot_dir: Path) -> dict[str, Any]:
+    snapshot_dir = snapshot_dir.expanduser().resolve()
+    html = snapshot_dir / "rendered.html"
+    screenshot = snapshot_dir / "screenshot.png"
+    snapshot_manifest = snapshot_dir / "snapshot.json"
+    for required in (html, screenshot, snapshot_manifest):
+        if not required.is_file():
+            raise FileNotFoundError(required)
+    snapshot = json.loads(snapshot_manifest.read_text(encoding="utf-8"))
+    records = list_records(config, 100)
+    record = next((item for item in records if item["record_id"] == record_id), None)
+    if record is None:
+        raise RuntimeError(f"Base record not found in current table: {record_id}")
+    fields = record["fields"]
+    source_url = extract_url(fields.get("内容"))
+    if not source_url:
+        raise RuntimeError("Base record has no HTTP(S) URL")
+    snapshot_url = str(snapshot.get("url") or "").split("#", 1)[0].rstrip("/")
+    if snapshot_url != source_url.split("#", 1)[0].rstrip("/"):
+        raise RuntimeError("browser snapshot URL does not match the Base record URL")
+
+    run_id = f"run-{datetime.now():%Y%m%dT%H%M%S}-{uuid.uuid4().hex[:8]}"
+    capture = capture_envelope(config, record_id, fields)
+    capture["source_snapshot"] = {
+        "final_url": str(snapshot["url"]),
+        "content_type": "text/html",
+        "size": html.stat().st_size,
+        "sha256": sha256_file(html),
+    }
+    source_hash = envelope_content_hash(capture)
+    capture["content_hash"] = source_hash
+    capture["capture_id"] = f"feishu-{record_id}-{source_hash[:12]}"
+    run = initial_run(run_id, capture, "web.browser-snapshot")
+    run["recipe_version"] = "feishu-browser-snapshot-v0.1"
+    run["modalities"]["text"].update({"status": "running", "capability": "web.browser-snapshot"})
+    run_dir = ROOT / ".oks" / "runs" / run_id
+    atomic_write_json(run_dir / "capture-envelope.json", capture)
+    atomic_write_json(run_dir / "processing-run.json", run)
+    update_record(
+        config,
+        record_id,
+        {
+            "运行状态": "已领取",
+            "运行ID": run_id,
+            "来源哈希": source_hash,
+            "采集模式": "公开浏览器",
+            "错误码": None,
+            "错误说明": None,
+            "重试": False,
+        },
+    )
+    try:
+        output = config.output_root / f"feishu-{record_id}-{source_hash[:10]}-browser"
+        report = package_local_attachment(config, html, output)
+        assets = output / "assets"
+        derived = output / "derived"
+        assets.mkdir(exist_ok=True)
+        derived.mkdir(exist_ok=True)
+        shutil.copy2(screenshot, assets / "browser-screenshot.png")
+        shutil.copy2(snapshot_manifest, derived / "browser-snapshot.json")
+        evidence_path = output / "evidence.jsonl"
+        existing_evidence = [
+            json.loads(line)
+            for line in evidence_path.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+        existing_evidence.append(
+            {
+                "id": "browser-screenshot-0001",
+                "kind": "browser_screenshot",
+                "text": str(snapshot.get("title") or "Rendered browser snapshot"),
+                "method": "browser.public",
+                "locator": {"asset": "assets/browser-screenshot.png", "url": snapshot["url"]},
+            }
+        )
+        evidence_path.write_text(
+            "".join(json.dumps(item, ensure_ascii=False) + "\n" for item in existing_evidence),
+            encoding="utf-8",
+            newline="\n",
+        )
+        quality_path = output / "quality-report.json"
+        quality_report = json.loads(quality_path.read_text(encoding="utf-8"))
+        quality_report["evidence_count"] = len(existing_evidence)
+        quality_report.setdefault("coverage_checks", {})["browser_screenshot"] = {
+            "expected": 1,
+            "observed": 1,
+            "status": "passed",
+        }
+        atomic_write_json(quality_path, quality_report)
+        metadata_path = output / "metadata.json"
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        metadata["capture_envelope"] = capture
+        metadata["browser_snapshot"] = {
+            "manifest": "derived/browser-snapshot.json",
+            "screenshot": "assets/browser-screenshot.png",
+        }
+        atomic_write_json(metadata_path, metadata)
+        quality = report.get("processing_status") or metadata.get("processing_status") or "partial"
+        run["modalities"]["text"].update({"status": "succeeded", "evidence_count": len(existing_evidence)})
+        run["outputs"] = [{"dataset_id": f"bundle:{capture['capture_id']}", "uri": str(output), "kind": "bundle", "sha256": None}]
+        finish_run(run, "complete" if quality == "complete" else "partial")
+        atomic_write_json(run_dir / "processing-run.json", run)
+        finalize_raw_v2(config, output, run_dir / "capture-envelope.json", run_dir / "processing-run.json", html)
+        update_record(
+            config,
+            record_id,
+            {
+                "运行状态": "Raw就绪",
+                "采集模式": "公开浏览器",
+                "Raw Bundle": str(output),
+                "质量状态": quality,
+                "错误码": None,
+                "错误说明": None,
+                "总结": f"公开 JavaScript 页面已从受控浏览器快照生成 Raw Bundle v0.2；质量状态={quality}。",
+            },
+        )
+        return run
+    except Exception as error:
+        failure = {"code": "BROWSER_SNAPSHOT_PROCESSING_FAILED", "message": str(error)}
+        run["outputs"] = []
+        finish_run(run, "failed", disposition="retryable", error=failure)
+        atomic_write_json(run_dir / "processing-run.json", run)
+        update_record(
+            config,
+            record_id,
+            {
+                "运行状态": "可重试失败",
+                "采集模式": "公开浏览器",
+                "错误码": failure["code"],
+                "错误说明": failure["message"][:500],
+                "质量状态": "failed",
+                "Raw Bundle": None,
+            },
+        )
+        return run
+
+
 def process_record(config: WorkerConfig, record: dict[str, Any]) -> dict[str, Any]:
     record_id = record["record_id"]
     fields = record["fields"]
@@ -688,11 +884,99 @@ def process_record(config: WorkerConfig, record: dict[str, Any]) -> dict[str, An
         )
         return run
 
-    if not str(receipt.get("content_type", "")).lower().startswith("text/html"):
-        error = {"code": "UNSUPPORTED_FETCH_ROUTE", "message": "首版 Worker 仅自动打包公开 HTML；其他格式交给已有模态路由"}
+    if (receipt.get("error") or {}).get("code") == "JS_RENDER_REQUIRED" or receipt.get("next_action") == "browser_public":
+        error = {
+            "code": "JS_RENDER_REQUIRED",
+            "message": "公开页面需要浏览器执行 JavaScript；等待受控浏览器快照后继续",
+        }
         finish_run(run, "failed", disposition="needs_user_action", error=error)
         atomic_write_json(run_dir / "processing-run.json", run)
-        update_record(config, record_id, {"运行状态": "需人工", "错误码": error["code"], "错误说明": error["message"]})
+        update_record(
+            config,
+            record_id,
+            {
+                "运行状态": "需人工",
+                "采集模式": "公开浏览器",
+                "错误码": error["code"],
+                "错误说明": error["message"],
+                "质量状态": "failed",
+                "Raw Bundle": None,
+                "总结": "HTTP 探测确认需要 JavaScript；尚未生成 Raw，等待公开浏览器快照。",
+            },
+        )
+        return run
+
+    if not str(receipt.get("content_type", "")).lower().startswith("text/html"):
+        try:
+            source, acquisition = download_public_source(config, url, receipt, run_dir / "source-downloads")
+            atomic_write_json(run_dir / "acquisition-receipt.json", acquisition)
+            capability, modality = attachment_capability(source)
+            if capability == "office.markitdown" and source.suffix.lower() not in {".pptx", ".docx", ".xlsx", ".html", ".htm", ".txt", ".csv"}:
+                raise RuntimeError(f"unsupported downloaded source format: {source.suffix or 'unknown'}")
+            capture["source_snapshot"] = {
+                "final_url": str(acquisition.get("final_url") or url),
+                "content_type": acquisition.get("content_type"),
+                "size": int(acquisition.get("downloaded_bytes") or source.stat().st_size),
+                "sha256": str(acquisition.get("content_sha256") or sha256_file(source)),
+            }
+            source_hash = envelope_content_hash(capture)
+            capture["content_hash"] = source_hash
+            capture["capture_id"] = f"feishu-{record_id}-{source_hash[:12]}"
+            run["capture_id"] = capture["capture_id"]
+            run["recipe_version"] = "feishu-public-file-v0.1"
+            run["job"]["capability"] = capability
+            run["inputs"] = [{"dataset_id": capture["capture_id"], "uri": capture["source_uri"], "kind": "capture", "sha256": source_hash}]
+            run["modalities"]["text"]["status"] = "skipped" if modality != "text" else "running"
+            run["modalities"][modality].update({"status": "running", "capability": capability})
+            atomic_write_json(run_dir / "capture-envelope.json", capture)
+            atomic_write_json(run_dir / "processing-run.json", run)
+            update_record(config, record_id, {"运行状态": "探测中", "来源哈希": source_hash, "采集模式": "HTTP"})
+            output = config.output_root / f"feishu-{record_id}-{source_hash[:10]}-{source.stem}"
+            report = package_local_attachment(config, source, output)
+            metadata_path = output / "metadata.json"
+            metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+            metadata["capture_envelope"] = capture
+            metadata["fetch_receipt"] = str((run_dir / "fetch-receipt.json").resolve())
+            metadata["acquisition_receipt"] = str((run_dir / "acquisition-receipt.json").resolve())
+            atomic_write_json(metadata_path, metadata)
+            quality = report.get("processing_status") or metadata.get("processing_status") or "partial"
+            evidence_count = int(report.get("evidence_count") or 0)
+            run["modalities"][modality].update({"status": "succeeded", "evidence_count": evidence_count})
+            run["outputs"] = [{"dataset_id": f"bundle:{capture['capture_id']}", "uri": str(output), "kind": "bundle", "sha256": None}]
+            finish_run(run, "complete" if quality == "complete" else "partial")
+            atomic_write_json(run_dir / "processing-run.json", run)
+            finalize_raw_v2(config, output, run_dir / "capture-envelope.json", run_dir / "processing-run.json", source)
+            update_record(
+                config,
+                record_id,
+                {
+                    "运行状态": "Raw就绪",
+                    "采集模式": "HTTP",
+                    "Raw Bundle": str(output),
+                    "质量状态": quality,
+                    "错误码": None,
+                    "错误说明": None,
+                    "总结": f"公网文件 Raw Bundle v0.2 已生成并通过校验；能力={capability}；质量状态={quality}。",
+                },
+            )
+        except Exception as error:
+            failure = {"code": "PUBLIC_FILE_PROCESSING_FAILED", "message": str(error)}
+            run["outputs"] = []
+            finish_run(run, "failed", disposition="retryable", error=failure)
+            atomic_write_json(run_dir / "processing-run.json", run)
+            update_record(
+                config,
+                record_id,
+                {
+                    "运行状态": "可重试失败",
+                    "采集模式": "HTTP",
+                    "错误码": failure["code"],
+                    "错误说明": failure["message"][:500],
+                    "质量状态": "failed",
+                    "Raw Bundle": None,
+                    "总结": f"公网文件未生成 Raw：{failure['message']}"[:1000],
+                },
+            )
         return run
 
     output = config.output_root / f"feishu-{record_id}-{source_hash[:10]}"
@@ -762,6 +1046,9 @@ def parse_args() -> argparse.Namespace:
     enqueue.add_argument("--rating", choices=("A", "B", "C"))
     once = subcommands.add_parser("run-once", help="Process at most one pending row.")
     once.add_argument("--limit", type=int, default=100)
+    browser = subcommands.add_parser("complete-browser", help="Complete one JS-rendered record from a controlled browser snapshot.")
+    browser.add_argument("--record-id", required=True)
+    browser.add_argument("--snapshot-dir", type=Path, required=True)
     return parser.parse_args()
 
 
@@ -781,6 +1068,10 @@ def main() -> int:
             fields["评级"] = args.rating
         print(json.dumps(create_record(config, fields), ensure_ascii=False, indent=2))
         return 0
+    if args.command == "complete-browser":
+        result = complete_browser_snapshot(config, args.record_id, args.snapshot_dir)
+        print(json.dumps({"processed": True, "run": result}, ensure_ascii=False, indent=2))
+        return 0 if result.get("status") in {"complete", "partial"} else 2
     candidates = [record for record in list_records(config, args.limit) if is_candidate(record)]
     if not candidates:
         print(json.dumps({"processed": False, "reason": "no_pending_records"}, ensure_ascii=False))
