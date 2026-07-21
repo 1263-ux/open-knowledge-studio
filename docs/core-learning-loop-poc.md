@@ -52,9 +52,11 @@ POC 的成功单位不是“生成一个 Raw Bundle”，而是“一条真实�
 
 ### T1：选择一个种子样本
 
-- [ ] 从当前飞书 Base 已成功生成 Raw 的内容中选择一条公开文章作为第一条种子。
-- [ ] 写清“为什么保存”和“我想解决的问题”。
-- [ ] 固定该记录、Run 和 Raw Bundle，整个 POC 不更换样本。
+- [x] 从当前飞书 Base 已成功生成 Raw 的内容中选择一条公开文章作为第一条种子。
+- [x] 写清“为什么保存”和“我想解决的问题”。
+- [x] 固定该记录、Run 和 Raw Bundle，整个 POC 不更换样本。
+
+首轮执行证据见 `loop-runs/2026-07-21-obsidian-web-clipper.md`。种子是 Obsidian 官方 Web Clipper 仓库，学习问题是“如何复用官方 Clipper 做低摩擦 Capture Adapter，而不是重新开发插件？”
 
 验收证据：Base record ID、Capture ID、Run ID、Raw Bundle 路径和一个学习问题。
 
@@ -62,10 +64,10 @@ POC 的成功单位不是“生成一个 Raw Bundle”，而是“一条真实�
 
 ### T2：确认 Capture → Raw
 
-- [ ] 重新读取种子 Capture，不修改用户原始输入。
-- [ ] 运行对应的成熟解析能力。
-- [ ] 校验 Raw Bundle，记录 `complete/partial/failed` 和 warning。
-- [ ] 任一失败必须停在真实阶段，禁止用人工摘要伪装 Raw 成功。
+- [x] 重新读取种子 Capture，不修改用户原始输入。
+- [x] 运行对应的成熟解析能力。
+- [x] 校验 Raw Bundle，记录 `complete/partial/failed` 和 warning。
+- [x] 任一失败必须停在真实阶段，禁止用人工摘要伪装 Raw 成功。
 
 验收证据：`capture-envelope.json`、`processing-run.json`、`bundle.json`、`content.md`、`evidence.jsonl` 和 `quality-report.json`。
 
@@ -73,10 +75,10 @@ POC 的成功单位不是“生成一个 Raw Bundle”，而是“一条真实�
 
 ### T3：生成 Teach-back Candidate
 
-- [ ] 基于用户学习问题读取 Raw 和必要 evidence。
-- [ ] 生成一份 Candidate，不直接修改 Wiki。
-- [ ] 将来源事实、个人理解、推断和未知项分开。
-- [ ] 提出一个可以实际执行的小实验或行动。
+- [x] 基于用户学习问题读取 Raw 和必要 evidence。
+- [x] 生成一份 Candidate，不直接修改 Wiki。
+- [x] 将来源事实、个人理解、推断和未知项分开。
+- [x] 提出一个可以实际执行的小实验或行动。
 
 Candidate 最小结构：
 
