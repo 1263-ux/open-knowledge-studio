@@ -26,13 +26,16 @@ POC 的成功单位不是“生成一个 Raw Bundle”，而是“一条真实�
 
 | 层 | 负责 | 不负责 |
 |---|---|---|
-| 飞书 / Obsidian | 用户入口、原始备注、附件或页面快照 | 自动判断知识价值 |
+| 飞书 Base | POC 唯一主入口与验收控制面：提交、状态、审核、重试、结果 | 机械解析和自动判断知识价值 |
+| Obsidian | POC 通过后的可选 Capture Adapter | 第一轮主流程与验收控制面 |
 | `oks-connector` | 获取后解析、证据定位、质量和失败事实 | 摘要、纠错、Wiki 决策 |
 | Studio | 编排、Candidate、审核、召回、反馈 | 绕过登录、反爬或平台限制 |
 | Wiki | 经审核的个人理解、实践结论和关系 | 保存整份原文或未经审核的 AI 输出 |
 | GitHub Pages | 展示经过审核的知识和方法 | 发布 Raw、凭据或整段转载内容 |
 
 当前 Capture/Processing Run/Raw Bundle v0.2 的机器事实源位于 `oks-connector/schemas/`，Studio 文档不再复制另一套协议定义。
+
+第一轮必须证明：用户不依赖终端或对话中的隐式状态，只在既有飞书 Base 中就能看见并推动整条记录从提交走到验收。Base 不是临时入口，而是本 POC 的状态机、人工门禁和可观察控制面。
 
 ## 3. 核心任务清单
 
@@ -104,14 +107,16 @@ Candidate 最小结构：
 
 ### T4：人工审核并晋升 Wiki
 
-- [ ] 用户逐项确认核心结论。
-- [ ] 记录修改类型：事实纠正、缺少上下文、结构改进或无修改。
+- [ ] Candidate 内容或可访问链接回填到当前 Base 记录。
+- [ ] 用户在 Base 内执行 `accept/edit/reject/defer`，而不是依赖聊天口令。
+- [ ] Base 持久记录审核时间、审核意见和修改类型。
 - [ ] 接受后生成一篇 Wiki 页面；拒绝时保留拒绝理由。
 - [ ] Wiki 保存 Raw/Capture 来源，不直接依赖临时文件路径。
 
 验收条件：
 
 - 存在明确审核动作和时间；
+- 仅查看 Base 就能知道 Candidate 内容、当前门禁和下一步动作；
 - Wiki 页面能回到 Capture、Raw 和 evidence；
 - 未审核 Candidate 不会进入正式 Wiki；
 - Git diff 只包含本次批准的知识变化。

@@ -1,7 +1,7 @@
 # Loop Run 001：Obsidian Web Clipper Capture Adapter
 
 > 日期：2026-07-21
-> 当前阶段：Candidate 待人工审核
+> 当前阶段：Candidate 已被人工拒绝
 > 学习问题：如何复用官方 Clipper 做低摩擦 Capture Adapter，而不是重新开发插件？
 
 ## 运行标识
@@ -31,6 +31,14 @@
 - T2：成功生成并验证 Raw Bundle v0.2；失败尝试停在真实失败状态；
 - T3：生成 `drafts/obsidian-web-clipper-as-capture-adapter.md`，未写入 Wiki。
 
+## 人工审核结果
+
+- 决定：`reject`
+- 原因：知识帮助不大，且样本方向偏离“以飞书多维表格跑通循环验收”的主目标。
+- 结论：不晋升 Wiki。本 Run 证明 Candidate 门控有效，但不计为完整 POC 种子闭环。
+
+审核结果已回填原 Base 记录。为让后续审核不依赖聊天或本地文件，当前表新增六个控制面字段：`候选内容`、`审核动作`、`审核意见`、`修改类型`、`审核时间`、`Wiki路径`。本记录已填写 `reject`、`方向偏离`、审核意见和审核时间，`Wiki路径` 保持为空。
+
 ## 遇到的问题
 
 ### P1：同一来源的 Raw 域名被本机 DNS 解析为不可用地址
@@ -51,4 +59,4 @@
 
 ## 下一门禁
 
-需要用户对 Candidate 执行 `accept/edit/reject/defer`。在明确接受前，不创建 Wiki、不实现 Clipper 模板，也不把本轮 Candidate 发布到 GitHub Pages。
+回到飞书 Base 主线：用户应能在 Base 内完成提交、状态观察、Candidate 查看、接受/编辑/拒绝、重试和最终验收；后台 Worker 根据 Base 状态继续处理。下一轮不以 Obsidian 集成为目标。
