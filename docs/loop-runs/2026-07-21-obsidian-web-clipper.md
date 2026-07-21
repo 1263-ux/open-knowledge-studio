@@ -1,7 +1,7 @@
 # Loop Run 001：Obsidian Web Clipper Capture Adapter
 
-> 日期：2026-07-21  
-> 当前阶段：Candidate 待人工审核  
+> 日期：2026-07-21
+> 当前阶段：Candidate 待人工审核
 > 学习问题：如何复用官方 Clipper 做低摩擦 Capture Adapter，而不是重新开发插件？
 
 ## 运行标识
@@ -52,4 +52,3 @@
 ## 下一门禁
 
 需要用户对 Candidate 执行 `accept/edit/reject/defer`。在明确接受前，不创建 Wiki、不实现 Clipper 模板，也不把本轮 Candidate 发布到 GitHub Pages。
-
