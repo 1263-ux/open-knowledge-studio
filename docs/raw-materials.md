@@ -2,7 +2,7 @@
 
 Raw 是你的入料层 — 蒸馏之前的原始来源。你读过的文章、收集的论文、研究过的代码仓库、经历过的对话。系统读取它们、评级、然后将持久部分蒸馏为 [Memory](memories.md)。
 
-网页、PDF、Word、PPT、图片、音频和视频等现实来源如何转换为Raw，统一遵循[Raw多模态录入核心标准](raw-multimodal-standard.md)。该标准扩展来源提取和证据格式，不改变本页定义的 `raw → drafts → wiki` 生命周期。
+网页、PDF、Word、PPT、图片、音频和视频等现实来源如何转换为 Raw，以独立 `oks-connector` 的 `schemas/`、`capabilities/` 和协议文档为机器事实源。本页只定义 Studio 中 `raw → drafts → wiki` 的知识生命周期，不再复制多模态协议字段。
 
 > **Raw 不是 Thread。** 竞品把所有东西都塞进"conversations"。
 > 我们的 raw/ 有**类型化入料**（articles / papers / repos / misc）、**A/B/C 分级**、

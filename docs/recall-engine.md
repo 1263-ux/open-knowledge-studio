@@ -1,12 +1,12 @@
 # 6-Factor Recall Engine（六因子召回引擎）
 
-使用六个因子对 wiki 页面评分，找到最相关的知识。引擎将语义搜索、关键词匹配和图谱关联融合在一次统一的评分过程中。
+使用六个因子对 wiki 页面评分，找到最相关的知识。当前实现融合分词重叠、精确字符串匹配、主题关联和记忆曲线；尚未接入 embedding，因此不能宣称为真正的语义搜索。
 
 ## 三种搜索模式合一
 
 | 模式 | 做什么 | 哪些因子 |
 |------|--------|----------|
-| **Semantic（语义）** | 按含义查找，不只是精确匹配 | Token overlap |
+| **Lexical overlap（词法重叠）** | jieba 分词后匹配共享 token | Token overlap |
 | **Keyword（关键词）** | 精确匹配特定术语 | Substring match |
 | **Graph（图谱）** | 通过主题关联和类型加权查找 | Topic trace + type boost + review penalty |
 
@@ -30,7 +30,7 @@ jieba 分词将查询和页面内容拆分为 token。重叠率衡量查询 toke
 overlap = len(query_tokens ∩ page_tokens) / len(query_tokens) × 0.3
 ```
 
-这是**语义层** — 搜索"design patterns"时能找到关于"architectural approaches"的页面，因为 token 重叠捕捉到了共享概念。
+这是**词法近似层**，只能命中实际共享的 token。没有共同词的近义表达不会因为含义相近而自动命中；若要支持这种能力，需要另行引入并真实验证 embedding/语义检索。
 
 ### 2. Substring Match（+1.0 / +0.5）
 

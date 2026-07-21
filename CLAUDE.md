@@ -88,7 +88,7 @@ open-knowledge-studio/
 | `/status` | Overview: wiki count, tier distribution, drafts, quality |
 | `/archive` | Extract conversation Q&A → AI summarize → wiki/queries/ |
 | `/promote` | Review drafts/ → promote/reject/edit |
-| `/media-ingest` | Experimental local-video adapter; v0.1 compatibility: `docs/raw-multimodal-standard.md`; new protocol baseline: `oks-connector/schemas/` |
+| `/media-ingest` | Experimental compatibility adapter; current protocol baseline: `oks-connector/schemas/` and `oks-connector/capabilities/` |
 
 ## CLI Commands
 

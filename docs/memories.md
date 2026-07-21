@@ -111,7 +111,7 @@ cp templates/strategy.md wiki/computing/strategies/my-strategy.md
 
 | 模式 | 工作方式 | 适合 |
 |------|----------|------|
-| **Semantic** | jieba 分词后的 token overlap — 按语义找，不只是精确匹配 | 搜"设计模式"能找到"架构方法" |
+| **Lexical overlap** | jieba 分词后的 token overlap，只匹配实际共享词，不等同于 embedding 语义检索 | 搜索词与页面存在共同 token 时获得加分 |
 | **Keyword** | 标题和正文中的 substring 精确匹配 | 精确术语、代码名、特定 API |
 | **Graph** | topic trace + type boost + review penalty | 找相关决策、追溯主题历史 |
 
