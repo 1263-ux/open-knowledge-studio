@@ -41,3 +41,29 @@ The reviewed body is preserved as the Wiki page content.
     assert page["review"]["lesson"] == "accepted in Base"
     assert Path(page["file_path"]).parent.name == "strategies"
     assert not draft.exists()
+
+
+def test_promote_draft_uses_explicit_slug_hint_for_non_ascii_title(monkeypatch, tmp_path):
+    monkeypatch.setenv("OKS_ROOT", str(tmp_path))
+    draft = tmp_path / "drafts" / "feishu-review-return-provenance.md"
+    draft.parent.mkdir()
+    draft.write_text(
+        '''---
+title: "飞书个人审核回程的可追溯门禁"
+draft_type: strategy
+draft_area: computing
+status: draft
+---
+
+Reviewed knowledge.
+''',
+        encoding="utf-8",
+    )
+
+    slug = store.promote_draft(
+        "feishu-review-return-provenance",
+        slug_hint="feishu-review-return-provenance",
+    )
+
+    assert slug.endswith("-feishu-review-return-provenance")
+    assert store.get_wiki_page(slug)["title"] == "飞书个人审核回程的可追溯门禁"

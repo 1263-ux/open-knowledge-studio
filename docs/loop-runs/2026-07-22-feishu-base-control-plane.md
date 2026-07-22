@@ -158,19 +158,19 @@ Worker 发布 revision 1 后，机器人向当前用户的个人会话发送绑�
 - `审核时间=2026-07-22 22:36:41`
 - `运行状态=已晋升`
 - `Wiki状态=promoted`
-- `Wiki路径=wiki/computing/strategies/20260722-untitled.md`
+- `Wiki路径=wiki/computing/strategies/20260722-feishu-review-return-provenance.md`
 
-Wiki frontmatter 保留了 Run、Base record、`outcome=success`、`decision_correct=true` 和 `lesson=有研究价值`。历史回复重复回放返回 `review_message_already_processed`，不会二次晋升。
+Wiki frontmatter 保留了 Run、Capture、Bundle、Base record、`outcome=success`、`decision_correct=true` 和 `lesson=有研究价值`。execution trace 使用仓库相对 Raw 路径，不再包含本机绝对路径。历史回复重复回放返回 `review_message_already_processed`，不会二次晋升。
 
 这次真实运行还暴露了飞书 Base 的短暂写后读旧快照：审核字段已写入，但紧接着第一次读取仍看不到 `审核动作`，第一次晋升返回 `no_review_action`；稍后同一记录读取已出现完整字段，`review-once` 成功晋升。Worker 现对审核写入后的读取做 0.25/0.5/1 秒有限重试，超时则明确失败并保留 Base 动作供后续恢复，不以旧快照继续错误决策。
 
-尚存两个非阻塞问题：监听器不是常驻服务；中文标题当前会生成 `untitled` 文件 slug，页面 frontmatter 标题正确但路径可读性不足。它们进入下一轮问题池，本轮不并行扩张修复范围。
+中文标题的 Wiki slug 已改为优先使用稳定 Candidate ID；现有页面也完成文件、指纹索引、Candidate state 与 Base 路径的同步迁移。尚存的非阻塞问题是监听器不是常驻服务。
 
-### P4：Wiki trace 含本机绝对路径
+### P4：Wiki trace 已移除本机绝对路径
 
-Wiki 能在本机回到 Raw，但远程或另一台机器无法解析该路径。应将可移植标识（Capture ID、Run ID、Raw Bundle URI/相对路径）作为正式 trace，本机绝对路径只保留在本地运行状态中。
+Wiki execution trace 现保存 Capture ID、Run ID、Bundle ID 和仓库相对 Raw 路径；本机绝对路径只保留在被忽略的本地 Candidate/运行状态中。另一台机器恢复相同的 Raw 相对目录后即可解析，不再把原机器盘符当成知识协议。
 
-T6 优先选择 P3；P4 作为紧随其后的来源可移植性问题保留。
+P3 的审核回程与 P4 的来源可移植性均已用 Run 003 的真实记录验证。
 
 ## 资源获取策略补充：AgentKey
 

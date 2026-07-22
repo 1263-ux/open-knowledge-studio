@@ -1042,8 +1042,21 @@ def publish_candidate(
     traces = metadata.get("traces")
     if not isinstance(traces, list):
         traces = []
+    manifest = json.loads((raw_path / "bundle.json").read_text(encoding="utf-8"))
+    execution_trace: dict[str, Any] = {
+        "kind": "execution",
+        "id": str(scalar_cell(fields.get("运行ID")) or ""),
+    }
+    for key in ("capture_id", "bundle_id"):
+        value = str(manifest.get(key) or "").strip()
+        if value:
+            execution_trace[key] = value
+    try:
+        execution_trace["path"] = raw_path.relative_to(ROOT.resolve()).as_posix()
+    except ValueError:
+        pass
     trace_values = [
-        {"kind": "execution", "id": str(scalar_cell(fields.get("运行ID")) or ""), "path": str(raw_path)},
+        execution_trace,
         {"kind": "external", "id": f"feishu-base:{record_id}"},
     ]
     for trace in trace_values:
@@ -1114,7 +1127,10 @@ def promote_candidate_document(
         sys.path.insert(0, cli_root)
     from knowledge_studio import store
 
-    promoted_slug = store.promote_draft(candidate_path.stem)
+    promoted_slug = store.promote_draft(
+        candidate_path.stem,
+        slug_hint=candidate_path.stem,
+    )
     page = store.get_wiki_page(promoted_slug)
     if not page or not page.get("file_path"):
         raise RuntimeError(f"Promoted Wiki page cannot be resolved: {promoted_slug}")

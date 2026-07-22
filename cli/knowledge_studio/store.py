@@ -318,6 +318,7 @@ def write_wiki_page(
     traces: list[dict] | None = None,
     review: dict | None = None,
     supersedes: str | None = None,
+    slug_hint: str | None = None,
 ) -> Path:
     fp = _fingerprint(content)
     fp_index = _load_fingerprint_index()
@@ -334,7 +335,7 @@ def write_wiki_page(
     type_dir = wd / area / wiki_type
     type_dir.mkdir(parents=True, exist_ok=True)
 
-    slug = re.sub(r"[^a-z0-9]+", "-", title.lower())[:60].strip("-")
+    slug = re.sub(r"[^a-z0-9]+", "-", (slug_hint or title).lower())[:60].strip("-")
     if not slug:
         slug = "untitled"
     slug = f"{date_str}-{slug}"
@@ -455,6 +456,7 @@ def promote_draft(
     wiki_type: str | None = None,
     area: str | None = None,
     tags: list[str] | None = None,
+    slug_hint: str | None = None,
 ) -> str:
     dd = drafts_dir()
     draft_path = dd / f"{slug}.md"
@@ -496,6 +498,7 @@ def promote_draft(
         tags=tags if tags is not None else draft_tags,
         traces=meta.get("traces") if isinstance(meta.get("traces"), list) else None,
         review=meta.get("review") if isinstance(meta.get("review"), dict) else None,
+        slug_hint=slug_hint,
     )
 
     draft_path.unlink()

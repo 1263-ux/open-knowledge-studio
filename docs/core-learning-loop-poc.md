@@ -111,9 +111,9 @@ Candidate 最小结构：
 - [x] 用户通过明确的飞书个人交互给出 `accept/edit/reject/defer`，Agent 将结果结构化写回 Base。
 - [x] Base 持久记录审核时间、审核意见和修改类型。
 - [x] 接受后生成一篇 Wiki 页面；拒绝时保留拒绝理由。
-- [ ] Wiki 保存 Raw/Capture 来源，不直接依赖临时文件路径。
+- [x] Wiki 保存 Raw/Capture 来源，不直接依赖临时文件路径。
 
-Run 002 验证了 Agent 代用户结构化回填 Base 的门禁；Run 003 进一步完成真实个人飞书消息闭环。机器人发送绑定 Candidate revision 的审核通知，用户回复 `accept，有研究价值`，Worker 将动作、意见、修改类型和时间写回 Base，并晋升 `wiki/computing/strategies/20260722-untitled.md`。飞书 OpenAPI 未返回这次 P2P UI 回复的 `parent_id/root_id`，系统使用严格的单待审、同会话、指定审核人、相邻消息回补，并以 `p2p_sequence_fallback` 明确留痕；详情见 Run 002/003 运行记录。当前 Wiki trace 仍含本机绝对 Raw 路径，来源可移植性尚未通过。
+Run 002 验证了 Agent 代用户结构化回填 Base 的门禁；Run 003 进一步完成真实个人飞书消息闭环。机器人发送绑定 Candidate revision 的审核通知，用户回复 `accept，有研究价值`，Worker 将动作、意见、修改类型和时间写回 Base，并晋升 `wiki/computing/strategies/20260722-feishu-review-return-provenance.md`。飞书 OpenAPI 未返回这次 P2P UI 回复的 `parent_id/root_id`，系统使用严格的单待审、同会话、指定审核人、相邻消息回补，并以 `p2p_sequence_fallback` 明确留痕；详情见 Run 002/003 运行记录。Wiki trace 现保存 Capture ID、Bundle ID、Run ID 和仓库相对 Raw 路径，不再依赖本机绝对路径。
 
 验收条件：
 

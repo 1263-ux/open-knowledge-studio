@@ -184,7 +184,16 @@ def test_publish_candidate_requires_raw_and_writes_visible_review_state(monkeypa
     monkeypatch.setattr(worker, "ROOT", tmp_path)
     raw = tmp_path / "raw-bundle"
     raw.mkdir()
-    (raw / "bundle.json").write_text('{"schema_version":"raw-multimodal/v0.2"}', encoding="utf-8")
+    (raw / "bundle.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "raw-multimodal/v0.2",
+                "capture_id": "capture_1",
+                "bundle_id": "bundle:capture_1:run_1",
+            }
+        ),
+        encoding="utf-8",
+    )
     source = tmp_path / "base-review-candidate.md"
     source.write_text(candidate_document(), encoding="utf-8")
     config = worker.WorkerConfig("base", "table", tmp_path / "lark.exe", tmp_path, tmp_path / "python.exe", tmp_path)
@@ -217,6 +226,17 @@ def test_publish_candidate_requires_raw_and_writes_visible_review_state(monkeypa
     assert "飞书多维表格" in updates[-1]["候选内容"]
     assert state["review_notification"]["status"] == "sent"
     assert notifications[0]["record_id"] == "rec_1"
+    metadata, _body = worker.parse_candidate_document(
+        (tmp_path / state["candidate_path"]).read_text(encoding="utf-8")
+    )
+    execution_trace = metadata["traces"][0]
+    assert execution_trace == {
+        "kind": "execution",
+        "id": "run_1",
+        "capture_id": "capture_1",
+        "bundle_id": "bundle:capture_1:run_1",
+        "path": "raw-bundle",
+    }
 
 
 def test_render_candidate_review_message_uses_agent_summary_and_questions():
