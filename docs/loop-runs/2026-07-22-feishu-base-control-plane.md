@@ -58,6 +58,17 @@ Base 当前应显示：
 
 ## 当前人工门禁
 
+Base 已创建专用网格视图：
+
+- 名称：`候选审核`
+- View ID：`vewxJs3jUf`
+- 筛选：`Wiki状态 intersects [review_pending]`
+- 当前命中：Run 002 的待审记录
+
+授权过程按 API 实际返回分两次增加最小 scope：`base:view:read` 与 `base:view:write_only`。设备流期间曾发生一次 `open.feishu.cn` DNS 查询失败，CLI 自动重试后授权成功。
+
+视图的可见字段精简请求连续返回 `800070003 no operation produced`，读取后仍为 27 个字段。筛选已生效，因此不阻塞审核；该 no-op 作为 Base/lark-cli 视图配置问题保留，未宣称字段隐藏成功。
+
 用户需要在 Base 的 `recvq6nZfwztXx` 记录中阅读 `候选内容`，填写：
 
 1. `审核动作`：`accept/edit/reject/defer`；
