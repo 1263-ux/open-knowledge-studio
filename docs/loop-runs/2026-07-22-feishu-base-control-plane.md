@@ -125,8 +125,14 @@ oks recall "飞书 Base 控制面如何区分能力定义、单次运行、输�
 
 本轮已验证“Agent 总结和提问 → 用户明确判断 → Agent 写回 Base → Worker 晋升”的人工流程，但个人飞书消息/卡片尚未自动关联 Candidate 和 Worker。最小修复应向用户个人发送包含摘要、证据和关键问题的审核消息；只接受明确 `accept/edit/reject/defer`，并将 Candidate revision、审核内容和时间结构化写回 Base。Base 继续作为审计事实源，不要求用户填写机器字段。
 
+发送端已在上游集成分支完成首版：`publish-candidate` 会在配置 `OKS_FEISHU_REVIEW_USER_ID` 后立即向该个人发送 Agent 提供的 `review_summary`、最多三个 `review_questions` 和四种审核动作；同一 Candidate revision 使用稳定幂等键。未配置收件人时明确记录 `skipped`，发送失败时保留 `failed`，不会伪装成已通知。当前尚未实现“回复消息 → Candidate revision → Base 审核字段”的自动消费。
+
 ### P4：Wiki trace 含本机绝对路径
 
 Wiki 能在本机回到 Raw，但远程或另一台机器无法解析该路径。应将可移植标识（Capture ID、Run ID、Raw Bundle URI/相对路径）作为正式 trace，本机绝对路径只保留在本地运行状态中。
 
 T6 优先选择 P3；P4 作为紧随其后的来源可移植性问题保留。
+
+## 资源获取策略补充：AgentKey
+
+`agentkey.app` 已确认是统一 MCP/Skill 数据接口，而不是共享用户浏览器登录态的工具。它通过 `discover → describe → execute` 暴露搜索、网页抓取、社交、金融与链上等能力，使用统一订阅积分并提供供应商故障转移。它适合作为公开数据获取的付费后置兜底，也可作为 Capability Manifest 动态发现层的设计参考；不能替代用户明确授权标签页的登录态访问。当前只完成公开官网与文档核验，没有安装插件、创建账号、购买套餐或发送任何项目数据。

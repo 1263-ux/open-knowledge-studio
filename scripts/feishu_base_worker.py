@@ -56,6 +56,8 @@ class WorkerConfig:
     output_root: Path
     identity: str = "user"
     lease_seconds: int = 3600
+    review_recipient_user_id: str | None = None
+    review_message_identity: str = "bot"
 
 
 def utc_now() -> str:
@@ -153,6 +155,16 @@ def load_config(args: argparse.Namespace) -> WorkerConfig:
         connector_python=connector_python,
         output_root=Path(args.output_root or ROOT / ".oks" / "intake").expanduser().resolve(),
         lease_seconds=int(args.lease_seconds),
+        review_recipient_user_id=(
+            args.review_recipient_user_id
+            or os.environ.get("OKS_FEISHU_REVIEW_USER_ID")
+            or None
+        ),
+        review_message_identity=(
+            args.review_message_identity
+            or os.environ.get("OKS_FEISHU_REVIEW_MESSAGE_IDENTITY")
+            or "bot"
+        ),
     )
 
 
@@ -471,12 +483,113 @@ def candidate_review_fingerprint(fields: dict[str, Any]) -> str:
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
 
+def render_candidate_review_message(
+    *,
+    record_id: str,
+    candidate_id: str,
+    revision: int,
+    metadata: dict[str, Any],
+    body: str,
+    fields: dict[str, Any],
+) -> str:
+    """Render Agent-authored review context without inventing new claims."""
+    summary = str(metadata.get("review_summary") or "").strip()
+    if not summary:
+        summary = body.strip()[:600]
+        if len(body.strip()) > 600:
+            summary += "…"
+    raw_questions = metadata.get("review_questions") or []
+    if isinstance(raw_questions, str):
+        questions = [raw_questions.strip()] if raw_questions.strip() else []
+    elif isinstance(raw_questions, list):
+        questions = [str(item).strip() for item in raw_questions if str(item).strip()]
+    else:
+        questions = []
+    question_lines = "\n".join(f"- {item}" for item in questions[:3])
+    if not question_lines:
+        question_lines = "- 这条知识是否值得进入你的个人知识库？"
+    source = str(scalar_cell(fields.get("内容")) or "").strip()
+    user_note = str(fields.get("思考") or "").strip()
+    context_lines = []
+    if source:
+        context_lines.append(f"**来源：** {source}")
+    if user_note:
+        context_lines.append(f"**你的原始思考：** {user_note}")
+    context = "\n\n".join(context_lines)
+    if context:
+        context += "\n\n"
+    return (
+        "## 知识候选待审核\n\n"
+        f"**主题：** {metadata.get('title', candidate_id)}\n\n"
+        f"{context}"
+        f"**Agent 总结：**\n\n{summary}\n\n"
+        f"**需要你判断：**\n\n{question_lines}\n\n"
+        "请直接回复以下任一动作：\n\n"
+        "- `accept`：接受；可附一句理由\n"
+        "- `edit`：说明需要修改什么\n"
+        "- `reject`：说明拒绝原因\n"
+        "- `defer`：暂缓处理\n\n"
+        f"候选标识：`{candidate_id}` · revision `{revision}` · Base `{record_id}`"
+    )
+
+
+def send_candidate_review_notification(
+    config: WorkerConfig,
+    *,
+    record_id: str,
+    state: dict[str, Any],
+    metadata: dict[str, Any],
+    body: str,
+    fields: dict[str, Any],
+) -> dict[str, Any]:
+    recipient = config.review_recipient_user_id
+    if not recipient:
+        return {"status": "skipped", "reason": "review_recipient_not_configured"}
+    message = render_candidate_review_message(
+        record_id=record_id,
+        candidate_id=str(state["candidate_id"]),
+        revision=int(state["revision"]),
+        metadata=metadata,
+        body=body,
+        fields=fields,
+    )
+    idempotency_key = hashlib.sha256(
+        f"{state['candidate_id']}:{state['revision']}:{state['candidate_sha256']}".encode("utf-8")
+    ).hexdigest()[:50]
+    try:
+        envelope = lark_json(
+            config,
+            "im",
+            "+messages-send",
+            "--user-id",
+            recipient,
+            "--markdown",
+            message,
+            "--idempotency-key",
+            idempotency_key,
+            "--as",
+            config.review_message_identity,
+            "--format",
+            "json",
+        )
+    except RuntimeError as error:
+        return {"status": "failed", "error": str(error)[:500]}
+    data = envelope.get("data") if isinstance(envelope.get("data"), dict) else {}
+    return {
+        "status": "sent",
+        "message_id": data.get("message_id") or envelope.get("message_id"),
+        "identity": config.review_message_identity,
+        "recipient": recipient,
+        "idempotency_key": idempotency_key,
+    }
+
+
 def publish_candidate(
     config: WorkerConfig,
     record_id: str,
     candidate_file: Path,
 ) -> dict[str, Any]:
-    record = get_record(config, record_id)
+    record = get_record(config, record_id, [*CANDIDATE_FIELDS, "内容", "思考"])
     fields = record["fields"]
     status = scalar_cell(fields.get("运行状态"))
     if status not in {"Raw就绪", "候选待审", "需人工"}:
@@ -551,6 +664,15 @@ def publish_candidate(
             "运行状态": "候选待审",
         },
     )
+    state["review_notification"] = send_candidate_review_notification(
+        config,
+        record_id=record_id,
+        state=state,
+        metadata=metadata,
+        body=body,
+        fields=fields,
+    )
+    atomic_write_json(state_path, state)
     return state
 
 
@@ -1626,6 +1748,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--connector-python")
     parser.add_argument("--output-root")
     parser.add_argument("--lease-seconds", type=int, default=3600)
+    parser.add_argument("--review-recipient-user-id")
+    parser.add_argument(
+        "--review-message-identity",
+        choices=("bot", "user"),
+        default=None,
+    )
     subcommands = parser.add_subparsers(dest="command", required=True)
     enqueue = subcommands.add_parser("enqueue", help="Create one pending capture row.")
     enqueue.add_argument("content")

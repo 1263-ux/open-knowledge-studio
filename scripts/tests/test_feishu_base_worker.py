@@ -161,6 +161,13 @@ def test_publish_candidate_requires_raw_and_writes_visible_review_state(monkeypa
         },
     )
     monkeypatch.setattr(worker, "update_record", lambda _c, _r, patch: updates.append(patch) or {})
+    notifications = []
+    monkeypatch.setattr(
+        worker,
+        "send_candidate_review_notification",
+        lambda *_args, **kwargs: notifications.append(kwargs)
+        or {"status": "sent", "message_id": "om_1"},
+    )
 
     state = worker.publish_candidate(config, "rec_1", source)
 
@@ -171,6 +178,96 @@ def test_publish_candidate_requires_raw_and_writes_visible_review_state(monkeypa
     assert updates[-1]["Wiki状态"] == "review_pending"
     assert updates[-1]["运行状态"] == "候选待审"
     assert "飞书多维表格" in updates[-1]["候选内容"]
+    assert state["review_notification"]["status"] == "sent"
+    assert notifications[0]["record_id"] == "rec_1"
+
+
+def test_render_candidate_review_message_uses_agent_summary_and_questions():
+    message = worker.render_candidate_review_message(
+        record_id="rec_1",
+        candidate_id="candidate-1",
+        revision=2,
+        metadata={
+            "title": "控制面设计",
+            "review_summary": "Base 保存审计事实，Agent 负责解释与提问。",
+            "review_questions": ["这条知识是否值得保留？", "是否需要补充反例？"],
+        },
+        body="完整 Candidate 正文。" * 20,
+        fields={"内容": "https://example.com", "思考": "如何降低审核摩擦？"},
+    )
+
+    assert "控制面设计" in message
+    assert "Base 保存审计事实" in message
+    assert "这条知识是否值得保留" in message
+    assert "如何降低审核摩擦" in message
+    assert "candidate-1" in message
+    assert "revision `2`" in message
+
+
+def test_review_notification_skips_without_configured_recipient(tmp_path):
+    config = worker.WorkerConfig(
+        "base",
+        "table",
+        tmp_path / "lark.exe",
+        tmp_path,
+        tmp_path / "python.exe",
+        tmp_path,
+    )
+
+    result = worker.send_candidate_review_notification(
+        config,
+        record_id="rec_1",
+        state={
+            "candidate_id": "candidate-1",
+            "revision": 1,
+            "candidate_sha256": "a" * 64,
+        },
+        metadata={"title": "Candidate"},
+        body="正文" * 50,
+        fields={},
+    )
+
+    assert result == {"status": "skipped", "reason": "review_recipient_not_configured"}
+
+
+def test_review_notification_sends_idempotent_personal_message(monkeypatch, tmp_path):
+    config = worker.WorkerConfig(
+        "base",
+        "table",
+        tmp_path / "lark.exe",
+        tmp_path,
+        tmp_path / "python.exe",
+        tmp_path,
+        review_recipient_user_id="ou_user",
+        review_message_identity="bot",
+    )
+    commands = []
+    monkeypatch.setattr(
+        worker,
+        "lark_json",
+        lambda _config, *args: commands.append(args)
+        or {"data": {"message_id": "om_1"}},
+    )
+
+    result = worker.send_candidate_review_notification(
+        config,
+        record_id="rec_1",
+        state={
+            "candidate_id": "candidate-1",
+            "revision": 1,
+            "candidate_sha256": "a" * 64,
+        },
+        metadata={"title": "Candidate", "review_summary": "摘要"},
+        body="正文" * 50,
+        fields={},
+    )
+
+    assert result["status"] == "sent"
+    assert result["message_id"] == "om_1"
+    assert commands[0][:2] == ("im", "+messages-send")
+    assert commands[0][commands[0].index("--user-id") + 1] == "ou_user"
+    assert commands[0][commands[0].index("--as") + 1] == "bot"
+    assert len(commands[0][commands[0].index("--idempotency-key") + 1]) == 50
 
 
 def test_publish_candidate_refuses_record_without_raw(monkeypatch, tmp_path):
