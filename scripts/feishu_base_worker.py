@@ -21,6 +21,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from typing import Any
 import uuid
 
@@ -704,11 +705,26 @@ def record_review_event(
             "root_id": str(event.get("root_id") or ""),
             "action": action,
             "comment": comment,
+            "correlation_method": str(event.get("correlation_method") or "reply_context"),
             "received_at": event_reviewed_at(event.get("create_time")),
         }
     )
     state["review_reply_events"] = receipts
     atomic_write_json(path, state)
+
+
+def read_review_record_after_write(
+    config: WorkerConfig,
+    record_id: str,
+    expected_action: str,
+) -> dict[str, Any]:
+    record = get_record(config, record_id)
+    for delay in (0.25, 0.5, 1.0):
+        if scalar_cell(record["fields"].get("审核动作")) == expected_action:
+            return record
+        time.sleep(delay)
+        record = get_record(config, record_id)
+    return record
 
 
 def apply_review_reply_event(
@@ -767,7 +783,12 @@ def apply_review_reply_event(
         "审核时间": event_reviewed_at(event.get("create_time")),
     }
     update_record(config, record_id, patch)
-    review_result = review_candidate(config, get_record(config, record_id))
+    record = read_review_record_after_write(config, record_id, action)
+    review_result = review_candidate(config, record)
+    if review_result.get("reason") == "no_review_action":
+        raise RuntimeError(
+            f"Base did not expose review action {action!r} after a bounded write-read retry"
+        )
     latest = load_candidate_state(record_id)
     record_review_event(state_path, latest, event, action=action, comment=comment)
     return {
@@ -779,6 +800,156 @@ def apply_review_reply_event(
         "action": action,
         "review": review_result,
     }
+
+
+def raw_message(config: WorkerConfig, message_id: str) -> dict[str, Any]:
+    envelope = lark_json(
+        config,
+        "api",
+        "GET",
+        f"/open-apis/im/v1/messages/{message_id}",
+        "--as",
+        "bot",
+        "--format",
+        "json",
+    )
+    data = envelope.get("data") if isinstance(envelope.get("data"), dict) else {}
+    items = data.get("items") if isinstance(data.get("items"), list) else []
+    if len(items) != 1 or not isinstance(items[0], dict):
+        raise RuntimeError(f"Feishu message detail is unavailable: {message_id}")
+    return items[0]
+
+
+def decoded_raw_message_content(message: dict[str, Any]) -> str:
+    body = message.get("body") if isinstance(message.get("body"), dict) else {}
+    raw = body.get("content")
+    if not isinstance(raw, str):
+        return ""
+    try:
+        value = json.loads(raw)
+    except json.JSONDecodeError:
+        return raw
+    if isinstance(value, dict):
+        return str(value.get("text") or value.get("content") or "")
+    return str(value)
+
+
+def pending_review_states_in_chat(chat_id: str) -> list[tuple[Path, dict[str, Any]]]:
+    states: list[tuple[Path, dict[str, Any]]] = []
+    for path in sorted((ROOT / ".oks" / "candidates").glob("*.json")):
+        value = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(value, dict) or value.get("last_review_action") in {"accept", "reject"}:
+            continue
+        notification = value.get("review_notification")
+        if not isinstance(notification, dict) or notification.get("status") != "sent":
+            continue
+        if str(notification.get("chat_id") or "") == chat_id:
+            states.append((path, value))
+    return states
+
+
+def review_states_for_prompt(
+    chat_id: str,
+    prompt_message_id: str,
+) -> list[tuple[Path, dict[str, Any]]]:
+    states: list[tuple[Path, dict[str, Any]]] = []
+    for path in sorted((ROOT / ".oks" / "candidates").glob("*.json")):
+        value = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(value, dict):
+            continue
+        notification = value.get("review_notification")
+        if not isinstance(notification, dict) or notification.get("status") != "sent":
+            continue
+        if str(notification.get("chat_id") or "") != chat_id:
+            continue
+        if str(notification.get("message_id") or "") == prompt_message_id:
+            states.append((path, value))
+    return states
+
+
+def reconcile_historical_review_reply(
+    config: WorkerConfig,
+    *,
+    prompt_message_id: str,
+    reply_message_id: str,
+) -> dict[str, Any]:
+    """Recover a missed P2P review event without pretending chronology is a native reply link."""
+    prompt = raw_message(config, prompt_message_id)
+    reply = raw_message(config, reply_message_id)
+    chat_id = str(prompt.get("chat_id") or "")
+    if not chat_id or str(reply.get("chat_id") or "") != chat_id:
+        raise RuntimeError("Review prompt and reply are not in the same chat")
+    reply_id = str(reply.get("message_id") or reply_message_id)
+    prompt_states = review_states_for_prompt(chat_id, prompt_message_id)
+    if len(prompt_states) == 1:
+        _prompt_path, prompt_state = prompt_states[0]
+        receipts = prompt_state.get("review_reply_events")
+        if isinstance(receipts, list):
+            prior = next(
+                (
+                    item
+                    for item in receipts
+                    if isinstance(item, dict) and str(item.get("message_id") or "") == reply_id
+                ),
+                None,
+            )
+            if prior is not None:
+                return {
+                    "processed": False,
+                    "reason": "review_message_already_processed",
+                    "message_id": reply_id,
+                    "record_id": prompt_state.get("record_id"),
+                    "correlation_method": str(
+                        prior.get("correlation_method") or "reply_context"
+                    ),
+                }
+    pending = pending_review_states_in_chat(chat_id)
+    matching = [
+        (path, state)
+        for path, state in pending
+        if str(state.get("review_notification", {}).get("message_id") or "") == prompt_message_id
+    ]
+    if len(pending) != 1 or len(matching) != 1:
+        raise RuntimeError("Historical review fallback requires exactly one pending Candidate in the chat")
+    _state_path, state = matching[0]
+    notification = state["review_notification"]
+    sender = reply.get("sender") if isinstance(reply.get("sender"), dict) else {}
+    if sender.get("sender_type") != "user" or str(sender.get("id") or "") != str(
+        notification.get("recipient") or ""
+    ):
+        raise RuntimeError("Historical review reply sender does not match the configured reviewer")
+    parent_id = str(reply.get("parent_id") or "")
+    root_id = str(reply.get("root_id") or "")
+    if prompt_message_id in {parent_id, root_id}:
+        method = "native_reply_context"
+    else:
+        try:
+            prompt_position = int(str(prompt.get("message_position")))
+            reply_position = int(str(reply.get("message_position")))
+        except (TypeError, ValueError) as error:
+            raise RuntimeError("Historical review fallback requires message positions") from error
+        if reply_position != prompt_position + 1:
+            raise RuntimeError("Historical review fallback requires the reply to immediately follow the prompt")
+        if int(str(reply.get("create_time") or 0)) <= int(str(prompt.get("create_time") or 0)):
+            raise RuntimeError("Historical review reply is not newer than the prompt")
+        method = "p2p_sequence_fallback"
+    event = {
+        "event_id": "",
+        "message_id": reply_id,
+        "reply_to": prompt_message_id,
+        "root_id": root_id,
+        "chat_id": chat_id,
+        "chat_type": "p2p",
+        "sender_id": str(sender.get("id") or ""),
+        "sender_type": "user",
+        "message_type": str(reply.get("msg_type") or ""),
+        "content": decoded_raw_message_content(reply),
+        "create_time": str(reply.get("create_time") or ""),
+        "correlation_method": method,
+    }
+    outcome = apply_review_reply_event(config, event)
+    outcome["correlation_method"] = method
+    return outcome
 
 
 def consume_review_events(
@@ -2037,6 +2208,12 @@ def parse_args() -> argparse.Namespace:
     )
     listen.add_argument("--max-events", type=int, default=1)
     listen.add_argument("--timeout", default="5m")
+    reconcile = subcommands.add_parser(
+        "reconcile-review",
+        help="Recover one missed personal review reply from immutable message IDs.",
+    )
+    reconcile.add_argument("--prompt-message-id", required=True)
+    reconcile.add_argument("--reply-message-id", required=True)
     return parser.parse_args()
 
 
@@ -2078,6 +2255,14 @@ def main() -> int:
             config,
             max_events=args.max_events,
             timeout=args.timeout,
+        )
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return 0
+    if args.command == "reconcile-review":
+        result = reconcile_historical_review_reply(
+            config,
+            prompt_message_id=args.prompt_message_id,
+            reply_message_id=args.reply_message_id,
         )
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return 0

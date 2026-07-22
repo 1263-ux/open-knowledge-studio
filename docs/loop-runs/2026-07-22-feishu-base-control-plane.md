@@ -121,7 +121,7 @@ oks recall "飞书 Base 控制面如何区分能力定义、单次运行、输�
 
 ## 下一轮最小改进候选
 
-### P3：个人飞书审核交互尚未自动接入 Worker
+### P3：个人飞书审核交互已完成真实闭环
 
 本轮已验证“Agent 总结和提问 → 用户明确判断 → Agent 写回 Base → Worker 晋升”的人工流程，但个人飞书消息/卡片尚未自动关联 Candidate 和 Worker。最小修复应向用户个人发送包含摘要、证据和关键问题的审核消息；只接受明确 `accept/edit/reject/defer`，并将 Candidate revision、审核内容和时间结构化写回 Base。Base 继续作为审计事实源，不要求用户填写机器字段。
 
@@ -129,7 +129,42 @@ oks recall "飞书 Base 控制面如何区分能力定义、单次运行、输�
 
 回程链路现已实现为 `listen-reviews`：使用 bot 身份订阅 `im.message.receive_v1`，只接收指定用户的个人消息，并要求消息通过 `reply_to/root_id` 精确指向当前 Candidate revision 的审核通知。解析器只接受显式且不冲突的 `accept/edit/reject/defer`；`edit/reject` 必须附理由。命中后先把审核动作、原始意见和时间写回 Base，再复用既有 `review_candidate` 门禁执行状态转换或晋升；消息 ID 会写入本地 Candidate state，重复投递不会二次处理。普通私聊、群消息、其他人的回复和未引用审核通知的消息都不会猜测归属。
 
-真实运行证据：应用机器人已成功向当前用户发送一条开发测试消息，返回 `message_id=om_x100b693831dc50a0dda70266e6da91c`；用户确认在飞书收到。随后 `im.message.receive_v1` 以 bot 身份完成 WebSocket 连接并发出 ready marker，5 秒无事件后按 timeout 正常退出。该消息是发送通道测试，不绑定 Candidate，因此没有被回程消费者伪装成完整验收。尚待发送一条新的、绑定 Candidate revision 的审核通知，并由用户直接回复，才能关闭“消息 → Base → 晋升”的最后真实验收项。
+真实 Candidate 回程已于 Run 003 完成，证据见下节。常驻监听器仍未部署，因此“进程在线时自动消费”与“进程离线后的严格历史回补”是两个不同能力，不能混写为一个验收项。
+
+## Run 003：个人消息 → Base → Wiki 的真实闭环
+
+- Base record ID：`recvq6Yr6qZGiX`
+- Capture ID：`feishu-recvq6Yr6qZGiX-7536284fcbfe`
+- Run ID：`run-20260722T222212-284bc2c7`
+- Candidate ID：`feishu-review-return-provenance`
+- 来源：`https://www.w3.org/TR/prov-o/`
+- Raw Bundle：`.oks/intake/feishu-recvq6Yr6qZGiX-7536284fcb`
+
+W3C PROV-O 页面由 `web.trafilatura` 完成正文抽取，文本模态 `succeeded`，产生 421 条 evidence；其他模态按来源类型 `skipped`，总状态为 `partial`。第一次使用的 GitHub raw commit URL 返回真实 `404`，未伪装成解析成功，随后同一测试记录改用 W3C 官方来源重新运行。
+
+Worker 发布 revision 1 后，机器人向当前用户的个人会话发送绑定 Candidate 的审核通知：
+
+- prompt message ID：`om_x100b6939687b70a0ddb95f9639613dc`
+- 用户 reply message ID：`om_x100b6939194320a0c006851420c128e`
+- 用户原文：`accept，有研究价值`
+
+监听进程在用户回复前已经按五分钟上限退出，因此事件流没有回放这条历史消息。进一步通过飞书官方消息详情 API 检查发现，这次个人会话 UI 中的“回复”没有向 OpenAPI 暴露 `parent_id/root_id`。系统没有假称存在原生引用关系，而是新增受限的 `p2p_sequence_fallback`：仅当同一私聊、配置的审核人、会话中恰好一个待审 Candidate、回复紧邻通知且文本只有一个明确动作时，才允许恢复；否则拒绝关联。原生 `parent_id/root_id` 仍是优先路径。
+
+回补后 Base 持久结果：
+
+- `审核动作=accept`
+- `审核意见=有研究价值`
+- `修改类型=[无修改]`
+- `审核时间=2026-07-22 22:36:41`
+- `运行状态=已晋升`
+- `Wiki状态=promoted`
+- `Wiki路径=wiki/computing/strategies/20260722-untitled.md`
+
+Wiki frontmatter 保留了 Run、Base record、`outcome=success`、`decision_correct=true` 和 `lesson=有研究价值`。历史回复重复回放返回 `review_message_already_processed`，不会二次晋升。
+
+这次真实运行还暴露了飞书 Base 的短暂写后读旧快照：审核字段已写入，但紧接着第一次读取仍看不到 `审核动作`，第一次晋升返回 `no_review_action`；稍后同一记录读取已出现完整字段，`review-once` 成功晋升。Worker 现对审核写入后的读取做 0.25/0.5/1 秒有限重试，超时则明确失败并保留 Base 动作供后续恢复，不以旧快照继续错误决策。
+
+尚存两个非阻塞问题：监听器不是常驻服务；中文标题当前会生成 `untitled` 文件 slug，页面 frontmatter 标题正确但路径可读性不足。它们进入下一轮问题池，本轮不并行扩张修复范围。
 
 ### P4：Wiki trace 含本机绝对路径
 

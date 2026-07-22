@@ -358,7 +358,10 @@ def test_personal_reply_updates_exact_linked_candidate_and_records_receipt(monke
     monkeypatch.setattr(
         worker,
         "get_record",
-        lambda _config, record_id: {"record_id": record_id, "fields": {}},
+        lambda _config, record_id: {
+            "record_id": record_id,
+            "fields": {"审核动作": "accept"},
+        },
     )
     monkeypatch.setattr(
         worker,
@@ -437,6 +440,171 @@ def test_review_reply_requires_exact_parent_and_comment_for_reject(monkeypatch, 
         config,
         {**base_event, "reply_to": "om_other", "content": "reject 方向偏离"},
     )["reason"] == "unknown_review_notification"
+
+
+def test_reconcile_historical_review_uses_strict_p2p_sequence_fallback(monkeypatch, tmp_path):
+    monkeypatch.setattr(worker, "ROOT", tmp_path)
+    worker.atomic_write_json(
+        worker.candidate_state_path("rec_reply"),
+        {
+            "record_id": "rec_reply",
+            "candidate_id": "candidate-1",
+            "revision": 1,
+            "review_notification": {
+                "status": "sent",
+                "message_id": "om_prompt",
+                "chat_id": "oc_personal",
+                "recipient": "ou_reviewer",
+            },
+        },
+    )
+    messages = {
+        "om_prompt": {
+            "message_id": "om_prompt",
+            "chat_id": "oc_personal",
+            "message_position": "2",
+            "create_time": "1784730000000",
+        },
+        "om_reply": {
+            "message_id": "om_reply",
+            "chat_id": "oc_personal",
+            "message_position": "3",
+            "create_time": "1784730001000",
+            "msg_type": "text",
+            "sender": {"id": "ou_reviewer", "sender_type": "user"},
+            "body": {"content": json.dumps({"text": "accept, useful"})},
+        },
+    }
+    monkeypatch.setattr(worker, "raw_message", lambda _config, message_id: messages[message_id])
+    events = []
+    monkeypatch.setattr(
+        worker,
+        "apply_review_reply_event",
+        lambda _config, event: events.append(event) or {"processed": True},
+    )
+    config = worker.WorkerConfig(
+        "base", "table", tmp_path / "lark.exe", tmp_path, tmp_path / "python.exe", tmp_path
+    )
+
+    result = worker.reconcile_historical_review_reply(
+        config,
+        prompt_message_id="om_prompt",
+        reply_message_id="om_reply",
+    )
+
+    assert result["processed"] is True
+    assert result["correlation_method"] == "p2p_sequence_fallback"
+    assert events[0]["reply_to"] == "om_prompt"
+    assert events[0]["content"] == "accept, useful"
+
+
+def test_review_write_read_retries_a_stale_base_snapshot(monkeypatch, tmp_path):
+    config = worker.WorkerConfig(
+        "base", "table", tmp_path / "lark.exe", tmp_path, tmp_path / "python.exe", tmp_path
+    )
+    records = iter(
+        [
+            {"record_id": "rec_reply", "fields": {"审核动作": None}},
+            {"record_id": "rec_reply", "fields": {"审核动作": ["accept"]}},
+        ]
+    )
+    delays = []
+    monkeypatch.setattr(worker, "get_record", lambda *_args: next(records))
+    monkeypatch.setattr(worker.time, "sleep", lambda delay: delays.append(delay))
+
+    record = worker.read_review_record_after_write(config, "rec_reply", "accept")
+
+    assert worker.scalar_cell(record["fields"]["审核动作"]) == "accept"
+    assert delays == [0.25]
+
+
+def test_reconcile_historical_review_rejects_nonadjacent_message(monkeypatch, tmp_path):
+    monkeypatch.setattr(worker, "ROOT", tmp_path)
+    worker.atomic_write_json(
+        worker.candidate_state_path("rec_reply"),
+        {
+            "record_id": "rec_reply",
+            "review_notification": {
+                "status": "sent",
+                "message_id": "om_prompt",
+                "chat_id": "oc_personal",
+                "recipient": "ou_reviewer",
+            },
+        },
+    )
+    messages = {
+        "om_prompt": {
+            "message_id": "om_prompt",
+            "chat_id": "oc_personal",
+            "message_position": "2",
+            "create_time": "1784730000000",
+        },
+        "om_reply": {
+            "message_id": "om_reply",
+            "chat_id": "oc_personal",
+            "message_position": "4",
+            "create_time": "1784730001000",
+            "msg_type": "text",
+            "sender": {"id": "ou_reviewer", "sender_type": "user"},
+            "body": {"content": json.dumps({"text": "accept"})},
+        },
+    }
+    monkeypatch.setattr(worker, "raw_message", lambda _config, message_id: messages[message_id])
+    config = worker.WorkerConfig(
+        "base", "table", tmp_path / "lark.exe", tmp_path, tmp_path / "python.exe", tmp_path
+    )
+
+    try:
+        worker.reconcile_historical_review_reply(
+            config,
+            prompt_message_id="om_prompt",
+            reply_message_id="om_reply",
+        )
+    except RuntimeError as error:
+        assert "immediately follow" in str(error)
+    else:
+        raise AssertionError("A nonadjacent message must not be correlated as a review")
+
+
+def test_reconcile_historical_review_is_idempotent_after_promotion(monkeypatch, tmp_path):
+    monkeypatch.setattr(worker, "ROOT", tmp_path)
+    worker.atomic_write_json(
+        worker.candidate_state_path("rec_reply"),
+        {
+            "record_id": "rec_reply",
+            "last_review_action": "accept",
+            "review_notification": {
+                "status": "sent",
+                "message_id": "om_prompt",
+                "chat_id": "oc_personal",
+                "recipient": "ou_reviewer",
+            },
+            "review_reply_events": [
+                {
+                    "message_id": "om_reply",
+                    "correlation_method": "p2p_sequence_fallback",
+                }
+            ],
+        },
+    )
+    messages = {
+        "om_prompt": {"message_id": "om_prompt", "chat_id": "oc_personal"},
+        "om_reply": {"message_id": "om_reply", "chat_id": "oc_personal"},
+    }
+    monkeypatch.setattr(worker, "raw_message", lambda _config, message_id: messages[message_id])
+    config = worker.WorkerConfig(
+        "base", "table", tmp_path / "lark.exe", tmp_path, tmp_path / "python.exe", tmp_path
+    )
+
+    result = worker.reconcile_historical_review_reply(
+        config,
+        prompt_message_id="om_prompt",
+        reply_message_id="om_reply",
+    )
+
+    assert result["processed"] is False
+    assert result["reason"] == "review_message_already_processed"
+    assert result["correlation_method"] == "p2p_sequence_fallback"
 
 
 def test_review_listener_uses_bounded_filtered_bot_event_consumer(monkeypatch, tmp_path):
