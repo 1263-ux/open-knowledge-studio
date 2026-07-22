@@ -592,9 +592,15 @@ def review_candidate(config: WorkerConfig, record: dict[str, Any]) -> dict[str, 
     if ROOT.resolve() not in candidate_path.parents or not candidate_path.is_file():
         raise RuntimeError(f"Candidate file is unavailable or outside Studio: {candidate_path}")
 
-    reviewed_at = scalar_cell(fields.get("审核时间")) or utc_now()
+    reviewed_at = scalar_cell(fields.get("审核时间")) or datetime.now().astimezone().strftime(
+        "%Y-%m-%d %H:%M:%S"
+    )
     comment = str(fields.get("审核意见") or "").strip()
     change_types = fields.get("修改类型") if isinstance(fields.get("修改类型"), list) else []
+    if action in {"accept", "edit", "reject"} and not change_types:
+        raise RuntimeError(f"Review action {action} requires at least one 修改类型")
+    if action in {"edit", "reject"} and not comment:
+        raise RuntimeError(f"Review action {action} requires 审核意见")
     history_item = {
         "action": action,
         "comment": comment,
@@ -640,6 +646,7 @@ def review_candidate(config: WorkerConfig, record: dict[str, Any]) -> dict[str, 
         patch = {"运行状态": "需人工", "Wiki状态": "candidate", "Wiki路径": None}
     else:
         patch = {"运行状态": "候选待审", "Wiki状态": "review_pending", "Wiki路径": None}
+    patch["审核时间"] = str(reviewed_at)
 
     history = state.get("review_history", [])
     if not isinstance(history, list):

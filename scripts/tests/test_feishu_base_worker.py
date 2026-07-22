@@ -223,7 +223,12 @@ def test_reject_review_is_persistent_and_idempotent(monkeypatch, tmp_path):
 
     assert first["processed"] is True
     assert first["action"] == "reject"
-    assert updates == [{"运行状态": "已拒绝", "Wiki状态": "rejected", "Wiki路径": None}]
+    assert updates == [{
+        "运行状态": "已拒绝",
+        "Wiki状态": "rejected",
+        "Wiki路径": None,
+        "审核时间": "2026-07-22 00:10:00",
+    }]
     metadata, _body = worker.parse_candidate_document(candidate.read_text(encoding="utf-8"))
     assert metadata["status"] == "rejected"
     assert metadata["review"]["lesson"] == "方向偏离，不晋升 Wiki。"
@@ -274,6 +279,7 @@ def test_accept_review_promotes_exact_base_content(monkeypatch, tmp_path):
     assert updates[-1]["运行状态"] == "已晋升"
     assert updates[-1]["Wiki状态"] == "promoted"
     assert updates[-1]["Wiki路径"] == "wiki/computing/strategies/accepted.md"
+    assert updates[-1]["审核时间"] == "2026-07-22 00:20:00"
 
 
 def test_needs_user_action_never_claims_raw_ready(monkeypatch, tmp_path):
