@@ -65,6 +65,43 @@ def test_claim_next_record_writes_visible_lease(monkeypatch, tmp_path):
     assert updates[0][1]["租约到期"]
 
 
+def test_claim_record_only_reads_and_claims_the_explicit_record(monkeypatch, tmp_path):
+    config = worker.WorkerConfig(
+        "base",
+        "table",
+        tmp_path / "lark.exe",
+        tmp_path,
+        tmp_path / "python.exe",
+        tmp_path,
+        lease_seconds=60,
+    )
+    requested = []
+    updates = []
+    monkeypatch.setattr(
+        worker,
+        "get_record",
+        lambda _config, record_id, projection: requested.append((record_id, projection))
+        or {"record_id": record_id, "fields": {"运行状态": "待处理", "重试": False}},
+    )
+    monkeypatch.setattr(
+        worker,
+        "update_record",
+        lambda _config, record_id, patch: updates.append((record_id, patch)) or {},
+    )
+    monkeypatch.setattr(
+        worker,
+        "local_claim_lock",
+        lambda _config: worker.contextmanager(lambda: (yield))(),
+    )
+
+    claimed = worker.claim_record(config, "rec_selected")
+
+    assert claimed is not None
+    assert requested == [("rec_selected", worker.CAPTURE_FIELDS)]
+    assert updates[0][0] == "rec_selected"
+    assert updates[0][1]["运行状态"] == "已领取"
+
+
 def test_attachment_change_changes_capture_hash():
     original = {"内容": "https://example.com", "思考": "note", "附件": []}
     changed = {

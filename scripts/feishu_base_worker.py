@@ -43,6 +43,17 @@ CANDIDATE_FIELDS = [
     "审核时间",
     "Wiki路径",
 ]
+CAPTURE_FIELDS = [
+    "内容",
+    "思考",
+    "附件",
+    "运行状态",
+    "运行ID",
+    "来源哈希",
+    "重试",
+    "租约所有者",
+    "租约到期",
+]
 REVIEW_ACTIONS = {"accept", "edit", "reject", "defer"}
 REVIEW_ACTION_RE = re.compile(
     r"(?<![A-Za-z])(accept|edit|reject|defer)(?![A-Za-z])",
@@ -239,7 +250,7 @@ def create_record(config: WorkerConfig, fields: dict[str, Any]) -> dict[str, Any
 
 
 def list_records(config: WorkerConfig, limit: int = 100) -> list[dict[str, Any]]:
-    projection = ["内容", "思考", "附件", "运行状态", "运行ID", "来源哈希", "重试", "租约所有者", "租约到期"]
+    projection = CAPTURE_FIELDS
     command = [
         "base",
         "+record-list",
@@ -406,6 +417,29 @@ def claim_next_record(config: WorkerConfig, limit: int = 100) -> tuple[dict[str,
         update_record(
             config,
             record["record_id"],
+            {
+                "运行状态": "已领取",
+                "运行ID": run_id,
+                "租约所有者": owner,
+                "租约到期": expires.strftime("%Y-%m-%d %H:%M:%S"),
+                "重试": False,
+            },
+        )
+        return record, run_id, owner
+
+
+def claim_record(config: WorkerConfig, record_id: str) -> tuple[dict[str, Any], str, str] | None:
+    """Claim one explicitly selected Base record without touching other pending rows."""
+    with local_claim_lock(config):
+        record = get_record(config, record_id, CAPTURE_FIELDS)
+        if not is_candidate(record):
+            return None
+        run_id = f"run-{datetime.now():%Y%m%dT%H%M%S}-{uuid.uuid4().hex[:8]}"
+        owner = f"{os.environ.get('COMPUTERNAME', 'local')}:{os.getpid()}:{uuid.uuid4().hex[:8]}"
+        expires = datetime.now().astimezone() + timedelta(seconds=config.lease_seconds)
+        update_record(
+            config,
+            record_id,
             {
                 "运行状态": "已领取",
                 "运行ID": run_id,
@@ -1978,6 +2012,11 @@ def parse_args() -> argparse.Namespace:
     enqueue.add_argument("--rating", choices=("A", "B", "C"))
     once = subcommands.add_parser("run-once", help="Process at most one pending row.")
     once.add_argument("--limit", type=int, default=100)
+    selected = subcommands.add_parser(
+        "run-record",
+        help="Process one explicitly selected pending Base record.",
+    )
+    selected.add_argument("--record-id", required=True)
     browser = subcommands.add_parser("complete-browser", help="Complete one JS-rendered record from a controlled browser snapshot.")
     browser.add_argument("--record-id", required=True)
     browser.add_argument("--snapshot-dir", type=Path, required=True)
@@ -2042,9 +2081,13 @@ def main() -> int:
         )
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return 0
-    claimed = claim_next_record(config, args.limit)
+    if args.command == "run-record":
+        claimed = claim_record(config, args.record_id)
+    else:
+        claimed = claim_next_record(config, args.limit)
     if claimed is None:
-        print(json.dumps({"processed": False, "reason": "no_pending_records"}, ensure_ascii=False))
+        reason = "record_not_claimable" if args.command == "run-record" else "no_pending_records"
+        print(json.dumps({"processed": False, "reason": reason}, ensure_ascii=False))
         return 0
     record, run_id, _owner = claimed
     try:
