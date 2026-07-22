@@ -13,7 +13,7 @@ import math
 import os
 import re
 import tempfile
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 import yaml
@@ -35,7 +35,23 @@ DEFAULT_CONFIG: dict = {
 
 
 def repo_root() -> Path:
-    return Path(os.environ.get("OKS_ROOT", os.getcwd()))
+    env_root = os.environ.get("OKS_ROOT")
+    if env_root:
+        return Path(env_root)
+    try:
+        from knowledge_studio.config import load_config
+
+        kb_path = load_config().get("knowledge_base_path")
+        if kb_path:
+            return Path(kb_path)
+    except Exception as e:
+        import sys
+        print(
+            f"oks: warning: could not read ~/.oks/config.json ({e}); "
+            f"falling back to current directory as KB root",
+            file=sys.stderr,
+        )
+    return Path(os.getcwd())
 
 
 def wiki_dir() -> Path:
@@ -48,6 +64,47 @@ def drafts_dir() -> Path:
 
 def raw_dir() -> Path:
     return repo_root() / "raw"
+
+
+def goals_dir() -> Path:
+    return repo_root() / "profiles" / "goals"
+
+
+def _as_str_set(value) -> set[str]:
+    if isinstance(value, str):
+        items = [v.strip() for v in value.split(",")]
+    elif isinstance(value, (list, tuple, set)):
+        items = [str(v).strip() for v in value]
+    else:
+        return set()
+    return {item.lower() for item in items if item}
+
+
+def load_active_goals() -> list[dict]:
+    """Return active goals (type==goal, status==active) as normalized dicts.
+
+    Each entry has lowercased 'domains' and 'keywords' string sets, used by
+    recall to boost pages that fall within an active goal's scope. Returns an
+    empty list when profiles/goals is absent or holds no active goals.
+    """
+    gd = goals_dir()
+    if not gd.exists():
+        return []
+
+    goals: list[dict] = []
+    for path in sorted(gd.rglob("*.md")):
+        meta = parse_wiki_file(path)
+        if not meta:
+            continue
+        if meta.get("type") != "goal" or meta.get("status") != "active":
+            continue
+        goals.append({
+            "slug": meta.get("slug", path.stem),
+            "title": meta.get("title", path.stem),
+            "domains": _as_str_set(meta.get("domains")),
+            "keywords": _as_str_set(meta.get("keywords")),
+        })
+    return goals
 
 
 def _access_log_path() -> Path:
@@ -135,11 +192,16 @@ def compute_score(meta: dict, access_count: int = 0, config: dict | None = None)
     if archived or status == "dropped":
         return 0.0
 
-    created_str = meta.get("created", "")
-    try:
-        created = datetime.fromisoformat(created_str)
-    except (ValueError, TypeError):
-        created = datetime.now(UTC)
+    created_raw = meta.get("created", "")
+    if isinstance(created_raw, datetime):
+        created = created_raw
+    elif isinstance(created_raw, date):
+        created = datetime(created_raw.year, created_raw.month, created_raw.day)
+    else:
+        try:
+            created = datetime.fromisoformat(str(created_raw))
+        except (ValueError, TypeError):
+            created = datetime.now(UTC)
 
     tz = UTC if not created.tzinfo else created.tzinfo
     days_old = max(0, (datetime.now(UTC) - created.replace(tzinfo=tz)).days)
@@ -166,23 +228,25 @@ def compute_tier(score: float) -> str:
 
 
 def compute_quality(meta: dict) -> int:
+    # Content factors (55) are reachable by any well-written page;
+    # traces/review (40) are earned bonuses, not the baseline.
     score = 0
-    if meta.get("traces"):
-        score += 25
-    if meta.get("review"):
-        score += 25
-    if meta.get("options"):
-        score += 15
     if len(meta.get("body", "")) >= 50:
-        score += 15
+        score += 25
     if meta.get("importance", 0) >= 0.7:
-        score += 10
+        score += 15
     tags = meta.get("tags", "")
     if isinstance(tags, list):
         if tags:
-            score += 10
+            score += 15
     elif isinstance(tags, str) and tags.strip():
-        score += 10
+        score += 15
+    if meta.get("traces"):
+        score += 20
+    if meta.get("review"):
+        score += 20
+    if meta.get("options"):
+        score += 5
     return score
 
 
@@ -220,18 +284,19 @@ def _find_file_by_slug(slug: str) -> Path | None:
     return None
 
 
-def _update_frontmatter_field(file_path: Path, field: str, value) -> None:
+def _update_frontmatter_field(file_path: Path, field: str, value) -> bool:
     text = file_path.read_text(encoding="utf-8")
     parts = text.split("---", 2)
     if len(parts) < 3:
-        return
+        return False
     try:
         meta = yaml.safe_load(parts[1].strip()) or {}
     except yaml.YAMLError:
-        return
+        return False
     meta[field] = value
     new_fm = yaml.dump(meta, default_flow_style=False, allow_unicode=True, sort_keys=False)
     _atomic_write(file_path, f"---\n{new_fm}---\n{parts[2]}")
+    return True
 
 
 def _reinforce_confidence(slug: str) -> None:
@@ -274,9 +339,6 @@ def list_wiki_pages(config: dict | None = None) -> list[dict]:
         meta["quality_score"] = compute_quality(meta)
         if "status" not in meta:
             meta["status"] = "active"
-        if "type" in meta and "category" not in meta:
-            type_to_cat = {"concept": "insight", "strategy": "pattern", "anti-pattern": "mistake"}
-            meta["category"] = type_to_cat.get(meta["type"], meta["type"])
         pages.append(meta)
 
     pages.sort(key=lambda x: (-x["score"], x["slug"]))
@@ -306,6 +368,12 @@ def record_access(slug: str) -> None:
     _reinforce_confidence(slug)
 
 
+def make_slug(title: str, fallback: str = "untitled") -> str:
+    # Keep CJK characters so Chinese titles don't degrade to the fallback.
+    slug = re.sub(r"[^a-z0-9\u4e00-\u9fff]+", "-", title.lower())[:60].strip("-")
+    return slug or fallback
+
+
 def write_wiki_page(
     title: str,
     content: str,
@@ -318,6 +386,9 @@ def write_wiki_page(
     traces: list[dict] | None = None,
     review: dict | None = None,
     supersedes: str | None = None,
+    relates_to: str | None = None,
+    relationship: str | None = None,
+    human_note: str | None = None,
     slug_hint: str | None = None,
 ) -> Path:
     fp = _fingerprint(content)
@@ -335,9 +406,7 @@ def write_wiki_page(
     type_dir = wd / area / wiki_type
     type_dir.mkdir(parents=True, exist_ok=True)
 
-    slug = re.sub(r"[^a-z0-9]+", "-", (slug_hint or title).lower())[:60].strip("-")
-    if not slug:
-        slug = "untitled"
+    slug = make_slug(slug_hint or title, fallback="untitled")
     slug = f"{date_str}-{slug}"
 
     file_path = type_dir / f"{slug}.md"
@@ -346,11 +415,28 @@ def write_wiki_page(
         file_path = type_dir / f"{slug}-{counter}.md"
         counter += 1
 
-    if supersedes:
-        old_file = _find_file_by_slug(supersedes)
+    if supersedes and not relates_to:
+        relates_to = supersedes
+        relationship = "supersedes"
+
+    if relates_to and relationship:
+        old_file = _find_file_by_slug(relates_to)
         if old_file:
-            _update_frontmatter_field(old_file, "status", "superseded")
-            _update_frontmatter_field(old_file, "superseded_by", slug)
+            if relationship == "supersedes":
+                _update_frontmatter_field(old_file, "status", "superseded")
+                _update_frontmatter_field(old_file, "superseded_by", slug)
+            elif relationship == "enriches":
+                _update_frontmatter_field(old_file, "enriched_by", slug)
+            elif relationship == "confirms":
+                old_meta = parse_wiki_file(old_file)
+                if old_meta:
+                    current_conf = old_meta.get("confidence", 0.8)
+                    new_conf = min(1.0, current_conf + 0.1)
+                    _update_frontmatter_field(old_file, "confidence", round(new_conf, 4))
+                _update_frontmatter_field(old_file, "confirmed_by", slug)
+            elif relationship == "challenges":
+                _update_frontmatter_field(old_file, "status", "stale")
+                _update_frontmatter_field(old_file, "challenged_by", slug)
 
     frontmatter: dict = {
         "title": title,
@@ -372,6 +458,11 @@ def write_wiki_page(
         frontmatter["traces"] = traces
     if review:
         frontmatter["review"] = review
+    if human_note:
+        frontmatter["human_note"] = human_note
+    if relates_to and relationship:
+        frontmatter["relates_to"] = relates_to
+        frontmatter["relationship"] = relationship
 
     fm_str = yaml.dump(frontmatter, default_flow_style=False, allow_unicode=True, sort_keys=False)
     _atomic_write(file_path, f"---\n{fm_str}---\n\n{content}")
@@ -414,17 +505,16 @@ def pin_page(slug: str) -> bool:
     f = _find_file_by_slug(slug)
     if not f:
         return False
-    _update_frontmatter_field(f, "pinned", True)
-    return True
+    return _update_frontmatter_field(f, "pinned", True)
 
 
 def archive_page(slug: str) -> bool:
     f = _find_file_by_slug(slug)
     if not f:
         return False
-    _update_frontmatter_field(f, "status", "dropped")
-    _update_frontmatter_field(f, "archived", True)
-    return True
+    dropped = _update_frontmatter_field(f, "status", "dropped")
+    archived = _update_frontmatter_field(f, "archived", True)
+    return dropped and archived
 
 
 def list_drafts() -> list[dict]:
@@ -470,17 +560,16 @@ def promote_draft(
 
     final_title = title or meta.get("title", slug)
     requested_type = wiki_type or meta.get("draft_type", "concept")
-    final_type = {
-        "concept": "concepts",
-        "concepts": "concepts",
-        "strategy": "strategies",
-        "strategies": "strategies",
-        "anti-pattern": "anti-patterns",
-        "anti-patterns": "anti-patterns",
-    }.get(requested_type)
+    _type_dirs = {
+        "concept": "concepts", "concepts": "concepts",
+        "strategy": "strategies", "strategies": "strategies",
+        "anti-pattern": "anti-patterns", "anti-patterns": "anti-patterns",
+    }
+    final_type = _type_dirs.get(requested_type)
     if final_type is None:
         raise ValueError(f"Unsupported Wiki type: {requested_type}")
     final_area = area or meta.get("draft_area", "computing")
+    human_note = meta.get("source_note") or None
 
     draft_tags = meta.get("tags", [])
     if isinstance(draft_tags, str):
@@ -498,6 +587,7 @@ def promote_draft(
         tags=tags if tags is not None else draft_tags,
         traces=meta.get("traces") if isinstance(meta.get("traces"), list) else None,
         review=meta.get("review") if isinstance(meta.get("review"), dict) else None,
+        human_note=human_note,
         slug_hint=slug_hint,
     )
 

@@ -18,35 +18,93 @@ Directory fsync after replace is required for crash safety.
 
 **Do not** write wiki pages or config with bare `open(path, 'w')`.
 
-### P3: raw/ is human-collected, wiki/ is LLM-written
+### P3: raw/ is human-collected or tool-processed, wiki/ is LLM-written
 
-- `raw/` contains original materials collected by humans. LLM reads but
-  does not write to `raw/`.
+- `raw/` contains original materials collected by humans OR processed by
+  external tools (modality conversion: video→text, audio→text, URL→markdown).
+  Tools preserve maximum fidelity — they convert format, not knowledge.
+  LLM does not write knowledge to `raw/`.
 - `wiki/` contains curated knowledge written by LLM via the Dreaming cycle,
   approved by humans through `drafts/` review.
 
-### P4: No AI configuration
+### P4: CLI core is API-free, external tools may use AI APIs
 
-The AI engine is Claude Code itself. There is no `config.json` with
-`base_url`, `api_key`, or `model` settings. The CLI tool (`oks`) handles
-only file system operations and recall scoring — it does not call AI APIs.
+The AI engine is Claude Code itself — it IS the orchestrator. The CLI core
+(`oks`) handles only file system operations and recall scoring — it does
+not call AI APIs and does not wrap tool calls.
+
+External tools (Level 1/2) may use AI APIs (vision, STT) independently.
+The agent calls these tools directly via Bash; OKS is not in the runtime path.
+
+### P5: OKS provides capability, not runtime wrapping
+
+**Core invariant: OKS 只提供能力，不提供运行时包装。**
+
+OKS is a capability layer — it installs, configures, routes, and health-checks.
+It is NOT a runtime wrapper. The agent (Claude Code) IS the orchestrator:
+it reads the routing table, checks tool availability via Bash, calls tools
+directly, and writes results to `raw/`. OKS is never in the runtime path
+between the agent and the tool.
+
+**Three-level tool protocol:**
+
+| Level | Type | Example | Called by | Output |
+|-------|------|---------|-----------|--------|
+| 0 | System tool | curl, pdftotext | Agent via Bash | Raw stdout |
+| 1 | OKS protocol CLI | oks-video | Agent via Bash | Raw Bundle (`raw-multimodal/v0.1`) |
+| 2 | Independent tool | agent-reach, yt-dlp | Agent via Bash | Tool-specific |
+
+**Level 1 output protocol — Raw Bundle (`raw-multimodal/v0.1`):**
+An L1 tool writes a **bundle directory** — `content.md` (faithful primary
+text, the recall entry) plus sidecars `raw.md`, `metadata.json` (source +
+hash), `evidence.jsonl` (atomic provenance), `quality-report.json`, and
+`assets/` — and prints a JSON envelope to stdout pointing at it:
+```json
+{"contract": "raw-multimodal/v0.1", "bundle": "raw/.../slug/", "content": "content.md", "metadata": {}}
+```
+See `docs/raw-multimodal-standard.md` for the full spec and
+`_meta/raw-evidence-schema.md` for how the core recalls it generically.
+
+Tools are registered in `settings/handlers.json` with `level`, `check_cmd`,
+`install_hint`, `raw_subdir` fields. The agent checks availability by
+running `check_cmd` via Bash — no CLI doctor command needed.
+
+**Do not** build a runtime wrapper — OKS must not sit between the agent
+and external tools (no `oks ingest <input>` that internally dispatches
+to handlers). The agent calls tools directly via Bash.
+
+**Do not** add AI API calls to the CLI core — `oks` handles only file
+system operations and recall scoring. External tools (L1/L2) may use AI
+APIs independently.
+
+**Do not** auto-detect modality inside OKS — modality detection is the
+agent's job, guided by the routing table in `settings/handlers.json`.
 
 ---
 
 ## Architecture Invariants
 
-### A1: Five-bucket memory architecture
+### A1: Four cognitive buckets + two infrastructure layers
 
-The knowledge base has **five buckets**. Each bucket has a clear purpose
-and recall strategy.
+The knowledge repo separates **four cognitive buckets** — content the agent
+observes, writes, recalls, and forgets — from **two infrastructure layers**
+(config + schema) that the agent reads to know how to behave but never writes
+as knowledge. Config and schema do not decay and are not recalled by relevance.
 
-| Bucket | Purpose | Decay | Recall |
-|--------|---------|-------|--------|
-| `profiles/` | Team/user/project portraits | None | Direct read |
-| `raw/` | Original records (articles, papers, traces) | None | Keyword + freshness |
-| `wiki/` | Curated knowledge (from raw via Dreaming) | Type-specific λ | 6-factor relevance + curve |
-| `drafts/` | Dreaming candidates (raw → wiki intermediate) | None | N/A (human review) |
-| `settings/` | System infrastructure (decay-config, input-sources) | None | Direct read |
+| Layer | Dir | Contents | Decay | Access |
+|-------|-----|----------|-------|--------|
+| Cognitive | `profiles/` | Team/user/project portraits, recipes, goals | None | Direct read (goals influence recall relevance) |
+| Cognitive | `raw/` | Original records, date-based by source | None | Keyword + freshness (rglob any structure) |
+| Cognitive | `wiki/` | Curated knowledge (from raw via Dreaming) | Type-specific λ | 6+1-factor relevance + curve |
+| Cognitive | `drafts/` | Dreaming candidates (raw → wiki intermediate) | None | N/A (human review) |
+| Config | `settings/` | Runtime knobs: handlers.json, input-sources.json, raw-tools | None | Direct read (agent reads routing table at runtime) |
+| Schema | `_meta/` | Data-shape contracts: frontmatter-schema, learning-schema | None | Applied on read; CI-enforced |
+
+`settings/` answers *"what should happen"* (config, changes per deployment);
+`_meta/` answers *"what shape is valid"* (schema, versioned, CI-gated). Both
+are git-synced (P1) and sit at top level alongside the cognitive buckets, but
+neither is "memory" in the cognitive sense — do not treat them as recallable
+knowledge.
 
 **Directory structure:**
 
@@ -55,20 +113,28 @@ open-knowledge-studio/
 ├── profiles/                     # ① Portraits
 │   ├── team.md
 │   ├── users/{id}.md
-│   └── projects/{slug}.md
+│   ├── projects/{slug}.md
+│   ├── recipes/{slug}.md         # Executable automation recipes
+│   └── goals/{slug}.md           # Goals & objectives (influences recall)
 ├── raw/                          # ② Original records
 │   └── {YYYY}/{MM}/{DD}/
-│       └── {topic_id}/
-│           ├── conversation.jsonl
-│           └── summary.md
+│       └── {source}/             # articles | papers | videos | audio | repos | misc
+│           ├── {slug}.md
+│           └── {slug}.jsonl
 ├── wiki/                         # ③ Curated knowledge
-│   └── {domain}/{type}/{slug}.md  # concept | strategy | anti-pattern
+│   └── {domain}/{type}/{slug}.md  # concepts/ | strategies/ | anti-patterns/
 ├── drafts/                       # ④ Dreaming candidates
 │   └── {slug}.md
-└── settings/                     # ⑤ System config
-    ├── decay-config.yaml
-    └── input-sources.json
+├── settings/                     # ⑤ Config layer
+│   ├── handlers.json             # 3-level tool registry
+│   └── input-sources.json        # Scheduled intake sources
+└── _meta/                        # ⑥ Schema layer
+    ├── frontmatter-schema.md     # wiki/ frontmatter contract
+    └── learning-schema.json      # CI-enforced learning schema
 ```
+
+**Infrastructure (not buckets):** `cli/` (the API-free `oks` core),
+`templates/`, and `docs/` live at top level but hold code/docs, not knowledge.
 
 **Memory curve scoring** (wiki/):
 
@@ -105,17 +171,26 @@ recall, scope, and decay:
 |------|---------|--------|-------|-------|
 | User Memory | `profiles/users/{id}.md` | Direct read | None | `user_id` |
 | Project Memory | `profiles/projects/{slug}.md` | Direct read | None | `project_slug` |
-| Episodic Memory | `raw/{date}/{topic}/conversation.jsonl` | Keyword + freshness | None | `topic_id` |
-| Semantic Memory | `wiki/{domain}/{type}/{slug}.md` | 6-factor relevance + curve | Type-specific λ | `domain` |
+| Episodic Memory | `raw/{YYYY}/{MM}/{DD}/{source}/` | Keyword + freshness | None | `source`, `date` |
+| Semantic Memory | `wiki/{domain}/{type}/{slug}.md` | 6+1-factor relevance + curve | Type-specific λ | `domain` |
 | Procedural Memory | `.claude/skills/{slug}/` | Keyword trigger | None | — |
 | Draft Memory | `drafts/{slug}.md` | N/A | None | N/A |
 
-**Bucket mapping:** The six types map to five buckets + Claude Code skills:
-- User/Project Memory → `profiles/`
-- Episodic Memory → `raw/`
+**Bucket mapping:** The six types map to the four cognitive buckets + Claude Code skills
+(`settings/` and `_meta/` are infrastructure, not memory types):
+- User/Project Memory → `profiles/` (also includes `recipes/` and `goals/`)
+- Episodic Memory → `raw/` (date-based: `{YYYY}/{MM}/{DD}/{source}/`)
 - Semantic Memory → `wiki/`
 - Draft Memory → `drafts/`
 - Procedural Memory → `.claude/skills/` (managed by Claude Code)
+
+**Recipes** (`profiles/recipes/`): Executable automation patterns with triggers,
+steps, tools, and schedules. Not cognitive knowledge (wiki/ strategy) —
+recipes are "how to do" playbooks the agent can follow.
+
+**Goals** (`profiles/goals/`): Team/user objectives with status and period.
+Active goals influence recall relevance — wiki pages matching an active
+goal's domain/keywords receive a relevance boost.
 
 **Injection order** (stable first for KV Cache, mutable last):
 
@@ -137,7 +212,8 @@ recall, scope, and decay:
 **Scope filtering:** Profiles must be filtered before injection:
 - User Memory: only the current user's profile
 - Project Memory: only the current project's profile
-- Episodic: filter by `topic_id` when available
+- Episodic: filter by `source` and `date` when available
+- Goals: active goals boost recall relevance for matching domains/keywords
 
 **Do not** inject another user's preferences or another project's facts
 into the current context.
@@ -175,17 +251,18 @@ are tracked. The system never silently overwrites old knowledge.
 
 **Relationship types:**
 
-| Relationship | Meaning | Effect on old page |
-|--------------|---------|---------------------|
-| `supersedes` | New page replaces the old one | Marked `status: superseded` with `superseded_by` field. Excluded from recall. Retained on disk for audit history. |
-| `enriches` | New page adds to the old one | Both stay `active`. New page linked via `enriches` field. |
-| `confirms` | New page validates the old one | Old page `confidence` boosted by +0.1 (max 1.0). New page linked via `confirms` field. |
-| `challenges` | New page contradicts the old one | Old page marked `[stale]` source label, flagged for review. New page linked via `challenges` field. |
+| Relationship | Meaning | Effect on old page | New page fields |
+|--------------|---------|---------------------|-----------------|
+| `supersedes` | New page replaces the old one | `status: superseded`, `superseded_by: {slug}`. Excluded from recall. | `relates_to`, `relationship: supersedes` |
+| `enriches` | New page adds to the old one | Both stay `active`. `enriched_by: {slug}` added. | `relates_to`, `relationship: enriches` |
+| `confirms` | New page validates the old one | `confidence` boosted by +0.1 (max 1.0). `confirmed_by: {slug}` added. | `relates_to`, `relationship: confirms` |
+| `challenges` | New page contradicts the old one | `status: stale`, `challenged_by: {slug}`. Still in recall but carries `[stale]` label. | `relates_to`, `relationship: challenges` |
 
-`write_wiki_page()` accepts a `relates_to` parameter (slug of the existing
-page) and a `relationship` parameter (`supersedes` | `enriches` | `confirms` |
-`challenges`). When set, the old page's frontmatter is updated before the new
-page is written.
+`write_wiki_page()` accepts `relates_to` (slug of existing page) and
+`relationship` (`supersedes` | `enriches` | `confirms` | `challenges`).
+The `supersedes` parameter is kept for backward compatibility — it's
+merged into `relates_to` + `relationship` internally. When set, the old
+page's frontmatter is updated before the new page is written.
 
 **Superseded pages** are excluded from recall and `get_top_wiki()` but
 retained on disk for audit history. Git history is the safety net, but

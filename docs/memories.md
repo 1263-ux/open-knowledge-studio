@@ -1,8 +1,15 @@
+---
+title: Memories
+nav_order: 3
+parent: 概述
+---
 # Memories
+
+*wiki 记忆的结构、类型、创建路径与搜索。*
 
 一条 memory 是一个值得保留的持久知识：一个 concept、一个 strategy、一个 anti-pattern、或一个决策。每条 memory 应该独立可读，不需要完整的对话上下文就能理解。
 
-Memories 是 Open Knowledge Studio 的核心单元。搜索、衰减、演化和 Claude Code 集成都因为 memories 的存在而变得更有价值。
+Memories 是 Open Knowledge Studio 的核心单元。搜索、衰减、演化和 Agent 集成都因为 memories 的存在而变得更有价值。
 
 ## Memories vs Raw Materials
 
@@ -11,21 +18,22 @@ Memories 是 Open Knowledge Studio 的核心单元。搜索、衰减、演化和
 | **是什么** | 持久的、蒸馏后的知识 | 原始文章、论文或对话 |
 | **谁写** | LLM 写，人审批 | 人类收集 |
 | **衰减** | 类型特定 λ | 无 |
-| **召回** | 6 因子相关性 + 曲线 | 关键词 + 新鲜度 |
-| **优势** | 22 域结构、衰减 tier、Crystal 合成 | 类型化入料（4 子目录）、A/B/C 分级、指纹去重 |
+| **召回** | 6+1 因子相关性 + 曲线 | 关键词 + 新鲜度 |
+| **优势** | 22 域结构、衰减 tier、4 种知识关系 | 日期 + 来源分类、A/B/C 分级、指纹去重 |
 | **何时用** | 需要模式或决策 | 需要完整历史 |
 
 推荐工作流：把来源保存到 `raw/`，然后把值得保留的部分蒸馏为 `wiki/` memories。
 
 ## 第一条有用的 Memory
 
-如果你是新手，不要先纠结结构。保存一条真实内容：
-
-* 一个你学到的 concept
-* 一个有效的 strategy
-* 一个你想避免的 anti-pattern
-
-然后搜索它。一旦跑通，这整页文档就更容易理解了。
+{: .tip }
+> 如果你是新手，不要先纠结结构。保存一条真实内容：
+>
+> * 一个你学到的 concept
+> * 一个有效的 strategy
+> * 一个你想避免的 anti-pattern
+>
+> 然后搜索它。一旦跑通，这整页文档就更容易理解了。
 
 ## Memory 结构
 
@@ -38,7 +46,7 @@ Memories 是 Open Knowledge Studio 的核心单元。搜索、衰减、演化和
 | **content** | 知识本身，frontmatter 之后的 Markdown 正文 |
 | **tags** | 用于过滤和组织的标签 |
 | **created** | 时间戳，用于时序搜索和衰减计算 |
-| **access_count** | 被召回的次数，增强 confidence |
+| **access_count** | 被**显式使用**的次数（经 `oks wiki use <slug>` 记录；召回/搜索只读、不计数），增强 confidence 并驱动 provisional→active |
 | **status** | `active`、`provisional`、`archived`、`dropped` 或 `superseded` |
 
 ### Importance 等级
@@ -58,7 +66,7 @@ Memories 是 Open Knowledge Studio 的核心单元。搜索、衰减、演化和
 | Type | 用途 | Type Boost | 衰减 λ |
 |------|------|------------|--------|
 | `concept` | 持久参考知识 | ×0.6 | 0.0（不衰减） |
-| `strategy` | 方法、决策、工作流 | ×0.8 | 0.014（缓慢） |
+| `strategy` | 方法、决策、工作流 | ×0.8 | 0.014（最快） |
 | `anti-pattern` | 要避免的东西、失败模式 | ×1.5 | 0.010（中等） |
 
 anti-pattern 的 boost 最高（×1.5），因为**错误是最有价值的召回对象** — 你希望在重复之前先找到它。
@@ -79,14 +87,14 @@ anti-pattern 的 boost 最高（×1.5），因为**错误是最有价值的召�
 ### 从原始材料（主路径）
 
 1. 把来源材料放入 `raw/`（文章、论文、对话摘要）
-2. 运行 `/ingest` 或 `oks distill` — AI 扫描并识别模式
+2. 运行 `/ingest`（三级路由）— AI 扫描并识别模式
 3. 候选写入 `drafts/{slug}.md`
 4. 用 `/promote` 审查 — accept、revise 或 reject
 5. 接受的草稿变为 `wiki/{domain}/{type}/{slug}.md`
 
 ### 从 AI 对话
 
-用 `/archive` 技能从对话中提取 Q&A 并写入 wiki。
+用 `/archive` 技能从对话中提取 Q&A 并写入 `drafts/`。
 
 ### 从 CLI
 
@@ -113,9 +121,9 @@ cp templates/strategy.md wiki/computing/strategies/my-strategy.md
 |------|----------|------|
 | **Lexical overlap** | jieba 分词后的 token overlap，只匹配实际共享词，不等同于 embedding 语义检索 | 搜索词与页面存在共同 token 时获得加分 |
 | **Keyword** | 标题和正文中的 substring 精确匹配 | 精确术语、代码名、特定 API |
-| **Graph** | topic trace + type boost + review penalty | 找相关决策、追溯主题历史 |
+| **Graph** | topic trace + type boost + 审查加分 | 找相关决策、追溯主题历史 |
 
-6 因子召回引擎自动组合这三种模式。详见 [召回引擎](recall-engine.md)。
+6+1 因子召回引擎自动组合这三种模式。详见 [召回引擎](recall-engine.md)。
 
 ### 从 CLI
 
@@ -126,13 +134,13 @@ oks recall "database design" --limit 5
 oks wiki list --domain computing --status active
 ```
 
-### 从 Claude Code
+### 从 Agent
 
 ```
 /query What patterns do we have for error handling?
 ```
 
-Claude Code 调用 `oks recall`，将相关 wiki 页面注入上下文（带来源标签），然后带引用回答。
+Agent 调用 `oks recall`，将相关 wiki 页面注入上下文（带来源标签），然后带引用回答。
 
 ## 编辑和组织
 
@@ -141,12 +149,13 @@ Claude Code 调用 `oks recall`，将相关 wiki 页面注入上下文（带来�
 直接编辑 wiki 页面，改动立即生效。
 
 ```bash
-oks wiki pin <slug>      # 提升 importance（pin_bonus = 0.5）
+oks wiki pin <slug>      # 固定页面（score +0.5，不改 importance）
 oks wiki archive <slug>  # 归档
 ```
 
 ### 删除 Memory
 
+{: .note }
 Memories 从不删除 — 它们被归档（`status: dropped`）或被替代（`status: superseded`）。Git 历史是安全网。
 
 ## 知识演化关系
@@ -162,11 +171,17 @@ Memories 从不删除 — 它们被归档（`status: dropped`）或被替代（`
 
 这构成了知识演化图。你可以追溯对任何主题的理解是如何随时间变化的。
 
-### Crystal — 合成参考文章
+### 来源标签 — 动态生成
 
-当 3+ 条同标签 memory 的 score > 0.5 时，系统可以将它们合成为一篇参考文章 — **Crystal**。引用来源。后续保存相关信息时 Crystal 会更新。
+来源标签在注入时**动态生成**，不存储在 frontmatter 中：
 
-这在 Dreaming 循环中自动发生。详见 [Dreaming 循环](dreaming-cycle.md)。
+| 条件 | 标签 | 含义 |
+|------|------|------|
+| `status == "stale"` | `[stale]` | 被 challenges 关系标记，可能过时 |
+| `has_traces == true` | `[verified]` | 工具确认（有 trace 证据） |
+| `confidence < 0.5` | `[inferred]` | AI 蒸馏，低置信度 |
+| `status == "provisional"` | `[inferred]` | 尚未提升为 active |
+| 其他 | `[verified]` | 人工审查的活跃知识 |
 
 ## Memory 生命周期
 
@@ -187,7 +202,11 @@ Provisional → Active（access_count ≥ 3）→ Dropped（score < threshold）
 ## 下一步
 
 * **[Raw Materials](raw-materials.md)**: 原始材料、蒸馏工作流和导入格式
-* **[召回引擎](recall-engine.md)**: 6 因子评分算法详解
+* **[召回引擎](recall-engine.md)**: 6+1 因子评分算法详解
 * **[Dreaming 循环](dreaming-cycle.md)**: memories 如何演化、连接和合成
 * **[衰减系统](decay-system.md)**: 记忆曲线、类型特定 λ 和 tier 分级
-* **[架构设计](architecture.md)**: 五桶结构和记忆生命周期
+* **[架构设计](architecture.md)**: 认知桶结构和记忆生命周期
+
+---
+
+{% include comments.html %}

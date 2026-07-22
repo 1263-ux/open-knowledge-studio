@@ -1,4 +1,11 @@
+---
+title: Dreaming 循环
+nav_order: 14
+parent: 内部机制
+---
 # Dreaming Cycle（做梦循环）
+
+*人工审查的知识演化：raw → 蒸馏 → drafts → 审查 → wiki。*
 
 知识通过**人工审查的 draft 提案**演化 — 系统绝不自动将 raw 内容提升到 wiki。
 
@@ -16,7 +23,7 @@ Trace、对话、文章和论文在 `raw/` 中积累。这是原始材料层 —
 
 ### 2. AI Dream（AI 做梦）
 
-Claude Code `/ingest` 技能扫描 `raw/`，识别模式，生成候选 wiki 页面。AI 评估每个材料：
+`/ingest` 技能（三级路由）扫描 `raw/`，识别模式，生成候选 wiki 页面。AI 评估每个材料：
 
 - **A 级** — 高质量，提升为 draft
 - **B 级** — 可能有用，保留在 raw 等下一轮
@@ -59,42 +66,26 @@ oks drafts reject <slug>  # 丢弃
 
 `oks distill` 重新评分所有 wiki 页面。低于归档阈值的页面标记为 `status: dropped`。长时间未访问的页面按其类型特定衰减率衰减。
 
-### 7. Evolve — Crystal（演化 — 晶体合成）
+### 7. Evolve — 知识演化关系（演化）
 
-当 3+ 个 wiki 页面共享同一主标签且 score > 0.5 时，系统将它们合成为一篇 **Crystal** — 合并多条 memory 洞见的参考文章。
+当新知识与已有页面相关时，系统追踪 4 种关系：
 
-```
-evolve_knowledge():
-  scan wiki/ for pages with score > 0.5
-  group by primary tag
-  3+ pages with same tag → merged draft proposal
-```
+| 关系 | 含义 | 对旧页面的影响 |
+|------|------|---------------|
+| `supersedes` | 新页面替代旧页面 | 标记 `superseded`，排除出召回 |
+| `enriches` | 新页面补充旧页面 | 两者保持 active，互相链接 |
+| `confirms` | 新页面确认旧页面 | 旧页面 confidence +0.1 |
+| `challenges` | 新页面挑战旧页面 | 旧页面标记 `[stale]`，待审查 |
 
-Crystal 的特点：
-- 引用所有来源页面
-- 合并重叠的洞见
-- 作为独立的 wiki 页面，`type: concept`
-- 后续保存相关信息时提出更新 Candidate，人工审核后再更新正式 Wiki
+`write_wiki_page()` 接受 `relates_to` 和 `relationship` 参数，自动更新旧页面 frontmatter。
 
-这就是零散 memory 如何变为有组织的参考知识。
+### 8. Git Commit（提交）
 
-### 8. Working Memory — 每日简报
-
-每天，Studio 可以从近期和高重要性的 memories 中生成一份简报。这份工作记忆为 Claude Code 提供关于你当前工作的上下文 — 在你说任何话之前。
-
-简报来源：
-- 近期创建或更新的 wiki 页面
-- 高重要性 memory（importance ≥ 0.7）
-- 近期访问的 raw materials
-- Active 项目画像
-
-### 9. Git Commit（提交）
-
-`oks sync` 提交所有变更 — 新 wiki 页面、更新的 drafts、衰减后的评分、Crystal 文章。
+`git` 提交所有变更 — 新 wiki 页面、更新的 drafts、衰减后的评分。实例就是普通 git 仓，OKS 不再提供 `sync` 命令。
 
 ```bash
-oks sync           # commit + push
-oks sync --pull    # 先 pull，再 commit + push
+git add -A && git commit -m "dream cycle"   # 提交记忆变更
+git push                                     # 同步到你自己的 remote
 ```
 
 ## 完整循环命令
@@ -113,20 +104,26 @@ oks drafts promote <slug>
 
 ## 核心不变量
 
-**绝不未经人工审查将 raw 提升到 wiki**（CONSTITUTION.md A3）。
-
-AI 可以 dream，但人类决定什么成为持久知识。
+{: .important }
+> **绝不未经人工审查将 raw 提升到 wiki**（CONSTITUTION.md A3）。
+>
+> AI 可以 dream，但人类决定什么成为持久知识。
 
 ## 实现
 
-- `/ingest` — AI 分诊（Claude Code skill）
+- `/ingest` — 三级路由 + AI 分诊
 - `oks distill` — 衰减 + 演化（CLI）
-- `/promote` — 人工审查（Claude Code skill）
+- `/promote` — 人工审查
 - `cli/knowledge_studio/distiller.py` — 核心逻辑
 
 ## 下一步
 
+* **[每日循环](daily-loop.md)**：Dreaming 在每天的训练闭环里处于哪一步
 * **[Memories](memories.md)**：提升后的 memory 长什么样
 * **[Raw Materials](raw-materials.md)**：蒸馏前的 raw material 长什么样
 * **[Decay System](decay-system.md)**：memory 评分如何随时间变化
-* **[Architecture](architecture.md)**：五桶结构
+* **[Architecture](architecture.md)**：认知桶结构
+
+---
+
+{% include comments.html %}

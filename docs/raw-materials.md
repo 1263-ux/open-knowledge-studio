@@ -1,18 +1,24 @@
+---
+title: Raw Materials
+nav_order: 4
+parent: 概述
+---
 # Raw Materials（原始材料）
 
-Raw 是你的入料层 — 蒸馏之前的原始来源。你读过的文章、收集的论文、研究过的代码仓库、经历过的对话。系统读取它们、评级、然后将持久部分蒸馏为 [Memory](memories.md)。
+*蒸馏前的入料层——文章、论文、仓库笔记、对话，按类型组织、A/B/C 分级。*
 
-网页、PDF、Word、PPT、图片、音频和视频等现实来源如何转换为 Raw，以独立 `oks-connector` 的 `schemas/`、`capabilities/` 和协议文档为机器事实源。本页只定义 Studio 中 `raw → drafts → wiki` 的知识生命周期，不再复制多模态协议字段。
+Raw 是你的入料层 — 蒸馏之前的原始来源。你读过的文章、收集的论文、研究过的代码仓库、经历过的对话。系统读取它们、评级、然后将持久部分蒸馏为 [Memory](memories.md)。网页、PDF、Office、图片、音频和视频的机器协议以独立 `oks-connector` 仓库的 `schemas/` 与 `capabilities/` 为唯一事实源。
 
+{: .important }
 > **Raw 不是 Thread。** 竞品把所有东西都塞进"conversations"。
-> 我们的 raw/ 有**类型化入料**（articles / papers / repos / misc）、**A/B/C 分级**、
+> 我们的 raw/ 有**类型化入料**（articles / papers / videos / audio / repos / misc）、**A/B/C 分级**、
 > **指纹去重**和**人工审批门控**。这就是区别。
 
 ## 为什么 raw/ 不只是"对话"
 
 | 我们的 raw/ | 通用 "Thread" |
 |-------------|-------------------|
-| 4 个类型子目录（articles/papers/repos/misc） | 扁平列表，仅对话 |
+| 6 个类型子目录（articles/papers/videos/audio/repos/misc） | 扁平列表，仅对话 |
 | 蒸馏前 A/B/C 分级 | 全量导入或全手动 |
 | 指纹去重防止重复 draft | 无去重 |
 | 人工门控：raw → draft → review → wiki | 自动提升或纯手动 |
@@ -21,13 +27,14 @@ Raw 是你的入料层 — 蒸馏之前的原始来源。你读过的文章、�
 
 ## 第一个有用的 Raw Material
 
-如果你是新用户，先做以下其中一件事：
-
-* 把一篇文章或笔记保存到 `raw/`
-* 运行一次 `/ingest` 进行分级和提取 draft
-* 从这些 draft 中蒸馏出一条有用的 memory
-
-然后打开那条 memory，确认它捕捉了关键信息。这就是核心工作流。
+{: .tip }
+> 如果你是新用户，先做以下其中一件事：
+>
+> * 把一篇文章或笔记保存到 `raw/`
+> * 运行一次 `/ingest` 进行分级和提取 draft
+> * 从这些 draft 中蒸馏出一条有用的 memory
+>
+> 然后打开那条 memory，确认它捕捉了关键信息。这就是核心工作流。
 
 | 我想... | 跳转到 |
 |---|---|
@@ -41,13 +48,24 @@ Raw 是你的入料层 — 蒸馏之前的原始来源。你读过的文章、�
 
 ```
 raw/
-├── articles/       # 博客文章、网页文档、文档页面
-├── papers/         # 学术论文、PDF（解析为 markdown）
-├── repos/          # 代码仓库笔记、README 摘要、代码模式
-└── misc/           # 对话、trace、笔记、其他
+└── {YYYY}/{MM}/{DD}/
+    └── {source}/         # articles | papers | videos | audio | repos | misc
+        └── {slug}.md
 ```
 
-材料**按类型组织，不按日期**。这很重要，因为 A/B/C 分级和质量门对不同类型的应用方式不同 — 学术论文比随手记的笔记会得到更深入的分析。
+材料**按日期 + 来源组织**。日期目录自动创建，来源对应工具类型 — 文章、论文、视频、音频、仓库、其他。这使得按时间检索和按来源过滤都很方便。
+
+### 三级工具协议
+
+Agent 读取 `settings/handlers.json` 路由表，按模态选择工具：
+
+| 级别 | 类型 | 示例 | 输出 |
+|------|------|------|------|
+| L0 | 系统工具 | curl, pdftotext | 原始 stdout |
+| L1 | OKS 协议 CLI (`oks-connector`) | oks-video, oks-audio, oks-image | Raw Bundle (`raw-multimodal/v0.2`) |
+| L2 | 独立工具 | agent-reach, yt-dlp | 工具特定格式 |
+
+Agent 直接通过 Bash 调用工具，OKS 不在运行时路径中。
 
 ### Raw 文件格式
 
@@ -84,21 +102,24 @@ Event-driven architecture is a paradigm where services communicate...
 
 ### 从文件
 
-将任意 markdown 文件放入对应的 `raw/` 子目录：
+将任意 markdown 文件放入对应的 `raw/` 来源目录：
 
 ```bash
-cp ~/Downloads/article.md raw/articles/
+# 自动创建当天目录
+mkdir -p raw/$(date +%Y/%m/%d)/articles
+cp ~/Downloads/article.md raw/$(date +%Y/%m/%d)/articles/
 ```
 
 ### 从 CLI
 
 ```bash
-echo "We decided to use FastAPI for the new service" > raw/misc/api-decision.md
+mkdir -p raw/$(date +%Y/%m/%d)/misc
+echo "We decided to use FastAPI for the new service" > raw/$(date +%Y/%m/%d)/misc/api-decision.md
 ```
 
 ### 从 AI 对话
 
-保存对话摘要或 Q&A 提取。`/archive` 技能可以从 Claude Code 会话中提取 Q&A 并写入 `raw/misc/`：
+保存对话摘要或 Q&A 提取。`/archive` 技能可以从 Agent 会话中提取 Q&A 并写入 `drafts/`：
 
 ```markdown
 ## User
@@ -122,19 +143,19 @@ Use Zustand for state management — lightweight, no boilerplate, good DX.
 ### 工作原理
 
 ```
-raw/（人类收集）
-  ↓ /ingest — AI 扫描 + A/B/C 分级每个文件
+raw/（人类收集 / 工具处理）
+  ↓ /ingest — 三级路由 + A/B/C 分级每个文件
   ↓ A 级 → drafts/（候选 wiki 页面）
   ↓ B 级 → 保留在 raw/，等下一轮
   ↓ C 级 → 跳过
 drafts/（中间提案）
   ↓ /promote — 人工审查：接受 / 修改 / 拒绝
-wiki/（策划知识，带衰减 + 演化）
+wiki/（策展知识，带衰减 + 演化）
 ```
 
 ### A/B/C 分级 — 我们的优势
 
-不同于全量导入或全手动的竞品，我们的系统对每个 raw material 进行分级：
+系统对每个 raw material 进行分级：
 
 | 等级 | 含义 | 操作 |
 |------|------|------|
@@ -160,10 +181,10 @@ wiki/（策划知识，带衰减 + 演化）
 ### 运行蒸馏
 
 ```bash
-# 预览蒸馏结果（不写入）
+# 预览（只统计将被评估的 wiki 页数，不写入）
 oks distill --dry-run
 
-# 运行完整循环：分级 raw → 写 drafts → 应用衰减 → 演化
+# 运行维护循环：应用衰减 + wiki 聚类演化（raw → drafts 的分级蒸馏由 /ingest 技能完成）
 oks distill
 
 # 列出待人工审查的 drafts
@@ -215,7 +236,8 @@ Use multiprocessing for CPU-bound work.
 
 ```bash
 # 复制所有文章到 raw/
-cp ~/Downloads/articles/*.md raw/articles/
+mkdir -p raw/$(date +%Y/%m/%d)/articles
+cp ~/Downloads/articles/*.md raw/$(date +%Y/%m/%d)/articles/
 
 # 运行蒸馏处理全部
 oks distill --dry-run  # 预览
@@ -227,7 +249,7 @@ oks distill            # 执行
 ### 按关键词
 
 ```bash
-oks search "authentication" --source raw
+oks recall "authentication"   # 双路召回，episodic 路覆盖 raw 蒸馏出的 digests
 ```
 
 ### 按新鲜度
@@ -245,7 +267,7 @@ oks recall "database design" --limit 5
 ```json
 {
   "episodic": [...],   // raw/ 材料，按关键词 + 新鲜度匹配
-  "knowledge": [...]    // wiki/ 页面，按 6 因子相关性 + 曲线匹配
+  "knowledge": [...]    // wiki/ 页面，按 6+1 因子相关性 + 曲线匹配
 }
 ```
 
@@ -263,15 +285,15 @@ oks recall "database design" --limit 5
 ## 我们的管线优势
 
 ```
-raw/（类型化入料）
+raw/（日期 + 来源结构）
   ↓ A/B/C 分级（过滤噪声）
   ↓ 指纹去重（防止重复）
 drafts/（人工门控审查）
   ↓ /promote — 接受 / 修改 / 拒绝
 wiki/（22 域 × 3 类型，带衰减）
-  ↓ 6 因子召回 + 记忆曲线
-  ↓ 演化：3+ 同标签 → Crystal
-注入 Claude Code 上下文
+  ↓ 6+1 因子召回 + 记忆曲线
+  ↓ 演化：4 种知识关系
+注入 Agent 上下文
 ```
 
 每一步都有质量门。没有通过分级**和**人工审查的内容不会进入 wiki/。这就是我们的 wiki/ 在 raw/ 增长时保持干净的原因 — 管线在每一阶段过滤噪声。
@@ -279,6 +301,10 @@ wiki/（22 域 × 3 类型，带衰减）
 ## 下一步
 
 * **[Memories](memories.md)**：蒸馏后会发生什么 — 结构、类型、搜索
-* **[Dreaming Cycle](dreaming-cycle.md)**：包含 Crystal 的完整演化管线
+* **[Dreaming Cycle](dreaming-cycle.md)**：完整演化管线
 * **[Recall Engine](recall-engine.md)**：6 因子搜索评分如何工作
-* **[Architecture](architecture.md)**：五桶结构和生命周期
+* **[Architecture](architecture.md)**：认知桶结构和生命周期
+
+---
+
+{% include comments.html %}

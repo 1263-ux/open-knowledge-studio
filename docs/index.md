@@ -1,87 +1,82 @@
+---
+title: 概述
+nav_order: 1
+has_children: true
+---
 # Open Knowledge Studio
 
-> 把一条有价值的信息，变成能够在未来任务中被找到、被使用、并推动系统改进的个人知识。
+> 你的知识库就是你的模型——你每天都在训练它。
 
-当前阶段只做一件事：跑通一条真实的自进化学习 Loop，然后根据真实反馈微调。
+大模型人人拿到的都一样，但你每天读到的、踩过的、验证过的，只属于你。Open Knowledge Studio 是你的 AI 工作记忆层：保存一个决策、一个洞察、一个来源、一段对话，让它可搜索、和已有知识相连、被 AI Agent 从同样的上下文调用。日积月累，它长成一份别人复制不来的知识库。
 
-## 当前主 Loop
+你不需要一次性配置所有东西。先保存一条知识，再找到它，然后让 Agent 用它。一旦这个循环跑通，Studio 就变得容易理解了——它背后的[理念](philosophy.md)也就不言自明。
 
-```text
-发现内容
-  → Capture（来源 + 为什么保存 + 学习问题）
-  → Raw（机械抽取 + evidence + 失败事实）
-  → Candidate（用自己的理解重讲）
-  → 人工审核
-  → Wiki
-  → 新任务召回并使用
-  → 反馈
-  → 改进 PR
+## 核心概念
+
+| 概念 | 是什么 | 了解更多 |
+|------|--------|----------|
+| **理念** | 知识库即模型，你每天用反馈训练它，人人都是标注师 | [理念 →](philosophy.md) |
+| **每日循环** | 收集 → 入料 → 分级 → 审查 → 沉淀 → 召回的训练闭环 | [每日循环 →](daily-loop.md) |
+| **Memory** | 从原始材料蒸馏出的持久知识——一个 concept、strategy 或 anti-pattern | [Memories →](memories.md) |
+| **Raw Material** | 蒸馏前的入料层——文章、论文、仓库笔记、对话 | [Raw Materials →](raw-materials.md) |
+| **召回引擎** | 6+1 因子评分找到最相关知识：token overlap + substring + topic trace + type boost + 审查加分 + memory curve | [召回引擎 →](recall-engine.md) |
+| **Dreaming 循环** | 人工审查的知识演化：raw → AI 蒸馏 → drafts → 人工审查 → wiki | [Dreaming 循环 →](dreaming-cycle.md) |
+
+## 核心管线
+
+```
+raw/（人类收集的原始材料）
+  ↓ /ingest — 三级路由 → A/B/C 分级
+drafts/（中间态草稿）
+  ↓ /promote — 人工审查
+wiki/（策展知识，带衰减）
+  ↓ oks search / /query — 6+1 因子召回
+注入 Agent 上下文
 ```
 
-完整任务、逐项验收标准和停止条件见：[自进化学习主 Loop](core-learning-loop-poc.md)。
+## 当前真实 POC
 
-## 从这里开始
+Studio 当前以飞书多维表格作为 Capture、状态与人工审核控制面，真实运行证据和待办集中在两份文档中：
 
-1. 阅读[阶段历史简报](phase-history-summary.md)，了解已经完成和未完成的能力。
-2. 按[主 Loop POC](core-learning-loop-poc.md)选择一条已成功生成 Raw 的公开文章。
-3. 生成 Teach-back Candidate，并由用户审核。
-4. 晋升一篇 Wiki，在隔离任务中验证召回和实际使用。
-5. 只修复本轮暴露的最大问题，通过测试和 PR 合入。
+- **[自进化学习主 Loop](core-learning-loop-poc.md)** — 当前唯一实施清单与验收门；
+- **[飞书 Base 控制面运行记录](loop-runs/2026-07-22-feishu-base-control-plane.md)** — Capture → Raw → Candidate → 个人审核 → Wiki 的真实证据与限制。
 
-## 当前能力边界
+多模态 Raw 协议的机器事实源位于独立 `oks-connector` 仓库的 `schemas/` 与 `capabilities/`；Studio 只保留生命周期和调用入口，不复制第二套 Schema。
 
-已经真实验证：
+## 架构总览
 
-- 本地或已取得的 PDF、DOCX、PPTX、图片、音频和视频可以形成带证据的 Raw；
-- 当前飞书 Base 已跑通静态 HTML、直接 PDF、附件和公开浏览器快照；
-- Challenge、登录要求和平台 HTTP 412 会诚实停止，不生成伪 Raw；
-- Raw Bundle 可以记录来源、运行、逐模态状态、证据和质量警告。
+<img src="assets/architecture-overview.svg" alt="Architecture Overview" style="max-width:100%;height:auto;" />
 
-尚未完成：
+<img src="assets/pipeline.svg" alt="Pipeline" style="max-width:100%;height:auto;" />
 
-- 任意平台 URL 的稳定资源获取；
-- 登录态浏览器到 Capture 的固定产品入口；
-- 当前 Base 的 Raw → Candidate → Wiki → 新任务使用闭环；
-- 基于真实使用反馈持续改进并 Merge 的完整 Loop。
+## 独特之处
 
-详细证据与数字见[阶段历史简报](phase-history-summary.md)。
+- **人人都是标注师** — 底座模型人人相同，但你的审查与取舍塑造出独一无二的知识库。这份独特性，就是你的护城河。
+- **Knowledge as Code** — 所有知识以 Markdown + YAML frontmatter 存储，通过 Git 版本管理。
+- **Git IS the migration** — 无数据库，schema 变更通过 `_meta/` 版本化。
+- **Agent-direct** — OKS 只提供能力，不包装工具调用。Agent 是 AI 引擎，CLI 只做文件操作 + 召回评分。
+- **人工审批门控** — 系统绝不在未经审查的情况下将 raw 内容提升到 wiki。
+- **衰减是特性** — 知识随时间遗忘。常用的保持敏锐，被遗忘的淡入归档。
+- **第一天少做** — 保存一条记忆，跑一次搜索，验证它工作。不要一次性配置所有东西。
 
-## 文档导航
+## 准备开始？
 
-### 当前执行
+```bash
+pip install open-knowledge-studio
+oks init my-knowledge-base
+cd my-knowledge-base
+oks status
+oks search "your query"
+```
 
-| 页面 | 内容 |
-|---|---|
-| [自进化学习主 Loop](core-learning-loop-poc.md) | 当前唯一主任务、任务清单和二元验收标准 |
-| [阶段历史简报](phase-history-summary.md) | 过去阶段的真实成果、失败和当前能力边界 |
-| [快速开始](start-here.md) | Studio 基础 CLI 和第一条知识的操作路径 |
+- **[快速开始](start-here.md)** — 最短可用路径：保存一条 → 搜索到它 → 验证工作
+- **[理念](philosophy.md)** — 为什么说知识库就是你在训练的模型
+- **[每日循环](daily-loop.md)** — 把训练闭环变成每天都能跑的流程
+- **[自动驾驶](autonomous.md)** — 人类判断随自动化程度如何分级（L0→L5）
+- **[案例](cases.md)** — 托管你的简历 / GitHub / 科研，看循环怎么落地
+- **[使用你的知识](memories.md)** — wiki 页面结构、类型和搜索
+- **[Raw Materials](raw-materials.md)** — 原始材料、A/B/C 分级、蒸馏工作流
 
-### 长期架构
+---
 
-| 页面 | 内容 |
-|---|---|
-| [架构设计](architecture.md) | Raw、Draft、Wiki、Profile 和 Settings 的职责 |
-| [Raw Materials](raw-materials.md) | 原始材料层和蒸馏入口 |
-| [Memories](memories.md) | Wiki 页面结构、类型和审核后的知识 |
-| [Dreaming 循环](dreaming-cycle.md) | Candidate、人工审核和知识演化 |
-| [召回引擎](recall-engine.md) | 当前词法评分、主题关联和记忆曲线 |
-| [记忆模型](memory-model.md) | 记忆类型、来源和冲突处理 |
-| [衰减系统](decay-system.md) | Wiki 页面生命周期与衰减 |
-| [Frontmatter Schema](frontmatter-schema.md) | Wiki YAML 元数据规范 |
-
-## 机器事实源
-
-Studio 负责编排和知识闭环；多模态解析协议与能力清单由独立 connector 维护：
-
-- [oks-connector 协议](https://github.com/1263-ux/oks-connector/blob/codex/raw-poc-validation/docs/protocols-v0.1.md)
-- [机器可读 Schema](https://github.com/1263-ux/oks-connector/tree/codex/raw-poc-validation/schemas)
-- [Capability Manifests](https://github.com/1263-ux/oks-connector/tree/codex/raw-poc-validation/capabilities)
-
-Studio 文档不再复制一套可能漂移的 Raw v0.x 字段定义。
-
-## 核心不变量
-
-- Raw 保存来源、机械抽取、证据和失败，不充当知识结论。
-- AI 可以生成 Candidate，但必须人工审核后才能进入 Wiki。
-- Git 记录知识和系统的演化。
-- “搜到了”不等于“学会了”；只有在真实任务中使用并产生反馈，Loop 才完成。
+{% include comments.html %}

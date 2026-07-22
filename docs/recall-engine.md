@@ -1,36 +1,49 @@
-# 6-Factor Recall Engine（六因子召回引擎）
+---
+title: 召回引擎
+nav_order: 12
+parent: 内部机制
+---
+# 6+1 Factor Recall Engine（六加一因子召回引擎）
 
-使用六个因子对 wiki 页面评分，找到最相关的知识。当前实现融合分词重叠、精确字符串匹配、主题关联和记忆曲线；尚未接入 embedding，因此不能宣称为真正的语义搜索。
+*六个核心因子 + 一个可选目标因子，为 wiki 页面评分，找到最相关知识。*
+
+使用六个核心因子（外加可选的 goal boost）对 wiki 页面评分，找到最相关的知识。引擎将语义搜索、关键词匹配和图谱关联融合在一次统一的评分过程中。
 
 ## 三种搜索模式合一
 
 | 模式 | 做什么 | 哪些因子 |
 |------|--------|----------|
-| **Lexical overlap（词法重叠）** | jieba 分词后匹配共享 token | Token overlap |
+| **Semantic（语义）** | 按含义查找，不只是精确匹配 | Token overlap |
 | **Keyword（关键词）** | 精确匹配特定术语 | Substring match |
-| **Graph（图谱）** | 通过主题关联和类型加权查找 | Topic trace + type boost + review penalty |
+| **Graph（图谱）** | 通过主题关联和类型加权查找 | Topic trace + type boost + review bonus |
 
-三种模式在每次查询时自动运行。6 因子引擎将它们与记忆曲线乘数结合，生成最终相关性评分。
+<img src="assets/recall-engine.svg" alt="Recall Engine" style="max-width:100%;height:auto;" />
+
+三种模式在每次查询时自动运行。引擎把它们与记忆分数、review 加成结合，生成最终相关性评分。
 
 ## 评分公式
 
 ```
-total = (token_overlap×0.3 + substring_bonus + topic_trace_bonus)
-        × type_boost + review_penalty
-        × memory_curve
+base  = token_overlap_count × 0.3 + substring_bonus + topic_trace_bonus
+total = base × type_boost
+        + review_bonus
+        + memory_score × 0.5
+        + goal_boost      # 可选第 7 因子，无 active goal 时为 0
 ```
 
-## 六个因子
+注意：`base == 0` 时页面直接出局；review 与记忆分数是**加法**项，不是乘数。
+
+## 六个核心因子（+ 1 个可选目标因子）
 
 ### 1. Token Overlap（×0.3）
 
-jieba 分词将查询和页面内容拆分为 token。重叠率衡量查询 token 中有多少出现在页面中。
+jieba 分词将查询拆分为 token，统计出现在页面（标题+正文+标签）中的个数。
 
 ```
-overlap = len(query_tokens ∩ page_tokens) / len(query_tokens) × 0.3
+overlap = count(query_tokens 出现在 title+body+tags 中) × 0.3
 ```
 
-这是**词法近似层**，只能命中实际共享的 token。没有共同词的近义表达不会因为含义相近而自动命中；若要支持这种能力，需要另行引入并真实验证 embedding/语义检索。
+这是**语义层** — 搜索"design patterns"时能找到关于"architectural approaches"的页面，因为 token 重叠捕捉到了共享概念。
 
 ### 2. Substring Match（+1.0 / +0.5）
 
@@ -46,8 +59,9 @@ overlap = len(query_tokens ∩ page_tokens) / len(query_tokens) × 0.3
 如果页面是从特定对话主题创建的，而你用同一个 `topic_id` 查询，页面获得 **+2.0** 加成。这是**图谱关联** — 将 memory 关联回产生它的对话。
 
 ```python
-if page.get("trace_id") == topic_id:
-    relevance += 2.0
+for trace in page.get("traces", []):
+    if trace["kind"] == "discuss" and str(trace["id"]) == str(topic_id):
+        base += 2.0
 ```
 
 ### 4. Type Boost（×1.5 / ×0.8 / ×0.6）
@@ -60,21 +74,22 @@ if page.get("trace_id") == topic_id:
 | `strategy` | ×0.8 | 策略有用但不如错误紧迫 |
 | `concept` | ×0.6 | 概念是背景知识 — 优先级最低 |
 
-### 5. Review Penalty（+2.0 / +1.0）
+### 5. Review Bonus（+2.0 / +1.0）
 
 来自失败决策或负面结果的页面获得加成，因为你需要回忆出了什么问题：
 
 - `decision_correct = false`：**+2.0**
 - `outcome = failure`：**+1.0**
 
+{: .note }
 这看似反直觉 — 为什么加成"坏"知识？因为最有价值的知识往往是"我们试了 X 但没用"。回忆失败可以防止重蹈覆辙。
 
-### 6. Memory Curve（×0.5）
+### 6. Memory Score（+score×0.5）
 
-记忆曲线应用基于页面年龄、访问次数和重要性的时间衰减乘数：
+页面的记忆分数（由记忆曲线计算：年龄衰减、访问次数、重要性、pin）以 **加法**方式进入相关性：`relevance += score × 0.5`。
 
 ```
-curve = importance × e^(-λ × days_old) + 0.5 × ln(1 + access_count) + pin_bonus
+score = importance × e^(-λ × days_old) + 0.5 × ln(1 + access_count) + pin_bonus
 ```
 
 - Active 页面获得 ×1.2 乘数
@@ -84,24 +99,49 @@ curve = importance × e^(-λ × days_old) + 0.5 × ln(1 + access_count) + pin_bo
 
 详见 [Decay System](decay-system.md)。
 
+### 7. Goal Boost（+0.8 / +0.4，可选）
+
+召回会读取 `profiles/goals/` 下 `status: active` 的 goal（`load_active_goals()`），
+把当前关注的方向变成一个**加法**加权。它只作用于**已经命中查询**（relevance>0）的页面：
+
+- 页面 `area` ∈ 某 active goal 的 `domains`：**+0.8**
+- 页面命中某 active goal 的任一 `keyword`：**+0.4**
+
+```python
+if relevance > 0 and (goal_domains or goal_keywords):
+    if page.area in goal_domains:
+        relevance += 0.8
+    if any(kw in searchable for kw in goal_keywords):
+        relevance += 0.4
+```
+
+{: .note }
+这是"目标感知召回"的真实实现（不是路线图）。它**默认开启**但**无 active goal 时为 no-op**，
+不会凭空把无关页面顶上来；只是在你设定方向后，让贡献/研究循环优先看到 on-scope 的策略。
+需要关闭时传 `goal_boost=False`（如做无偏基线对比）。
+
 ## 双路召回
 
 | 路径 | 来源 | 评分 |
 |------|------|------|
 | **Episodic** | `raw/` + `profiles/` | 关键词 + 新鲜度（`0.95^days_old`） |
-| **Knowledge** | `wiki/` | 6 因子相关性 + 记忆曲线 |
+| **Knowledge** | `wiki/` | 6+1 因子相关性 + 记忆曲线 |
 | **合并** | 两者 | `{"episodic": [...], "knowledge": [...]}` |
 
 ```bash
-# 仅 Episodic（raw materials）
-oks search "authentication" --source raw
-
 # 仅 Knowledge（wiki 页面）
-oks search "authentication" --source wiki
+oks search "authentication" --limit 5
 
-# 双路（默认）
+# 双路：Episodic（raw/）+ Knowledge（wiki/）
 oks recall "authentication" --limit 5
+
+# 记录一次“真正使用”（召回/搜索本身只读、不计数）
+oks wiki use <slug>
 ```
+
+> 召回与搜索是**只读**的：一次查询不算一次使用，不会改动 access_count 或页面状态。
+> 只有 `oks wiki use <slug>`（在真正注入/采用某页时调用）才 +1，从而驱动记忆曲线与
+> provisional→active 晋级。这样记忆热度反映的是“真被用上”，而非“被搜过几次”。
 
 ## 实现
 
@@ -109,11 +149,15 @@ oks recall "authentication" --limit 5
 
 核心函数：
 - `recall_episodic(query)` — 按关键词 + 新鲜度搜索 raw/
-- `recall_knowledge(query, topic_id)` — 通过 6 因子评分所有 wiki/ 页面
+- `recall_knowledge(query, topic_id)` — 通过 6+1 因子评分所有 wiki/ 页面
 - `recall(query, topic_id)` — 合并双路
 
 ## 下一步
 
 * **[Memories](memories.md)**：Memory 结构、类型和创建路径
 * **[Decay System](decay-system.md)**：记忆曲线公式和 tier 分级
-* **[Architecture](architecture.md)**：五桶结构
+* **[Architecture](architecture.md)**：认知桶结构
+
+---
+
+{% include comments.html %}

@@ -31,7 +31,6 @@ def _configure_utf8_stdio() -> None:
             try:
                 reconfigure(encoding="utf-8", errors="replace")
             except (OSError, ValueError):
-                # Redirected or already-closed streams may reject reconfiguration.
                 pass
 
 
@@ -44,10 +43,35 @@ app = typer.Typer(
 )
 console = Console()
 
+
+def _version_callback(value: bool):
+    if value:
+        from importlib.metadata import version, PackageNotFoundError
+        try:
+            console.print(f"oks {version('open-knowledge-studio')}")
+        except PackageNotFoundError:
+            console.print("oks (development, not installed as a package)")
+        raise typer.Exit()
+
+
+@app.callback()
+def _main(
+    version: bool = typer.Option(
+        False, "--version", "-V", callback=_version_callback, is_eager=True,
+        help="Show the oks version and exit.",
+    ),
+):
+    pass
+
+
 wiki_app = typer.Typer(help="Wiki page management.")
 drafts_app = typer.Typer(help="Draft proposal management.")
+config_app = typer.Typer(help="Global configuration (~/.oks/config.json).")
+hook_app = typer.Typer(help="Optional editor hooks (opt-in auto-recall injection).")
 app.add_typer(wiki_app, name="wiki")
 app.add_typer(drafts_app, name="drafts")
+app.add_typer(config_app, name="config")
+app.add_typer(hook_app, name="hook")
 
 
 # ── Search / Recall ──────────────────────────────────────────────
@@ -56,14 +80,12 @@ app.add_typer(drafts_app, name="drafts")
 def search(
     query: str = typer.Argument(help="Search query"),
     limit: int = typer.Option(5, "--limit", "-n", help="Max results"),
-    domain: Optional[str] = typer.Option(None, "--domain", "-d", help="Filter by domain"),
+    scope: Optional[str] = typer.Option(None, "--scope", "--domain", "-d", help="Soft scope: narrow to one area (opt-in, not a hard partition)"),
     type_filter: Optional[str] = typer.Option(None, "--type", "-t", help="Filter by type"),
 ):
-    """Search wiki pages using the 6-factor recall engine (read-only)."""
-    results = recall_knowledge(query=query, limit=limit)
+    """Search wiki pages using the 6+1-factor recall engine (read-only)."""
+    results = recall_knowledge(query=query, limit=limit, scope=scope)
 
-    if domain:
-        results = [r for r in results if r.get("area") == domain]
     if type_filter:
         results = [r for r in results if r.get("type") == type_filter]
 
@@ -98,9 +120,10 @@ def recall_cmd(
     query: str = typer.Argument(help="Search query"),
     topic_id: Optional[int] = typer.Option(None, "--topic-id", help="Filter by topic ID"),
     limit: int = typer.Option(5, "--limit", "-n", help="Max results per path"),
+    scope: Optional[str] = typer.Option(None, "--scope", "-s", help="Soft scope: narrow knowledge path to one area (opt-in, not a hard partition)"),
 ):
     """Two-path recall: episodic (raw/) + knowledge (wiki/)."""
-    result = recall(query=query, topic_id=topic_id, limit=limit)
+    result = recall(query=query, topic_id=topic_id, limit=limit, scope=scope)
 
     if result["episodic"]:
         console.print("\n[bold blue]Episodic Memory (raw/ + profiles/)[/bold blue]")
@@ -208,8 +231,18 @@ def wiki_create(
     if not content and not sys.stdin.isatty():
         content = sys.stdin.read()
 
-    type_map = {"concept": "concepts", "strategy": "strategies", "anti-pattern": "anti-patterns"}
-    wiki_type = type_map.get(page_type, "concepts")
+    type_map = {
+        "concept": "concepts", "concepts": "concepts",
+        "strategy": "strategies", "strategies": "strategies",
+        "anti-pattern": "anti-patterns", "anti-patterns": "anti-patterns",
+    }
+    wiki_type = type_map.get(page_type)
+    if wiki_type is None:
+        console.print(
+            f"[yellow]Unknown --type '{page_type}' — using 'concept'. "
+            f"Valid: concept, strategy, anti-pattern.[/yellow]"
+        )
+        wiki_type = "concepts"
 
     path = store.write_wiki_page(
         title=title,
@@ -242,20 +275,22 @@ def wiki_archive(slug: str = typer.Argument(help="Page slug to archive")):
 
 
 @wiki_app.command("use")
-def wiki_use(
-    slug: str = typer.Argument(help="Slug of a Wiki page actually used in a task"),
-):
-    """Record explicit knowledge use after recall results were actually applied."""
+def wiki_use(slug: str = typer.Argument(help="Slug of a page that was actually used/injected")):
+    """Record an explicit use of a wiki page — the memory-curve signal.
+
+    Recall and search are read-only: a query does not count as a use. Call
+    this when a page is actually injected or applied so that access_count
+    reflects real usage, not query frequency. Recording also promotes a
+    provisional page to active once it has been used 3+ times.
+    """
     if not store.get_wiki_page(slug):
         console.print(f"[red]Not found:[/red] {slug}")
         raise typer.Exit(1)
-
     store.record_access(slug)
-    updated = store.get_wiki_page(slug) or {}
+    updated = store.get_wiki_page(slug)
     console.print(
         f"[green]Recorded use:[/green] {slug} "
-        f"(access_count={updated.get('access_count', 0)}, "
-        f"status={updated.get('status', 'active')})"
+        f"(access_count={updated.get('access_count', 0)}, status={updated.get('status', 'active')})"
     )
 
 
@@ -450,18 +485,407 @@ def distill(
         console.print("[dim]No new draft proposals generated.[/dim]")
 
 
-@app.command()
-def sync(
-    pull: bool = typer.Option(False, "--pull", help="Pull from remote"),
+# ── Config ───────────────────────────────────────────────────────
+
+@config_app.command("init")
+def config_init(
+    kb_path: str = typer.Option(None, "--kb-path", help="Knowledge base path"),
 ):
-    """Git sync the knowledge repo."""
-    from knowledge_studio.sync import sync_repo
-    ok = sync_repo(pull=pull)
-    if ok:
-        console.print("[green]Sync complete.[/green]")
+    """Initialize global config at ~/.oks/config.json."""
+    from knowledge_studio.config import init_config
+
+    path = init_config(kb_path)
+    console.print(f"[green]Config created:[/green] {path}")
+
+    from knowledge_studio.config import load_config
+    config = load_config()
+    console.print(f"  [dim]KB path: {config.get('knowledge_base_path', '')}[/dim]")
+
+
+@config_app.command("show")
+def config_show():
+    """Show current global configuration."""
+    from knowledge_studio.config import load_config, config_path
+
+    config = load_config()
+    console.print(f"[dim]Config file: {config_path()}[/dim]\n")
+    console.print(Panel.fit(
+        f"[bold]Knowledge Base[/bold]\n  {config.get('knowledge_base_path', '(not set)')}\n\n"
+        f"[bold]API Keys[/bold]\n"
+        f"  openai: {'✓ set' if config.get('api_keys', {}).get('openai') else '✗ empty'}\n"
+        f"  anthropic: {'✓ set' if config.get('api_keys', {}).get('anthropic') else '✗ empty'}\n\n"
+        f"[bold]Handler Config[/bold]",
+        border_style="cyan",
+    ))
+
+    handlers = config.get("handlers", {})
+    if handlers:
+        table = Table(show_header=True, header_style="bold cyan")
+        table.add_column("Handler", max_width=15)
+        table.add_column("Settings", max_width=50)
+        for name, settings in handlers.items():
+            table.add_row(name, ", ".join(f"{k}={v}" for k, v in settings.items()))
+        console.print(table)
+
+
+@config_app.command("set")
+def config_set(
+    key: str = typer.Argument(help="Config key (e.g., api_keys.openai, handlers.video.frame_interval)"),
+    value: str = typer.Argument(help="Config value"),
+):
+    """Set a config value."""
+    from knowledge_studio.config import load_config, save_config
+
+    config = load_config()
+
+    keys = key.split(".")
+    target = config
+    for k in keys[:-1]:
+        if k not in target:
+            target[k] = {}
+        target = target[k]
+
+    if value.lower() in ("true", "false"):
+        target[keys[-1]] = value.lower() == "true"
+    elif value.isdigit():
+        target[keys[-1]] = int(value)
     else:
-        console.print("[red]Sync failed.[/red]")
+        target[keys[-1]] = value
+
+    save_config(config)
+    console.print(f"[green]Set:[/green] {key} = {value}")
+
+
+# ── Instance scaffolding ─────────────────────────────────────────
+
+_INSTANCE_DIRS = [
+    "profiles/users",
+    "profiles/projects",
+    "profiles/recipes",
+    "profiles/goals",
+    "raw",
+    "wiki",
+    "drafts",
+]
+
+_INSTANCE_GITIGNORE = """\
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Virtual env
+.venv/
+venv/
+env/
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# OKS local per-machine state (access counts, fingerprints) — NOT synced
+.oks/
+
+# NOTE: wiki/, drafts/, profiles/ are intentionally TRACKED — they ARE your
+# memory. Unlike the open-knowledge-studio code repo (which ignores wiki/ &
+# drafts/ so it ships clean), an instance commits its knowledge to git.
+"""
+
+
+_ASSET_MAP = [
+    ("claude", ".claude"),
+    ("templates", "templates"),
+    ("_meta", "_meta"),
+    ("settings", "settings"),
+]
+
+
+def _asset_source() -> tuple[Path | None, bool]:
+    """Locate the shareable asset layer. Returns (base, is_packaged).
+
+    Priority: bundled `_assets/` inside the installed package (release build),
+    else the dev repo root (walk up for a dir containing .claude + templates).
+    """
+    packaged = Path(__file__).resolve().parent / "_assets"
+    if packaged.is_dir() and any(packaged.iterdir()):
+        return packaged, True
+    for parent in Path(__file__).resolve().parents:
+        if (parent / ".claude").is_dir() and (parent / "templates").is_dir():
+            return parent, False
+    return None, False
+
+
+def _materialize_assets(root: Path, base: Path, is_packaged: bool, overwrite: bool) -> list[str]:
+    import shutil
+
+    done: list[str] = []
+    for pkg_name, dest_name in _ASSET_MAP:
+        src = base / (pkg_name if is_packaged else dest_name)
+        if not src.is_dir():
+            continue
+        dest = root / dest_name
+        if dest.exists():
+            if not overwrite:
+                continue
+            shutil.rmtree(dest)
+        shutil.copytree(src, dest)
+        done.append(dest_name)
+    return done
+
+
+@app.command()
+def init(
+    path: str = typer.Argument(".", help="Target directory for the new knowledge instance"),
+    set_default: bool = typer.Option(
+        True, "--set-default/--no-set-default",
+        help="Register this folder as the active KB in ~/.oks/config.json",
+    ),
+    git: bool = typer.Option(
+        True, "--git/--no-git", help="Run `git init` in the instance folder",
+    ),
+    upgrade: bool = typer.Option(
+        False, "--upgrade",
+        help="Re-copy bundled assets (skills/templates/_meta/settings), overwriting them; your memory (wiki/drafts/profiles) is untouched",
+    ),
+):
+    """Scaffold a new knowledge INSTANCE folder (e.g. your personal artboy-knowledge-studio).
+
+    Creates the bucket structure and a .gitignore that TRACKS your memory
+    (wiki/, drafts/, profiles/) while ignoring only per-machine state (.oks/).
+    By default points ~/.oks/config.json at the new folder so `oks` targets it
+    from anywhere.
+    """
+    root = Path(path).expanduser().resolve()
+    root.mkdir(parents=True, exist_ok=True)
+
+    for d in _INSTANCE_DIRS:
+        p = root / d
+        p.mkdir(parents=True, exist_ok=True)
+        (p / ".gitkeep").touch()
+
+    base, is_packaged = _asset_source()
+    if base is None:
+        console.print(
+            "[yellow]No bundled assets found — skills/templates not materialized.[/yellow]\n"
+            "  Source installs lack the asset bundle. Fix: pip install open-knowledge-studio,\n"
+            "  or run python cli/scripts/bundle_assets.py in the repo before installing."
+        )
+    else:
+        copied = _materialize_assets(root, base, is_packaged, overwrite=upgrade)
+        if copied:
+            console.print(f"[green]Materialized assets:[/green] {', '.join(copied)}")
+        else:
+            console.print("[dim]Assets already present (use --upgrade to refresh).[/dim]")
+
+    gitignore = root / ".gitignore"
+    if gitignore.exists():
+        console.print(f"[yellow]Kept existing[/yellow] .gitignore ({gitignore})")
+    else:
+        gitignore.write_text(_INSTANCE_GITIGNORE, encoding="utf-8")
+        console.print(f"[green]Wrote[/green] {gitignore}")
+
+    if git and not (root / ".git").exists():
+        import subprocess
+        try:
+            subprocess.run(
+                ["git", "init"], cwd=str(root),
+                check=True, capture_output=True, text=True,
+            )
+            console.print(f"[green]git init[/green] {root}")
+        except (subprocess.CalledProcessError, FileNotFoundError) as e:
+            console.print(f"[yellow]Skipped git init:[/yellow] {e}")
+
+    if set_default:
+        from knowledge_studio.config import init_config
+        init_config(str(root))
+        console.print(f"[green]Active KB set:[/green] {root}")
+
+    console.print(
+        f"\n[bold]Instance ready.[/bold] Next:\n"
+        f"  cd {root}\n"
+        f"  oks status\n"
+        f"  oks wiki create --title \"...\" --type concept --area computing"
+    )
+
+
+# ── Optional editor hooks (opt-in auto-recall) ───────────────────
+
+_RECALL_HOOK_CMD = ".claude/hooks/user-prompt-recall.sh"
+_RECALL_HOOK_SCRIPTS = ("user-prompt-recall.py", "user-prompt-recall.sh")
+_HOOK_EDITORS = {
+    "claude": ".claude/settings.json",
+    "qoder": ".qoder/settings.json",
+}
+
+
+def _instance_root(path: str | None) -> Path:
+    if path:
+        return Path(path).expanduser().resolve()
+    from knowledge_studio.config import get_kb_root
+    return get_kb_root()
+
+
+def _ensure_recall_scripts(root: Path) -> list[str]:
+    """Copy the recall hook scripts into <root>/.claude/hooks/ if missing."""
+    import shutil
+    import stat
+
+    hooks_dir = root / ".claude" / "hooks"
+    hooks_dir.mkdir(parents=True, exist_ok=True)
+
+    base, is_packaged = _asset_source()
+    src_dir = None
+    if base is not None:
+        src_dir = base / ("claude/hooks" if is_packaged else ".claude/hooks")
+
+    created: list[str] = []
+    for name in _RECALL_HOOK_SCRIPTS:
+        dest = hooks_dir / name
+        if dest.exists():
+            continue
+        if src_dir is None or not (src_dir / name).is_file():
+            raise FileNotFoundError(
+                f"bundled hook script not found: {name} (asset source: {src_dir})"
+            )
+        shutil.copy2(src_dir / name, dest)
+        if name.endswith(".sh"):
+            import sys
+            text = dest.read_text(encoding="utf-8").replace(
+                '"${OKS_PYTHON:-python3}"', f'"${{OKS_PYTHON:-{sys.executable}}}"'
+            )
+            dest.write_text(text, encoding="utf-8")
+        dest.chmod(dest.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+        created.append(name)
+    return created
+
+
+def _wire_userpromptsubmit(settings_path: Path, command: str) -> str:
+    """Idempotently add a UserPromptSubmit command hook. Returns 'wired'|'exists'."""
+    data: dict = {}
+    if settings_path.exists():
+        try:
+            data = json.loads(settings_path.read_text(encoding="utf-8")) or {}
+        except json.JSONDecodeError as e:
+            raise ValueError(f"{settings_path} is not valid JSON: {e}") from e
+    hooks = data.setdefault("hooks", {})
+    ups = hooks.setdefault("UserPromptSubmit", [])
+    for group in ups:
+        for h in group.get("hooks", []):
+            if h.get("command") == command:
+                return "exists"
+    ups.append({"hooks": [{"type": "command", "command": command}]})
+    settings_path.parent.mkdir(parents=True, exist_ok=True)
+    settings_path.write_text(
+        json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
+    return "wired"
+
+
+def _hook_is_wired(settings_path: Path, command: str) -> bool:
+    if not settings_path.exists():
+        return False
+    try:
+        data = json.loads(settings_path.read_text(encoding="utf-8")) or {}
+    except json.JSONDecodeError:
+        return False
+    for group in data.get("hooks", {}).get("UserPromptSubmit", []):
+        for h in group.get("hooks", []):
+            if h.get("command") == command:
+                return True
+    return False
+
+
+@hook_app.command("install")
+def hook_install(
+    editor: str = typer.Option(
+        "both", "--editor", "-e", help="Which editor(s) to wire: claude | qoder | both"
+    ),
+    path: Optional[str] = typer.Option(
+        None, "--path", help="Instance root (default: active KB from ~/.oks/config.json)"
+    ),
+):
+    """Wire the auto-recall UserPromptSubmit hook into your editor settings (opt-in).
+
+    Copies the recall hook script into .claude/hooks/ (if missing) and adds a
+    UserPromptSubmit entry to the chosen editor's settings. Idempotent and
+    non-destructive: existing settings and hooks are preserved.
+    """
+    editor = editor.lower().strip()
+    if editor not in ("claude", "qoder", "both"):
+        console.print("[red]--editor must be one of: claude, qoder, both[/red]")
         raise typer.Exit(1)
+
+    import platform
+    if platform.system() == "Windows":
+        console.print(
+            "[yellow]Warning: hooks are bash scripts and will not run on native Windows.[/yellow]\n"
+            "  Use WSL (or Git Bash configured as the hook shell) for auto-recall to work."
+        )
+
+    root = _instance_root(path)
+    if not root.is_dir():
+        console.print(f"[red]Instance root not found:[/red] {root}")
+        raise typer.Exit(1)
+
+    try:
+        created = _ensure_recall_scripts(root)
+    except FileNotFoundError as e:
+        console.print(
+            f"[red]Cannot install hook — bundled assets missing.[/red]\n"
+            f"  {e}\n"
+            f"  This happens when oks was installed from source without the asset bundle.\n"
+            f"  Fix: [bold]pip install open-knowledge-studio[/bold] (PyPI wheel includes assets),\n"
+            f"  or run [bold]python cli/scripts/bundle_assets.py[/bold] in the repo before installing."
+        )
+        raise typer.Exit(1)
+    if created:
+        console.print(f"[green]Installed hook script:[/green] {', '.join(created)}")
+
+    editors = ("claude", "qoder") if editor == "both" else (editor,)
+    for name in editors:
+        settings_path = root / _HOOK_EDITORS[name]
+        result = _wire_userpromptsubmit(settings_path, _RECALL_HOOK_CMD)
+        label = "[green]wired[/green]" if result == "wired" else "[dim]already wired[/dim]"
+        console.print(f"  {name}: {label} → {settings_path}")
+
+    console.print(
+        "\n[bold]Auto-recall enabled.[/bold] New prompts will inject relevant memory.\n"
+        "Tune via env: OKS_RECALL_FLOOR (0.7), OKS_RECALL_TOPN (3), OKS_RECALL_MINLEN (6)."
+    )
+
+
+@hook_app.command("status")
+def hook_status(
+    path: Optional[str] = typer.Option(None, "--path", help="Instance root (default: active KB)"),
+):
+    """Show whether the auto-recall hook is installed for each editor."""
+    root = _instance_root(path)
+    script = root / ".claude" / "hooks" / "user-prompt-recall.sh"
+    console.print(f"[bold]Instance:[/bold] {root}")
+    console.print(f"  script: {'present' if script.is_file() else 'missing'} ({script})")
+    if script.is_file():
+        import os
+        import re
+        import subprocess
+        m = re.search(r"\$\{OKS_PYTHON:-([^}]+)\}", script.read_text(encoding="utf-8"))
+        py = os.environ.get("OKS_PYTHON") or (m.group(1) if m else "python3")
+        try:
+            ok = subprocess.run(
+                [py, "-c", "import knowledge_studio"],
+                capture_output=True, timeout=15,
+            ).returncode == 0
+        except (OSError, subprocess.TimeoutExpired):
+            ok = False
+        state = ("[green]importable[/green]" if ok
+                 else "[red]NOT importable — hook will silently no-op; re-run oks hook install[/red]")
+        console.print(f"  engine: {state} (python: {py})")
+    for name, rel in _HOOK_EDITORS.items():
+        settings_path = root / rel
+        wired = _hook_is_wired(settings_path, _RECALL_HOOK_CMD)
+        state = "[green]wired[/green]" if wired else "[dim]not wired[/dim]"
+        console.print(f"  {name}: {state}")
 
 
 if __name__ == "__main__":

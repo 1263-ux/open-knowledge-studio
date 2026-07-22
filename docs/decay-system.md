@@ -1,4 +1,11 @@
+---
+title: 衰减系统
+nav_order: 15
+parent: 内部机制
+---
 # Decay System（衰减系统）
+
+*记忆曲线、类型特定 λ 与 tier 分级——知识如何随时间衰减。*
 
 知识随时间衰减，衰减率由类型决定。
 
@@ -20,11 +27,12 @@ Active 页面获得 ×1.2 乘数。Dropped/archived → 0.0。
 | 类型 | λ | 行为 |
 |------|---|------|
 | concept | 0.0 | 不衰减 — 概念是永恒的 |
-| strategy | 0.014 | 缓慢衰减 — 策略会过时但周期长 |
-| anti-pattern | 0.010 | 中等衰减 — 教训会随场景变化 |
+| strategy | 0.014 | 最快衰减 — 策略最容易过时 |
+| anti-pattern | 0.010 | 中等衰减 — 教训保鲜期长 |
 | unknown | 0.030 | 快速衰减（fallback） |
 
-Concept 不衰减是因为 "什么是 REST API" 这类知识不会过时。Strategy 衰减最慢是因为 "用微服务拆分单体" 这类策略在几年内仍然有效。Anti-pattern 衰减略快是因为 "不要用 var 声明变量" 这类教训会随语言演进而变化。
+{: .note }
+Concept 不衰减是因为 "什么是 REST API" 这类知识不会过时。Strategy 衰减最快（λ=0.014）是因为 "用微服务拆分单体" 这类策略最容易随技术环境变化而过时。Anti-pattern 衰减较慢（λ=0.010）是因为 "不要用 var 声明变量" 这类教训的保鲜期更长——踩过的坑在很长时间内仍然值得警惕。
 
 ## Tier 分级
 
@@ -49,7 +57,7 @@ Provisional → Active（access_count ≥ 3）→ Dropped（score < threshold）
 
 ## 访问增强
 
-每次页面被召回命中时，confidence 提升：
+每次页面被**显式使用**时（`oks wiki use <slug>`；召回/搜索只读、不计数），confidence 提升：
 
 ```python
 new_confidence = min(1.0, current + 0.1 × (1 - current))
@@ -59,14 +67,24 @@ new_confidence = min(1.0, current + 0.1 × (1 - current))
 
 ## 配置
 
-`settings/decay-config.yaml`:
+衰减参数是 `cli/knowledge_studio/store.py` 里的代码默认值，可通过 `~/.oks/config.json` 的 `decay` 段覆盖（不存在独立的 yaml 配置文件）：
 
-```yaml
-archive_threshold: 0.3
-pin_bonus: 0.5
+```json
+{ "decay": { "archive_threshold": 0.3, "pin_bonus": 0.5 } }
 ```
 
 - **archive_threshold** — 低于此分数的页面成为归档候选
 - **pin_bonus** — Pinned 页面获得的额外分数
 
-源码：`cli/knowledge_studio/store.py`
+源码：`cli/knowledge_studio/store.py`（`DECAY_LAMBDA` + 默认 config）
+
+## 下一步
+
+* **[知识库指标](metrics.md)**：`avg_score` 如何进入四维报告卡
+* **[召回引擎](recall-engine.md)**：记忆曲线如何作为第六因子影响召回
+* **[Dreaming 循环](dreaming-cycle.md)**：衰减在演化循环中的位置
+* **[架构设计](architecture.md)**：认知桶结构
+
+---
+
+{% include comments.html %}

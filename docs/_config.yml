@@ -1,8 +1,59 @@
-theme: jekyll-theme-cayman
+remote_theme: just-the-docs/just-the-docs
 title: Open Knowledge Studio
-description: 面向 Claude Code 的知识工程仓库 — raw → wiki → recall
+description: 面向 AI Agent 的知识工程工作区 — raw → wiki → recall
+baseurl: "/open-knowledge-studio"
+url: "https://open-agent-power.github.io"
 lang: zh-CN
+
 markdown: kramdown
 kramdown:
   input: GFM
   syntax_highlighter: rouge
+
+search_enabled: true
+search:
+  heading_level: 2
+  previews: 2
+  preview_words_before: 3
+  preview_words_after: 3
+  tokenizer_separator: /[\s/]+/
+  rel_url: true
+  button: false
+
+heading_anchors: true
+back_to_top: true
+back_to_top_text: "回到顶部"
+
+color_scheme: light
+
+# Callout 提示框（just-the-docs v0.4.0+）
+# 用法：在段落或引用块前加 {: .note } / {: .tip } / {: .warning } / {: .important } / {: .highlight }
+callouts:
+  note:
+    title: 提示
+    color: blue
+  tip:
+    title: 建议
+    color: green
+  warning:
+    title: 注意
+    color: red
+  important:
+    title: 重要
+    color: purple
+  highlight:
+    color: yellow
+
+# 顶部辅助链接
+aux_links:
+  "GitHub":
+    - "https://github.com/open-agent-power/open-knowledge-studio"
+
+footer_content: 'Copyright &copy; 2026 Open Knowledge Studio. <a href="https://github.com/open-agent-power/open-knowledge-studio/blob/main/LICENSE">MIT License</a>.'
+
+# 所有页面默认套 just-the-docs 的 default layout（左侧导航 + 侧边栏）
+defaults:
+  - scope:
+      path: ""
+    values:
+      layout: "default"

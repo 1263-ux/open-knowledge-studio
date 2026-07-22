@@ -3,17 +3,21 @@
 Extracted from autpilot-web/backend/app/services/knowledge_recall.py.
 Removed settings and knowledge_sync dependencies. Uses store.repo_root().
 
-6-factor relevance scoring:
+6+1-factor relevance scoring:
   1. Token overlap (×0.3) — jieba segmentation + intersection
   2. Substring match (+1.0 title / +0.5 body)
   3. Topic trace match (+2.0)
   4. Type boost (anti-pattern=1.5, strategy=0.8, concept=0.6)
   5. Review penalty boost (+2.0 wrong / +1.0 failure)
   6. Memory-curve score (×0.5)
+  7. Goal boost — active goals (profiles/goals/, status=active) lift pages
+     that already matched: area in a goal's domains (+0.8) and page content
+     hits a goal keyword (+0.4). No-op when there are no active goals.
 
-Recall is read-only: searching does not count as using knowledge and never
-mutates access counts or Wiki state. Actual use is recorded explicitly through
-``store.record_access`` (exposed as ``oks wiki use <slug>``).
+Recall is read-only: a search does NOT count as a use and never mutates
+access counts or page state. Access is recorded only via the explicit
+`store.record_access` signal (exposed as `oks wiki use <slug>`), so the
+memory curve reflects real usage, not query frequency.
 """
 from __future__ import annotations
 
@@ -23,7 +27,12 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from knowledge_studio.store import list_wiki_pages, raw_dir, repo_root
+from knowledge_studio.store import (
+    list_wiki_pages,
+    load_active_goals,
+    raw_dir,
+    repo_root,
+)
 
 _logger = logging.getLogger(__name__)
 
@@ -35,11 +44,19 @@ def recall(
     query: str = "",
     topic_id: int | None = None,
     limit: int = DEFAULT_RECALL_LIMIT,
+    scope: str | None = None,
+    goal_boost: bool = True,
 ) -> dict[str, list[dict[str, Any]]]:
-    """Two-path recall: episodic (search) + knowledge (stability)."""
+    """Two-path recall: episodic (search) + knowledge (stability).
+
+    scope narrows only the knowledge path (wiki area); episodic recall stays
+    global since raw/ is time-partitioned and has no area.
+    """
     return {
         "episodic": recall_episodic(query=query, topic_id=topic_id, limit=limit),
-        "knowledge": recall_knowledge(query=query, topic_id=topic_id, limit=limit),
+        "knowledge": recall_knowledge(
+            query=query, topic_id=topic_id, limit=limit, scope=scope, goal_boost=goal_boost
+        ),
     }
 
 
@@ -56,26 +73,16 @@ def recall_episodic(
     query_lower = query.lower().strip()
     query_tokens = _tokenize(query_lower)
     results: list[tuple[float, dict[str, Any]]] = []
-    matched_bundle_roots: set[Path] = set()
 
     rd = raw_dir()
     if rd.exists():
         for f in rd.rglob("*.md"):
-            bundle = _multimodal_bundle_root(f)
-            if bundle is not None:
-                primary = bundle / "content.md"
-                expected = primary if primary.is_file() else bundle / "raw.md"
-                if f != expected:
-                    continue
             try:
                 content = f.read_text(encoding="utf-8").lower()
                 if _matches_query(content, query_lower, query_tokens):
-                    if bundle is not None:
-                        matched_bundle_roots.add(bundle.resolve())
                     freshness = _freshness_score(f)
                     snippet_idx = content.find(query_lower) if len(query_lower) > 3 else 0
-                    snippet_start = max(0, snippet_idx - 120) if snippet_idx >= 0 else 0
-                    snippet = content[snippet_start:snippet_start + 300]
+                    snippet = content[snippet_idx:snippet_idx + 300] if snippet_idx >= 0 else content[:300]
                     results.append((freshness, {
                         "type": "raw",
                         "source_path": str(f.relative_to(root)),
@@ -87,8 +94,6 @@ def recall_episodic(
                 continue
 
         for f in rd.rglob("*.jsonl"):
-            if f.name == "evidence.jsonl" and _multimodal_bundle_root(f) is not None:
-                continue
             try:
                 for line in f.read_text(encoding="utf-8").splitlines():
                     if not line.strip():
@@ -115,8 +120,7 @@ def recall_episodic(
                 if _matches_query(content, query_lower, query_tokens):
                     freshness = _freshness_score(f)
                     snippet_idx = content.find(query_lower) if len(query_lower) > 3 else 0
-                    snippet_start = max(0, snippet_idx - 120) if snippet_idx >= 0 else 0
-                    snippet = content[snippet_start:snippet_start + 300]
+                    snippet = content[snippet_idx:snippet_idx + 300] if snippet_idx >= 0 else content[:300]
                     results.append((freshness + 1.0, {
                         "type": "profile",
                         "source_path": str(f.relative_to(root)),
@@ -128,104 +132,38 @@ def recall_episodic(
                 continue
 
     results.sort(key=lambda x: -x[0])
-    selected = [r[1] for r in results[:limit]]
-    if len(selected) < limit and rd.exists():
-        selected.extend(
-            _recall_multimodal_ocr_evidence(
-                rd=rd,
-                root=root,
-                query_lower=query_lower,
-                query_tokens=query_tokens,
-                excluded_bundles=matched_bundle_roots,
-                limit=limit - len(selected),
-            )
-        )
-    return selected
-
-
-def _recall_multimodal_ocr_evidence(
-    *,
-    rd: Path,
-    root: Path,
-    query_lower: str,
-    query_tokens: set[str],
-    excluded_bundles: set[Path],
-    limit: int,
-) -> list[dict[str, Any]]:
-    """Fill ordinary recall gaps with OCR evidence from validated bundle sidecars."""
-    if limit <= 0:
-        return []
-    candidates: list[tuple[float, dict[str, Any]]] = []
-    seen: set[tuple[str, str]] = set()
-    for evidence_path in rd.rglob("evidence.jsonl"):
-        bundle = _multimodal_bundle_root(evidence_path)
-        if bundle is None or bundle.resolve() in excluded_bundles:
-            continue
-        try:
-            for line in evidence_path.read_text(encoding="utf-8").splitlines():
-                if not line.strip():
-                    continue
-                entry = json.loads(line)
-                if entry.get("kind") != "ocr":
-                    continue
-                text = str(entry.get("text", "")).strip()
-                if not text or not _matches_query(
-                    text.lower(), query_lower, query_tokens
-                ):
-                    continue
-                key = (str(bundle.resolve()), text.lower())
-                if key in seen:
-                    continue
-                seen.add(key)
-                freshness = _freshness_score(evidence_path)
-                candidates.append(
-                    (
-                        freshness,
-                        {
-                            "type": "ocr_evidence",
-                            "source_path": str(evidence_path.relative_to(root)),
-                            "snippet": text[:300],
-                            "locator": entry.get("locator", {}),
-                            "evidence_id": entry.get("id"),
-                            "freshness": round(freshness, 3),
-                            "relevance": round(max(0.01, freshness - 0.1), 3),
-                        },
-                    )
-                )
-        except (json.JSONDecodeError, OSError):
-            continue
-    candidates.sort(key=lambda item: -item[0])
-    return [item[1] for item in candidates[:limit]]
-
-
-def _multimodal_bundle_root(path: Path) -> Path | None:
-    """Return a Raw multimodal bundle root for a direct sidecar file.
-
-    Human-facing episodic recall indexes only ``content.md``. Structured
-    evidence remains available for explicit evidence lookup and provenance,
-    but no longer competes with readable Raw content in ordinary recall.
-    """
-    metadata_path = path.parent / "metadata.json"
-    if not metadata_path.is_file():
-        return None
-    try:
-        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return None
-    if metadata.get("schema_version") != "raw-multimodal/v0.1":
-        return None
-    return path.parent
+    return [r[1] for r in results[:limit]]
 
 
 def recall_knowledge(
     query: str = "",
     topic_id: int | None = None,
     limit: int = DEFAULT_RECALL_LIMIT,
+    scope: str | None = None,
+    goal_boost: bool = True,
 ) -> list[dict[str, Any]]:
-    """Find wiki pages relevant to the query via 6-factor scoring."""
+    """Find wiki pages relevant to the query via 6+1-factor scoring.
+
+    scope: optional area name for soft, opt-in narrowing (reuses the `area`
+    field). None = global recall across all areas. This is a soft scope, not
+    a hard partition — it filters candidates before scoring, nothing more.
+
+    goal_boost: when True (default), pages that already matched are lifted if
+    they fall within an active goal's domains/keywords. No-op when there are
+    no active goals, so it is safe to leave on.
+    """
     all_pages = list_wiki_pages()
     if not all_pages:
         return []
+
+    scope_lower = scope.lower().strip() if scope else ""
+
+    goal_domains: set[str] = set()
+    goal_keywords: set[str] = set()
+    if goal_boost:
+        for goal in load_active_goals():
+            goal_domains |= goal.get("domains", set())
+            goal_keywords |= goal.get("keywords", set())
 
     query_lower = query.lower().strip() if query else ""
     query_tokens = _tokenize(query_lower)
@@ -235,7 +173,12 @@ def recall_knowledge(
         if item.get("status") in ("dropped", "superseded") or item.get("archived"):
             continue
 
-        relevance = _compute_relevance(item, query_lower, query_tokens, topic_id)
+        if scope_lower and str(item.get("area", "")).lower().strip() != scope_lower:
+            continue
+
+        relevance = _compute_relevance(
+            item, query_lower, query_tokens, topic_id, goal_domains, goal_keywords
+        )
         if relevance > 0:
             scored.append((relevance, item))
 
@@ -252,9 +195,12 @@ def recall_knowledge(
             "status": item.get("status", "active"),
             "score": round(item.get("score", 0), 3),
             "relevance": round(relevance, 3),
+            "confidence": item.get("confidence", 0.8),
             "body_preview": item.get("body", "")[:MAX_BODY_PREVIEW],
             "tags": item.get("tags", ""),
             "has_traces": bool(item.get("traces")),
+            "relates_to": item.get("relates_to", ""),
+            "relationship": item.get("relationship", ""),
         }
         if review.get("lesson"):
             entry["review_lesson"] = review["lesson"][:200]
@@ -294,6 +240,8 @@ def _compute_relevance(
     query_lower: str,
     query_tokens: set[str],
     topic_id: int | None,
+    goal_domains: set[str] | None = None,
+    goal_keywords: set[str] | None = None,
 ) -> float:
     base = 0.0
 
@@ -344,6 +292,12 @@ def _compute_relevance(
 
     score = item.get("score", 0)
     relevance += score * 0.5
+
+    if relevance > 0 and (goal_domains or goal_keywords):
+        if goal_domains and str(item.get("area", "")).lower().strip() in goal_domains:
+            relevance += 0.8
+        if goal_keywords and any(kw in searchable for kw in goal_keywords):
+            relevance += 0.4
 
     return relevance
 
