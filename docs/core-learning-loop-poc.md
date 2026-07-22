@@ -109,9 +109,11 @@ Candidate 最小结构：
 
 - [x] Candidate 内容或可访问链接回填到当前 Base 记录。
 - [ ] 用户在 Base 内执行 `accept/edit/reject/defer`，而不是依赖聊天口令。
-- [ ] Base 持久记录审核时间、审核意见和修改类型。
-- [ ] 接受后生成一篇 Wiki 页面；拒绝时保留拒绝理由。
+- [x] Base 持久记录审核时间、审核意见和修改类型。
+- [x] 接受后生成一篇 Wiki 页面；拒绝时保留拒绝理由。
 - [ ] Wiki 保存 Raw/Capture 来源，不直接依赖临时文件路径。
+
+Run 002 的用户审核意图明确为 `accept / 文章有价值 / 无修改`，但浏览器中的操作没有实际保存到记录，最终由 Agent 根据聊天中的明确指令回填 Base 后再由 Worker 消费。因此人工决策和 Base 审核轨迹均真实存在，但“只在 Base 内完成审核”的低摩擦验收尚未通过。Wiki 已生成且重复运行审核 Worker 返回 `no_pending_reviews`；当前 Wiki trace 仍含本机绝对 Raw 路径，来源可移植性也尚未通过。
 
 验收条件：
 
@@ -123,10 +125,12 @@ Candidate 最小结构：
 
 ### T5：在新任务中召回并使用
 
-- [ ] 在不预先粘贴 Wiki 正文的新会话或隔离项目中提出原学习问题。
-- [ ] 运行 Studio search/recall。
-- [ ] 记录是否命中、排名、引用和答案是否真正使用该知识。
-- [ ] 执行 Candidate 中提出的小实践。
+- [x] 在不预先粘贴 Wiki 正文的新会话或隔离项目中提出原学习问题。
+- [x] 运行 Studio search/recall。
+- [x] 记录是否命中、排名、引用和答案是否真正使用该知识。
+- [x] 执行 Candidate 中提出的小实践。
+
+隔离召回从 `oks-connector` 项目目录发起，通过 `OKS_ROOT` 指向 Studio；没有预先粘贴 Wiki 正文。目标页面 `20260722-base` 在 Semantic Memory 中排名第 1，`relevance=2.51`。召回知识被用于核对当前实现：Capability Manifest 保持稳定定义、Processing Run 每次执行独立、Raw/Wiki 作为产物、Base 只做控制面投影，并实际完成一次 `accept` 后重复消费不二次晋升的小实验。详细证据见 Run 002 记录。
 
 验收条件：
 
