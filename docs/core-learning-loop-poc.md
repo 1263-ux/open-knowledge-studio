@@ -59,7 +59,7 @@ POC 的成功单位不是“生成一个 Raw Bundle”，而是“一条真实�
 - [x] 写清“为什么保存”和“我想解决的问题”。
 - [x] 固定该记录、Run 和 Raw Bundle，整个 POC 不更换样本。
 
-首轮执行证据见 `loop-runs/2026-07-21-obsidian-web-clipper.md`。种子是 Obsidian 官方 Web Clipper 仓库，学习问题是“如何复用官方 Clipper 做低摩擦 Capture Adapter，而不是重新开发插件？”
+Run 001 的 Obsidian Candidate 因价值低且偏离 Base 主线被人工拒绝，只保留为门控校准证据。正式 POC 种子已固定为 Run 002 的 OpenLineage Object Model，学习问题是“飞书 Base 控制面如何区分能力定义、单次运行、输入输出和人工审核门禁？”执行证据见 `loop-runs/2026-07-22-feishu-base-control-plane.md`。
 
 验收证据：Base record ID、Capture ID、Run ID、Raw Bundle 路径和一个学习问题。
 
@@ -107,7 +107,7 @@ Candidate 最小结构：
 
 ### T4：人工审核并晋升 Wiki
 
-- [ ] Candidate 内容或可访问链接回填到当前 Base 记录。
+- [x] Candidate 内容或可访问链接回填到当前 Base 记录。
 - [ ] 用户在 Base 内执行 `accept/edit/reject/defer`，而不是依赖聊天口令。
 - [ ] Base 持久记录审核时间、审核意见和修改类型。
 - [ ] 接受后生成一篇 Wiki 页面；拒绝时保留拒绝理由。

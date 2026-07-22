@@ -467,16 +467,35 @@ def promote_draft(
     body = meta.get("body", "")
 
     final_title = title or meta.get("title", slug)
-    final_type = (wiki_type or meta.get("draft_type", "concepts")).rstrip("s") + "s"
+    requested_type = wiki_type or meta.get("draft_type", "concept")
+    final_type = {
+        "concept": "concepts",
+        "concepts": "concepts",
+        "strategy": "strategies",
+        "strategies": "strategies",
+        "anti-pattern": "anti-patterns",
+        "anti-patterns": "anti-patterns",
+    }.get(requested_type)
+    if final_type is None:
+        raise ValueError(f"Unsupported Wiki type: {requested_type}")
     final_area = area or meta.get("draft_area", "computing")
+
+    draft_tags = meta.get("tags", [])
+    if isinstance(draft_tags, str):
+        draft_tags = [item.strip() for item in draft_tags.split(",") if item.strip()]
+    if not isinstance(draft_tags, list):
+        draft_tags = []
 
     path = write_wiki_page(
         title=final_title,
         content=body,
         wiki_type=final_type,
         area=final_area,
+        source_type=meta.get("source_type", "auto"),
         importance=0.7,
-        tags=tags,
+        tags=tags if tags is not None else draft_tags,
+        traces=meta.get("traces") if isinstance(meta.get("traces"), list) else None,
+        review=meta.get("review") if isinstance(meta.get("review"), dict) else None,
     )
 
     draft_path.unlink()

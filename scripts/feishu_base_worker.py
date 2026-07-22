@@ -24,10 +24,26 @@ import tempfile
 from typing import Any
 import uuid
 
+import yaml
+
 
 ROOT = Path(__file__).resolve().parents[1]
 URL_RE = re.compile(r"https?://[^\s<>\]\[)]+", re.IGNORECASE)
 RETRYABLE_CODES = {"RATE_LIMITED", "UPSTREAM_UNAVAILABLE", "NETWORK_ERROR", "TIMEOUT"}
+CANDIDATE_FIELDS = [
+    "运行状态",
+    "运行ID",
+    "Raw Bundle",
+    "Wiki状态",
+    "候选ID",
+    "候选内容",
+    "审核动作",
+    "审核意见",
+    "修改类型",
+    "审核时间",
+    "Wiki路径",
+]
+REVIEW_ACTIONS = {"accept", "edit", "reject", "defer"}
 
 
 @dataclass(frozen=True)
@@ -61,6 +77,20 @@ def atomic_write_json(path: Path, value: object) -> None:
     try:
         with os.fdopen(handle, "w", encoding="utf-8", newline="\n") as stream:
             stream.write(payload)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+    except BaseException:
+        Path(temporary).unlink(missing_ok=True)
+        raise
+
+
+def atomic_write_text(path: Path, value: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    handle, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    try:
+        with os.fdopen(handle, "w", encoding="utf-8", newline="\n") as stream:
+            stream.write(value)
             stream.flush()
             os.fsync(stream.fileno())
         os.replace(temporary, path)
@@ -225,6 +255,73 @@ def list_records(config: WorkerConfig, limit: int = 100) -> list[dict[str, Any]]
     return records
 
 
+def get_record(
+    config: WorkerConfig,
+    record_id: str,
+    projection: list[str] | None = None,
+) -> dict[str, Any]:
+    fields_requested = projection or CANDIDATE_FIELDS
+    command = [
+        "base",
+        "+record-get",
+        *base_args(config),
+        "--record-id",
+        record_id,
+        "--format",
+        "json",
+    ]
+    for field in fields_requested:
+        command.extend(["--field-id", field])
+    envelope = lark_json(config, *command)
+    data = envelope.get("data", {})
+    rows = data.get("data", [])
+    fields = data.get("fields", fields_requested)
+    record_ids = data.get("record_id_list", [])
+    if not rows:
+        raise RuntimeError(f"Base record not found: {record_id}")
+    row = rows[0]
+    if isinstance(row, list):
+        values = dict(zip(fields, row))
+    elif isinstance(row, dict):
+        values = row.get("fields", row)
+    else:
+        raise RuntimeError(f"Base record has unsupported shape: {record_id}")
+    resolved_id = record_ids[0] if record_ids else record_id
+    return {"record_id": resolved_id, "fields": values}
+
+
+def list_review_records(config: WorkerConfig, limit: int = 100) -> list[dict[str, Any]]:
+    command = [
+        "base",
+        "+record-list",
+        *base_args(config),
+        "--limit",
+        str(limit),
+        "--format",
+        "json",
+    ]
+    for field in CANDIDATE_FIELDS:
+        command.extend(["--field-id", field])
+    envelope = lark_json(config, *command)
+    data = envelope.get("data", {})
+    fields = data.get("fields", CANDIDATE_FIELDS)
+    rows = data.get("data", [])
+    record_ids = data.get("record_id_list", [])
+    records: list[dict[str, Any]] = []
+    for index, row in enumerate(rows):
+        record_id = record_ids[index] if index < len(record_ids) else None
+        if isinstance(row, list):
+            values = dict(zip(fields, row))
+        elif isinstance(row, dict):
+            record_id = row.get("record_id") or row.get("id") or record_id
+            values = row.get("fields", row)
+        else:
+            continue
+        if record_id:
+            records.append({"record_id": record_id, "fields": values})
+    return records
+
+
 def parse_base_datetime(value: object) -> datetime | None:
     value = scalar_cell(value)
     if not isinstance(value, str) or not value.strip():
@@ -313,6 +410,263 @@ def scalar_cell(value: object) -> object:
     if isinstance(value, list) and len(value) == 1:
         return value[0]
     return value
+
+
+def parse_candidate_document(text: str) -> tuple[dict[str, Any], str]:
+    if not text.startswith("---"):
+        raise ValueError("Candidate must start with YAML frontmatter")
+    parts = text.split("---", 2)
+    if len(parts) != 3:
+        raise ValueError("Candidate frontmatter is not closed")
+    metadata = yaml.safe_load(parts[1].strip()) or {}
+    if not isinstance(metadata, dict):
+        raise ValueError("Candidate frontmatter must be an object")
+    for field in ("title", "draft_type", "draft_area"):
+        if not str(metadata.get(field) or "").strip():
+            raise ValueError(f"Candidate frontmatter missing {field}")
+    if metadata["draft_type"] not in {"concept", "strategy", "anti-pattern"}:
+        raise ValueError("Candidate draft_type must be concept, strategy, or anti-pattern")
+    body = parts[2].strip()
+    if len(body) < 50:
+        raise ValueError("Candidate body must contain at least 50 characters")
+    return metadata, body
+
+
+def render_candidate_document(metadata: dict[str, Any], body: str) -> str:
+    frontmatter = yaml.safe_dump(
+        metadata,
+        allow_unicode=True,
+        default_flow_style=False,
+        sort_keys=False,
+    )
+    return f"---\n{frontmatter}---\n\n{body.strip()}\n"
+
+
+def candidate_state_path(record_id: str) -> Path:
+    safe_record_id = re.sub(r"[^A-Za-z0-9_-]+", "-", record_id).strip("-")
+    if not safe_record_id:
+        raise ValueError("record_id cannot form a Candidate state path")
+    return ROOT / ".oks" / "candidates" / f"{safe_record_id}.json"
+
+
+def load_candidate_state(record_id: str) -> dict[str, Any]:
+    path = candidate_state_path(record_id)
+    if not path.is_file():
+        raise FileNotFoundError(f"Candidate state not found for Base record: {record_id}")
+    value = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(value, dict):
+        raise ValueError(f"Candidate state is not an object: {path}")
+    return value
+
+
+def candidate_review_fingerprint(fields: dict[str, Any]) -> str:
+    payload = {
+        "action": scalar_cell(fields.get("审核动作")),
+        "comment": fields.get("审核意见"),
+        "change_types": fields.get("修改类型"),
+        "reviewed_at": fields.get("审核时间"),
+        "candidate": fields.get("候选内容"),
+    }
+    encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+def publish_candidate(
+    config: WorkerConfig,
+    record_id: str,
+    candidate_file: Path,
+) -> dict[str, Any]:
+    record = get_record(config, record_id)
+    fields = record["fields"]
+    status = scalar_cell(fields.get("运行状态"))
+    if status not in {"Raw就绪", "候选待审", "需人工"}:
+        raise RuntimeError(f"Base record is not ready for Candidate publication: {status!r}")
+    raw_bundle = scalar_cell(fields.get("Raw Bundle"))
+    if not isinstance(raw_bundle, str) or not raw_bundle.strip():
+        raise RuntimeError("Base record has no Raw Bundle; refusing to publish Candidate")
+    raw_path = Path(raw_bundle).expanduser().resolve()
+    if not raw_path.is_dir() or not (raw_path / "bundle.json").is_file():
+        raise RuntimeError(f"Raw Bundle is not locally verifiable: {raw_path}")
+
+    source = candidate_file.expanduser().resolve()
+    metadata, body = parse_candidate_document(source.read_text(encoding="utf-8"))
+    candidate_id = re.sub(r"[^a-z0-9-]+", "-", source.stem.lower()).strip("-")
+    if not candidate_id:
+        candidate_id = f"feishu-{record_id.lower()}"
+    target = ROOT / "drafts" / f"{candidate_id}.md"
+    metadata["status"] = "draft"
+    source_pages = metadata.get("source_pages", [])
+    if not isinstance(source_pages, list):
+        source_pages = [str(source_pages)] if source_pages else []
+    metadata["source_pages"] = list(dict.fromkeys([
+        *source_pages,
+        f"feishu:{record_id}",
+    ]))
+    traces = metadata.get("traces")
+    if not isinstance(traces, list):
+        traces = []
+    trace_values = [
+        {"kind": "execution", "id": str(scalar_cell(fields.get("运行ID")) or ""), "path": str(raw_path)},
+        {"kind": "external", "id": f"feishu-base:{record_id}"},
+    ]
+    for trace in trace_values:
+        if trace not in traces:
+            traces.append(trace)
+    metadata["traces"] = traces
+    document = render_candidate_document(metadata, body)
+    atomic_write_text(target, document)
+
+    state_path = candidate_state_path(record_id)
+    previous: dict[str, Any] = {}
+    if state_path.is_file():
+        loaded = json.loads(state_path.read_text(encoding="utf-8"))
+        if isinstance(loaded, dict):
+            previous = loaded
+    state = {
+        "schema_version": "oks-feishu-candidate/v0.1",
+        "record_id": record_id,
+        "candidate_id": candidate_id,
+        "candidate_path": target.relative_to(ROOT).as_posix(),
+        "candidate_sha256": hashlib.sha256(document.encode("utf-8")).hexdigest(),
+        "raw_bundle": str(raw_path),
+        "run_id": scalar_cell(fields.get("运行ID")),
+        "revision": int(previous.get("revision", 0)) + 1,
+        "published_at": utc_now(),
+        "review_history": previous.get("review_history", []),
+        "last_review_fingerprint": None,
+    }
+    atomic_write_json(state_path, state)
+    update_record(
+        config,
+        record_id,
+        {
+            "候选ID": candidate_id,
+            "候选内容": body,
+            "审核动作": None,
+            "审核意见": None,
+            "修改类型": None,
+            "审核时间": None,
+            "Wiki路径": None,
+            "Wiki状态": "review_pending",
+            "运行状态": "候选待审",
+        },
+    )
+    return state
+
+
+def promote_candidate_document(
+    candidate_path: Path,
+    reviewed_body: str,
+    review: dict[str, Any],
+) -> Path:
+    metadata, _body = parse_candidate_document(candidate_path.read_text(encoding="utf-8"))
+    metadata["status"] = "draft"
+    metadata["review"] = review
+    atomic_write_text(candidate_path, render_candidate_document(metadata, reviewed_body))
+    cli_root = str(ROOT / "cli")
+    if cli_root not in sys.path:
+        sys.path.insert(0, cli_root)
+    from knowledge_studio import store
+
+    promoted_slug = store.promote_draft(candidate_path.stem)
+    page = store.get_wiki_page(promoted_slug)
+    if not page or not page.get("file_path"):
+        raise RuntimeError(f"Promoted Wiki page cannot be resolved: {promoted_slug}")
+    return Path(page["file_path"]).resolve()
+
+
+def review_candidate(config: WorkerConfig, record: dict[str, Any]) -> dict[str, Any]:
+    record_id = record["record_id"]
+    fields = record["fields"]
+    action = scalar_cell(fields.get("审核动作"))
+    if action not in REVIEW_ACTIONS:
+        return {"processed": False, "reason": "no_review_action", "record_id": record_id}
+    state = load_candidate_state(record_id)
+    if scalar_cell(fields.get("候选ID")) != state.get("candidate_id"):
+        raise RuntimeError(f"Candidate ID does not match local state for {record_id}")
+    fingerprint = candidate_review_fingerprint(fields)
+    if state.get("last_review_fingerprint") == fingerprint:
+        return {"processed": False, "reason": "review_already_processed", "record_id": record_id}
+    relative_candidate = Path(str(state["candidate_path"]))
+    candidate_path = (ROOT / relative_candidate).resolve()
+    if ROOT.resolve() not in candidate_path.parents or not candidate_path.is_file():
+        raise RuntimeError(f"Candidate file is unavailable or outside Studio: {candidate_path}")
+
+    reviewed_at = scalar_cell(fields.get("审核时间")) or utc_now()
+    comment = str(fields.get("审核意见") or "").strip()
+    change_types = fields.get("修改类型") if isinstance(fields.get("修改类型"), list) else []
+    history_item = {
+        "action": action,
+        "comment": comment,
+        "change_types": change_types,
+        "reviewed_at": reviewed_at,
+        "candidate_sha256": hashlib.sha256(
+            str(fields.get("候选内容") or "").encode("utf-8")
+        ).hexdigest(),
+    }
+    patch: dict[str, Any]
+    wiki_path: Path | None = None
+    if action == "accept":
+        reviewed_body = str(fields.get("候选内容") or "").strip()
+        if len(reviewed_body) < 50:
+            raise RuntimeError("Accepted Candidate content is empty or too short")
+        wiki_path = promote_candidate_document(
+            candidate_path,
+            reviewed_body,
+            {
+                "outcome": "success",
+                "decision_correct": True,
+                "lesson": comment,
+                "reviewed_at": str(reviewed_at),
+            },
+        )
+        patch = {
+            "运行状态": "已晋升",
+            "Wiki状态": "promoted",
+            "Wiki路径": wiki_path.relative_to(ROOT).as_posix(),
+        }
+    elif action == "reject":
+        metadata, body = parse_candidate_document(candidate_path.read_text(encoding="utf-8"))
+        metadata["status"] = "rejected"
+        metadata["review"] = {
+            "outcome": "failure",
+            "decision_correct": False,
+            "lesson": comment,
+            "reviewed_at": str(reviewed_at),
+        }
+        atomic_write_text(candidate_path, render_candidate_document(metadata, body))
+        patch = {"运行状态": "已拒绝", "Wiki状态": "rejected", "Wiki路径": None}
+    elif action == "edit":
+        patch = {"运行状态": "需人工", "Wiki状态": "candidate", "Wiki路径": None}
+    else:
+        patch = {"运行状态": "候选待审", "Wiki状态": "review_pending", "Wiki路径": None}
+
+    history = state.get("review_history", [])
+    if not isinstance(history, list):
+        history = []
+    history.append(history_item)
+    state["review_history"] = history
+    state["last_review_fingerprint"] = fingerprint
+    state["last_review_action"] = action
+    state["last_reviewed_at"] = reviewed_at
+    if wiki_path is not None:
+        state["wiki_path"] = wiki_path.relative_to(ROOT).as_posix()
+    atomic_write_json(candidate_state_path(record_id), state)
+    update_record(config, record_id, patch)
+    return {"processed": True, "record_id": record_id, "action": action, "patch": patch}
+
+
+def process_next_review(config: WorkerConfig, limit: int = 100) -> dict[str, Any]:
+    for record in list_review_records(config, limit):
+        fields = record["fields"]
+        action = scalar_cell(fields.get("审核动作"))
+        status = scalar_cell(fields.get("运行状态"))
+        if action not in REVIEW_ACTIONS or status in {"已晋升", "已拒绝"}:
+            continue
+        result = review_candidate(config, record)
+        if result.get("processed"):
+            return result
+    return {"processed": False, "reason": "no_pending_reviews"}
 
 
 def extract_url(value: object) -> str | None:
@@ -1275,6 +1629,17 @@ def parse_args() -> argparse.Namespace:
     browser = subcommands.add_parser("complete-browser", help="Complete one JS-rendered record from a controlled browser snapshot.")
     browser.add_argument("--record-id", required=True)
     browser.add_argument("--snapshot-dir", type=Path, required=True)
+    publish = subcommands.add_parser(
+        "publish-candidate",
+        help="Publish an Agent-authored Teach-back Candidate to its Base record.",
+    )
+    publish.add_argument("--record-id", required=True)
+    publish.add_argument("--candidate-file", type=Path, required=True)
+    review = subcommands.add_parser(
+        "review-once",
+        help="Consume at most one new accept/edit/reject/defer action from Base.",
+    )
+    review.add_argument("--limit", type=int, default=100)
     return parser.parse_args()
 
 
@@ -1303,6 +1668,14 @@ def main() -> int:
         result = complete_browser_snapshot(config, args.record_id, args.snapshot_dir)
         print(json.dumps({"processed": True, "run": result}, ensure_ascii=False, indent=2))
         return 0 if result.get("status") in {"complete", "partial"} else 2
+    if args.command == "publish-candidate":
+        result = publish_candidate(config, args.record_id, args.candidate_file)
+        print(json.dumps({"published": True, "candidate": result}, ensure_ascii=False, indent=2))
+        return 0
+    if args.command == "review-once":
+        result = process_next_review(config, args.limit)
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return 0
     claimed = claim_next_record(config, args.limit)
     if claimed is None:
         print(json.dumps({"processed": False, "reason": "no_pending_records"}, ensure_ascii=False))

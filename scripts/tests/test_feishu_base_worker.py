@@ -9,6 +9,23 @@ sys.path.insert(0, str(SCRIPTS))
 import feishu_base_worker as worker
 
 
+def candidate_document(title="Base review Candidate"):
+    return f'''---
+title: "{title}"
+draft_type: strategy
+draft_area: computing
+source_pages: []
+drafted_at: "2026-07-22"
+status: draft
+tags: "feishu, learning-loop"
+---
+
+# 我对它的理解
+
+飞书多维表格是本轮 POC 的入口、状态机与人工审核控制面。Worker 负责确定性状态转换，Agent 负责需要判断的 Teach-back，审核通过后才允许晋升 Wiki。
+'''
+
+
 def test_extract_url_from_labeled_capture():
     assert worker.extract_url("[test] https://example.com/a?b=1。") == "https://example.com/a?b=1"
     assert worker.extract_url("plain note") is None
@@ -124,6 +141,139 @@ def test_list_records_maps_projected_rows(monkeypatch, tmp_path):
             "fields": {"内容": "https://example.com", "运行状态": "待处理", "重试": False},
         }
     ]
+
+
+def test_publish_candidate_requires_raw_and_writes_visible_review_state(monkeypatch, tmp_path):
+    monkeypatch.setattr(worker, "ROOT", tmp_path)
+    raw = tmp_path / "raw-bundle"
+    raw.mkdir()
+    (raw / "bundle.json").write_text('{"schema_version":"raw-multimodal/v0.2"}', encoding="utf-8")
+    source = tmp_path / "base-review-candidate.md"
+    source.write_text(candidate_document(), encoding="utf-8")
+    config = worker.WorkerConfig("base", "table", tmp_path / "lark.exe", tmp_path, tmp_path / "python.exe", tmp_path)
+    updates = []
+    monkeypatch.setattr(
+        worker,
+        "get_record",
+        lambda *_: {
+            "record_id": "rec_1",
+            "fields": {"运行状态": "Raw就绪", "Raw Bundle": str(raw), "运行ID": "run_1"},
+        },
+    )
+    monkeypatch.setattr(worker, "update_record", lambda _c, _r, patch: updates.append(patch) or {})
+
+    state = worker.publish_candidate(config, "rec_1", source)
+
+    assert state["candidate_id"] == "base-review-candidate"
+    assert state["revision"] == 1
+    assert (tmp_path / state["candidate_path"]).is_file()
+    assert updates[-1]["候选ID"] == "base-review-candidate"
+    assert updates[-1]["Wiki状态"] == "review_pending"
+    assert updates[-1]["运行状态"] == "候选待审"
+    assert "飞书多维表格" in updates[-1]["候选内容"]
+
+
+def test_publish_candidate_refuses_record_without_raw(monkeypatch, tmp_path):
+    monkeypatch.setattr(worker, "ROOT", tmp_path)
+    source = tmp_path / "candidate.md"
+    source.write_text(candidate_document(), encoding="utf-8")
+    config = worker.WorkerConfig("base", "table", tmp_path / "lark.exe", tmp_path, tmp_path / "python.exe", tmp_path)
+    monkeypatch.setattr(
+        worker,
+        "get_record",
+        lambda *_: {"record_id": "rec_1", "fields": {"运行状态": "Raw就绪", "Raw Bundle": None}},
+    )
+
+    try:
+        worker.publish_candidate(config, "rec_1", source)
+    except RuntimeError as error:
+        assert "no Raw Bundle" in str(error)
+    else:
+        raise AssertionError("Candidate publication must require a Raw Bundle")
+
+
+def test_reject_review_is_persistent_and_idempotent(monkeypatch, tmp_path):
+    monkeypatch.setattr(worker, "ROOT", tmp_path)
+    candidate = tmp_path / "drafts" / "base-review-candidate.md"
+    candidate.parent.mkdir()
+    candidate.write_text(candidate_document(), encoding="utf-8")
+    worker.atomic_write_json(
+        worker.candidate_state_path("rec_1"),
+        {
+            "candidate_id": "base-review-candidate",
+            "candidate_path": "drafts/base-review-candidate.md",
+            "review_history": [],
+            "last_review_fingerprint": None,
+        },
+    )
+    fields = {
+        "候选ID": "base-review-candidate",
+        "候选内容": "这是用户看到并拒绝的候选内容，因为它偏离了飞书 Base 主循环的真正验收目标。" * 3,
+        "审核动作": "reject",
+        "审核意见": "方向偏离，不晋升 Wiki。",
+        "修改类型": ["方向偏离"],
+        "审核时间": "2026-07-22 00:10:00",
+    }
+    config = worker.WorkerConfig("base", "table", tmp_path / "lark.exe", tmp_path, tmp_path / "python.exe", tmp_path)
+    updates = []
+    monkeypatch.setattr(worker, "update_record", lambda _c, _r, patch: updates.append(patch) or {})
+
+    first = worker.review_candidate(config, {"record_id": "rec_1", "fields": fields})
+    second = worker.review_candidate(config, {"record_id": "rec_1", "fields": fields})
+
+    assert first["processed"] is True
+    assert first["action"] == "reject"
+    assert updates == [{"运行状态": "已拒绝", "Wiki状态": "rejected", "Wiki路径": None}]
+    metadata, _body = worker.parse_candidate_document(candidate.read_text(encoding="utf-8"))
+    assert metadata["status"] == "rejected"
+    assert metadata["review"]["lesson"] == "方向偏离，不晋升 Wiki。"
+    assert second == {"processed": False, "reason": "review_already_processed", "record_id": "rec_1"}
+
+
+def test_accept_review_promotes_exact_base_content(monkeypatch, tmp_path):
+    monkeypatch.setattr(worker, "ROOT", tmp_path)
+    candidate = tmp_path / "drafts" / "base-review-candidate.md"
+    candidate.parent.mkdir()
+    candidate.write_text(candidate_document(), encoding="utf-8")
+    worker.atomic_write_json(
+        worker.candidate_state_path("rec_2"),
+        {
+            "candidate_id": "base-review-candidate",
+            "candidate_path": "drafts/base-review-candidate.md",
+            "review_history": [],
+            "last_review_fingerprint": None,
+        },
+    )
+    accepted_body = "这是用户在飞书 Base 中最终确认的 Teach-back 内容。" * 5
+    fields = {
+        "候选ID": "base-review-candidate",
+        "候选内容": accepted_body,
+        "审核动作": "accept",
+        "审核意见": "验收通过。",
+        "修改类型": ["无修改"],
+        "审核时间": "2026-07-22 00:20:00",
+    }
+    wiki = tmp_path / "wiki" / "computing" / "strategies" / "accepted.md"
+    wiki.parent.mkdir(parents=True)
+    wiki.write_text("accepted", encoding="utf-8")
+    promoted = []
+    monkeypatch.setattr(
+        worker,
+        "promote_candidate_document",
+        lambda path, body, review: promoted.append((path, body, review)) or wiki,
+    )
+    updates = []
+    monkeypatch.setattr(worker, "update_record", lambda _c, _r, patch: updates.append(patch) or {})
+    config = worker.WorkerConfig("base", "table", tmp_path / "lark.exe", tmp_path, tmp_path / "python.exe", tmp_path)
+
+    result = worker.review_candidate(config, {"record_id": "rec_2", "fields": fields})
+
+    assert result["action"] == "accept"
+    assert promoted[0][1] == accepted_body
+    assert promoted[0][2]["lesson"] == "验收通过。"
+    assert updates[-1]["运行状态"] == "已晋升"
+    assert updates[-1]["Wiki状态"] == "promoted"
+    assert updates[-1]["Wiki路径"] == "wiki/computing/strategies/accepted.md"
 
 
 def test_needs_user_action_never_claims_raw_ready(monkeypatch, tmp_path):
