@@ -59,7 +59,7 @@ def search(
     domain: Optional[str] = typer.Option(None, "--domain", "-d", help="Filter by domain"),
     type_filter: Optional[str] = typer.Option(None, "--type", "-t", help="Filter by type"),
 ):
-    """Search wiki pages using the 6-factor recall engine."""
+    """Search wiki pages using the 6-factor recall engine (read-only)."""
     results = recall_knowledge(query=query, limit=limit)
 
     if domain:
@@ -239,6 +239,24 @@ def wiki_archive(slug: str = typer.Argument(help="Page slug to archive")):
     else:
         console.print(f"[red]Not found:[/red] {slug}")
         raise typer.Exit(1)
+
+
+@wiki_app.command("use")
+def wiki_use(
+    slug: str = typer.Argument(help="Slug of a Wiki page actually used in a task"),
+):
+    """Record explicit knowledge use after recall results were actually applied."""
+    if not store.get_wiki_page(slug):
+        console.print(f"[red]Not found:[/red] {slug}")
+        raise typer.Exit(1)
+
+    store.record_access(slug)
+    updated = store.get_wiki_page(slug) or {}
+    console.print(
+        f"[green]Recorded use:[/green] {slug} "
+        f"(access_count={updated.get('access_count', 0)}, "
+        f"status={updated.get('status', 'active')})"
+    )
 
 
 # ── Drafts ───────────────────────────────────────────────────────

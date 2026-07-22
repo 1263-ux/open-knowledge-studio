@@ -10,6 +10,10 @@ Removed settings and knowledge_sync dependencies. Uses store.repo_root().
   4. Type boost (anti-pattern=1.5, strategy=0.8, concept=0.6)
   5. Review penalty boost (+2.0 wrong / +1.0 failure)
   6. Memory-curve score (×0.5)
+
+Recall is read-only: searching does not count as using knowledge and never
+mutates access counts or Wiki state. Actual use is recorded explicitly through
+``store.record_access`` (exposed as ``oks wiki use <slug>``).
 """
 from __future__ import annotations
 
@@ -19,7 +23,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from knowledge_studio.store import list_wiki_pages, raw_dir, record_access, repo_root
+from knowledge_studio.store import list_wiki_pages, raw_dir, repo_root
 
 _logger = logging.getLogger(__name__)
 
@@ -255,7 +259,6 @@ def recall_knowledge(
         if review.get("lesson"):
             entry["review_lesson"] = review["lesson"][:200]
         results.append(entry)
-        record_access(item["slug"])
 
     return results
 

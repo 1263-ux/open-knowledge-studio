@@ -35,7 +35,7 @@ POC 的成功单位不是“生成一个 Raw Bundle”，而是“一条真实�
 
 当前 Capture/Processing Run/Raw Bundle v0.2 的机器事实源位于 `oks-connector/schemas/`，Studio 文档不再复制另一套协议定义。
 
-第一轮必须证明：用户不依赖终端或对话中的隐式状态，只在既有飞书 Base 中就能看见并推动整条记录从提交走到验收。Base 不是临时入口，而是本 POC 的状态机、人工门禁和可观察控制面。
+第一轮必须证明：用户不依赖终端中的隐式状态，通过飞书 Base 提交内容，并可在个人飞书消息中阅读 Agent 的总结、回答问题和给出明确审核动作；Agent 将交互结构化写回 Base。Base 不是要求用户维护机器字段的后台表单，而是本 POC 的状态机、审计事实源和可观察控制面。
 
 ## 3. 核心任务清单
 
@@ -108,12 +108,12 @@ Candidate 最小结构：
 ### T4：人工审核并晋升 Wiki
 
 - [x] Candidate 内容或可访问链接回填到当前 Base 记录。
-- [ ] 用户在 Base 内执行 `accept/edit/reject/defer`，而不是依赖聊天口令。
+- [x] 用户通过明确的飞书个人交互给出 `accept/edit/reject/defer`，Agent 将结果结构化写回 Base。
 - [x] Base 持久记录审核时间、审核意见和修改类型。
 - [x] 接受后生成一篇 Wiki 页面；拒绝时保留拒绝理由。
 - [ ] Wiki 保存 Raw/Capture 来源，不直接依赖临时文件路径。
 
-Run 002 的用户审核意图明确为 `accept / 文章有价值 / 无修改`，但浏览器中的操作没有实际保存到记录，最终由 Agent 根据聊天中的明确指令回填 Base 后再由 Worker 消费。因此人工决策和 Base 审核轨迹均真实存在，但“只在 Base 内完成审核”的低摩擦验收尚未通过。Wiki 已生成且重复运行审核 Worker 返回 `no_pending_reviews`；当前 Wiki trace 仍含本机绝对 Raw 路径，来源可移植性也尚未通过。
+Run 002 的用户审核意图明确为 `accept / 文章有价值 / 无修改`。用户没有被要求手工维护 Base 审核字段；Agent 根据明确指令回填唯一待审记录，再由 Worker 消费。人工决策和 Base 审核轨迹均真实存在，符合“Agent 总结和提问、用户判断、Agent 结构化落账并晋升”的职责边界。个人飞书消息/卡片到 Worker 的自动接入仍未完成；当前 Wiki trace 也仍含本机绝对 Raw 路径，来源可移植性尚未通过。
 
 验收条件：
 
@@ -130,7 +130,7 @@ Run 002 的用户审核意图明确为 `accept / 文章有价值 / 无修改`，
 - [x] 记录是否命中、排名、引用和答案是否真正使用该知识。
 - [x] 执行 Candidate 中提出的小实践。
 
-隔离召回从 `oks-connector` 项目目录发起，通过 `OKS_ROOT` 指向 Studio；没有预先粘贴 Wiki 正文。目标页面 `20260722-base` 在 Semantic Memory 中排名第 1，`relevance=2.51`。召回知识被用于核对当前实现：Capability Manifest 保持稳定定义、Processing Run 每次执行独立、Raw/Wiki 作为产物、Base 只做控制面投影，并实际完成一次 `accept` 后重复消费不二次晋升的小实验。详细证据见 Run 002 记录。
+隔离召回从 `oks-connector` 项目目录发起，通过 `OKS_ROOT` 指向 Studio；没有预先粘贴 Wiki 正文。目标页面 `20260722-base` 在 Semantic Memory 中排名第 1，`relevance=2.51`。召回知识被用于核对当前实现：Capability Manifest 保持稳定定义、Processing Run 每次执行独立、Raw/Wiki 作为产物、Base 只做控制面投影，并实际完成一次 `accept` 后重复消费不二次晋升的小实验。该次实际使用已形成一次 access 记录；后续 recall/search 保持只读，只有 Agent 确实采用知识后才执行显式 `oks wiki use`。详细证据见 Run 002 记录。
 
 验收条件：
 

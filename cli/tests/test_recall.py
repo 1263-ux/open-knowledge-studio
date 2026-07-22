@@ -82,6 +82,48 @@ def test_recall_knowledge_returns_results(kb_root):
     assert any(r["slug"] == "git-branching" for r in results)
 
 
+def test_recall_is_read_only(kb_root):
+    from knowledge_studio.recall import recall_knowledge
+    from knowledge_studio.store import get_wiki_page
+
+    results = recall_knowledge("git branching", limit=5)
+
+    assert any(r["slug"] == "git-branching" for r in results)
+    assert not (kb_root / ".oks" / "access.json").exists()
+    assert get_wiki_page("git-branching")["access_count"] == 0
+
+
+def test_explicit_use_promotes_provisional_page(kb_root):
+    from knowledge_studio.store import get_wiki_page, record_access
+
+    provisional = kb_root / "wiki" / "computing" / "concepts" / "provisional.md"
+    metadata = {
+        "title": "Provisional Page",
+        "type": "concept",
+        "area": "computing",
+        "status": "provisional",
+        "importance": 0.6,
+        "confidence": 0.8,
+        "created": "2026-01-15T00:00:00+00:00",
+        "pinned": False,
+        "archived": False,
+    }
+    frontmatter = yaml.dump(
+        metadata,
+        default_flow_style=False,
+        allow_unicode=True,
+        sort_keys=False,
+    )
+    _atomic_write(provisional, f"---\n{frontmatter}---\n\nProvisional body.")
+
+    for _ in range(3):
+        record_access("provisional")
+
+    updated = get_wiki_page("provisional")
+    assert updated["access_count"] == 3
+    assert updated["status"] == "active"
+
+
 def test_recall_knowledge_anti_pattern_boosted(kb_root):
     from knowledge_studio.recall import recall_knowledge
     results = recall_knowledge("deployment", limit=5)
