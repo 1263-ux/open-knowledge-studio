@@ -270,6 +270,172 @@ def test_review_notification_sends_idempotent_personal_message(monkeypatch, tmp_
     assert len(commands[0][commands[0].index("--idempotency-key") + 1]) == 50
 
 
+def test_parse_review_reply_accepts_action_before_or_after_comment():
+    assert worker.parse_review_reply("accept 文章有价值") == ("accept", "文章有价值")
+    assert worker.parse_review_reply("文章有价值，accept") == ("accept", "文章有价值")
+    assert worker.parse_review_reply("`defer`") == ("defer", "")
+
+
+def test_parse_review_reply_rejects_missing_or_conflicting_action():
+    for content in ("文章有价值", "accept but reject"):
+        try:
+            worker.parse_review_reply(content)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"invalid review reply accepted: {content}")
+
+
+def test_personal_reply_updates_exact_linked_candidate_and_records_receipt(monkeypatch, tmp_path):
+    monkeypatch.setattr(worker, "ROOT", tmp_path)
+    state_path = worker.candidate_state_path("rec_reply")
+    worker.atomic_write_json(
+        state_path,
+        {
+            "record_id": "rec_reply",
+            "candidate_id": "candidate-1",
+            "revision": 3,
+            "review_notification": {
+                "status": "sent",
+                "message_id": "om_prompt",
+                "chat_id": "oc_personal",
+                "recipient": "ou_reviewer",
+            },
+        },
+    )
+    config = worker.WorkerConfig(
+        "base",
+        "table",
+        tmp_path / "lark.exe",
+        tmp_path,
+        tmp_path / "python.exe",
+        tmp_path,
+        review_recipient_user_id="ou_reviewer",
+    )
+    updates = []
+    monkeypatch.setattr(
+        worker,
+        "update_record",
+        lambda _config, record_id, patch: updates.append((record_id, patch)) or {},
+    )
+    monkeypatch.setattr(
+        worker,
+        "get_record",
+        lambda _config, record_id: {"record_id": record_id, "fields": {}},
+    )
+    monkeypatch.setattr(
+        worker,
+        "review_candidate",
+        lambda _config, record: {
+            "processed": True,
+            "record_id": record["record_id"],
+            "action": "accept",
+        },
+    )
+    event = {
+        "event_id": "evt_1",
+        "message_id": "om_reply",
+        "reply_to": "om_prompt",
+        "root_id": "om_prompt",
+        "chat_id": "oc_personal",
+        "chat_type": "p2p",
+        "sender_id": "ou_reviewer",
+        "sender_type": "user",
+        "message_type": "text",
+        "content": "文章有价值，accept",
+        "create_time": "1784730000000",
+    }
+
+    first = worker.apply_review_reply_event(config, event)
+    second = worker.apply_review_reply_event(config, event)
+
+    assert first["processed"] is True
+    assert first["record_id"] == "rec_reply"
+    assert first["revision"] == 3
+    assert updates[0][0] == "rec_reply"
+    assert updates[0][1]["审核动作"] == "accept"
+    assert updates[0][1]["审核意见"] == "文章有价值"
+    assert updates[0][1]["修改类型"] == ["无修改"]
+    assert second["reason"] == "review_message_already_processed"
+    saved = json.loads(state_path.read_text(encoding="utf-8"))
+    assert saved["review_reply_events"][0]["message_id"] == "om_reply"
+
+
+def test_review_reply_requires_exact_parent_and_comment_for_reject(monkeypatch, tmp_path):
+    monkeypatch.setattr(worker, "ROOT", tmp_path)
+    worker.atomic_write_json(
+        worker.candidate_state_path("rec_reply"),
+        {
+            "record_id": "rec_reply",
+            "candidate_id": "candidate-1",
+            "revision": 1,
+            "review_notification": {
+                "status": "sent",
+                "message_id": "om_prompt",
+                "chat_id": "oc_personal",
+                "recipient": "ou_reviewer",
+            },
+        },
+    )
+    config = worker.WorkerConfig(
+        "base",
+        "table",
+        tmp_path / "lark.exe",
+        tmp_path,
+        tmp_path / "python.exe",
+        tmp_path,
+    )
+    base_event = {
+        "message_id": "om_reply",
+        "reply_to": "om_prompt",
+        "chat_id": "oc_personal",
+        "chat_type": "p2p",
+        "sender_id": "ou_reviewer",
+        "sender_type": "user",
+        "message_type": "text",
+        "content": "reject",
+    }
+    assert worker.apply_review_reply_event(config, base_event)["reason"] == "review_comment_required"
+    assert worker.apply_review_reply_event(
+        config,
+        {**base_event, "reply_to": "om_other", "content": "reject 方向偏离"},
+    )["reason"] == "unknown_review_notification"
+
+
+def test_review_listener_uses_bounded_filtered_bot_event_consumer(monkeypatch, tmp_path):
+    config = worker.WorkerConfig(
+        "base",
+        "table",
+        tmp_path / "lark.exe",
+        tmp_path,
+        tmp_path / "python.exe",
+        tmp_path,
+        review_recipient_user_id="ou_reviewer",
+    )
+    event = {"message_id": "om_reply", "chat_type": "p2p", "sender_type": "user"}
+    commands = []
+    monkeypatch.setattr(
+        worker.subprocess,
+        "run",
+        lambda command, **_kwargs: commands.append(command)
+        or worker.subprocess.CompletedProcess(command, 0, json.dumps(event) + "\n", "[event] ready\n"),
+    )
+    monkeypatch.setattr(
+        worker,
+        "apply_review_reply_event",
+        lambda _config, value: {"processed": True, "message_id": value["message_id"]},
+    )
+
+    result = worker.consume_review_events(config, max_events=1, timeout="30s")
+
+    assert result["events_received"] == 1
+    assert result["outcomes"][0]["processed"] is True
+    assert commands[0][1:4] == ["event", "consume", "im.message.receive_v1"]
+    assert commands[0][commands[0].index("--as") + 1] == "bot"
+    assert commands[0][commands[0].index("--max-events") + 1] == "1"
+    assert "ou_reviewer" in commands[0][commands[0].index("--jq") + 1]
+
+
 def test_publish_candidate_refuses_record_without_raw(monkeypatch, tmp_path):
     monkeypatch.setattr(worker, "ROOT", tmp_path)
     source = tmp_path / "candidate.md"

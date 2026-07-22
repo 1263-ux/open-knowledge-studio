@@ -44,6 +44,10 @@ CANDIDATE_FIELDS = [
     "Wiki路径",
 ]
 REVIEW_ACTIONS = {"accept", "edit", "reject", "defer"}
+REVIEW_ACTION_RE = re.compile(
+    r"(?<![A-Za-z])(accept|edit|reject|defer)(?![A-Za-z])",
+    re.IGNORECASE,
+)
 
 
 @dataclass(frozen=True)
@@ -578,9 +582,224 @@ def send_candidate_review_notification(
     return {
         "status": "sent",
         "message_id": data.get("message_id") or envelope.get("message_id"),
+        "chat_id": data.get("chat_id") or envelope.get("chat_id"),
         "identity": config.review_message_identity,
         "recipient": recipient,
         "idempotency_key": idempotency_key,
+    }
+
+
+def parse_review_reply(content: str) -> tuple[str, str]:
+    """Extract one explicit review action and preserve the user's explanation."""
+    text = str(content or "").strip()
+    matches = list(REVIEW_ACTION_RE.finditer(text))
+    actions = {match.group(1).lower() for match in matches}
+    if not matches:
+        raise ValueError("review reply must contain accept, edit, reject, or defer")
+    if len(actions) != 1:
+        raise ValueError("review reply contains conflicting actions")
+    action = next(iter(actions))
+    pieces: list[str] = []
+    cursor = 0
+    for match in matches:
+        pieces.append(text[cursor:match.start()])
+        cursor = match.end()
+    pieces.append(text[cursor:])
+    comment = " ".join(piece.strip() for piece in pieces if piece.strip())
+    comment = comment.strip("`*_# \\t\\r\\n:：,，;；。.!！?-—")
+    return action, comment
+
+
+def event_reviewed_at(value: object) -> str:
+    try:
+        milliseconds = int(str(value))
+    except (TypeError, ValueError):
+        return datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S")
+    return datetime.fromtimestamp(milliseconds / 1000, timezone.utc).astimezone().strftime(
+        "%Y-%m-%d %H:%M:%S"
+    )
+
+
+def find_candidate_state_for_reply(
+    event: dict[str, Any],
+) -> tuple[Path, dict[str, Any]] | None:
+    parent_ids = {
+        str(value)
+        for value in (event.get("reply_to"), event.get("root_id"))
+        if str(value or "").strip()
+    }
+    if not parent_ids:
+        return None
+    state_dir = ROOT / ".oks" / "candidates"
+    for path in sorted(state_dir.glob("*.json")):
+        value = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(value, dict):
+            continue
+        notification = value.get("review_notification")
+        if not isinstance(notification, dict) or notification.get("status") != "sent":
+            continue
+        if str(notification.get("message_id") or "") not in parent_ids:
+            continue
+        expected_sender = str(notification.get("recipient") or "")
+        if expected_sender and str(event.get("sender_id") or "") != expected_sender:
+            continue
+        expected_chat = str(notification.get("chat_id") or "")
+        if expected_chat and str(event.get("chat_id") or "") != expected_chat:
+            continue
+        return path, value
+    return None
+
+
+def record_review_event(
+    path: Path,
+    state: dict[str, Any],
+    event: dict[str, Any],
+    *,
+    action: str,
+    comment: str,
+) -> None:
+    receipts = state.get("review_reply_events")
+    if not isinstance(receipts, list):
+        receipts = []
+    receipts.append(
+        {
+            "message_id": str(event.get("message_id") or event.get("id") or ""),
+            "event_id": str(event.get("event_id") or ""),
+            "sender_id": str(event.get("sender_id") or ""),
+            "reply_to": str(event.get("reply_to") or ""),
+            "root_id": str(event.get("root_id") or ""),
+            "action": action,
+            "comment": comment,
+            "received_at": event_reviewed_at(event.get("create_time")),
+        }
+    )
+    state["review_reply_events"] = receipts
+    atomic_write_json(path, state)
+
+
+def apply_review_reply_event(
+    config: WorkerConfig,
+    event: dict[str, Any],
+) -> dict[str, Any]:
+    """Apply one direct reply to the exact Candidate notification it references."""
+    message_id = str(event.get("message_id") or event.get("id") or "").strip()
+    if not message_id:
+        return {"processed": False, "reason": "missing_message_id"}
+    if event.get("chat_type") != "p2p" or event.get("sender_type") != "user":
+        return {"processed": False, "reason": "not_personal_user_message", "message_id": message_id}
+    if event.get("message_type") not in {"text", "post"}:
+        return {"processed": False, "reason": "unsupported_message_type", "message_id": message_id}
+    resolved = find_candidate_state_for_reply(event)
+    if resolved is None:
+        return {"processed": False, "reason": "unknown_review_notification", "message_id": message_id}
+    state_path, state = resolved
+    receipts = state.get("review_reply_events")
+    if isinstance(receipts, list) and any(
+        str(item.get("message_id") or "") == message_id
+        for item in receipts
+        if isinstance(item, dict)
+    ):
+        return {
+            "processed": False,
+            "reason": "review_message_already_processed",
+            "message_id": message_id,
+            "record_id": state.get("record_id"),
+        }
+    try:
+        action, comment = parse_review_reply(str(event.get("content") or ""))
+    except ValueError as error:
+        return {
+            "processed": False,
+            "reason": "invalid_review_reply",
+            "message_id": message_id,
+            "record_id": state.get("record_id"),
+            "error": str(error),
+        }
+    if action in {"edit", "reject"} and not comment:
+        return {
+            "processed": False,
+            "reason": "review_comment_required",
+            "message_id": message_id,
+            "record_id": state.get("record_id"),
+            "action": action,
+        }
+    record_id = str(state.get("record_id") or "").strip()
+    if not record_id:
+        raise RuntimeError(f"Candidate state has no record_id: {state_path}")
+    patch = {
+        "审核动作": action,
+        "审核意见": comment or None,
+        "修改类型": ["无修改"] if action == "accept" else None,
+        "审核时间": event_reviewed_at(event.get("create_time")),
+    }
+    update_record(config, record_id, patch)
+    review_result = review_candidate(config, get_record(config, record_id))
+    latest = load_candidate_state(record_id)
+    record_review_event(state_path, latest, event, action=action, comment=comment)
+    return {
+        "processed": bool(review_result.get("processed")),
+        "message_id": message_id,
+        "record_id": record_id,
+        "candidate_id": state.get("candidate_id"),
+        "revision": state.get("revision"),
+        "action": action,
+        "review": review_result,
+    }
+
+
+def consume_review_events(
+    config: WorkerConfig,
+    *,
+    max_events: int,
+    timeout: str,
+) -> dict[str, Any]:
+    if max_events < 1:
+        raise ValueError("max_events must be at least 1")
+    jq_filter = 'select(.chat_type=="p2p" and .sender_type=="user")'
+    if config.review_recipient_user_id:
+        recipient = json.dumps(config.review_recipient_user_id, ensure_ascii=False)
+        jq_filter = f"{jq_filter} | select(.sender_id=={recipient})"
+    result = subprocess.run(
+        [
+            str(config.lark_cli),
+            "event",
+            "consume",
+            "im.message.receive_v1",
+            "--as",
+            "bot",
+            "--max-events",
+            str(max_events),
+            "--timeout",
+            timeout,
+            "--jq",
+            jq_filter,
+        ],
+        cwd=ROOT,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"Feishu review event consumer failed ({result.returncode}): "
+            f"{(result.stderr or result.stdout).strip()}"
+        )
+    events: list[dict[str, Any]] = []
+    outcomes: list[dict[str, Any]] = []
+    for line in result.stdout.splitlines():
+        if not line.strip():
+            continue
+        event = json.loads(line)
+        if not isinstance(event, dict):
+            continue
+        events.append(event)
+        outcomes.append(apply_review_reply_event(config, event))
+    return {
+        "events_received": len(events),
+        "outcomes": outcomes,
+        "consumer_stderr": result.stderr.strip(),
     }
 
 
@@ -719,8 +938,6 @@ def review_candidate(config: WorkerConfig, record: dict[str, Any]) -> dict[str, 
     )
     comment = str(fields.get("审核意见") or "").strip()
     change_types = fields.get("修改类型") if isinstance(fields.get("修改类型"), list) else []
-    if action in {"accept", "edit", "reject"} and not change_types:
-        raise RuntimeError(f"Review action {action} requires at least one 修改类型")
     if action in {"edit", "reject"} and not comment:
         raise RuntimeError(f"Review action {action} requires 审核意见")
     history_item = {
@@ -1775,6 +1992,12 @@ def parse_args() -> argparse.Namespace:
         help="Consume at most one new accept/edit/reject/defer action from Base.",
     )
     review.add_argument("--limit", type=int, default=100)
+    listen = subcommands.add_parser(
+        "listen-reviews",
+        help="Consume bounded Feishu personal replies and apply linked Candidate reviews.",
+    )
+    listen.add_argument("--max-events", type=int, default=1)
+    listen.add_argument("--timeout", default="5m")
     return parser.parse_args()
 
 
@@ -1809,6 +2032,14 @@ def main() -> int:
         return 0
     if args.command == "review-once":
         result = process_next_review(config, args.limit)
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return 0
+    if args.command == "listen-reviews":
+        result = consume_review_events(
+            config,
+            max_events=args.max_events,
+            timeout=args.timeout,
+        )
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return 0
     claimed = claim_next_record(config, args.limit)

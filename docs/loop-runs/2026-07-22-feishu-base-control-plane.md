@@ -125,7 +125,11 @@ oks recall "飞书 Base 控制面如何区分能力定义、单次运行、输�
 
 本轮已验证“Agent 总结和提问 → 用户明确判断 → Agent 写回 Base → Worker 晋升”的人工流程，但个人飞书消息/卡片尚未自动关联 Candidate 和 Worker。最小修复应向用户个人发送包含摘要、证据和关键问题的审核消息；只接受明确 `accept/edit/reject/defer`，并将 Candidate revision、审核内容和时间结构化写回 Base。Base 继续作为审计事实源，不要求用户填写机器字段。
 
-发送端已在上游集成分支完成首版：`publish-candidate` 会在配置 `OKS_FEISHU_REVIEW_USER_ID` 后立即向该个人发送 Agent 提供的 `review_summary`、最多三个 `review_questions` 和四种审核动作；同一 Candidate revision 使用稳定幂等键。未配置收件人时明确记录 `skipped`，发送失败时保留 `failed`，不会伪装成已通知。当前尚未实现“回复消息 → Candidate revision → Base 审核字段”的自动消费。
+发送端已在上游集成分支完成首版：`publish-candidate` 会在配置 `OKS_FEISHU_REVIEW_USER_ID` 后立即向该个人发送 Agent 提供的 `review_summary`、最多三个 `review_questions` 和四种审核动作；同一 Candidate revision 使用稳定幂等键。未配置收件人时明确记录 `skipped`，发送失败时保留 `failed`，不会伪装成已通知。
+
+回程链路现已实现为 `listen-reviews`：使用 bot 身份订阅 `im.message.receive_v1`，只接收指定用户的个人消息，并要求消息通过 `reply_to/root_id` 精确指向当前 Candidate revision 的审核通知。解析器只接受显式且不冲突的 `accept/edit/reject/defer`；`edit/reject` 必须附理由。命中后先把审核动作、原始意见和时间写回 Base，再复用既有 `review_candidate` 门禁执行状态转换或晋升；消息 ID 会写入本地 Candidate state，重复投递不会二次处理。普通私聊、群消息、其他人的回复和未引用审核通知的消息都不会猜测归属。
+
+真实运行证据：应用机器人已成功向当前用户发送一条开发测试消息，返回 `message_id=om_x100b693831dc50a0dda70266e6da91c`；用户确认在飞书收到。随后 `im.message.receive_v1` 以 bot 身份完成 WebSocket 连接并发出 ready marker，5 秒无事件后按 timeout 正常退出。该消息是发送通道测试，不绑定 Candidate，因此没有被回程消费者伪装成完整验收。尚待发送一条新的、绑定 Candidate revision 的审核通知，并由用户直接回复，才能关闭“消息 → Base → 晋升”的最后真实验收项。
 
 ### P4：Wiki trace 含本机绝对路径
 
