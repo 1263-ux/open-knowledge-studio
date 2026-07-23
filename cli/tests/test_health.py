@@ -38,6 +38,20 @@ def test_health_check_missing_frontmatter(kb_root):
     assert any("missing frontmatter" in w for w in result["warnings"])
 
 
+def test_health_check_ignores_readme_files(kb_root):
+    from knowledge_studio.health import run_health_check
+    wiki = kb_root / "wiki"
+    (wiki / "README.md").write_text("Vault instructions.", encoding="utf-8")
+    nested = wiki / "99-System"
+    nested.mkdir()
+    (nested / "README.md").write_text("System instructions.", encoding="utf-8")
+
+    result = run_health_check()
+
+    assert result["summary"]["total_wiki_pages"] == 0
+    assert not any("README.md" in warning for warning in result["warnings"])
+
+
 def test_health_check_missing_fields(kb_root):
     from knowledge_studio.health import run_health_check
     wiki = kb_root / "wiki" / "computing" / "concepts"

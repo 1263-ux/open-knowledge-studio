@@ -1,7 +1,7 @@
 # 自进化学习主 Loop：POC 任务清单与验收标准
 
 > 状态：当前唯一主任务
-> 更新日期：2026-07-21
+> 更新日期：2026-07-23
 > 原则：先用一条真实内容跑完整闭环，再根据观察到的问题微调；不并行扩张插件、视觉模型和复杂知识图谱。
 
 ## 1. POC 目标
@@ -59,7 +59,7 @@ POC 的成功单位不是“生成一个 Raw Bundle”，而是“一条真实�
 - [x] 写清“为什么保存”和“我想解决的问题”。
 - [x] 固定该记录、Run 和 Raw Bundle，整个 POC 不更换样本。
 
-Run 001 的 Obsidian Candidate 因价值低且偏离 Base 主线被人工拒绝，只保留为门控校准证据。正式 POC 种子已固定为 Run 002 的 OpenLineage Object Model，学习问题是“飞书 Base 控制面如何区分能力定义、单次运行、输入输出和人工审核门禁？”执行证据见 `loop-runs/2026-07-22-feishu-base-control-plane.md`。
+Run 001 的 Obsidian Candidate 因价值低且偏离 Base 主线被人工拒绝，只保留为门控校准证据。正式 POC 种子已固定为 Run 002 的 OpenLineage Object Model，学习问题是“飞书 Base 控制面如何区分能力定义、单次运行、输入输出和人工审核门禁？”阶段证据统一见 `phase-history-summary.md`。
 
 验收证据：Base record ID、Capture ID、Run ID、Raw Bundle 路径和一个学习问题。
 

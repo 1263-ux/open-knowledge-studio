@@ -39,7 +39,7 @@ wiki/（策展知识，带衰减）
 Studio 当前以飞书多维表格作为 Capture、状态与人工审核控制面，真实运行证据和待办集中在两份文档中：
 
 - **[自进化学习主 Loop](core-learning-loop-poc.md)** — 当前唯一实施清单与验收门；
-- **[飞书 Base 控制面运行记录](loop-runs/2026-07-22-feishu-base-control-plane.md)** — Capture → Raw → Candidate → 个人审核 → Wiki 的真实证据与限制。
+- **[阶段历史与验收简报](phase-history-summary.md)** — Capture → Raw → Candidate → 个人审核 → Wiki → Recall 的真实结果与限制。
 
 多模态 Raw 协议的机器事实源位于独立 `oks-connector` 仓库的 `schemas/` 与 `capabilities/`；Studio 只保留生命周期和调用入口，不复制第二套 Schema。
 

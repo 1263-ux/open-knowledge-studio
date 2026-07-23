@@ -29,7 +29,7 @@ def run_health_check() -> dict:
     dropped_pages = 0
     if wd.is_dir():
         for md in sorted(wd.rglob("*.md")):
-            if md.name == "INDEX.md":
+            if md.name.lower() in {"index.md", "readme.md"}:
                 continue
             total_pages += 1
             result = _check_wiki_page(md, errors, warnings)

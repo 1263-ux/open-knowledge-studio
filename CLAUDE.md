@@ -122,3 +122,11 @@ oks config init | show | set <key> <value>
 - **Git IS the migration** — no database, schema changes versioned through _meta/.
 - **Atomic writes** — all persistent writes use mkstemp + fsync + os.replace.
 - **Never auto-promote** raw content to wiki/ without human review.
+
+## Project-specific safety rules
+
+- The operational personal knowledge instance is `D:\knowledge\oks-personal-knowledge`; this repository is reusable Studio code and must not remain the long-term destination for personal Wiki or Raw state.
+- Every `git push`, Pull Request create/update/close, Merge, Pages/Release publication, deployment, remote setting change, or external message requires the user's explicit authorization for that exact action. A general “continue” or authorization for a different action does not count.
+- Without that authorization, stop after local editing, validation, diff review, and read-only remote inspection. A Draft PR is still an external action.
+- Context compaction is controlled by the client or runtime; this file cannot set an automatic threshold or reveal an unexposed usage percentage. If the client explicitly reports 80% usage, or at major milestones and around unusually large tool output, preserve a structured checkpoint before invoking an actually available compaction mechanism.
+- Preserve `partial`, `failed`, and `skipped` states exactly. Mechanical extraction, AI interpretation, human review, and Wiki promotion are separate layers and must remain traceable.

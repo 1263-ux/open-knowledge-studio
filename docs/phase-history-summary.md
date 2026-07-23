@@ -1,105 +1,97 @@
-# 阶段历史简报
+# 阶段历史与验收简报
 
-> 截止日期：2026-07-21
-> 目的：用一份短报告保留项目过去阶段做过什么、证明了什么、还没有证明什么。旧实验报告已从当前文档集中移除；详细实现历史仍可通过 Git 提交和测试产物追溯。
+> 截止日期：2026-07-23
+> 目的：用这一份报告说明项目做过什么、真实通过了什么、仍缺什么。详细事实保存在 Base、Raw Bundle、Wiki、测试和 Git 历史中，不再维护重复的逐日 Run 文档。
 
-## 1. Studio 基础阶段
+## 1. 已形成的系统边界
 
-项目原有能力包括：
+- Studio 负责 Capture 编排、Candidate、人工审核、Wiki、召回和反馈。
+- 独立 `oks-connector` 负责文件/链接获取后的机械解析、证据、质量和逐模态状态。
+- Raw、AI 理解和 Wiki 分层保存；未经人工审核不得自动晋升。
+- 当前协议事实源是 `oks-connector/schemas/`、`capabilities/` 和 `docs/protocols-v0.1.md`。
+- 个人知识与代码仓库已经分离：运行实例位于 `D:\knowledge\oks-personal-knowledge`。
 
-- `profiles/raw/drafts/wiki/settings` 五桶结构；
-- Raw → Draft → 人工审核 → Wiki 的 Dreaming 思路；
-- 基于 Markdown/YAML 和 Git 的知识管理；
-- CLI search/recall、Wiki 生命周期、衰减和人工晋升约束。
+## 2. 已真实验证的解析能力
 
-长期保留的不变量是：Raw 与知识分离，AI 可以提出 Candidate，但不能未经人工审核直接晋升 Wiki。
-
-## 2. 多模态 Raw 原型阶段
-
-项目复用了成熟工具，没有重写解析器：
-
-| 输入 | 能力 | 真实结果快照 |
+| 输入 | 复用能力 | 真实边界 |
 |---|---|---|
-| DOCX | MarkItDown | 真实项目计划生成文档级 evidence；定位粒度有限 |
-| 15 页 PPTX | MarkItDown | 15 条幻灯片 evidence，内嵌媒体保留 |
-| 7 页数字 PDF | MinerU | 299 条 evidence |
-| 13 页扫描 PDF | MinerU | 322 条 evidence |
-| 公式图片 | RapidOCR | 154 条 evidence，其中 153 个 OCR 块 |
-| 正常语速音频 | faster-whisper | 60 条时间戳 ASR |
-| 困难高速音频 | faster-whisper | 0 条，诚实标为 failed |
-| 本地技术视频 | Watch + OCR + ASR | 376 条 evidence：12 帧、37 ASR、327 OCR |
-| 飞书视频附件 | Watch + OCR | 339 条 evidence：12 帧、0 ASR、327 OCR |
+| DOCX/PPTX | MarkItDown | 能生成 Markdown 与页/幻灯片 evidence，定位粒度有限 |
+| 数字/扫描 PDF | MinerU | 能生成正文、版面和图片证据；公式/OCR 未人工逐项校对 |
+| 图片 | RapidOCR | 保存文字、置信度、bbox 和原图；不等于 AI 视觉理解 |
+| 音频 | faster-whisper | 正常语速可形成时间戳 ASR；困难样本可能真实失败 |
+| 视频 | Watch、yt-dlp、OCR、ASR | 已取得的本地媒体可生成字幕/帧证据；平台 URL 获取仍受风控限制 |
+| 公开 HTML | HTTP/浏览器快照、Trafilatura | 静态和受控浏览器样本已通过；登录、验证码和付费墙不保证成功 |
 
-这些结果证明“已经取得的本地文件可以形成可定位 Raw”，不证明任意互联网链接都可以取得。OCR、ASR、公式和版面结果未经人工校对，因此成功产物通常是 `partial`。
+`valid=true` 只表示 Bundle 结构与证据一致，不表示 OCR、ASR、公式或语义百分之百正确。真实成功产物仍可能是 `partial`。
 
-## 3. Connector 迁移与协议阶段
+## 3. 飞书 Base 主 Loop 实验
 
-多模态能力被迁移到独立 `oks-connector`，Studio 保留编排职责。形成了：
+测试 Base：
 
-- Capability Manifest；
-- Capture Envelope；
-- Fetch Receipt；
-- Processing Run；
-- Raw Bundle v0.2；
-- 明确的逐模态状态、错误、来源快照和简化 PROV 血缘；
-- `validate`/`validate-v2` 机械完整性检查。
+- 名称：`Open Knowledge Studio Raw Pipeline Test`
+- Base token：`STeHbEo5lalFR9soQWIcuZAunxg`
+- Table：`tblOtwfofnnSwL3f`
+- Base 是采集、运行状态和人工审核的控制面，不替代 Raw 文件与 Wiki。
 
-当前机器事实源：
+真实闭环样本：
 
-- `oks-connector/schemas/`
-- `oks-connector/capabilities/`
-- `oks-connector/docs/protocols-v0.1.md`
+| 决策 | Base record | Run | 结果 |
+|---|---|---|---|
+| `reject` | `recvq1fpIyaVS9` | `run-20260721T224656-c88cddfa` | Obsidian Clipper Candidate 因价值低、方向偏离被拒绝；没有 Wiki |
+| `accept` | `recvq6nZfwztXx` | `run-20260722T195226-7db4031f` | 晋升 `wiki/computing/strategies/20260722-base.md` |
+| `accept` | `recvq6Yr6qZGiX` | `run-20260722T222212-284bc2c7` | 个人飞书回复后晋升 `wiki/computing/strategies/20260722-feishu-review-return-provenance.md` |
 
-2026-07-19 检查点：connector 33 项测试、Studio 69 项测试通过；两个开发分支均已推送远程备份。
-
-## 4. 飞书 Base POC 阶段
-
-当前账号建立了 `Open Knowledge Studio Raw Pipeline Test`，作为采集和运行控制面。2026-07-19 的全表快照共 7 条：
-
-- 5 条 `Raw就绪`：公开静态 HTML、TXT 附件、PDF 附件、直接 PDF URL、公开浏览器 JS 快照；
-- 1 条 `需授权`：微信公众号 Challenge，未生成 Raw；
-- 1 条 `可重试失败`：Bilibili URL 返回 HTTP 412，未生成 Raw。
-
-Worker 已实现：
-
-- 领取记录、Run ID 和内容哈希；
-- 本机跨进程 lease、超时回收和正常释放；
-- 附件下载与哈希；
-- 公开 HTTP、直接文件、浏览器快照和平台提取器路由；
-- 成功、部分成功、需授权和可重试失败的诚实回写。
-
-本机 lease 不是多主机分布式锁；飞书记录更新 API 没有被宣称为 CAS。
-
-## 5. 已经成立的能力边界
-
-可以诚实声称：
+第二个接受样本实际走过：
 
 ```text
-已取得的 HTML / PDF / Office / 图片 / 音频 / MP4
-  → 成熟解析器
-  → content.md + evidence.jsonl + assets + quality report
-  → 可验证 Raw
+Base Capture
+  → web.trafilatura
+  → Raw Bundle v0.2（421 条 evidence，总状态 partial）
+  → Agent Teach-back Candidate
+  → 个人飞书审核通知
+  → 用户回复 “accept，有研究价值”
+  → 审核事实写回 Base
+  → Wiki 晋升
+  → OKS recall
 ```
 
-尚不能声称：
+飞书 P2P 消息 API 没有为该 UI 回复暴露 `parent_id/root_id`。系统没有伪造原生引用，而是在“同一私聊、指定审核人、恰好一个待审 Candidate、相邻消息、单一明确动作”的约束下使用 `p2p_sequence_fallback`，并在状态中留痕。
 
-- 任意 URL 都能自动取得；
-- 能绕过登录、CAPTCHA、付费墙或平台风控；
-- Bilibili/YouTube 平台 URL 已成功形成 Raw；
-- Raw 的机器文本等于人工校对后的正确内容；
-- 当前新 Base 已经完成 Raw → Candidate → Wiki → 新任务召回闭环；
-- 当前 recall 的 token overlap 等于真正的语义检索。
+## 4. 2026-07-23 收口验收
 
-## 6. 历史阶段留下的关键经验
+- `oks-connector`：33 项测试通过。
+- Studio：96 项测试通过。
+- 两个全新 Worker 进程连续运行 `review-once`，均返回 `no_pending_reviews`。
+- 两次重复消费前后共 75 个 Candidate/Wiki/Draft 文件，数量与 SHA-256 全部不变。
+- Base 当前可回读 2 条 `promoted`、1 条 `rejected`；失败、需授权和 `partial` 状态仍如实保留。
+- OKS 全局 `knowledge_base_path` 已设置为 `D:\knowledge\oks-personal-knowledge`。
+- 从代码仓库目录执行真实 recall，命中两篇个人 Wiki，并能继续回到 Raw evidence。
 
-1. “工具已安装”不等于 URL 获取成功；资源获取层是当前主要缺口。
-2. `valid=true` 只表示结构和证据一致，不表示 OCR/ASR/公式百分之百正确。
-3. Raw 必须保存错误和失败，不能由 AI 补写看似合理的内容。
-4. 平台媒体未长期保存时，只能记录来源引用，不能伪造媒体内容哈希。
-5. 浏览器和飞书是入口，不能把 Cookie、Token 或完整登录态写入 Raw。
-6. Wiki 设计必须通过真实使用迭代，不能先构建复杂本体。
-7. 下一阶段的唯一主线是 `Capture → Raw → Candidate → Review → Wiki → Recall → Feedback → PR`。
+## 5. 私有备份与恢复
 
-## 7. 当前起点
+私有仓库：`1263-ux/oks-personal-knowledge`。
 
-后续执行统一以[自进化学习主 Loop](core-learning-loop-poc.md)为准。先用一条已成功生成 Raw 的公开文章跑完整闭环；完成验收后，再扩展到平台视频、群聊内容和 Obsidian 入口。
+首轮备份包含：
+
+- 2 篇已晋升 Wiki；
+- 2 个对应 Raw Bundle v0.2；
+- 1 个历史批准的口播 Raw 样本；
+- Capture、晋升与迁移索引。
+
+全新克隆恢复验证已通过：JSON/JSONL 可解析、两个来源快照 SHA-256 匹配、Wiki/Raw 索引可解析、召回与 evidence trace 命中、敏感信息和本机绝对路径扫描为零。原始大媒体、凭据、临时消息映射、`.venv` 和模型缓存不进入 Git。
+
+## 6. 仍未完成
+
+- 平台 URL 获取没有通用成功保证；登录浏览器、官方接口和付费兜底仍需按平台实践。
+- 飞书审核监听器尚未部署为常驻服务。
+- 当前改进尚未整理成面向上游的小范围 PR，也没有 Merge。
+- GitHub Pages 未修改、未发布。
+- 旧 worktree 尚未清理；必须等目标改进通过授权后的 PR/Merge 与最终恢复复核。
+- `.venv` 和模型缓存继续保留，是否删除另行决定。
+
+## 7. 下一门禁
+
+1. 以个人知识仓库作为后续 Worker 的 `output_root`，代码仓库不再积累个人 Raw/Wiki。
+2. 从现有宽分支中提取最小上游改进，先在本地展示 diff、测试和回退方式。
+3. 只有用户明确授权后，才 Push、创建 PR、Merge 或发布 Pages。
+4. PR 合并且个人仓库再次恢复验证通过后，才提出旧 worktree 清理清单。
