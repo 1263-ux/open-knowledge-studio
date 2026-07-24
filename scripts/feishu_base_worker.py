@@ -47,6 +47,7 @@ CANDIDATE_FIELDS = [
 CAPTURE_FIELDS = [
     "内容",
     "思考",
+    "希望解决的问题",
     "附件",
     "运行状态",
     "运行ID",
@@ -74,6 +75,7 @@ class WorkerConfig:
     lease_seconds: int = 3600
     review_recipient_user_id: str | None = None
     review_message_identity: str = "bot"
+    knowledge_root: Path | None = None
 
 
 def utc_now() -> str:
@@ -163,13 +165,20 @@ def load_config(args: argparse.Namespace) -> WorkerConfig:
     ).expanduser().resolve()
     if not connector_python.is_file():
         raise RuntimeError(f"connector Python not found: {connector_python}")
+    knowledge_root = Path(
+        args.knowledge_root
+        or os.environ.get("OKS_KNOWLEDGE_ROOT")
+        or ROOT
+    ).expanduser().resolve()
     return WorkerConfig(
         base_token=base_token,
         table_id=table_id,
         lark_cli=resolve_lark_cli(),
         connector_repo=connector_repo,
         connector_python=connector_python,
-        output_root=Path(args.output_root or ROOT / ".oks" / "intake").expanduser().resolve(),
+        output_root=Path(
+            args.output_root or knowledge_root / "raw" / "feishu-intake"
+        ).expanduser().resolve(),
         lease_seconds=int(args.lease_seconds),
         review_recipient_user_id=(
             args.review_recipient_user_id
@@ -181,7 +190,12 @@ def load_config(args: argparse.Namespace) -> WorkerConfig:
             or os.environ.get("OKS_FEISHU_REVIEW_MESSAGE_IDENTITY")
             or "bot"
         ),
+        knowledge_root=knowledge_root,
     )
+
+
+def configured_knowledge_root(config: WorkerConfig) -> Path:
+    return (config.knowledge_root or ROOT).expanduser().resolve()
 
 
 def parse_json_output(result: subprocess.CompletedProcess[str], *, allow_codes: set[int] = {0}) -> dict[str, Any]:
@@ -952,6 +966,38 @@ def reconcile_historical_review_reply(
     return outcome
 
 
+def apply_review_event_with_fallback(
+    config: WorkerConfig,
+    event: dict[str, Any],
+) -> dict[str, Any]:
+    outcome = apply_review_reply_event(config, event)
+    if outcome.get("reason") != "unknown_review_notification":
+        return outcome
+    chat_id = str(event.get("chat_id") or "").strip()
+    message_id = str(event.get("message_id") or event.get("id") or "").strip()
+    if not chat_id or not message_id:
+        return outcome
+    pending = pending_review_states_in_chat(chat_id)
+    if len(pending) != 1:
+        return outcome
+    notification = pending[0][1].get("review_notification")
+    prompt_message_id = (
+        str(notification.get("message_id") or "").strip()
+        if isinstance(notification, dict)
+        else ""
+    )
+    if not prompt_message_id:
+        return outcome
+    try:
+        return reconcile_historical_review_reply(
+            config,
+            prompt_message_id=prompt_message_id,
+            reply_message_id=message_id,
+        )
+    except RuntimeError as error:
+        return {**outcome, "fallback_error": str(error)}
+
+
 def consume_review_events(
     config: WorkerConfig,
     *,
@@ -1000,7 +1046,7 @@ def consume_review_events(
         if not isinstance(event, dict):
             continue
         events.append(event)
-        outcomes.append(apply_review_reply_event(config, event))
+        outcomes.append(apply_review_event_with_fallback(config, event))
     return {
         "events_received": len(events),
         "outcomes": outcomes,
@@ -1030,7 +1076,8 @@ def publish_candidate(
     candidate_id = re.sub(r"[^a-z0-9-]+", "-", source.stem.lower()).strip("-")
     if not candidate_id:
         candidate_id = f"feishu-{record_id.lower()}"
-    target = ROOT / "drafts" / f"{candidate_id}.md"
+    knowledge_root = configured_knowledge_root(config)
+    target = knowledge_root / "drafts" / f"{candidate_id}.md"
     metadata["status"] = "draft"
     source_pages = metadata.get("source_pages", [])
     if not isinstance(source_pages, list):
@@ -1052,7 +1099,7 @@ def publish_candidate(
         if value:
             execution_trace[key] = value
     try:
-        execution_trace["path"] = raw_path.relative_to(ROOT.resolve()).as_posix()
+        execution_trace["path"] = raw_path.relative_to(knowledge_root).as_posix()
     except ValueError:
         pass
     trace_values = [
@@ -1076,7 +1123,11 @@ def publish_candidate(
         "schema_version": "oks-feishu-candidate/v0.1",
         "record_id": record_id,
         "candidate_id": candidate_id,
-        "candidate_path": target.relative_to(ROOT).as_posix(),
+        "candidate_path": (
+            target.relative_to(ROOT).as_posix()
+            if knowledge_root == ROOT.resolve()
+            else str(target)
+        ),
         "candidate_sha256": hashlib.sha256(document.encode("utf-8")).hexdigest(),
         "raw_bundle": str(raw_path),
         "run_id": scalar_cell(fields.get("运行ID")),
@@ -1117,6 +1168,8 @@ def promote_candidate_document(
     candidate_path: Path,
     reviewed_body: str,
     review: dict[str, Any],
+    *,
+    knowledge_root: Path | None = None,
 ) -> Path:
     metadata, _body = parse_candidate_document(candidate_path.read_text(encoding="utf-8"))
     metadata["status"] = "draft"
@@ -1127,11 +1180,20 @@ def promote_candidate_document(
         sys.path.insert(0, cli_root)
     from knowledge_studio import store
 
-    promoted_slug = store.promote_draft(
-        candidate_path.stem,
-        slug_hint=candidate_path.stem,
-    )
-    page = store.get_wiki_page(promoted_slug)
+    previous_root = os.environ.get("OKS_ROOT")
+    if knowledge_root is not None:
+        os.environ["OKS_ROOT"] = str(knowledge_root)
+    try:
+        promoted_slug = store.promote_draft(
+            candidate_path.stem,
+            slug_hint=candidate_path.stem,
+        )
+        page = store.get_wiki_page(promoted_slug)
+    finally:
+        if previous_root is None:
+            os.environ.pop("OKS_ROOT", None)
+        else:
+            os.environ["OKS_ROOT"] = previous_root
     if not page or not page.get("file_path"):
         raise RuntimeError(f"Promoted Wiki page cannot be resolved: {promoted_slug}")
     return Path(page["file_path"]).resolve()
@@ -1149,10 +1211,17 @@ def review_candidate(config: WorkerConfig, record: dict[str, Any]) -> dict[str, 
     fingerprint = candidate_review_fingerprint(fields)
     if state.get("last_review_fingerprint") == fingerprint:
         return {"processed": False, "reason": "review_already_processed", "record_id": record_id}
-    relative_candidate = Path(str(state["candidate_path"]))
-    candidate_path = (ROOT / relative_candidate).resolve()
-    if ROOT.resolve() not in candidate_path.parents or not candidate_path.is_file():
-        raise RuntimeError(f"Candidate file is unavailable or outside Studio: {candidate_path}")
+    knowledge_root = configured_knowledge_root(config)
+    stored_candidate = Path(str(state["candidate_path"]))
+    candidate_path = (
+        stored_candidate.resolve()
+        if stored_candidate.is_absolute()
+        else (ROOT / stored_candidate).resolve()
+    )
+    if knowledge_root not in candidate_path.parents or not candidate_path.is_file():
+        raise RuntimeError(
+            f"Candidate file is unavailable or outside the configured knowledge root: {candidate_path}"
+        )
 
     reviewed_at = scalar_cell(fields.get("审核时间")) or datetime.now().astimezone().strftime(
         "%Y-%m-%d %H:%M:%S"
@@ -1185,11 +1254,12 @@ def review_candidate(config: WorkerConfig, record: dict[str, Any]) -> dict[str, 
                 "lesson": comment,
                 "reviewed_at": str(reviewed_at),
             },
+            knowledge_root=knowledge_root,
         )
         patch = {
             "运行状态": "已晋升",
             "Wiki状态": "promoted",
-            "Wiki路径": wiki_path.relative_to(ROOT).as_posix(),
+            "Wiki路径": wiki_path.relative_to(knowledge_root).as_posix(),
         }
     elif action == "reject":
         metadata, body = parse_candidate_document(candidate_path.read_text(encoding="utf-8"))
@@ -1217,7 +1287,7 @@ def review_candidate(config: WorkerConfig, record: dict[str, Any]) -> dict[str, 
     state["last_review_action"] = action
     state["last_reviewed_at"] = reviewed_at
     if wiki_path is not None:
-        state["wiki_path"] = wiki_path.relative_to(ROOT).as_posix()
+        state["wiki_path"] = wiki_path.relative_to(knowledge_root).as_posix()
     atomic_write_json(candidate_state_path(record_id), state)
     update_record(config, record_id, patch)
     return {"processed": True, "record_id": record_id, "action": action, "patch": patch}
@@ -1265,12 +1335,23 @@ def normalize_attachments(value: object) -> list[dict[str, Any]]:
     return sorted(attachments, key=lambda item: (item["source_token"], item["name"]))
 
 
+def capture_user_note(fields: dict[str, Any]) -> str | None:
+    thought = str(fields.get("思考") or "").strip()
+    question = str(fields.get("希望解决的问题") or "").strip()
+    parts = []
+    if thought:
+        parts.append(thought)
+    if question:
+        parts.append(f"希望解决的问题：{question}")
+    return "\n\n".join(parts) or None
+
+
 def capture_content_hash(fields: dict[str, Any]) -> str:
     canonical = {
         "source_type": "feishu_base",
         "source_uri": extract_url(fields.get("内容")),
         "content": fields.get("内容"),
-        "user_note": fields.get("思考"),
+        "user_note": capture_user_note(fields),
         "attachments": normalize_attachments(fields.get("附件")),
     }
     payload = json.dumps(canonical, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
@@ -1300,7 +1381,7 @@ def capture_envelope(config: WorkerConfig, record_id: str, fields: dict[str, Any
         "source_uri": f"feishu-base://{config.base_token}/{config.table_id}/{record_id}",
         "captured_at": utc_now(),
         "submitted_by": None,
-        "user_note": fields.get("思考"),
+        "user_note": capture_user_note(fields),
         "content": fields.get("内容"),
         "content_hash": content_hash,
         "hash_algorithm": "sha256-canonical-json-v1",
@@ -2185,6 +2266,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--connector-repo")
     parser.add_argument("--connector-python")
     parser.add_argument("--output-root")
+    parser.add_argument("--knowledge-root")
     parser.add_argument("--lease-seconds", type=int, default=3600)
     parser.add_argument("--review-recipient-user-id")
     parser.add_argument(

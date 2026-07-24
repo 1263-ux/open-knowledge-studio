@@ -111,6 +111,18 @@ def test_attachment_change_changes_capture_hash():
     assert worker.capture_content_hash(original) != worker.capture_content_hash(changed)
 
 
+def test_question_is_preserved_in_user_note_and_capture_hash():
+    original = {
+        "内容": "https://example.com",
+        "思考": "值得学习",
+        "希望解决的问题": "先学什么？",
+    }
+    changed = {**original, "希望解决的问题": "学完能做什么？"}
+
+    assert worker.capture_user_note(original) == "值得学习\n\n希望解决的问题：先学什么？"
+    assert worker.capture_content_hash(original) != worker.capture_content_hash(changed)
+
+
 def test_downloaded_attachment_sha_changes_final_envelope_hash(tmp_path):
     fields = {
         "内容": "attachment only",
@@ -237,6 +249,77 @@ def test_publish_candidate_requires_raw_and_writes_visible_review_state(monkeypa
         "bundle_id": "bundle:capture_1:run_1",
         "path": "raw-bundle",
     }
+
+
+def test_publish_candidate_writes_draft_to_configured_personal_root(monkeypatch, tmp_path):
+    studio_root = tmp_path / "studio"
+    personal_root = tmp_path / "personal"
+    raw = personal_root / "raw" / "bundle"
+    raw.mkdir(parents=True)
+    (raw / "bundle.json").write_text(
+        json.dumps({"capture_id": "capture_1", "bundle_id": "bundle_1"}),
+        encoding="utf-8",
+    )
+    source = tmp_path / "personal-candidate.md"
+    source.write_text(candidate_document(), encoding="utf-8")
+    monkeypatch.setattr(worker, "ROOT", studio_root)
+    config = worker.WorkerConfig(
+        "base",
+        "table",
+        tmp_path / "lark.exe",
+        tmp_path,
+        tmp_path / "python.exe",
+        raw.parent,
+        knowledge_root=personal_root,
+    )
+    monkeypatch.setattr(
+        worker,
+        "get_record",
+        lambda *_: {
+            "record_id": "rec_personal",
+            "fields": {"运行状态": "Raw就绪", "Raw Bundle": str(raw), "运行ID": "run_1"},
+        },
+    )
+    monkeypatch.setattr(worker, "update_record", lambda *_: {})
+    monkeypatch.setattr(
+        worker,
+        "send_candidate_review_notification",
+        lambda *_args, **_kwargs: {"status": "disabled"},
+    )
+
+    state = worker.publish_candidate(config, "rec_personal", source)
+
+    candidate = personal_root / "drafts" / "personal-candidate.md"
+    assert candidate.is_file()
+    assert state["candidate_path"] == str(candidate)
+    assert Path(state["candidate_path"]).is_absolute()
+
+
+def test_promote_candidate_document_uses_configured_personal_root(monkeypatch, tmp_path):
+    studio_root = tmp_path / "studio"
+    personal_root = tmp_path / "personal"
+    candidate = personal_root / "drafts" / "personal-candidate.md"
+    candidate.parent.mkdir(parents=True)
+    candidate.write_text(candidate_document(), encoding="utf-8")
+    monkeypatch.setattr(worker, "ROOT", studio_root)
+    monkeypatch.setenv("OKS_ROOT", str(studio_root))
+
+    wiki_path = worker.promote_candidate_document(
+        candidate,
+        worker.parse_candidate_document(candidate.read_text(encoding="utf-8"))[1],
+        {
+            "outcome": "success",
+            "decision_correct": True,
+            "lesson": "验收通过",
+            "reviewed_at": "2026-07-24 12:00:00",
+        },
+        knowledge_root=personal_root,
+    )
+
+    assert wiki_path.is_relative_to(personal_root / "wiki")
+    assert wiki_path.is_file()
+    assert not (studio_root / "wiki").exists()
+    assert worker.os.environ["OKS_ROOT"] == str(studio_root)
 
 
 def test_render_candidate_review_message_uses_agent_summary_and_questions():
@@ -518,6 +601,90 @@ def test_reconcile_historical_review_uses_strict_p2p_sequence_fallback(monkeypat
     assert events[0]["content"] == "accept, useful"
 
 
+def test_unknown_standalone_review_automatically_uses_strict_sequence_fallback(
+    monkeypatch, tmp_path
+):
+    config = worker.WorkerConfig(
+        "base", "table", tmp_path / "lark.exe", tmp_path, tmp_path / "python.exe", tmp_path
+    )
+    state = {
+        "review_notification": {
+            "status": "sent",
+            "message_id": "om_prompt",
+            "chat_id": "oc_personal",
+        }
+    }
+    monkeypatch.setattr(
+        worker,
+        "apply_review_reply_event",
+        lambda *_args: {
+            "processed": False,
+            "reason": "unknown_review_notification",
+            "message_id": "om_reply",
+        },
+    )
+    monkeypatch.setattr(
+        worker,
+        "pending_review_states_in_chat",
+        lambda chat_id: [(tmp_path / "state.json", state)]
+        if chat_id == "oc_personal"
+        else [],
+    )
+    reconciled = []
+    monkeypatch.setattr(
+        worker,
+        "reconcile_historical_review_reply",
+        lambda _config, **kwargs: reconciled.append(kwargs)
+        or {"processed": True, "correlation_method": "p2p_sequence_fallback"},
+    )
+
+    result = worker.apply_review_event_with_fallback(
+        config,
+        {
+            "message_id": "om_reply",
+            "chat_id": "oc_personal",
+        },
+    )
+
+    assert result["processed"] is True
+    assert reconciled == [
+        {
+            "prompt_message_id": "om_prompt",
+            "reply_message_id": "om_reply",
+        }
+    ]
+
+
+def test_standalone_review_fallback_does_not_guess_between_candidates(monkeypatch, tmp_path):
+    config = worker.WorkerConfig(
+        "base", "table", tmp_path / "lark.exe", tmp_path, tmp_path / "python.exe", tmp_path
+    )
+    monkeypatch.setattr(
+        worker,
+        "apply_review_reply_event",
+        lambda *_args: {
+            "processed": False,
+            "reason": "unknown_review_notification",
+            "message_id": "om_reply",
+        },
+    )
+    monkeypatch.setattr(
+        worker,
+        "pending_review_states_in_chat",
+        lambda _chat_id: [
+            (tmp_path / "one.json", {}),
+            (tmp_path / "two.json", {}),
+        ],
+    )
+
+    result = worker.apply_review_event_with_fallback(
+        config,
+        {"message_id": "om_reply", "chat_id": "oc_personal"},
+    )
+
+    assert result["reason"] == "unknown_review_notification"
+
+
 def test_review_write_read_retries_a_stale_base_snapshot(monkeypatch, tmp_path):
     config = worker.WorkerConfig(
         "base", "table", tmp_path / "lark.exe", tmp_path, tmp_path / "python.exe", tmp_path
@@ -753,7 +920,7 @@ def test_accept_review_promotes_exact_base_content(monkeypatch, tmp_path):
     monkeypatch.setattr(
         worker,
         "promote_candidate_document",
-        lambda path, body, review: promoted.append((path, body, review)) or wiki,
+        lambda path, body, review, **_kwargs: promoted.append((path, body, review)) or wiki,
     )
     updates = []
     monkeypatch.setattr(worker, "update_record", lambda _c, _r, patch: updates.append(patch) or {})
