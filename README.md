@@ -39,6 +39,28 @@ oks search "git branch"             # (empty on a fresh instance — add knowled
 Why pipx? Recent systems ship PEP 668 "externally-managed" Pythons, so a bare
 `pip install` fails out of the box. Per-OS setup:
 
+Optional source intake stays outside the core dependency set:
+
+```bash
+pipx inject open-knowledge-studio oks-connector
+oks ingest <URL> --mode quick
+oks ingest <URL> --mode forensic --timeout-seconds 900
+```
+
+To test this fork before a PyPI release, install directly from GitHub:
+
+```bash
+pipx install "git+https://github.com/1263-ux/open-knowledge-studio.git@codex/upstream-v0.2.3-integration#subdirectory=cli"
+pipx inject open-knowledge-studio "git+https://github.com/1263-ux/oks-connector.git@codex/raw-poc-validation"
+```
+
+If Connector is absent, `oks ingest` shows this exact action prominently; it
+only runs `pipx inject` when you explicitly pass `--install`. Feishu Base is an
+optional extension: `oks feishu auth`, `oks feishu form --url <form-url>`,
+`oks feishu run-once`, and bounded `oks feishu listen` retain user-controlled
+login and review. See `docs/handoff-cli-feishu-loop-20260724.md` for setup and
+operational boundaries.
+
 | OS | Get pipx | Note |
 |----|----------|------|
 | Linux (Debian/Ubuntu) | `sudo apt install pipx` | System pip is PEP 668 protected — bare `pip install` errors with `externally-managed-environment` |
