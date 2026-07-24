@@ -142,7 +142,17 @@ def _connector_install_hint() -> str:
 
 
 def _connector_command() -> str | None:
-    return shutil.which("oks-connector")
+    """Find Connector on PATH or beside the interpreter that runs ``oks``.
+
+    ``pipx inject`` installs an injected console script in the app venv but
+    deliberately does not expose that script on the user's PATH.
+    """
+    command = shutil.which("oks-connector")
+    if command is not None:
+        return command
+    suffix = ".exe" if sys.platform == "win32" else ""
+    injected = Path(sys.executable).parent / f"oks-connector{suffix}"
+    return str(injected) if injected.is_file() else None
 
 
 def _recommended_capability(source: str) -> str:

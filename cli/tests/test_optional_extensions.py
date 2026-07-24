@@ -26,6 +26,16 @@ def test_ingest_recommends_the_pdf_component(monkeypatch):
     assert "oks-connector[pdf]" in result.output
 
 
+def test_connector_command_finds_pipx_injected_script_beside_oks_interpreter(monkeypatch, tmp_path):
+    script_name = "oks-connector.exe" if cli.sys.platform == "win32" else "oks-connector"
+    injected = tmp_path / script_name
+    injected.touch()
+    monkeypatch.setattr(cli.shutil, "which", lambda _name: None)
+    monkeypatch.setattr(cli.sys, "executable", str(tmp_path / "python"))
+
+    assert cli._connector_command() == str(injected)
+
+
 def test_ingest_forwards_mode_timeout_and_progress(monkeypatch):
     command = []
 
