@@ -47,6 +47,18 @@ assert _W_SPEC and _W_SPEC.loader
 watch_module = importlib.util.module_from_spec(_W_SPEC)
 _W_SPEC.loader.exec_module(watch_module)
 
+NET_PATH = Path(__file__).parents[1] / "network.py"
+_NET_SPEC = importlib.util.spec_from_file_location("network", NET_PATH)
+assert _NET_SPEC and _NET_SPEC.loader
+network_module = importlib.util.module_from_spec(_NET_SPEC)
+_NET_SPEC.loader.exec_module(network_module)
+
+VAL_PATH = Path(__file__).parents[1] / "validator.py"
+_VAL_SPEC = importlib.util.spec_from_file_location("validator", VAL_PATH)
+assert _VAL_SPEC and _VAL_SPEC.loader
+validator_module = importlib.util.module_from_spec(_VAL_SPEC)
+_VAL_SPEC.loader.exec_module(validator_module)
+
 
 class FakeProbeResponse:
     def __init__(
@@ -91,13 +103,13 @@ class FakeProbeOpener:
 
 
 def test_probe_rejects_non_http_and_private_targets():
-    invalid = adapter.probe_url("file:///etc/passwd")
+    invalid = network_module.probe_url("file:///etc/passwd")
     assert invalid["status"] == "failed_final"
     assert invalid["error"]["code"] == "INVALID_URL"
 
     try:
-        adapter.assert_public_network_target("http://127.0.0.1/admin")
-    except adapter.ProbeError as exc:
+        network_module.assert_public_network_target("http://127.0.0.1/admin")
+    except network_module.ProbeError as exc:
         assert exc.code == "INVALID_URL"
         assert "non-public" in str(exc)
     else:
@@ -112,7 +124,7 @@ def test_probe_public_html_emits_fetch_receipt():
     ).encode()
     opener = FakeProbeOpener(FakeProbeResponse(body))
 
-    receipt = adapter.probe_url(
+    receipt = network_module.probe_url(
         "https://example.com/article#section",
         opener=opener,
         resolved_addresses=["93.184.216.34"],
@@ -130,7 +142,7 @@ def test_probe_public_html_emits_fetch_receipt():
 def test_probe_delegates_known_platform_without_generic_dns_or_http():
     opener = FakeProbeOpener(FakeProbeResponse(b"must not be read"))
 
-    receipt = adapter.probe_url(
+    receipt = network_module.probe_url(
         "https://www.youtube.com/watch?v=abc123",
         opener=opener,
     )
@@ -151,7 +163,7 @@ def test_platform_detection_requires_exact_domain_boundary():
 
 def test_probe_script_only_page_requires_browser_without_claiming_failure():
     body = b"<html><body><div id='root'></div><script src='/app.js'></script></body></html>"
-    receipt = adapter.probe_url(
+    receipt = network_module.probe_url(
         "https://example.com/app",
         opener=FakeProbeOpener(
             FakeProbeResponse(body, url="https://example.com/app")
@@ -166,7 +178,7 @@ def test_probe_script_only_page_requires_browser_without_claiming_failure():
 
 def test_probe_challenge_stops_for_user_action():
     body = b"<html><body><div class='cf-chl-widget'>Cloudflare challenge CAPTCHA</div></body></html>"
-    receipt = adapter.probe_url(
+    receipt = network_module.probe_url(
         "https://example.com/protected",
         opener=FakeProbeOpener(
             FakeProbeResponse(body, url="https://example.com/protected")
@@ -190,7 +202,7 @@ def test_fetch_public_binary_is_atomic_and_hashed(tmp_path):
     )
     output = tmp_path / "paper.pdf"
 
-    receipt = adapter.fetch_url(
+    receipt = network_module.fetch_url(
         "https://example.com/paper.pdf",
         output,
         opener=opener,
@@ -207,7 +219,7 @@ def test_fetch_public_binary_is_atomic_and_hashed(tmp_path):
 def test_fetch_rejects_oversize_without_leaving_partial_file(tmp_path):
     body = b"x" * 20
     output = tmp_path / "too-large.bin"
-    receipt = adapter.fetch_url(
+    receipt = network_module.fetch_url(
         "https://example.com/too-large.bin",
         output,
         max_bytes=10,
@@ -538,7 +550,7 @@ def test_package_markitdown_preserves_slides_media_and_unresolved_refs(tmp_path)
     assert quality["embedded_media_count"] == 1
     assert quality["unresolved_asset_references"] == 1
     assert quality["coverage_status"] == "partial"
-    assert adapter.validate_bundle(output)["valid"] is True
+    assert validator_module.validate_bundle(output)["valid"] is True
 
 
 def test_package_markitdown_maps_pptx_placeholders_via_ooxml_relationships(tmp_path):
@@ -586,7 +598,7 @@ def test_package_markitdown_maps_pptx_placeholders_via_ooxml_relationships(tmp_p
     assert quality["mapped_asset_references"] == 1
     assert quality["unresolved_asset_references"] == 0
     assert quality["coverage_status"] == "passed"
-    assert adapter.validate_bundle(output)["valid"] is True
+    assert validator_module.validate_bundle(output)["valid"] is True
 
 
 def test_extract_markdown_data_images_persists_extractor_asset(tmp_path):
@@ -724,7 +736,7 @@ def test_package_watch_payload_keeps_timestamps_ocr_bbox_and_frames(tmp_path):
     assert "{len(transcript_segments)}" not in raw
     assert "[ASR候选逐字稿](transcript-candidates.md)：1路候选" in raw
     assert "键盘录入" in (output / "transcript-candidates.md").read_text(encoding="utf-8")
-    assert adapter.validate_bundle(output)["valid"] is True
+    assert validator_module.validate_bundle(output)["valid"] is True
 
 
 def test_watch_transcript_route_distinguishes_captions_asr_and_none():
@@ -784,7 +796,7 @@ def test_package_watch_audio_is_transcript_only_raw(tmp_path):
     assert "source_type: audio" in (output / "raw.md").read_text(encoding="utf-8")
     assert not (output / "visual.md").exists()
     assert not (output / "assets" / "frames").exists()
-    assert adapter.validate_bundle(output)["valid"] is True
+    assert validator_module.validate_bundle(output)["valid"] is True
 
 
 def test_group_transcript_and_visual_dedupe_are_readability_only():
@@ -878,7 +890,7 @@ def test_validate_bundle_reports_broken_evidence_asset(tmp_path):
     (bundle / "metadata.json").write_text(
         json.dumps(
             {
-                "schema_version": adapter.SCHEMA_VERSION,
+                "schema_version": validator_module.SCHEMA_VERSION,
                 "processing_status": "partial",
             }
         ),
@@ -911,7 +923,7 @@ def test_validate_bundle_reports_broken_evidence_asset(tmp_path):
         ),
         encoding="utf-8",
     )
-    report = adapter.validate_bundle(bundle)
+    report = validator_module.validate_bundle(bundle)
     assert report["valid"] is False
     assert any("不存在资产" in error for error in report["errors"])
 
@@ -969,11 +981,11 @@ def test_package_image_result_preserves_ocr_bbox_and_original(tmp_path):
     quality = json.loads((output / "quality-report.json").read_text(encoding="utf-8"))
     assert quality["coverage_status"] == "partial"
     assert quality["rejected_ocr_block_count"] == 1
-    assert adapter.validate_bundle(output)["valid"] is True
+    assert validator_module.validate_bundle(output)["valid"] is True
 
     protocol = adapter.bundle_protocol_result(output)
     assert protocol["status"] == "ok"
-    assert protocol["contract"] == adapter.SCHEMA_VERSION
+    assert protocol["contract"] == validator_module.SCHEMA_VERSION
     assert protocol["plugin_version"] == adapter.PLUGIN_VERSION
     assert protocol["bundle"] == str(output.resolve())
     assert protocol["markdown_path"] == str((output / "content.md").resolve())
@@ -1004,7 +1016,7 @@ def test_cli_failure_is_machine_readable(monkeypatch, capsys, tmp_path):
 
     assert exit_code == 1
     assert payload["status"] == "error"
-    assert payload["contract"] == adapter.SCHEMA_VERSION
+    assert payload["contract"] == validator_module.SCHEMA_VERSION
     assert payload["error_type"] == "RuntimeError"
     assert payload["error"] == "ocr unavailable"
 
@@ -1016,7 +1028,7 @@ def test_finalize_v2_preserves_legacy_content_and_adds_provenance(monkeypatch, t
     (bundle / "evidence.jsonl").write_text('{"id":"e1"}\n', encoding="utf-8")
     (bundle / "assets" / "page.html").write_text("<html>source</html>", encoding="utf-8")
     (bundle / "metadata.json").write_text(
-        json.dumps({"schema_version": adapter.SCHEMA_VERSION, "source": {"content_type": "text/html"}}),
+        json.dumps({"schema_version": validator_module.SCHEMA_VERSION, "source": {"content_type": "text/html"}}),
         encoding="utf-8",
     )
     (bundle / "quality-report.json").write_text(json.dumps({"warnings": ["partial images"]}), encoding="utf-8")
@@ -1039,12 +1051,12 @@ def test_finalize_v2_preserves_legacy_content_and_adds_provenance(monkeypatch, t
     run_path = tmp_path / "run.json"
     capture_path.write_text(json.dumps(capture), encoding="utf-8")
     run_path.write_text(json.dumps(run), encoding="utf-8")
-    monkeypatch.setattr(adapter, "validate_bundle", lambda _: {"valid": True, "errors": []})
+    monkeypatch.setattr(validator_module, "validate_bundle", lambda _: {"valid": True, "errors": []})
 
-    report = adapter.finalize_bundle_v2(bundle, capture_path, run_path, bundle / "assets" / "page.html")
+    report = validator_module.finalize_bundle_v2(bundle, capture_path, run_path, bundle / "assets" / "page.html")
 
     assert report["valid"] is True
-    assert report["schema_version"] == adapter.RAW_V2_VERSION
+    assert report["schema_version"] == validator_module.RAW_V2_VERSION
     assert (bundle / "content.md").read_text(encoding="utf-8") == "# Extracted\n"
     manifest = json.loads((bundle / "bundle.json").read_text(encoding="utf-8"))
     assert manifest["content_hash"] == "a" * 64
@@ -1062,11 +1074,11 @@ def test_default_validator_reports_v2_manifest_contract(monkeypatch, tmp_path):
     bundle = tmp_path / "bundle"
     bundle.mkdir()
     monkeypatch.setattr(
-        adapter,
+        validator_module,
         "validate_bundle_v2",
         lambda _: {
             "valid": True,
-            "schema_version": adapter.RAW_V2_VERSION,
+            "schema_version": validator_module.RAW_V2_VERSION,
             "bundle_id": "bundle-1",
             "processing_status": "partial",
             "errors": [],
@@ -1078,7 +1090,7 @@ def test_default_validator_reports_v2_manifest_contract(monkeypatch, tmp_path):
     (bundle / "metadata.json").write_text(
         json.dumps(
             {
-                "schema_version": adapter.SCHEMA_VERSION,
+                "schema_version": validator_module.SCHEMA_VERSION,
                 "processing_status": "partial",
             }
         ),
@@ -1103,10 +1115,10 @@ def test_default_validator_reports_v2_manifest_contract(monkeypatch, tmp_path):
     )
     (bundle / "bundle.json").write_text("{}", encoding="utf-8")
 
-    report = adapter.validate_bundle(bundle)
+    report = validator_module.validate_bundle(bundle)
 
     assert report["valid"] is True
-    assert report["schema_version"] == adapter.RAW_V2_VERSION
+    assert report["schema_version"] == validator_module.RAW_V2_VERSION
     assert report["bundle_id"] == "bundle-1"
     assert report["warnings"] == ["v2 warning"]
 
@@ -1116,7 +1128,7 @@ def test_finalize_v2_marks_platform_reference_without_claiming_media_hash(monkey
     (bundle / "assets").mkdir(parents=True)
     (bundle / "content.md").write_text("# Platform evidence\n", encoding="utf-8")
     (bundle / "evidence.jsonl").write_text('{"kind":"video_frame","method":"watch","locator":{}}\n', encoding="utf-8")
-    (bundle / "metadata.json").write_text(json.dumps({"schema_version": adapter.SCHEMA_VERSION, "source": {}, "processing_status": "partial"}), encoding="utf-8")
+    (bundle / "metadata.json").write_text(json.dumps({"schema_version": validator_module.SCHEMA_VERSION, "source": {}, "processing_status": "partial"}), encoding="utf-8")
     (bundle / "quality-report.json").write_text(json.dumps({"warnings": [], "evidence_count": 1, "coverage_status": "passed", "coverage_checks": {"evidence": {"expected": 1, "observed": 1, "status": "passed"}}}), encoding="utf-8")
     reference = tmp_path / "platform-source.json"
     reference.write_text(json.dumps({"source_url": "https://example.com/video", "original_media_retained": False}), encoding="utf-8")
@@ -1135,9 +1147,9 @@ def test_finalize_v2_marks_platform_reference_without_claiming_media_hash(monkey
     run_path = tmp_path / "run.json"
     capture_path.write_text(json.dumps(capture), encoding="utf-8")
     run_path.write_text(json.dumps(run), encoding="utf-8")
-    monkeypatch.setattr(adapter, "validate_bundle", lambda _: {"valid": True, "errors": []})
+    monkeypatch.setattr(validator_module, "validate_bundle", lambda _: {"valid": True, "errors": []})
 
-    report = adapter.finalize_bundle_v2(bundle, capture_path, run_path, reference)
+    report = validator_module.finalize_bundle_v2(bundle, capture_path, run_path, reference)
 
     assert report["valid"] is True
     manifest = json.loads((bundle / "bundle.json").read_text(encoding="utf-8"))
