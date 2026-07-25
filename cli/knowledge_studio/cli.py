@@ -145,17 +145,10 @@ def capability_list():
 
 
 def _capability_already_installed(name: str) -> bool:
-    """Check whether a capability's key module is already importable."""
-    probes = {
-        "watch": "watch_skill",
-        "document": "markitdown",
-        "pdf": "mineru",
-        "formula": "paddleocr",
-    }
-    module = probes.get(name)
-    if module is None:
-        return False
-    return importlib.util.find_spec(module) is not None
+    """Check whether a capability is available (delegates to shared module)."""
+    from capability_check import is_capability_available
+    ok, _ = is_capability_available(name)
+    return ok
 
 
 @capability_app.command("install")

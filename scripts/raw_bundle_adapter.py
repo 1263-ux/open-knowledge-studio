@@ -338,8 +338,9 @@ def source_identity(
     }
 
 
-def is_url(value: str) -> bool:
-    return urlparse(value).scheme.lower() in {"http", "https"}
+from route import is_url, platform_for, route_plan
+from digest import write_digest, update_raw_index
+from i18n import t
 
 
 class ProbeError(RuntimeError):
@@ -784,104 +785,6 @@ def fetch_url(
             temporary.unlink(missing_ok=True)
 
 
-def platform_for(source: str) -> str:
-    if not is_url(source):
-        return "local"
-    host = (urlparse(source).hostname or "").lower()
-    if host == "bilibili.com" or host.endswith(".bilibili.com") or host == "b23.tv":
-        return "bilibili"
-    if host == "douyin.com" or host.endswith(".douyin.com"):
-        return "douyin"
-    if host == "youtube.com" or host.endswith(".youtube.com") or host == "youtu.be":
-        return "youtube"
-    return host or "web"
-
-
-def route_plan(source: str) -> dict[str, Any]:
-    parsed = urlparse(source)
-    suffix = Path(parsed.path if is_url(source) else source).suffix.lower()
-    platform = platform_for(source)
-    video_suffixes = {".mp4", ".mkv", ".mov", ".webm", ".avi", ".m4v"}
-    audio_suffixes = {".mp3", ".wav", ".m4a", ".flac", ".aac", ".ogg"}
-    office_suffixes = {".pptx", ".docx", ".xlsx", ".html", ".htm", ".txt", ".csv", ".md"}
-    image_suffixes = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tiff"}
-    if is_url(source) and platform in {"bilibili", "douyin", "youtube"}:
-        return {
-            "source_type": "video",
-            "platform": platform,
-            "modalities": ["speech", "video", "on_screen_text"],
-            "extractor": "watch",
-            "route": ["platform_caption", "media_acquire", "asr", "keyframe", "ocr"],
-        }
-    if suffix in video_suffixes:
-        return {
-            "source_type": "video",
-            "platform": platform,
-            "modalities": ["speech", "video", "on_screen_text"],
-            "extractor": "watch",
-            "route": ["embedded_caption", "asr", "keyframe", "ocr"],
-        }
-    if suffix in audio_suffixes:
-        return {
-            "source_type": "audio",
-            "platform": platform,
-            "modalities": ["speech"],
-            "extractor": "watch",
-            "route": ["embedded_transcript", "asr"],
-        }
-    if suffix == ".pdf":
-        return {
-            "source_type": "document",
-            "platform": platform,
-            "modalities": ["text", "layout", "image", "formula"],
-            "extractor": "mineru",
-            "route": ["text_layer", "layout", "ocr", "formula", "asset_copy"],
-        }
-    if suffix in office_suffixes:
-        return {
-            "source_type": "document",
-            "platform": platform,
-            "modalities": ["text", "layout", "image"],
-            "extractor": "markitdown",
-            "route": ["native_structure", "markdown", "embedded_media"],
-        }
-    if suffix in image_suffixes:
-        return {
-            "source_type": "image",
-            "platform": platform,
-            "modalities": ["image", "on_screen_text"],
-            "extractor": "rapidocr",
-            "route": ["ocr", "bbox", "original_asset"],
-        }
-    return {
-        "source_type": "unknown",
-        "platform": platform,
-        "modalities": [],
-        "extractor": None,
-        "route": ["human_fallback"],
-        "implementation_status": "unsupported",
-        "diagnostics": {
-            "detected_extension": suffix or None,
-            "detected_source": source,
-            "is_url": is_url(source),
-            "url_platform": platform if is_url(source) else None,
-            "supported_extensions": {
-                "视频": sorted(video_suffixes),
-                "音频": sorted(audio_suffixes),
-                "文档": sorted(office_suffixes) + [".pdf"],
-                "图片": sorted(image_suffixes),
-            },
-            "suggestion": (
-                "请输入平台视频链接 (YouTube/Bilibili/抖音)，或本地文件。支持的本地文件："
-                + str(sorted(video_suffixes | audio_suffixes | office_suffixes | {".pdf"} | image_suffixes))
-                if not is_url(source) else
-                "仅支持 YouTube、Bilibili、抖音平台的视频链接。"
-                " 普通网页请先用浏览器采集工具下载为本地文件再导入。"
-            ),
-        },
-    }
-
-
 def default_ingest_output(source: str) -> Path:
     """Return a unique, human-readable bundle path for one immutable run."""
     if is_url(source):
@@ -918,9 +821,11 @@ def _extractor_python(extractor: str) -> Path:
         "mineru": "mineru",
     }[extractor]
 
-    # 1. Already installed in current venv (via oks capability install)
-    if importlib.util.find_spec(module) is not None:
-        return Path(sys.executable).resolve()
+    # 1. Already installed (via oks capability install) — shared check
+    from capability_check import is_capability_available as _cap_ok
+    cap_ok, cap_python = _cap_ok(extractor)
+    if cap_ok and cap_python is not None:
+        return cap_python
 
     # 2. Explicit env var override
     configured = os.environ.get(environment)
@@ -944,9 +849,8 @@ def _extractor_python(extractor: str) -> Path:
         return _validate_extractor_python(candidate.resolve(), extractor, environment=environment)
 
     raise RuntimeError(
-        f"{extractor} 能力未安装。\n"
-        f"运行: oks capability install {extra} --yes\n"
-        f"或设置环境变量 {environment} 指向已安装 {extractor} 依赖的 Python 解释器。"
+        f"{t('capability_missing', name=extractor)}\n"
+        f"{t('capability_missing_hint', name=extra, env=environment)}"
     )
 
 
@@ -3599,81 +3503,12 @@ def bundle_protocol_result(bundle: Path) -> dict[str, Any]:
     }
 
 
-def write_digest(bundle: Path) -> None:
-    """Generate digest.md inside the bundle for Agent quick-scan."""
-    qr_path = bundle / "quality-report.json"
-    meta_path = bundle / "metadata.json"
-    if not qr_path.is_file() or not meta_path.is_file():
-        return
-    qr = json.loads(qr_path.read_text(encoding="utf-8"))
-    meta = json.loads(meta_path.read_text(encoding="utf-8"))
-    source_info = meta.get("source", {})
-    title = source_info.get("title") or bundle.name
-    source = source_info.get("url") or source_info.get("local_path", "unknown")
-    modality = meta.get("source_type", "unknown")
-    status = qr.get("processing_status", meta.get("processing_status", "unknown"))
-    transcript_n = qr.get("transcript_segment_count", 0)
-    frame_n = qr.get("frame_count", 0)
-    ocr_n = qr.get("ocr_block_count", 0)
-    evidence_n = qr.get("evidence_count", 0)
-    warnings = [w for w in qr.get("warnings", []) if w]
-    human = qr.get("human_fallback", "")
-    lines = [
-        f"# {title}",
-        f"- 来源：{source}",
-        f"- 模态：{modality}",
-        f"- 状态：{status}",
-        f"- 证据：字幕{transcript_n}段 / 帧{frame_n} / OCR{ocr_n}块 / 总计{evidence_n}条",
-    ]
-    if warnings:
-        lines.append(f"- 警告：{'；'.join(warnings)}")
-    if human:
-        lines.append(f"- 人工核验建议：{human}")
-    lines.append("")
-    (bundle / "digest.md").write_text("\n".join(lines), encoding="utf-8")
-
-
-def _update_raw_index(bundle: Path) -> None:
-    """Append this bundle's entry to raw/index.json."""
-    raw_dir = bundle.parent
-    index_path = raw_dir / "index.json"
-    entries: list[dict] = []
-    if index_path.is_file():
-        try:
-            entries = json.loads(index_path.read_text(encoding="utf-8"))
-        except json.JSONDecodeError:
-            entries = []
-    qr_path = bundle / "quality-report.json"
-    meta_path = bundle / "metadata.json"
-    if not qr_path.is_file() or not meta_path.is_file():
-        return
-    qr = json.loads(qr_path.read_text(encoding="utf-8"))
-    meta = json.loads(meta_path.read_text(encoding="utf-8"))
-    source_info = meta.get("source", {})
-    bundle_id = bundle.name
-    existing = {e["id"] for e in entries if "id" in e}
-    if bundle_id in existing:
-        return
-    entries.append({
-        "id": bundle_id,
-        "source": source_info.get("url") or source_info.get("local_path", ""),
-        "title": source_info.get("title", ""),
-        "modality": meta.get("source_type", ""),
-        "collected_at": source_info.get("collected_at", ""),
-        "status": qr.get("processing_status", meta.get("processing_status", "")),
-        "digest": f"raw/{bundle_id}/digest.md",
-        "evidence_count": qr.get("evidence_count", 0),
-        "warnings": [w for w in qr.get("warnings", []) if w],
-    })
-    index_path.write_text(json.dumps(entries, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-
-
 def emit_bundle(bundle: Path) -> int:
     result = bundle_protocol_result(bundle)
     emit_json(result)
     try:
         write_digest(bundle)
-        _update_raw_index(bundle)
+        update_raw_index(bundle)
     except Exception:
         pass  # digest/index are best-effort, never fail the ingest
     return 0 if result["status"] == "ok" else 2
