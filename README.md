@@ -24,35 +24,33 @@ Open Knowledge Studio is a knowledge base system designed to work with Claude Co
 
 ### Quick Start
 
-Prerequisites: Python ≥ 3.10, git. Claude Code (or a compatible agent) is optional
-but required for the skills-driven workflow (`/ingest`, `/query`, `/promote`) — the
-CLI alone covers search/recall/wiki CRUD.
+Prerequisites: Python ≥ 3.12, git. Claude Code (or a compatible agent) is optional
+but required for the skills-driven workflow — the CLI alone covers the full loop.
 
 ```bash
-pipx install open-knowledge-studio && pipx ensurepath   # 1. install the CLI
-oks init my-knowledge-base          # 2. scaffold your instance
+# 一步安装（核心 + connector 内置）
+pipx install "git+https://github.com/1263-ux/open-knowledge-studio.git@main#subdirectory=cli"
+oks init my-knowledge-base
 cd my-knowledge-base
-oks status                          # 3. use it
-oks search "git branch"             # (empty on a fresh instance — add knowledge first)
+oks status
+
+# 按需安装能力
+oks capability install watch     # 视频/音频提取
+oks capability install document  # Office/HTML 提取
+oks capability install pdf       # PDF 提取
+
+# 采集（Agent 或用户直接调用）
+oks ingest "https://www.youtube.com/watch?v=..." --mode quick --progress
+
+# 飞书（可选组件）
+oks feishu setup                 # 自动创建 Base + 表 + 表单
+oks feishu submit "https://..."  # 提交采集
+oks feishu run-once              # 处理一条待办
+oks feishu listen                # 监听审核回复
 ```
 
-Why pipx? Recent systems ship PEP 668 "externally-managed" Pythons, so a bare
-`pip install` fails out of the box. Per-OS setup:
-
-Optional source intake stays outside the core dependency set:
-
-```bash
-pipx inject open-knowledge-studio oks-connector
-oks ingest <URL> --mode quick
-oks ingest <URL> --mode forensic --timeout-seconds 900
-```
-
-To test this fork before a PyPI release, install directly from GitHub:
-
-```bash
-pipx install "git+https://github.com/1263-ux/open-knowledge-studio.git@codex/upstream-v0.2.3-integration#subdirectory=cli"
-pipx inject open-knowledge-studio "git+https://github.com/1263-ux/oks-connector.git@codex/raw-poc-validation"
-```
+`oks-connector` 已内置，不再需要 `pipx inject`。重型依赖（faster-whisper、MinerU、PaddleOCR）
+通过 `oks capability install` 按需安装，每次安装前提示用户确认。
 
 If Connector is absent, `oks ingest` shows this exact action prominently; it
 only runs `pipx inject` when you explicitly pass `--install`. Feishu Base is an

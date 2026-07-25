@@ -158,6 +158,11 @@ def get_kb_root() -> Path:
     kb_path = config.get("knowledge_base_path")
     if kb_path:
         root = Path(kb_path).expanduser().resolve()
+        # If the current directory is itself a valid knowledge base,
+        # prefer it over the global config — the user is clearly working here.
+        cwd = Path.cwd()
+        if (cwd / "wiki").is_dir():
+            return cwd
         _warn_if_not_kb(root)
         return root
 

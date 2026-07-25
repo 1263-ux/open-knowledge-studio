@@ -1,6 +1,8 @@
 # CLI 组合能力验收测试手册
 
-日期：2026-07-24。适用分支：Studio `codex/upstream-v0.2.3-integration`（`38107f3`）与 Connector `codex/raw-poc-validation`（`9cad94c`）。
+日期：2026-07-24（更新 2026-07-25）。适用分支：`codex/upstream-v0.2.3-integration`。
+
+> **2026-07-25 更新**：`oks-connector` 已合并入 `open-knowledge-studio` 单仓库。不再需要 `pipx inject`。
 
 本手册的目标是让一台新机器验证本次交付，而不是要求预先配置飞书或下载所有模态模型。每一步都给出应达到的效果；任一步失败时，请保留终端输出、`--progress` 的 stderr 日志，以及生成的 Raw 路径。
 
@@ -16,15 +18,18 @@
 py -m pip install --user pipx
 py -m pipx ensurepath
 # 关闭并重新打开 PowerShell 后：
-pipx install "git+https://github.com/1263-ux/open-knowledge-studio.git@codex/upstream-v0.2.3-integration#subdirectory=cli"
-pipx inject open-knowledge-studio "git+https://github.com/1263-ux/oks-connector.git@codex/raw-poc-validation"
+
+# 基础安装（不含重型依赖，仅核心命令）
+pipx install “git+https://github.com/1263-ux/open-knowledge-studio.git@codex/upstream-v0.2.3-integration#subdirectory=cli”
+
+# 或带 watch 能力（视频/音频提取）
+pipx install “git+https://github.com/1263-ux/open-knowledge-studio.git@codex/upstream-v0.2.3-integration#subdirectory=cli[watch]”
+
 oks --version
 oks capability list
 ```
 
-验收效果：`oks --version` 成功；`capability list` 至少列出 `connector`、`watch`、`document`、`pdf`、`formula`、`feishu`。这一步不应自动下载 MinerU、Whisper、PaddleOCR，也不应要求飞书登录。
-
-`pipx inject` 会将 `oks-connector.exe` 放入 OKS 自己的 pipx 虚拟环境，而不会额外暴露到全局 PATH。交付版本的 `oks ingest` 会自动从自身环境发现该程序；不需要手动把 `venvs\\open-knowledge-studio\\Scripts` 加入 PATH。若看到“Optional Connector is required”，先执行 `pipx list` 确认注入目标是 `open-knowledge-studio`，然后用本手册中的 GitHub 分支重新安装 Studio。
+验收效果：`oks --version` 成功；`capability list` 列出 `watch`、`document`、`pdf`、`formula`、`feishu`（`connector` 已内置，不再单独列出）。注意：`pipx install` 的 `[watch]` extras 语法可能需要 `--pip-args` 或分两步；如遇到问题，先执行基础安装，再用 `oks capability install watch --yes`。
 
 ## 2. 初始化与只读 CLI 安全性
 

@@ -1,9 +1,15 @@
 import importlib.util
+import io
 import json
+import sys
+import tomllib
 import zipfile
 from argparse import Namespace
+from email.message import Message
 from pathlib import Path
 from types import SimpleNamespace
+
+import pytest
 
 
 MODULE_PATH = Path(__file__).parents[1] / "raw_bundle_adapter.py"
@@ -11,6 +17,230 @@ SPEC = importlib.util.spec_from_file_location("raw_bundle_adapter", MODULE_PATH)
 assert SPEC and SPEC.loader
 adapter = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(adapter)
+
+
+class FakeProbeResponse:
+    def __init__(
+        self,
+        body,
+        *,
+        url="https://example.com/article",
+        content_type="text/html",
+        status=200,
+    ):
+        self._body = io.BytesIO(body)
+        self._url = url
+        self.status = status
+        self.headers = Message()
+        self.headers["Content-Type"] = content_type
+        self.headers["Content-Length"] = str(len(body))
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        return False
+
+    def getcode(self):
+        return self.status
+
+    def geturl(self):
+        return self._url
+
+    def read(self, size=-1):
+        return self._body.read(size)
+
+
+class FakeProbeOpener:
+    def __init__(self, response):
+        self.response = response
+        self.requests = []
+
+    def open(self, request, timeout):
+        self.requests.append((request, timeout))
+        return self.response
+
+
+def test_probe_rejects_non_http_and_private_targets():
+    invalid = adapter.probe_url("file:///etc/passwd")
+    assert invalid["status"] == "failed_final"
+    assert invalid["error"]["code"] == "INVALID_URL"
+
+    try:
+        adapter.assert_public_network_target("http://127.0.0.1/admin")
+    except adapter.ProbeError as exc:
+        assert exc.code == "INVALID_URL"
+        assert "non-public" in str(exc)
+    else:
+        raise AssertionError("private target was accepted")
+
+
+def test_probe_public_html_emits_fetch_receipt():
+    body = (
+        "<html><body><article>"
+        + "Public article text. " * 10
+        + "</article></body></html>"
+    ).encode()
+    opener = FakeProbeOpener(FakeProbeResponse(body))
+
+    receipt = adapter.probe_url(
+        "https://example.com/article#section",
+        opener=opener,
+        resolved_addresses=["93.184.216.34"],
+    )
+
+    assert receipt["schema_version"] == adapter.FETCH_RECEIPT_VERSION
+    assert receipt["status"] == "ok"
+    assert receipt["normalized_url"] == "https://example.com/article"
+    assert receipt["next_action"] == "direct_http_snapshot"
+    assert receipt["http_status"] == 200
+    assert receipt["robots"]["checked"] is False
+    assert opener.requests[0][1] == 15.0
+
+
+def test_probe_delegates_known_platform_without_generic_dns_or_http():
+    opener = FakeProbeOpener(FakeProbeResponse(b"must not be read"))
+
+    receipt = adapter.probe_url(
+        "https://www.youtube.com/watch?v=abc123",
+        opener=opener,
+    )
+
+    assert receipt["status"] == "ok"
+    assert receipt["fetch_mode"] == "platform_route"
+    assert receipt["next_action"] == "platform_extractor"
+    assert receipt["route_plan"]["extractor"] == "watch"
+    assert receipt["resolved_addresses"] == []
+    assert opener.requests == []
+
+
+def test_platform_detection_requires_exact_domain_boundary():
+    assert adapter.platform_for("https://youtube.com/watch?v=abc") == "youtube"
+    assert adapter.platform_for("https://www.youtube.com/watch?v=abc") == "youtube"
+    assert adapter.platform_for("https://evil-youtube.com/watch?v=abc") == "evil-youtube.com"
+
+
+def test_probe_script_only_page_requires_browser_without_claiming_failure():
+    body = b"<html><body><div id='root'></div><script src='/app.js'></script></body></html>"
+    receipt = adapter.probe_url(
+        "https://example.com/app",
+        opener=FakeProbeOpener(
+            FakeProbeResponse(body, url="https://example.com/app")
+        ),
+        resolved_addresses=["93.184.216.34"],
+    )
+
+    assert receipt["status"] == "ok"
+    assert receipt["error"]["code"] == "JS_RENDER_REQUIRED"
+    assert receipt["next_action"] == "browser_public"
+
+
+def test_probe_challenge_stops_for_user_action():
+    body = b"<html><body><div class='cf-chl-widget'>Cloudflare challenge CAPTCHA</div></body></html>"
+    receipt = adapter.probe_url(
+        "https://example.com/protected",
+        opener=FakeProbeOpener(
+            FakeProbeResponse(body, url="https://example.com/protected")
+        ),
+        resolved_addresses=["93.184.216.34"],
+    )
+
+    assert receipt["status"] == "needs_user_action"
+    assert receipt["error"]["code"] == "CHALLENGE_REQUIRED"
+    assert receipt["next_action"] == "visible_browser_or_manual_snapshot"
+
+
+def test_fetch_public_binary_is_atomic_and_hashed(tmp_path):
+    body = b"%PDF-1.7\npublic fixture\n"
+    opener = FakeProbeOpener(
+        FakeProbeResponse(
+            body,
+            url="https://example.com/paper.pdf",
+            content_type="application/pdf",
+        )
+    )
+    output = tmp_path / "paper.pdf"
+
+    receipt = adapter.fetch_url(
+        "https://example.com/paper.pdf",
+        output,
+        opener=opener,
+        resolved_addresses=["93.184.216.34"],
+    )
+
+    assert receipt["status"] == "ok"
+    assert receipt["fetch_mode"] == "http_snapshot"
+    assert receipt["content_sha256"] == adapter.sha256_file(output)
+    assert receipt["downloaded_bytes"] == len(body)
+    assert output.read_bytes() == body
+
+
+def test_fetch_rejects_oversize_without_leaving_partial_file(tmp_path):
+    body = b"x" * 20
+    output = tmp_path / "too-large.bin"
+    receipt = adapter.fetch_url(
+        "https://example.com/too-large.bin",
+        output,
+        max_bytes=10,
+        opener=FakeProbeOpener(
+            FakeProbeResponse(body, content_type="application/octet-stream")
+        ),
+        resolved_addresses=["93.184.216.34"],
+    )
+
+    assert receipt["status"] == "failed_final"
+    assert receipt["error"]["code"] == "RESPONSE_TOO_LARGE"
+    assert not output.exists()
+
+
+def test_emit_json_writes_unicode_as_utf8_bytes(monkeypatch):
+    class BinaryStdout:
+        def __init__(self):
+            self.buffer = io.BytesIO()
+
+    stdout = BinaryStdout()
+    monkeypatch.setattr(sys, "stdout", stdout)
+
+    adapter.emit_json({"formula": "x₀ + 中文"})
+
+    payload = stdout.buffer.getvalue()
+    assert payload.endswith(b"\n")
+    assert json.loads(payload.decode("utf-8")) == {"formula": "x₀ + 中文"}
+
+
+def test_watch_extra_declares_perception_dependencies():
+    pyproject = MODULE_PATH.parents[1] / "cli" / "pyproject.toml"
+    config = tomllib.loads(pyproject.read_text(encoding="utf-8"))
+    dependencies = config["project"]["optional-dependencies"]["watch"]
+
+    assert any(item.lower().startswith("scenedetect") for item in dependencies)
+    assert any(item.lower().startswith("imagehash") for item in dependencies)
+
+
+def test_document_extra_declares_docx_and_pptx_dependencies():
+    pyproject = MODULE_PATH.parents[1] / "cli" / "pyproject.toml"
+    config = tomllib.loads(pyproject.read_text(encoding="utf-8"))
+    dependencies = config["project"]["optional-dependencies"]["document"]
+    requirements = (
+        MODULE_PATH.parents[1] / "scripts" / "raw_extract_requirements.txt"
+    ).read_text(encoding="utf-8")
+
+    assert any("markitdown[docx,pptx]" in item.lower() for item in dependencies)
+    assert "markitdown[docx,pptx]" in requirements.lower()
+
+
+def test_pdf_extra_declares_pipeline_backend_dependencies():
+    pyproject = MODULE_PATH.parents[1] / "cli" / "pyproject.toml"
+    config = tomllib.loads(pyproject.read_text(encoding="utf-8"))
+    dependencies = config["project"]["optional-dependencies"]["pdf"]
+    requirements = (
+        MODULE_PATH.parents[1] / "scripts" / "mineru_extract_requirements.txt"
+    ).read_text(encoding="utf-8")
+
+    assert any("mineru[pipeline]" in item.lower() for item in dependencies)
+    assert any(item.lower().startswith("six==") for item in dependencies)
+    assert "mineru[pipeline]" in requirements.lower()
+    assert "six==" in requirements.lower()
 
 
 def test_package_mineru_preserves_page_bbox_and_assets(tmp_path):
@@ -94,6 +324,149 @@ def test_route_plan_selects_mature_extractors():
     url_plan = adapter.route_plan("https://www.bilibili.com/video/BV123")
     assert url_plan["extractor"] == "watch"
     assert url_plan["route"][0] == "platform_caption"
+
+
+def test_ingest_defaults_to_quick_tier_and_unique_run_output(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    args = adapter.build_parser().parse_args(
+        ["ingest", "https://www.youtube.com/watch?v=abc123"]
+    )
+
+    first = adapter.default_ingest_output(args.source)
+    second = adapter.default_ingest_output(args.source)
+
+    assert args.mode == "quick"
+    assert first != second
+    assert first.parent == tmp_path / "raw"
+    assert "-www.youtube.com-watch-" in first.name
+    assert len(first.name.rsplit("-", 1)[-1]) == 8
+
+
+def test_ingest_fast_video_uses_caption_only_child_command(tmp_path):
+    args = Namespace(
+        source="https://www.youtube.com/watch?v=abc123",
+        output=None,
+        title=None,
+        mode="fast",
+        subtitle_langs="zh.*,en.*",
+        mineru_backend="pipeline",
+        mineru_method="auto",
+        overwrite=False,
+    )
+    output = tmp_path / "bundle"
+
+    command = adapter.ingest_child_argv(
+        args,
+        adapter.route_plan(args.source),
+        output,
+        Path("watch-python"),
+    )
+
+    assert command[2:5] == ["watch", args.source, "--output"]
+    assert "--transcript-only" in command
+    assert "--no-local-whisper" in command
+    assert command[command.index("--subtitle-langs"):command.index("--subtitle-langs") + 2] == ["--subtitle-langs", "zh.*,en.*"]
+    assert "--evidence-tier" in command
+    assert command[command.index("--evidence-tier") + 1] == "quick"
+
+
+def test_ingest_fast_audio_keeps_local_asr_available(tmp_path):
+    args = Namespace(
+        source=str(tmp_path / "voice.mp3"),
+        output=None,
+        title=None,
+        mode="fast",
+        subtitle_langs="zh.*,en.*",
+        mineru_backend="pipeline",
+        mineru_method="auto",
+        overwrite=False,
+    )
+
+    command = adapter.ingest_child_argv(
+        args,
+        adapter.route_plan(args.source),
+        tmp_path / "bundle",
+        Path("watch-python"),
+    )
+
+    assert "--transcript-only" in command
+    assert "--no-local-whisper" not in command
+
+
+def test_ingest_forensic_uses_subtitle_anchored_tier(tmp_path):
+    args = Namespace(
+        source="https://www.youtube.com/watch?v=abc123",
+        output=None,
+        title=None,
+        mode="forensic",
+        subtitle_langs="zh.*,en.*",
+        mineru_backend="pipeline",
+        mineru_method="auto",
+        overwrite=False,
+    )
+
+    command = adapter.ingest_child_argv(
+        args, adapter.route_plan(args.source), tmp_path / "bundle", Path("watch-python")
+    )
+
+    assert "--transcript-only" not in command
+    assert command[command.index("--evidence-tier") + 1] == "forensic"
+
+
+def test_subtitle_topic_anchors_are_bounded_and_gap_aware():
+    segments = [
+        {"start": 0, "end": 2, "text": "opening"},
+        {"start": 8, "end": 10, "text": "next topic"},
+        {"start": 15, "end": 16, "text": "detail"},
+        {"start": 70, "end": 72, "text": "later topic"},
+    ]
+
+    assert adapter.subtitle_topic_anchors(segments, 12) == [0.0, 8.0, 15.0, 70.0]
+    assert adapter.subtitle_topic_anchors(segments, 2) == [0.0, 70.0]
+
+
+def test_ingest_rejects_generic_web_url_without_claiming_extraction():
+    args = adapter.build_parser().parse_args(["ingest", "https://example.com/article"])
+
+    with pytest.raises(RuntimeError, match=r"Raw"):
+        adapter.run_ingest(args)
+
+
+def test_migrated_route_matrix_covers_declared_modalities_and_platforms():
+    cases = {
+        "clip.mp4": ("video", "watch"),
+        "clip.mkv": ("video", "watch"),
+        "voice.mp3": ("audio", "watch"),
+        "voice.flac": ("audio", "watch"),
+        "paper.pdf": ("document", "mineru"),
+        "slides.pptx": ("document", "markitdown"),
+        "notes.docx": ("document", "markitdown"),
+        "table.xlsx": ("document", "markitdown"),
+        "page.html": ("document", "markitdown"),
+        "plain.txt": ("document", "markitdown"),
+        "rows.csv": ("document", "markitdown"),
+        "scan.png": ("image", "rapidocr"),
+        "photo.jpg": ("image", "rapidocr"),
+        "photo.jpeg": ("image", "rapidocr"),
+        "screen.webp": ("image", "rapidocr"),
+        "scan.bmp": ("image", "rapidocr"),
+        "scan.tiff": ("image", "rapidocr"),
+    }
+    for source, expected in cases.items():
+        plan = adapter.route_plan(source)
+        assert (plan["source_type"], plan["extractor"]) == expected
+
+    platforms = {
+        "https://www.bilibili.com/video/BV123": "bilibili",
+        "https://www.douyin.com/video/123": "douyin",
+        "https://youtu.be/abc123": "youtube",
+    }
+    for source, platform in platforms.items():
+        plan = adapter.route_plan(source)
+        assert plan["source_type"] == "video"
+        assert plan["platform"] == platform
+        assert plan["extractor"] == "watch"
+        assert plan["route"][0] == "platform_caption"
 
 
 def test_package_markitdown_preserves_slides_media_and_unresolved_refs(tmp_path):
@@ -568,3 +941,175 @@ def test_package_image_result_preserves_ocr_bbox_and_original(tmp_path):
     assert quality["coverage_status"] == "partial"
     assert quality["rejected_ocr_block_count"] == 1
     assert adapter.validate_bundle(output)["valid"] is True
+
+    protocol = adapter.bundle_protocol_result(output)
+    assert protocol["status"] == "ok"
+    assert protocol["contract"] == adapter.SCHEMA_VERSION
+    assert protocol["plugin_version"] == adapter.PLUGIN_VERSION
+    assert protocol["bundle"] == str(output.resolve())
+    assert protocol["markdown_path"] == str((output / "content.md").resolve())
+    assert "知识复利" in protocol["markdown"]
+    assert protocol["title"] == "截图"
+    assert protocol["modality"] == "image"
+
+
+def test_cli_failure_is_machine_readable(monkeypatch, capsys, tmp_path):
+    source = tmp_path / "screen.png"
+    source.write_bytes(b"png")
+    monkeypatch.setattr(adapter, "run_image", lambda _: (_ for _ in ()).throw(RuntimeError("ocr unavailable")))
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "raw_bundle_adapter.py",
+            "image",
+            str(source),
+            "--output",
+            str(tmp_path / "bundle"),
+        ],
+    )
+
+    exit_code = adapter.main()
+    payload = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 1
+    assert payload["status"] == "error"
+    assert payload["contract"] == adapter.SCHEMA_VERSION
+    assert payload["error_type"] == "RuntimeError"
+    assert payload["error"] == "ocr unavailable"
+
+
+def test_finalize_v2_preserves_legacy_content_and_adds_provenance(monkeypatch, tmp_path):
+    bundle = tmp_path / "bundle"
+    (bundle / "assets").mkdir(parents=True)
+    (bundle / "content.md").write_text("# Extracted\n", encoding="utf-8")
+    (bundle / "evidence.jsonl").write_text('{"id":"e1"}\n', encoding="utf-8")
+    (bundle / "assets" / "page.html").write_text("<html>source</html>", encoding="utf-8")
+    (bundle / "metadata.json").write_text(
+        json.dumps({"schema_version": adapter.SCHEMA_VERSION, "source": {"content_type": "text/html"}}),
+        encoding="utf-8",
+    )
+    (bundle / "quality-report.json").write_text(json.dumps({"warnings": ["partial images"]}), encoding="utf-8")
+    capture = {
+        "schema_version": "oks-capture-envelope/v0.2",
+        "capture_id": "capture-1",
+        "content_hash": "a" * 64,
+    }
+    run = {
+        "schema_version": "oks-processing-run/v0.2",
+        "run_id": "run-1",
+        "capture_id": "capture-1",
+        "recipe_version": "recipe-1",
+        "status": "partial",
+        "started_at": "2026-07-19T00:00:00+00:00",
+        "finished_at": "2026-07-19T00:01:00+00:00",
+        "job": {"name": "web", "version": "1.0", "capability": "web.trafilatura"},
+    }
+    capture_path = tmp_path / "capture.json"
+    run_path = tmp_path / "run.json"
+    capture_path.write_text(json.dumps(capture), encoding="utf-8")
+    run_path.write_text(json.dumps(run), encoding="utf-8")
+    monkeypatch.setattr(adapter, "validate_bundle", lambda _: {"valid": True, "errors": []})
+
+    report = adapter.finalize_bundle_v2(bundle, capture_path, run_path, bundle / "assets" / "page.html")
+
+    assert report["valid"] is True
+    assert report["schema_version"] == adapter.RAW_V2_VERSION
+    assert (bundle / "content.md").read_text(encoding="utf-8") == "# Extracted\n"
+    manifest = json.loads((bundle / "bundle.json").read_text(encoding="utf-8"))
+    assert manifest["content_hash"] == "a" * 64
+    assert {item["type"] for item in manifest["provenance"]["relations"]} == {
+        "used",
+        "wasGeneratedBy",
+        "wasDerivedFrom",
+    }
+    assert manifest["sources"][0]["snapshot_kind"] == "content"
+    assert manifest["sources"][0]["content_hash_status"] == "verified"
+    assert (bundle / "source" / "primary.html").is_file()
+
+
+def test_default_validator_reports_v2_manifest_contract(monkeypatch, tmp_path):
+    bundle = tmp_path / "bundle"
+    bundle.mkdir()
+    monkeypatch.setattr(
+        adapter,
+        "validate_bundle_v2",
+        lambda _: {
+            "valid": True,
+            "schema_version": adapter.RAW_V2_VERSION,
+            "bundle_id": "bundle-1",
+            "processing_status": "partial",
+            "errors": [],
+            "warnings": ["v2 warning"],
+        },
+    )
+    for name in ("raw.md", "content.md"):
+        (bundle / name).write_text("# Raw\n", encoding="utf-8")
+    (bundle / "metadata.json").write_text(
+        json.dumps(
+            {
+                "schema_version": adapter.SCHEMA_VERSION,
+                "processing_status": "partial",
+            }
+        ),
+        encoding="utf-8",
+    )
+    (bundle / "evidence.jsonl").write_text(
+        '{"kind":"text","method":"fixture","locator":{}}\n',
+        encoding="utf-8",
+    )
+    (bundle / "quality-report.json").write_text(
+        json.dumps(
+            {
+                "evidence_count": 1,
+                "coverage_status": "passed",
+                "coverage_checks": {
+                    "evidence": {"expected": 1, "observed": 1, "status": "passed"}
+                },
+                "warnings": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    (bundle / "bundle.json").write_text("{}", encoding="utf-8")
+
+    report = adapter.validate_bundle(bundle)
+
+    assert report["valid"] is True
+    assert report["schema_version"] == adapter.RAW_V2_VERSION
+    assert report["bundle_id"] == "bundle-1"
+    assert report["warnings"] == ["v2 warning"]
+
+
+def test_finalize_v2_marks_platform_reference_without_claiming_media_hash(monkeypatch, tmp_path):
+    bundle = tmp_path / "bundle"
+    (bundle / "assets").mkdir(parents=True)
+    (bundle / "content.md").write_text("# Platform evidence\n", encoding="utf-8")
+    (bundle / "evidence.jsonl").write_text('{"kind":"video_frame","method":"watch","locator":{}}\n', encoding="utf-8")
+    (bundle / "metadata.json").write_text(json.dumps({"schema_version": adapter.SCHEMA_VERSION, "source": {}, "processing_status": "partial"}), encoding="utf-8")
+    (bundle / "quality-report.json").write_text(json.dumps({"warnings": [], "evidence_count": 1, "coverage_status": "passed", "coverage_checks": {"evidence": {"expected": 1, "observed": 1, "status": "passed"}}}), encoding="utf-8")
+    reference = tmp_path / "platform-source.json"
+    reference.write_text(json.dumps({"source_url": "https://example.com/video", "original_media_retained": False}), encoding="utf-8")
+    capture = {
+        "schema_version": "oks-capture-envelope/v0.2",
+        "capture_id": "capture-platform",
+        "content_hash": "b" * 64,
+        "source_snapshot": {"kind": "reference", "content_hash_status": "unavailable"},
+    }
+    run = {
+        "schema_version": "oks-processing-run/v0.2", "run_id": "run-platform", "capture_id": "capture-platform",
+        "recipe_version": "platform-v0.1", "status": "partial", "started_at": "2026-07-19T00:00:00+00:00",
+        "finished_at": "2026-07-19T00:01:00+00:00", "job": {"name": "watch", "version": "1.0", "capability": "video.watch"},
+    }
+    capture_path = tmp_path / "capture.json"
+    run_path = tmp_path / "run.json"
+    capture_path.write_text(json.dumps(capture), encoding="utf-8")
+    run_path.write_text(json.dumps(run), encoding="utf-8")
+    monkeypatch.setattr(adapter, "validate_bundle", lambda _: {"valid": True, "errors": []})
+
+    report = adapter.finalize_bundle_v2(bundle, capture_path, run_path, reference)
+
+    assert report["valid"] is True
+    manifest = json.loads((bundle / "bundle.json").read_text(encoding="utf-8"))
+    assert manifest["sources"][0]["snapshot_kind"] == "reference"
+    assert manifest["sources"][0]["content_hash_status"] == "unavailable"

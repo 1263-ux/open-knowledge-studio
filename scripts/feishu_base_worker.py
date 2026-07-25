@@ -68,8 +68,6 @@ class WorkerConfig:
     base_token: str
     table_id: str
     lark_cli: Path
-    connector_repo: Path
-    connector_python: Path
     output_root: Path
     identity: str = "user"
     lease_seconds: int = 3600
@@ -152,19 +150,6 @@ def load_config(args: argparse.Namespace) -> WorkerConfig:
             "Base coordinates are required via --base-token/--table-id or "
             "OKS_FEISHU_BASE_TOKEN/OKS_FEISHU_TABLE_ID"
         )
-    connector_repo = Path(
-        args.connector_repo
-        or os.environ.get("OKS_CONNECTOR_REPO", ROOT.parent / "oks-connector")
-    ).expanduser().resolve()
-    connector_python = Path(
-        args.connector_python
-        or os.environ.get(
-            "OKS_CONNECTOR_PYTHON",
-            connector_repo / ".venv-document" / "Scripts" / "python.exe",
-        )
-    ).expanduser().resolve()
-    if not connector_python.is_file():
-        raise RuntimeError(f"connector Python not found: {connector_python}")
     knowledge_root = Path(
         args.knowledge_root
         or os.environ.get("OKS_KNOWLEDGE_ROOT")
@@ -174,8 +159,6 @@ def load_config(args: argparse.Namespace) -> WorkerConfig:
         base_token=base_token,
         table_id=table_id,
         lark_cli=resolve_lark_cli(),
-        connector_repo=connector_repo,
-        connector_python=connector_python,
         output_root=Path(
             args.output_root or knowledge_root / "raw" / "feishu-intake"
         ).expanduser().resolve(),
@@ -229,6 +212,22 @@ def lark_json(config: WorkerConfig, *arguments: str) -> dict[str, Any]:
     return value
 
 
+def _connector_binary() -> str:
+    """Return the oks-connector CLI path.
+
+    Prefers the entry point next to the current Python (pipx venv).
+    Falls back to the source script in dev mode.
+    """
+    suffix = ".exe" if os.name == "nt" else ""
+    injected = Path(sys.executable).parent / f"oks-connector{suffix}"
+    if injected.is_file():
+        return str(injected)
+    script = ROOT / "scripts" / "raw_bundle_adapter.py"
+    if script.is_file():
+        return str(script)
+    raise RuntimeError("oks-connector not found; reinstall open-knowledge-studio")
+
+
 def base_args(config: WorkerConfig) -> list[str]:
     return [
         "--base-token",
@@ -277,6 +276,11 @@ def list_records(config: WorkerConfig, limit: int = 100) -> list[dict[str, Any]]
     ]
     for field in projection:
         command.extend(["--field-id", field])
+    # Only fetch pending records (avoid wasting limit on already-processed ones)
+    command.extend([
+        "--filter-json",
+        '{"logic":"and","conditions":[["运行状态","intersects",["待处理"]]]}',
+    ])
     envelope = lark_json(config, *command)
     data = envelope.get("data", {})
     fields = data.get("fields", projection)
@@ -422,7 +426,8 @@ def local_claim_lock(config: WorkerConfig):
 
 def claim_next_record(config: WorkerConfig, limit: int = 100) -> tuple[dict[str, Any], str, str] | None:
     with local_claim_lock(config):
-        candidates = [record for record in list_records(config, limit) if is_candidate(record)]
+        all_records = list_records(config, limit)
+        candidates = [record for record in all_records if is_candidate(record)]
         if not candidates:
             return None
         record = candidates[0]
@@ -1397,10 +1402,10 @@ def capture_envelope(config: WorkerConfig, record_id: str, fields: dict[str, Any
 
 
 def probe_source(config: WorkerConfig, url: str) -> dict[str, Any]:
-    script = config.connector_repo / "scripts" / "raw_bundle_adapter.py"
+    connector = _connector_binary()
     result = subprocess.run(
-        [str(config.connector_python), str(script), "probe", url],
-        cwd=config.connector_repo,
+        [connector, "probe", url],
+        cwd=ROOT,
         text=True,
         encoding="utf-8",
         errors="replace",
@@ -1440,18 +1445,17 @@ def download_public_source(
         raise RuntimeError("public file route has neither a supported URL extension nor MIME type")
     output_dir.mkdir(parents=True, exist_ok=True)
     target = output_dir / f"source{suffix}"
-    script = config.connector_repo / "scripts" / "raw_bundle_adapter.py"
+    connector = _connector_binary()
     result = subprocess.run(
         [
-            str(config.connector_python),
-            str(script),
+            connector,
             "fetch",
             url,
             "--output",
             str(target),
             "--overwrite",
         ],
-        cwd=config.connector_repo,
+        cwd=ROOT,
         text=True,
         encoding="utf-8",
         errors="replace",
@@ -1505,7 +1509,7 @@ def attachment_capability(path: Path) -> tuple[str, str]:
 def package_local_attachment(config: WorkerConfig, source: Path, output: Path) -> dict[str, Any]:
     if output.is_dir():
         validation = subprocess.run(
-            [sys.executable, str(ROOT / "scripts" / "raw_bundle_adapter.py"), "validate", str(output)],
+            [_connector_binary(), "validate", str(output)],
             cwd=ROOT,
             text=True,
             encoding="utf-8",
@@ -1519,14 +1523,12 @@ def package_local_attachment(config: WorkerConfig, source: Path, output: Path) -
         raise RuntimeError(f"existing attachment output is invalid: {json.dumps(report, ensure_ascii=False)}")
     result = subprocess.run(
         [
-            sys.executable,
-            str(ROOT / "scripts" / "raw_ingest.py"),
+            _connector_binary(),
             "ingest",
             str(source),
             "--output",
             str(output),
-            "--benchmark",
-        ],
+            ],
         cwd=ROOT,
         text=True,
         encoding="utf-8",
@@ -1537,7 +1539,7 @@ def package_local_attachment(config: WorkerConfig, source: Path, output: Path) -
     if result.returncode != 0:
         raise RuntimeError((result.stderr or result.stdout).strip())
     validation = subprocess.run(
-        [sys.executable, str(ROOT / "scripts" / "raw_bundle_adapter.py"), "validate", str(output)],
+        [_connector_binary(), "validate", str(output)],
         cwd=ROOT,
         text=True,
         encoding="utf-8",
@@ -1554,7 +1556,7 @@ def package_local_attachment(config: WorkerConfig, source: Path, output: Path) -
 def package_routed_source(config: WorkerConfig, source: str, output: Path) -> dict[str, Any]:
     if output.is_dir():
         validation = subprocess.run(
-            [sys.executable, str(ROOT / "scripts" / "raw_bundle_adapter.py"), "validate", str(output)],
+            [_connector_binary(), "validate", str(output)],
             cwd=ROOT,
             text=True,
             encoding="utf-8",
@@ -1568,14 +1570,12 @@ def package_routed_source(config: WorkerConfig, source: str, output: Path) -> di
         raise RuntimeError(f"existing routed output is invalid: {json.dumps(report, ensure_ascii=False)}")
     result = subprocess.run(
         [
-            sys.executable,
-            str(ROOT / "scripts" / "raw_ingest.py"),
+            _connector_binary(),
             "ingest",
             source,
             "--output",
             str(output),
-            "--benchmark",
-        ],
+            ],
         cwd=ROOT,
         text=True,
         encoding="utf-8",
@@ -1586,7 +1586,7 @@ def package_routed_source(config: WorkerConfig, source: str, output: Path) -> di
     if result.returncode != 0:
         raise RuntimeError((result.stderr or result.stdout).strip())
     validation = subprocess.run(
-        [sys.executable, str(ROOT / "scripts" / "raw_bundle_adapter.py"), "validate", str(output)],
+        [_connector_binary(), "validate", str(output)],
         cwd=ROOT,
         text=True,
         encoding="utf-8",
@@ -1627,7 +1627,7 @@ def package_public_web(
     if result.returncode != 0:
         raise RuntimeError((result.stderr or result.stdout).strip())
     validation = subprocess.run(
-        [sys.executable, str(ROOT / "scripts" / "raw_bundle_adapter.py"), "validate", str(output)],
+        [_connector_binary(), "validate", str(output)],
         cwd=ROOT,
         text=True,
         encoding="utf-8",
@@ -1648,10 +1648,9 @@ def finalize_raw_v2(
     run_path: Path,
     source_path: Path | None = None,
 ) -> dict[str, Any]:
-    script = config.connector_repo / "scripts" / "raw_bundle_adapter.py"
+    connector = _connector_binary()
     command = [
-            str(config.connector_python),
-            str(script),
+            connector,
             "finalize-v2",
             str(output),
             "--capture-envelope",
@@ -1663,7 +1662,7 @@ def finalize_raw_v2(
         command.extend(["--source", str(source_path)])
     result = subprocess.run(
         command,
-        cwd=config.connector_repo,
+        cwd=ROOT,
         text=True,
         encoding="utf-8",
         errors="replace",

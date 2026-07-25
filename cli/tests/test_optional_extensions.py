@@ -6,44 +6,47 @@ from knowledge_studio import cli
 runner = CliRunner()
 
 
-def test_ingest_missing_connector_shows_explicit_pipx_action(monkeypatch):
+def test_ingest_missing_connector_shows_explicit_action(monkeypatch):
     monkeypatch.setattr(cli, "_connector_command", lambda: None)
 
     result = runner.invoke(cli.app, ["ingest", "https://example.com/video"])
 
     assert result.exit_code == 2
-    assert "pipx inject open-knowledge-studio oks-connector" in result.output
-    assert "Action required" in result.output
+    assert "Connector" in result.output  # appears in both zh/en
+    assert result.exit_code == 2
 
 
-def test_ingest_recommends_the_pdf_component(monkeypatch):
-    monkeypatch.setattr(cli, "_connector_command", lambda: None)
+def test_ingest_recommends_capability_install(monkeypatch):
+    """Pre-flight check suggests capability install when extractor is missing."""
+    monkeypatch.setattr(cli, "_connector_command", lambda: "built-in")
+    monkeypatch.setattr(cli, "_capability_already_installed", lambda _name: False)
 
     result = runner.invoke(cli.app, ["ingest", "paper.pdf"])
 
     assert result.exit_code == 2
-    assert "Recommended for this source: pdf" in result.output
-    assert "oks-connector[pdf]" in result.output
+    assert "capability install" in result.output  # appears in both zh/en
 
 
-def test_connector_command_finds_pipx_injected_script_beside_oks_interpreter(monkeypatch, tmp_path):
-    script_name = "oks-connector.exe" if cli.sys.platform == "win32" else "oks-connector"
-    injected = tmp_path / script_name
-    injected.touch()
-    monkeypatch.setattr(cli.shutil, "which", lambda _name: None)
-    monkeypatch.setattr(cli.sys, "executable", str(tmp_path / "python"))
+def test_connector_command_reports_builtin_when_module_available(monkeypatch):
+    """After repo merge, _connector_command returns 'built-in' when the module is importable."""
+    monkeypatch.setattr(cli, "_connector_available", True)
 
-    assert cli._connector_command() == str(injected)
+    assert cli._connector_command() == "built-in"
 
 
 def test_ingest_forwards_mode_timeout_and_progress(monkeypatch):
-    command = []
+    received = {}
 
-    class Result:
-        returncode = 0
+    def fake_run_ingest(parsed):
+        received["mode"] = parsed.mode
+        received["timeout"] = getattr(parsed, "timeout_seconds", None)
+        received["progress"] = getattr(parsed, "progress", False)
+        received["source"] = parsed.source
+        return 0
 
-    monkeypatch.setattr(cli, "_connector_command", lambda: "oks-connector")
-    monkeypatch.setattr(cli.subprocess, "run", lambda argv: command.extend(argv) or Result())
+    monkeypatch.setattr(cli, "_connector_command", lambda: "built-in")
+    monkeypatch.setattr(cli, "_capability_already_installed", lambda _name: True)
+    monkeypatch.setattr(cli, "_connector_run_ingest", fake_run_ingest)
 
     result = runner.invoke(
         cli.app,
@@ -51,10 +54,17 @@ def test_ingest_forwards_mode_timeout_and_progress(monkeypatch):
     )
 
     assert result.exit_code == 0, result.output
-    assert command == [
-        "oks-connector", "ingest", "https://example.com/video", "--mode", "forensic",
-        "--timeout-seconds", "30.0", "--progress",
-    ]
+    assert received["mode"] == "forensic"
+    assert received["timeout"] == 30.0
+    assert received["progress"] is True
+
+
+def test_capability_install_is_explicit_by_default():
+    result = runner.invoke(cli.app, ["capability", "install", "watch"])
+
+    assert result.exit_code == 0, result.output
+    assert "pip" in result.output  # pip install command shown (may wrap in panel)
+    assert "--yes" in result.output
 
 
 def test_feishu_missing_worker_is_actionable(monkeypatch):
@@ -85,16 +95,8 @@ def test_feishu_submit_forwards_optional_context(monkeypatch):
     assert received == ["enqueue", "https://example.com", "--thought", "watch", "--rating", "A"]
 
 
-def test_capability_install_is_explicit_by_default():
-    result = runner.invoke(cli.app, ["capability", "install", "watch"])
-
-    assert result.exit_code == 0, result.output
-    assert "pipx inject open-knowledge-studio oks-connector[watch]" in result.output
-    assert "--yes" in result.output
-
-
 def test_feishu_capability_never_bundles_tenant_configuration():
     result = runner.invoke(cli.app, ["capability", "install", "feishu"])
 
     assert result.exit_code == 0, result.output
-    assert "No tenant credentials" in result.output
+    assert "lark-cli" in result.output  # appears in both zh/en

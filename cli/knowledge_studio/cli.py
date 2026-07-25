@@ -4,6 +4,7 @@ Typer-based CLI for knowledge base search, wiki CRUD, drafts, and maintenance.
 """
 from __future__ import annotations
 
+import importlib.util
 import json
 from pathlib import Path
 import shutil
@@ -19,7 +20,20 @@ from rich.markdown import Markdown
 from rich.markup import escape
 
 from knowledge_studio import store
+from knowledge_studio.i18n import t
 from knowledge_studio.recall import recall, recall_episodic, recall_knowledge
+
+# ── ingest: direct import from bundled scripts/ ──────────────────────
+_SCRIPTS = Path(__file__).resolve().parent.parent.parent / "scripts"
+if str(_SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(_SCRIPTS))
+
+_connector_available = False
+try:
+    from raw_bundle_adapter import build_parser as _connector_parser, run_ingest as _connector_run_ingest
+    _connector_available = True
+except ImportError:
+    pass
 
 
 def _configure_utf8_stdio() -> None:
@@ -81,12 +95,39 @@ app.add_typer(feishu_app, name="feishu")
 app.add_typer(capability_app, name="capability")
 
 _CAPABILITIES = {
-    "connector": ("oks-connector", "Raw routing for URL, files, and media"),
-    "watch": ("oks-connector[watch]", "Video/audio subtitles, ASR, frames, and OCR"),
-    "document": ("oks-connector[document]", "Office, HTML, and text extraction"),
-    "pdf": ("oks-connector[pdf]", "MinerU PDF layout and asset evidence"),
-    "formula": ("oks-connector[formula]", "PaddleOCR formula candidates"),
-    "feishu": ("lark-cli", "Private Base, form, bot review, and bounded listening"),
+    "watch": {
+        "purpose": "Video/audio subtitles, ASR, frames, and OCR",
+        "deps": [
+            "faster-whisper==1.2.1",
+            "rapidocr==3.9.1",
+            "onnxruntime==1.27.0",
+            "scenedetect>=0.7,<0.8",
+            "imagehash>=4.3,<5",
+            "yt-dlp==2026.7.4",
+            "watch-skill @ git+https://github.com/oxbshw/watch-skill.git@bf177b09a4c8a4d850c878f3965caecf971555e6",
+        ],
+    },
+    "document": {
+        "purpose": "Office, HTML, and text extraction",
+        "deps": ["markitdown[docx,pptx]==0.1.6"],
+    },
+    "pdf": {
+        "purpose": "MinerU PDF layout and asset evidence",
+        "deps": ["mineru[pipeline]==3.4.4", "six==1.17.0"],
+    },
+    "formula": {
+        "purpose": "PaddleOCR formula candidates",
+        "deps": [
+            "paddlepaddle==3.2.0",
+            "paddleocr==3.7.0",
+            "tokenizers==0.23.1",
+            "ftfy==6.3.1",
+        ],
+    },
+    "feishu": {
+        "purpose": "Private Base, form, bot review, and bounded listening",
+        "deps": [],
+    },
 }
 
 
@@ -97,44 +138,65 @@ def capability_list():
     table.add_column("Capability")
     table.add_column("Purpose")
     table.add_column("Install")
-    for name, (_package, purpose) in _CAPABILITIES.items():
+    for name, info in _CAPABILITIES.items():
         install = "user-managed lark-cli" if name == "feishu" else f"oks capability install {name}"
-        table.add_row(name, purpose, install)
+        table.add_row(name, info["purpose"], install)
     console.print(table)
+
+
+def _capability_already_installed(name: str) -> bool:
+    """Check whether a capability's key module is already importable."""
+    probes = {
+        "watch": "watch_skill",
+        "document": "markitdown",
+        "pdf": "mineru",
+        "formula": "paddleocr",
+    }
+    module = probes.get(name)
+    if module is None:
+        return False
+    return importlib.util.find_spec(module) is not None
 
 
 @capability_app.command("install")
 def capability_install(
-    name: str = typer.Argument(..., help="connector, watch, document, pdf, formula, or feishu"),
+    name: str = typer.Argument(..., help="watch, document, pdf, formula, or feishu"),
     yes: bool = typer.Option(False, "--yes", help="Execute the displayed installation command"),
 ):
-    """Show or explicitly perform a pipx injection for one selected capability."""
-    selected = _CAPABILITIES.get(name)
-    if selected is None:
+    """Show or explicitly install one optional capability (heavy dependencies)."""
+    info = _CAPABILITIES.get(name)
+    if info is None:
         raise typer.BadParameter(f"unknown capability: {name}; run `oks capability list`")
-    package, purpose = selected
+    purpose = info["purpose"]
+
     if name == "feishu":
         console.print(Panel.fit(
-            "[bold]Feishu is a private deployment extension.[/bold]\n\n"
-            "Install your organization's approved lark-cli, then follow docs/handoff-cli-feishu-loop-20260724.md.\n"
-            "No tenant credentials, scopes, or bot identity are bundled into OKS.",
-            title="User-managed capability", border_style="cyan",
+            f"[bold]{t('feishu_private')}[/bold]",
+            title=t("user_managed_capability"), border_style="cyan",
         ))
         return
-    command = ["pipx", "inject", "open-knowledge-studio", package]
+
+    if _capability_already_installed(name):
+        console.print(f"[green]{t('capability_already', name=name)}[/green]")
+        return
+
+    deps = info["deps"]
+    cmd = [sys.executable, "-m", "pip", "install"] + deps
+
     if not yes:
         console.print(Panel.fit(
             f"[bold]{name}[/bold]: {purpose}\n\n"
-            f"This may download large modality-specific dependencies. Run:\n[bold]{escape(' '.join(command))}[/bold]\n"
-            "Or re-run with [bold]--yes[/bold] to execute it.",
-            title="Optional install", border_style="yellow",
+            f"{t('capability_install_prompt', n=len(deps), cmd=' '.join(cmd))}",
+            title=t("optional_install"), border_style="yellow",
         ))
         return
-    pipx = shutil.which("pipx")
-    if pipx is None:
-        console.print("[bold red]pipx is not on PATH.[/bold red]")
-        raise typer.Exit(2)
-    raise typer.Exit(subprocess.run([pipx, *command[1:]]).returncode)
+
+    console.print(f"[yellow]{t('capability_installing', name=name)}[/yellow]")
+    result = subprocess.run(cmd)
+    if result.returncode != 0:
+        console.print(f"[bold red]{t('capability_failed', name=name, code=result.returncode)}[/bold red]")
+        raise typer.Exit(result.returncode)
+    console.print(f"[green]{t('capability_installed', name=name)}[/green]")
 
 
 def _connector_install_hint() -> str:
@@ -142,17 +204,8 @@ def _connector_install_hint() -> str:
 
 
 def _connector_command() -> str | None:
-    """Find Connector on PATH or beside the interpreter that runs ``oks``.
-
-    ``pipx inject`` installs an injected console script in the app venv but
-    deliberately does not expose that script on the user's PATH.
-    """
-    command = shutil.which("oks-connector")
-    if command is not None:
-        return command
-    suffix = ".exe" if sys.platform == "win32" else ""
-    injected = Path(sys.executable).parent / f"oks-connector{suffix}"
-    return str(injected) if injected.is_file() else None
+    """Connector is bundled as ``scripts/raw_bundle_adapter`` — no separate binary needed."""
+    return "built-in" if _connector_available else None
 
 
 def _recommended_capability(source: str) -> str:
@@ -161,61 +214,67 @@ def _recommended_capability(source: str) -> str:
         return "pdf"
     if suffix in {".docx", ".pptx", ".xlsx", ".html", ".htm", ".txt", ".csv"}:
         return "document"
-    if suffix in {".mp4", ".mov", ".mkv", ".avi", ".webm", ".mp3", ".wav", ".m4a", ".flac", ".aac", ".ogg"}:
-        return "watch"
-    lowered = source.lower()
-    if any(host in lowered for host in ("youtube.com", "youtu.be", "bilibili.com", "b23.tv", "douyin.com")):
-        return "watch"
-    return "connector"
+    return "watch"  # video, audio, and platform URLs all route to watch
 
 
 @app.command()
 def ingest(
     source: str = typer.Argument(..., help="Local file or supported platform URL"),
     mode: str = typer.Option("quick", "--mode", help="quick or forensic"),
-    install: bool = typer.Option(False, "--install", help="Install the optional Connector into this pipx environment"),
     timeout_seconds: Optional[float] = typer.Option(None, "--timeout-seconds"),
     progress: bool = typer.Option(True, "--progress/--no-progress"),
 ):
-    """Acquire one source through the optional Connector; no Wiki promotion occurs here."""
+    """Acquire one source through the built-in connector; no Wiki promotion occurs here."""
     if mode not in {"quick", "forensic"}:
         raise typer.BadParameter("--mode must be quick or forensic")
-    capability = _recommended_capability(source)
-    package = _CAPABILITIES[capability][0]
     connector = _connector_command()
-    if connector is None and install:
-        pipx = shutil.which("pipx")
-        if pipx is None:
-            console.print(Panel.fit(
-                "[bold red]Optional Connector is missing[/bold red]\n\n"
-                "Install pipx first, then run:\n"
-                f"  [bold]{_connector_install_hint()}[/bold]",
-                border_style="red",
-            ))
-            raise typer.Exit(2)
-        console.print("[bold yellow]Installing optional Connector into pipx environment…[/bold yellow]")
-        result = subprocess.run([pipx, "inject", "open-knowledge-studio", package])
-        if result.returncode:
-            raise typer.Exit(result.returncode)
-        connector = _connector_command()
     if connector is None:
         console.print(Panel.fit(
-            "[bold red]Optional Connector is required for ingest[/bold red]\n\n"
-            "The OKS core stays lightweight; video/PDF/OCR dependencies are not installed by default.\n"
-            f"Recommended for this source: [bold]{capability}[/bold]\n"
-            f"Run: [bold]{escape(f'pipx inject open-knowledge-studio {package}')}[/bold]\n"
-            "Then retry this command, or pass [bold]--install[/bold] to let oks invoke that explicit pipx action.",
-            title="Action required",
+            f"[bold red]{t('connector_missing')}[/bold red]\n\n"
+            f"{t('connector_missing_hint')}",
+            title=t("action_required"),
             border_style="red",
         ))
         raise typer.Exit(2)
-    command = [connector, "ingest", source, "--mode", mode]
+
+    # ── pre-flight: check capability before running the connector ──
+    needed = _recommended_capability(source)
+    if not _capability_already_installed(needed):
+        env = _extractor_env_for(needed)
+        console.print(Panel.fit(
+            f"[bold yellow]{t('capability_missing', name=needed)}[/bold yellow]\n\n"
+            f"{t('capability_missing_hint', name=needed, env=env)}",
+            title=t("install_hint"),
+            border_style="yellow",
+        ))
+        raise typer.Exit(2)
+
+    cli_args = ["ingest", source, "--mode", mode]
     if timeout_seconds is not None:
-        command.extend(["--timeout-seconds", str(timeout_seconds)])
+        cli_args.extend(["--timeout-seconds", str(timeout_seconds)])
     if progress:
-        command.append("--progress")
-    console.print(f"[dim]Running: {' '.join(command)}[/dim]")
-    raise typer.Exit(subprocess.run(command).returncode)
+        cli_args.append("--progress")
+    try:
+        parsed = _connector_parser().parse_args(cli_args)
+    except SystemExit as exc:
+        raise typer.Exit(exc.code)
+    try:
+        exit_code = _connector_run_ingest(parsed)
+    except Exception as exc:
+        console.print(Panel.fit(
+            f"[bold red]{exc}[/bold red]",
+            title=t("ingest_failed"),
+            border_style="red",
+        ))
+        raise typer.Exit(1)
+    if exit_code == 0:
+        print(t("ingest_done_hint"), file=sys.stderr)
+    raise typer.Exit(exit_code)
+
+
+def _extractor_env_for(capability: str) -> str:
+    return {"watch": "OKS_WATCH_PYTHON", "document": "OKS_DOCUMENT_PYTHON",
+            "pdf": "OKS_MINERU_PYTHON", "formula": "OKS_FORMULA_PYTHON"}.get(capability, "")
 
 
 def _feishu_worker_path() -> Path | None:
@@ -282,6 +341,32 @@ def feishu_run_once(limit: int = typer.Option(100, "--limit")):
 def feishu_listen(max_events: int = typer.Option(1, "--max-events"), timeout: str = typer.Option("5m", "--timeout")):
     """Consume bounded Feishu review replies; use an external scheduler for continuous service."""
     _run_feishu_worker("listen-reviews", ["--max-events", str(max_events), "--timeout", timeout])
+
+
+@feishu_app.command("setup")
+def feishu_setup(
+    base_token: Optional[str] = typer.Option(None, "--base-token", help="已有 Base token（跳过创建）"),
+    base_name: str = typer.Option("Open Knowledge Studio", "--base-name"),
+    table_name: str = typer.Option("每日知识采集", "--table-name"),
+):
+    """自动创建飞书 Base、采集表和表单。需要 lark-cli 已认证。"""
+    lark = shutil.which("lark-cli") or shutil.which("lark-cli.exe")
+    if lark is None:
+        console.print("[bold red]lark-cli 未安装。[/bold red]")
+        raise typer.Exit(2)
+    worker = _feishu_worker_path()
+    if worker is None:
+        console.print("[bold red]找不到 worker 脚本。[/bold red]")
+        raise typer.Exit(2)
+    setup_script = worker.parent / "feishu_setup.py"
+    if not setup_script.is_file():
+        console.print(f"[bold red]找不到: {setup_script}[/bold red]")
+        raise typer.Exit(2)
+    cmd = [sys.executable, str(setup_script)]
+    if base_token:
+        cmd.extend(["--base-token", base_token])
+    cmd.extend(["--base-name", base_name, "--table-name", table_name])
+    raise typer.Exit(subprocess.run(cmd).returncode)
 
 
 # ── Search / Recall ──────────────────────────────────────────────
@@ -948,10 +1033,15 @@ def init(
         console.print(f"[green]Active KB set:[/green] {root}")
 
     console.print(
-        f"\n[bold]Instance ready.[/bold] Next:\n"
-        f"  cd {root}\n"
-        f"  oks status\n"
-        f"  oks wiki create --title \"...\" --type concept --area computing"
+        f"\n[bold]{t('init_ready')}[/bold]\n"
+        f"{t('init_step_install')}\n"
+        f"{t('init_step_ingest')}\n"
+        f"{t('init_step_status')}\n"
+        f"\n[dim]{t('init_capabilities')}[/dim]\n"
+        f"  [dim]watch    - 视频/音频 (faster-whisper + yt-dlp + RapidOCR)[/dim]\n"
+        f"  [dim]document - Office/HTML/文本 (markitdown)[/dim]\n"
+        f"  [dim]pdf      - PDF (MinerU)[/dim]\n"
+        f"  [dim]formula  - 公式 OCR (PaddleOCR)[/dim]"
     )
 
 
