@@ -41,6 +41,12 @@ assert _MD_SPEC and _MD_SPEC.loader
 markitdown_module = importlib.util.module_from_spec(_MD_SPEC)
 _MD_SPEC.loader.exec_module(markitdown_module)
 
+WATCH_PATH = Path(__file__).parents[1] / "extractors" / "watch.py"
+_W_SPEC = importlib.util.spec_from_file_location("extractors.watch", WATCH_PATH)
+assert _W_SPEC and _W_SPEC.loader
+watch_module = importlib.util.module_from_spec(_W_SPEC)
+_W_SPEC.loader.exec_module(watch_module)
+
 
 class FakeProbeResponse:
     def __init__(
@@ -444,8 +450,8 @@ def test_subtitle_topic_anchors_are_bounded_and_gap_aware():
         {"start": 70, "end": 72, "text": "later topic"},
     ]
 
-    assert adapter.subtitle_topic_anchors(segments, 12) == [0.0, 8.0, 15.0, 70.0]
-    assert adapter.subtitle_topic_anchors(segments, 2) == [0.0, 70.0]
+    assert watch_module.subtitle_topic_anchors(segments, 12) == [0.0, 8.0, 15.0, 70.0]
+    assert watch_module.subtitle_topic_anchors(segments, 2) == [0.0, 70.0]
 
 
 def test_ingest_rejects_generic_web_url_without_claiming_extraction():
@@ -688,7 +694,7 @@ def test_package_watch_payload_keeps_timestamps_ocr_bbox_and_frames(tmp_path):
     }
     output = tmp_path / "bundle"
 
-    adapter.package_watch_payload(
+    watch_module.package_watch_payload(
         payload,
         source=str(source),
         source_file=None,
@@ -722,10 +728,10 @@ def test_package_watch_payload_keeps_timestamps_ocr_bbox_and_frames(tmp_path):
 
 
 def test_watch_transcript_route_distinguishes_captions_asr_and_none():
-    assert adapter.transcript_route(
+    assert watch_module.transcript_route(
         {"transcript": {"source": "captions", "segments": [{"text": "字幕"}]}}
     ) == "platform_caption"
-    assert adapter.transcript_route(
+    assert watch_module.transcript_route(
         {
             "transcript": {
                 "source": "whisper-local (small)",
@@ -733,7 +739,7 @@ def test_watch_transcript_route_distinguishes_captions_asr_and_none():
             }
         }
     ) == "asr"
-    assert adapter.transcript_route(
+    assert watch_module.transcript_route(
         {"transcript": {"source": "none", "segments": []}}
     ) == "none"
 
@@ -760,7 +766,7 @@ def test_package_watch_audio_is_transcript_only_raw(tmp_path):
     }
     output = tmp_path / "audio-bundle"
 
-    adapter.package_watch_payload(
+    watch_module.package_watch_payload(
         payload,
         source=str(source),
         source_file=None,
@@ -782,7 +788,7 @@ def test_package_watch_audio_is_transcript_only_raw(tmp_path):
 
 
 def test_group_transcript_and_visual_dedupe_are_readability_only():
-    groups = adapter.group_transcript_segments(
+    groups = watch_module.group_transcript_segments(
         [
             {"start": 0.0, "end": 1.0, "text": "第一句"},
             {"start": 1.1, "end": 2.0, "text": "第二句"},
@@ -800,7 +806,7 @@ def test_group_transcript_and_visual_dedupe_are_readability_only():
         {"ocr_blocks": [{"text": "相同屏幕内容"}]},
         {"ocr_blocks": [{"text": "新的屏幕内容"}]},
     ]
-    selected = adapter.select_visual_summaries(frames)
+    selected = watch_module.select_visual_summaries(frames)
     assert len(selected) == 2
 
 

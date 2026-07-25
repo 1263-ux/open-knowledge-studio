@@ -86,13 +86,52 @@ def normalize_ocr_text(value: str) -> str:
 
 
 def order_ocr_blocks(blocks: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Sort OCR blocks by reading order (top-to-bottom, left-to-right)."""
-    indexed = [(i, item) for i, item in enumerate(blocks)]
-    indexed.sort(key=lambda item: (
-        round(item[1].get("bbox", [0, 0, 0, 0])[1], 1),
-        round(item[1].get("bbox", [0, 0, 0, 0])[0], 1),
-    ))
-    return [{**item, "source_index": i} for i, (orig_i, item) in enumerate(indexed)]
+    """Restore basic top-to-bottom, left-to-right order from OCR bboxes."""
+    positioned: list[dict[str, Any]] = []
+    unpositioned: list[dict[str, Any]] = []
+    for index, original in enumerate(blocks):
+        block = dict(original)
+        block.setdefault("source_index", index)
+        bbox = block.get("bbox")
+        if not isinstance(bbox, (list, tuple)) or len(bbox) != 4:
+            unpositioned.append(block)
+            continue
+        left, top, right, bottom = (float(value) for value in bbox)
+        block["_layout"] = {
+            "left": left, "top": top, "right": right, "bottom": bottom,
+            "center": (top + bottom) / 2, "height": max(1.0, bottom - top),
+        }
+        positioned.append(block)
+    positioned.sort(key=lambda item: (item["_layout"]["top"], item["_layout"]["left"], item["source_index"]))
+    lines: list[dict[str, Any]] = []
+    for block in positioned:
+        layout = block["_layout"]
+        best_line: dict[str, Any] | None = None
+        best_distance = float("inf")
+        for line in lines:
+            overlap = max(0.0, min(layout["bottom"], line["bottom"]) - max(layout["top"], line["top"]))
+            overlap_ratio = overlap / min(layout["height"], line["height"])
+            distance = abs(layout["center"] - line["center"])
+            tolerance = max(layout["height"], line["height"]) * 0.6
+            if (overlap_ratio >= 0.4 or distance <= tolerance) and distance < best_distance:
+                best_line = line
+                best_distance = distance
+        if best_line is None:
+            lines.append({"top": layout["top"], "bottom": layout["bottom"], "center": layout["center"],
+                          "height": layout["height"], "blocks": [block]})
+            continue
+        best_line["blocks"].append(block)
+        best_line["top"] = min(best_line["top"], layout["top"])
+        best_line["bottom"] = max(best_line["bottom"], layout["bottom"])
+        best_line["center"] = (best_line["top"] + best_line["bottom"]) / 2
+        best_line["height"] = max(1.0, best_line["bottom"] - best_line["top"])
+    ordered: list[dict[str, Any]] = []
+    for line in sorted(lines, key=lambda item: (item["top"], item["center"])):
+        for block in sorted(line["blocks"], key=lambda item: (item["_layout"]["left"], item["source_index"])):
+            block.pop("_layout", None)
+            ordered.append(block)
+    ordered.extend(unpositioned)
+    return ordered
 
 
 def parse_ocr_roi(raw: str | None) -> tuple[int, int, int, int] | None:
@@ -103,8 +142,9 @@ def parse_ocr_roi(raw: str | None) -> tuple[int, int, int, int] | None:
     if len(parts) != 4:
         raise ValueError(f"OCR ROI must be x1,y1,x2,y2, got: {raw!r}")
     coords = tuple(int(p) for p in parts)
-    if coords[0] >= coords[2] or coords[1] >= coords[3]:
-        raise ValueError(f"OCR ROI must have x1<x2 and y1<y2, got: {raw!r}")
+    x1, y1, x2, y2 = coords
+    if min(coords) < 0 or x2 <= x1 or y2 <= y1:
+        raise ValueError(f"OCR ROI must satisfy 0 <= x1 < x2 and 0 <= y1 < y2, got: {raw!r}")
     return coords  # type: ignore[return-value]
 
 
