@@ -12,6 +12,11 @@ from types import SimpleNamespace
 import pytest
 
 
+import os
+_SCRIPTS_DIR = str(Path(__file__).resolve().parents[1])
+if _SCRIPTS_DIR not in sys.path:
+    sys.path.insert(0, _SCRIPTS_DIR)
+
 MODULE_PATH = Path(__file__).parents[1] / "raw_bundle_adapter.py"
 SPEC = importlib.util.spec_from_file_location("raw_bundle_adapter", MODULE_PATH)
 assert SPEC and SPEC.loader
@@ -23,6 +28,18 @@ _IMG_SPEC = importlib.util.spec_from_file_location("extractors.image", IMAGE_PAT
 assert _IMG_SPEC and _IMG_SPEC.loader
 image_module = importlib.util.module_from_spec(_IMG_SPEC)
 _IMG_SPEC.loader.exec_module(image_module)
+
+MINERU_PATH = Path(__file__).parents[1] / "extractors" / "mineru.py"
+_MIN_SPEC = importlib.util.spec_from_file_location("extractors.mineru", MINERU_PATH)
+assert _MIN_SPEC and _MIN_SPEC.loader
+mineru_module = importlib.util.module_from_spec(_MIN_SPEC)
+_MIN_SPEC.loader.exec_module(mineru_module)
+
+MD_PATH = Path(__file__).parents[1] / "extractors" / "markitdown.py"
+_MD_SPEC = importlib.util.spec_from_file_location("extractors.markitdown", MD_PATH)
+assert _MD_SPEC and _MD_SPEC.loader
+markitdown_module = importlib.util.module_from_spec(_MD_SPEC)
+_MD_SPEC.loader.exec_module(markitdown_module)
 
 
 class FakeProbeResponse:
@@ -286,7 +303,7 @@ def test_package_mineru_preserves_page_bbox_and_assets(tmp_path):
         encoding="utf-8",
     )
 
-    adapter.package_mineru(
+    mineru_module.package_mineru(
         Namespace(
             result_dir=result.parent.parent,
             source=source,
@@ -487,7 +504,7 @@ def test_package_markitdown_preserves_slides_media_and_unresolved_refs(tmp_path)
     )
     output = tmp_path / "bundle"
 
-    adapter.package_markitdown(
+    markitdown_module.package_markitdown(
         Namespace(
             source=source,
             markdown=markdown,
@@ -544,7 +561,7 @@ def test_package_markitdown_maps_pptx_placeholders_via_ooxml_relationships(tmp_p
     )
     output = tmp_path / "mapped-bundle"
 
-    adapter.package_markitdown(
+    markitdown_module.package_markitdown(
         Namespace(
             source=source,
             markdown=markdown,
@@ -569,7 +586,7 @@ def test_package_markitdown_maps_pptx_placeholders_via_ooxml_relationships(tmp_p
 def test_extract_markdown_data_images_persists_extractor_asset(tmp_path):
     markdown = "![图](data:image/png;base64,aW1hZ2U=)"
 
-    mapped, assets, failed = adapter.extract_markdown_data_images(markdown, tmp_path)
+    mapped, assets, failed = markitdown_module.extract_markdown_data_images(markdown, tmp_path)
 
     assert mapped == "![图](assets/embedded/image-0001.png)"
     assert len(assets) == 1
@@ -584,7 +601,7 @@ def test_package_markitdown_marks_empty_extraction_failed(tmp_path):
     extracted.write_text("", encoding="utf-8")
     output = tmp_path / "empty-bundle"
 
-    adapter.package_markitdown(
+    markitdown_module.package_markitdown(
         Namespace(
             source=source,
             markdown=extracted,
