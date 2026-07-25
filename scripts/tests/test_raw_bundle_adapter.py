@@ -18,6 +18,12 @@ assert SPEC and SPEC.loader
 adapter = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(adapter)
 
+IMAGE_PATH = Path(__file__).parents[1] / "extractors" / "image.py"
+_IMG_SPEC = importlib.util.spec_from_file_location("extractors.image", IMAGE_PATH)
+assert _IMG_SPEC and _IMG_SPEC.loader
+image_module = importlib.util.module_from_spec(_IMG_SPEC)
+_IMG_SPEC.loader.exec_module(image_module)
+
 
 class FakeProbeResponse:
     def __init__(
@@ -831,7 +837,7 @@ def test_package_image_result_translates_roi_coordinates(tmp_path):
         overwrite=False,
     )
 
-    adapter.package_image_result(args, result, elapsed_seconds=0.1)
+    image_module.package_image_result(args, result, elapsed_seconds=0.1)
 
     evidence = [
         json.loads(line)
@@ -926,7 +932,7 @@ def test_package_image_result_preserves_ocr_bbox_and_original(tmp_path):
         overwrite=False,
     )
 
-    adapter.package_image_result(args, result, elapsed_seconds=0.1)
+    image_module.package_image_result(args, result, elapsed_seconds=0.1)
 
     content = (output / "content.md").read_text(encoding="utf-8")
     assert "知识复利" in content
@@ -956,7 +962,8 @@ def test_package_image_result_preserves_ocr_bbox_and_original(tmp_path):
 def test_cli_failure_is_machine_readable(monkeypatch, capsys, tmp_path):
     source = tmp_path / "screen.png"
     source.write_bytes(b"png")
-    monkeypatch.setattr(adapter, "run_image", lambda _: (_ for _ in ()).throw(RuntimeError("ocr unavailable")))
+    import extractors.image as _img_mod
+    monkeypatch.setattr(_img_mod, "run_image", lambda _: (_ for _ in ()).throw(RuntimeError("ocr unavailable")))
     monkeypatch.setattr(
         sys,
         "argv",
