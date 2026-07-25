@@ -45,32 +45,6 @@ PLUGIN_VERSION = "0.1.0"
 _WATCH_OVERRIDE_LOCK = threading.Lock()
 
 
-def emit_json(value: Any, *, indent: int | None = None) -> None:
-    """Write UTF-8 JSON without depending on the Windows console code page."""
-    payload = json.dumps(value, ensure_ascii=False, indent=indent) + "\n"
-    buffer = getattr(sys.stdout, "buffer", None)
-    if buffer is not None:
-        buffer.write(payload.encode("utf-8"))
-        buffer.flush()
-        return
-    sys.stdout.write(payload)
-    sys.stdout.flush()
-
-
-def emit_progress(enabled: bool, phase: str, fraction: float, eta_seconds: int | None) -> None:
-    """Emit machine-readable progress on stderr without corrupting CLI JSON output."""
-    if not enabled:
-        return
-    payload = {
-        "event": "progress",
-        "phase": phase,
-        "percent": round(max(0.0, min(1.0, fraction)) * 100, 1),
-        "estimated_remaining_seconds": eta_seconds,
-    }
-    sys.stderr.write(json.dumps(payload, ensure_ascii=False) + "\n")
-    sys.stderr.flush()
-
-
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="oks-connector", description=__doc__)
     parser.add_argument(
@@ -251,48 +225,6 @@ def build_parser() -> argparse.ArgumentParser:
     )
     check.add_argument("--minimal", action="store_true", help="仅输出版本兼容性检查，不逐个验证提取器。")
     return parser
-
-
-def sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(4 * 1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
-def write_json(path: Path, value: Any) -> None:
-    path.write_text(
-        json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-    )
-
-
-def write_jsonl(path: Path, values: Iterable[dict[str, Any]]) -> int:
-    count = 0
-    with path.open("w", encoding="utf-8", newline="\n") as handle:
-        for value in values:
-            handle.write(json.dumps(value, ensure_ascii=False) + "\n")
-            count += 1
-    return count
-
-
-def exactly_one(root: Path, pattern: str) -> Path:
-    matches = sorted(root.rglob(pattern))
-    if len(matches) != 1:
-        raise ValueError(
-            f"expected exactly one {pattern!r} under {root}, found {len(matches)}"
-        )
-    return matches[0]
-
-
-def prepare_output(path: Path, overwrite: bool) -> Path:
-    path = path.expanduser().resolve()
-    if path.exists():
-        if not overwrite:
-            raise FileExistsError(f"output already exists: {path}")
-        shutil.rmtree(path)
-    path.mkdir(parents=True)
-    return path
 
 
 def source_identity(
@@ -827,8 +759,12 @@ def _extractor_python(extractor: str) -> Path:
     }[extractor]
 
     # 1. Already installed (via oks capability install) — shared check
+    # Map extractor names to capability names for the shared check
+    _extractor_to_capability = {"watch": "watch", "rapidocr": "watch",
+                                "markitdown": "document", "mineru": "pdf"}
+    capability = _extractor_to_capability.get(extractor, extractor)
     from capability_check import is_capability_available as _cap_ok
-    cap_ok, cap_python = _cap_ok(extractor)
+    cap_ok, cap_python = _cap_ok(capability)
     if cap_ok and cap_python is not None:
         return cap_python
 
