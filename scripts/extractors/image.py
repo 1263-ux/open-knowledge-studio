@@ -15,9 +15,8 @@ from _shared import (
     sha256_file, write_json, write_jsonl, format_media_time,
 )
 # Import from parent module — safe because this module is loaded lazily
-from raw_bundle_adapter import (
-    SCHEMA_VERSION, common_metadata, coverage_report, source_identity,
-)
+from constants import SCHEMA_VERSION
+from _shared import common_metadata, coverage_report, source_identity
 
 
 def rapidocr_blocks(result: Any, min_confidence: float) -> tuple[list[dict[str, Any]], int]:

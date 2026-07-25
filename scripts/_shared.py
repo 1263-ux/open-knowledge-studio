@@ -5,6 +5,7 @@ These are pure functions with no side-effects on the extraction pipeline.
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 import hashlib
 import json
 import shutil
@@ -152,3 +153,113 @@ def format_media_time(seconds: float) -> str:
     """Format seconds as mm:ss."""
     m, s = divmod(int(seconds), 60)
     return f"{m:02d}:{s:02d}"
+
+from constants import SCHEMA_VERSION
+
+def common_metadata(
+    *,
+    capture_id: str,
+    identity: dict[str, Any],
+    title: str,
+    source_type: str,
+    modalities: list[str],
+    route: list[str],
+    extractor_name: str,
+    extractor_version: str,
+    processing_status: str,
+    benchmark: bool,
+) -> dict[str, Any]:
+    generated_at = datetime.now(timezone.utc).isoformat()
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "capture_id": capture_id,
+        "source": {
+            **identity,
+            "title": title,
+            "author": None,
+            "collected_at": generated_at,
+        },
+        "source_type": source_type,
+        "modalities": modalities,
+        "route": route,
+        "extractors": [{"name": extractor_name, "version": extractor_version}],
+        "processing_status": processing_status,
+        "review_status": "pending",
+        "benchmark": bool(benchmark),
+        "human_context": "omitted" if benchmark else "required",
+        "purpose": "multimodal_pipeline_evaluation" if benchmark else None,
+    }
+
+def coverage_report(
+    checks: dict[str, tuple[int | None, int]],
+) -> tuple[dict[str, dict[str, Any]], str]:
+    report: dict[str, dict[str, Any]] = {}
+    statuses: list[str] = []
+    for name, (expected, observed) in checks.items():
+        if expected is None:
+            status = "unknown"
+        elif observed == expected:
+            status = "passed"
+        else:
+            status = "partial"
+        report[name] = {
+            "expected": expected,
+            "observed": observed,
+            "status": status,
+        }
+        statuses.append(status)
+    if "partial" in statuses:
+        overall = "partial"
+    elif statuses and all(status == "passed" for status in statuses):
+        overall = "passed"
+    else:
+        overall = "unknown"
+    return report, overall
+
+
+# ── source identity ────────────────────────────────────────────────
+
+from route import is_url, platform_for
+
+def source_identity(
+    source: str,
+    source_file: Path | None = None,
+    content_file: Path | None = None,
+) -> dict:
+    """Build a content-addressable identity dict for one source."""
+    local = source_file
+    if local is None:
+        candidate = Path(source).expanduser()
+        if candidate.is_file():
+            local = candidate
+    if local is not None:
+        local = local.expanduser().resolve()
+        if not local.is_file():
+            raise FileNotFoundError(local)
+        identity = {
+            "local_path": str(local),
+            "url": None if source == str(local) else source if is_url(source) else None,
+            "platform": platform_for(source),
+            "content_sha256": sha256_file(local),
+            "content_hash_status": "verified",
+        }
+        if is_url(source):
+            identity["source_url_sha256"] = hashlib.sha256(
+                source.encode("utf-8")
+            ).hexdigest()
+        return identity
+    if not is_url(source):
+        raise FileNotFoundError(source)
+    verified_content = None
+    if content_file is not None:
+        candidate_content = content_file.expanduser().resolve()
+        if candidate_content.is_file():
+            verified_content = sha256_file(candidate_content)
+    return {
+        "local_path": None,
+        "url": source,
+        "platform": platform_for(source),
+        "source_url_sha256": hashlib.sha256(source.encode("utf-8")).hexdigest(),
+        "content_sha256": verified_content,
+        "content_hash_status": "verified" if verified_content else "unavailable",
+    }

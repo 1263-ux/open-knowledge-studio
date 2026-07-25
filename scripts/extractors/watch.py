@@ -27,10 +27,8 @@ from _shared import (
     format_media_time, sha256_file, prepare_output,
 )
 from route import is_url, platform_for, route_plan
-from raw_bundle_adapter import (
-    SCHEMA_VERSION, PLUGIN_VERSION, source_identity, common_metadata,
-    coverage_report, _WATCH_OVERRIDE_LOCK,
-)
+from constants import SCHEMA_VERSION, PLUGIN_VERSION, _WATCH_OVERRIDE_LOCK
+from _shared import common_metadata, coverage_report, source_identity
 
 
 

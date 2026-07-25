@@ -15,9 +15,8 @@ from typing import Any, Iterable
 
 from route import is_url
 from _shared import prepare_output, sha256_file, write_json, write_jsonl
-from raw_bundle_adapter import (
-    SCHEMA_VERSION, common_metadata, coverage_report, source_identity,
-)
+from constants import SCHEMA_VERSION
+from _shared import common_metadata, coverage_report, source_identity
 
 
 def markdown_asset_references(markdown: str) -> list[str]:
