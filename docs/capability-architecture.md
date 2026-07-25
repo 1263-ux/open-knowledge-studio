@@ -28,7 +28,7 @@ oks capability install connector
 oks capability install watch
 ```
 
-默认 `oks capability install` 只展示对应的 `pipx inject` 命令。用户确认本机环境和模型体积后，使用 `--yes` 执行。核心包永远不自动安装模型、不会登录第三方平台、不会创建远端资源。
+默认 `oks capability install` 只展示对应的 `oks capability install` 命令。用户确认本机环境和模型体积后，使用 `--yes` 执行。核心包永远不自动安装模型、不会登录第三方平台、不会创建远端资源。
 
 | Capability | 独立 CLI / Provider | 用户选择后安装 | 主要输入 |
 |---|---|---|---|

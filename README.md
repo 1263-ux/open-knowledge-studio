@@ -53,7 +53,7 @@ oks feishu listen                # 监听审核回复
 通过 `oks capability install` 按需安装，每次安装前提示用户确认。
 
 If Connector is absent, `oks ingest` shows this exact action prominently; it
-only runs `pipx inject` when you explicitly pass `--install`. Feishu Base is an
+no longer needs `pipx inject` when you explicitly pass `--install`. Feishu Base is an
 optional extension: `oks feishu auth`, `oks feishu form --url <form-url>`,
 `oks feishu run-once`, and bounded `oks feishu listen` retain user-controlled
 login and review. See `docs/handoff-cli-feishu-loop-20260724.md` for setup and

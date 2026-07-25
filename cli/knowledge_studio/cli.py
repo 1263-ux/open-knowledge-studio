@@ -193,7 +193,7 @@ def capability_install(
 
 
 def _connector_install_hint() -> str:
-    return "pipx inject open-knowledge-studio oks-connector"
+    return ""  # no-op: connector is built into the monorepo
 
 
 def _connector_command() -> str | None:

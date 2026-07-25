@@ -72,7 +72,7 @@ oks ingest "https://www.youtube.com/watch?v=<video-id>" --mode forensic --timeou
 oks capability install watch
 ```
 
-验收效果：只显示 `pipx inject` 建议，不修改本机环境。确认下载体积和依赖后才执行：
+验收效果：只显示安装建议，不修改本机环境。确认下载体积和依赖后才执行：
 
 ```powershell
 oks capability install watch --yes
