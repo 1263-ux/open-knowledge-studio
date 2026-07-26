@@ -32,6 +32,8 @@ def test_init_materializes_shareable_assets(tmp_path):
     assert (target / ".claude" / "skills" / "ingest").is_dir()
     assert (target / ".claude" / "settings.json").is_file()
     assert (target / "templates").is_dir()
+    for schema in ("recall-case.schema.json", "trace-event.schema.json", "run-manifest.schema.json"):
+        assert (target / "_meta" / schema).is_file()
 
 
 def test_init_upgrade_refreshes_assets_but_keeps_user_files(tmp_path):

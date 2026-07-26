@@ -32,7 +32,7 @@ you add extras. In a plain venv, use `pip install "open-knowledge-studio[connect
 - **Dreaming cycle** — distill raw materials into draft proposals; humans review and
   promote them to the wiki.
 - **Decay system** — memory-curve scoring with type-specific λ and hot/warm/cold/evictable tiers.
-- **`oks` CLI** — search, recall, wiki CRUD, drafts, distill, lint, status, metrics.
+- **`oks` CLI** — search, recall, offline evaluation, execution traces, wiki CRUD, drafts, distill, lint, status, metrics.
 
 The CLI core is dependency-light and calls no external network APIs; agents and humans
 orchestrate the pipeline around it.
@@ -47,6 +47,8 @@ oks status                          # 3. use it
 oks search "git branch"
 oks search "deployment" --type strategy --format json
 oks recall "git branch" --goal none --format json --explain
+oks eval recall eval/datasets/team-v1.yaml --output eval/runs/baseline.json
+oks trace start memory-goal --run-id demo-001
 ```
 
 Use `--goal active` (default) to merge active goals, `--goal <slug>` for one
@@ -56,6 +58,10 @@ score components without changing ranking.
 Machine-readable output uses `search-response/v1` for `oks search`,
 `recall-response/v1` for `oks recall`, and `recall-hit/v1` for individual
 hits. Search type filtering happens before ranking and `--limit`.
+
+`oks eval` is offline and read-only. `oks trace` writes append-only execution
+events under `raw/executions/`; generated Wiki/Skill proposals stay under
+`drafts/proposals/` until a human explicitly promotes them.
 
 `oks init` materializes the shareable layer (Claude Code skills, templates, schema,
 settings) and a git-tracked memory instance. No repo clone required.

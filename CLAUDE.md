@@ -112,6 +112,15 @@ oks distill [--dry-run]
 oks lint | status | metrics | decay
 oks hook install [--editor claude|qoder|both] [--path DIR]   # opt-in auto-recall on prompt
 oks hook status
+oks eval recall <dataset.yaml> --output <run.json>
+oks eval compare <baseline.json> <candidate.json> [--output <comparison.json>]
+oks trace start <goal-id> [--run-id ID]
+oks trace append <run-id> --type <event> --actor <actor> --payload '<json>'
+oks trace judge <run-id> --outcome pass --comment "..."
+oks trace feedback <run-id> --outcome accepted --comment "..."
+oks trace propose <run-id> --kind wiki|skill --title "..." --summary "..."
+oks trace finish <run-id> --result '{"outcome":"success"}'
+oks trace validate <run-id> [--completed]
 oks config init | show | set <key> <value>
 ```
 
