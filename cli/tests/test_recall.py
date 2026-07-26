@@ -1,4 +1,5 @@
 """Tests for the 6-factor recall engine."""
+import json
 import os
 import yaml
 from pathlib import Path
@@ -151,6 +152,149 @@ def test_goal_boost_noop_without_goals(kb_root):
     off = recall_knowledge("deployment", limit=5, goal_boost=False)
     on = recall_knowledge("deployment", limit=5, goal_boost=True)
     assert [r["slug"] for r in on] == [r["slug"] for r in off]
+
+
+def test_recall_explain_components_rebuild_final_score(kb_root):
+    from knowledge_studio.recall import RECALL_HIT_SCHEMA, recall_knowledge
+
+    result = recall_knowledge("deployment", goal="none", explain=True)[0]
+    components = result["score_components"]
+    rebuilt = sum(
+        components[key]
+        for key in (
+            "typed_base",
+            "review_decision",
+            "review_failure",
+            "memory_score",
+            "goal_area",
+            "goal_keyword",
+        )
+    )
+
+    assert result["schema_version"] == RECALL_HIT_SCHEMA
+    assert result["channel"] == "knowledge"
+    assert result["rank"] == 1
+    assert components["final_score"] == pytest.approx(rebuilt)
+    assert result["relevance"] == pytest.approx(rebuilt, abs=1e-3)
+    assert result["reasons"]
+
+
+def test_recall_explain_does_not_change_ranking(kb_root):
+    from knowledge_studio.recall import recall_knowledge
+
+    plain = recall_knowledge("deployment", goal="none")
+    explained = recall_knowledge("deployment", goal="none", explain=True)
+
+    assert [item["slug"] for item in explained] == [item["slug"] for item in plain]
+    assert [item["relevance"] for item in explained] == [
+        item["relevance"] for item in plain
+    ]
+    assert all("score_components" not in item for item in plain)
+    assert all("score_components" in item for item in explained)
+
+
+def test_explicit_goal_does_not_merge_other_active_goals(kb_root):
+    from knowledge_studio.recall import recall_knowledge
+
+    _write_goal(kb_root, "docker-goal", keywords=["docker"])
+    _write_goal(kb_root, "testing-goal", keywords=["tests"])
+
+    baseline = recall_knowledge("deployment", goal="none", explain=True)
+    selected = recall_knowledge("deployment", goal="docker-goal", explain=True)
+
+    def hit(results, slug):
+        return next(item for item in results if item["slug"] == slug)
+
+    docker_base = hit(baseline, "docker-deployment")
+    docker_selected = hit(selected, "docker-deployment")
+    tests_base = hit(baseline, "no-tests")
+    tests_selected = hit(selected, "no-tests")
+
+    assert docker_selected["relevance"] == pytest.approx(
+        docker_base["relevance"] + 0.4
+    )
+    assert tests_selected["relevance"] == tests_base["relevance"]
+    assert docker_selected["goal_matches"] == [
+        {"slug": "docker-goal", "area": False, "keywords": ["docker"]}
+    ]
+    assert tests_selected["goal_matches"] == []
+
+
+def test_explicit_goal_must_exist(kb_root):
+    from knowledge_studio.recall import recall_knowledge
+
+    with pytest.raises(ValueError, match="Goal not found"):
+        recall_knowledge("deployment", goal="missing-goal")
+
+
+def test_recall_response_describes_goal_selection(kb_root):
+    from knowledge_studio.recall import RECALL_RESPONSE_SCHEMA, recall
+
+    _write_goal(kb_root, "docker-goal", status="done", keywords=["docker"])
+    result = recall("deployment", goal="docker-goal", explain=True)
+
+    assert result["schema_version"] == RECALL_RESPONSE_SCHEMA
+    assert result["goal"]["mode"] == "explicit"
+    assert result["goal"]["slugs"] == ["docker-goal"]
+    assert result["goal"]["keywords"] == ["docker"]
+    assert result["knowledge"][0]["score_components"]
+
+
+def test_recall_cli_emits_machine_readable_json(kb_root):
+    from typer.testing import CliRunner
+
+    from knowledge_studio.cli import app
+
+    result = CliRunner().invoke(
+        app,
+        ["recall", "deployment", "--goal", "none", "--format", "json", "--explain"],
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.stdout)
+    assert payload["schema_version"] == "recall-response/v1"
+    assert payload["goal"]["mode"] == "none"
+    assert payload["knowledge"][0]["score_components"]
+
+
+def test_search_cli_rejects_unknown_goal(kb_root):
+    from typer.testing import CliRunner
+
+    from knowledge_studio.cli import app
+
+    result = CliRunner().invoke(app, ["search", "deployment", "--goal", "missing"])
+
+    assert result.exit_code == 2
+    assert "Goal not found: missing" in result.output
+
+
+def test_search_cli_json_filters_type_before_limit(kb_root):
+    from typer.testing import CliRunner
+
+    from knowledge_studio.cli import app
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "search",
+            "deployment",
+            "--type",
+            "strategy",
+            "--limit",
+            "1",
+            "--goal",
+            "none",
+            "--format",
+            "json",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.stdout)
+    assert payload["schema_version"] == "search-response/v1"
+    assert payload["result_count"] == 1
+    assert payload["knowledge"][0]["slug"] == "docker-deployment"
+    assert payload["knowledge"][0]["rank"] == 1
 
 
 def test_promote_draft_carries_human_note(kb_root):

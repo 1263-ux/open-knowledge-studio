@@ -45,7 +45,17 @@ oks init my-knowledge-base          # 2. scaffold an instance (skills + buckets)
 cd my-knowledge-base
 oks status                          # 3. use it
 oks search "git branch"
+oks search "deployment" --type strategy --format json
+oks recall "git branch" --goal none --format json --explain
 ```
+
+Use `--goal active` (default) to merge active goals, `--goal <slug>` for one
+reproducible goal, or `--goal none` for a no-goal baseline. `--explain` exposes
+score components without changing ranking.
+
+Machine-readable output uses `search-response/v1` for `oks search`,
+`recall-response/v1` for `oks recall`, and `recall-hit/v1` for individual
+hits. Search type filtering happens before ranking and `--limit`.
 
 `oks init` materializes the shareable layer (Claude Code skills, templates, schema,
 settings) and a git-tracked memory instance. No repo clone required.

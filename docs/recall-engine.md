@@ -101,8 +101,9 @@ score = importance × e^(-λ × days_old) + 0.5 × ln(1 + access_count) + pin_bo
 
 ### 7. Goal Boost（+0.8 / +0.4，可选）
 
-召回会读取 `profiles/goals/` 下 `status: active` 的 goal（`load_active_goals()`），
-把当前关注的方向变成一个**加法**加权。它只作用于**已经命中查询**（relevance>0）的页面：
+召回默认读取 `profiles/goals/` 下所有 `status: active` 的 goal，
+也可以显式指定一个 goal 或关闭 goal。Goal 是一个**加法**加权，
+只作用于**已经命中查询**（relevance>0）的页面：
 
 - 页面 `area` ∈ 某 active goal 的 `domains`：**+0.8**
 - 页面命中某 active goal 的任一 `keyword`：**+0.4**
@@ -116,9 +117,13 @@ if relevance > 0 and (goal_domains or goal_keywords):
 ```
 
 {: .note }
-这是"目标感知召回"的真实实现（不是路线图）。它**默认开启**但**无 active goal 时为 no-op**，
-不会凭空把无关页面顶上来；只是在你设定方向后，让贡献/研究循环优先看到 on-scope 的策略。
-需要关闭时传 `goal_boost=False`（如做无偏基线对比）。
+这是"目标感知召回"的真实实现（不是路线图）。它不会凭空把无关页面顶上来；
+只是在页面已经匹配查询后，让 on-scope 的策略优先出现。
+
+- `--goal active`：默认行为，合并全部 active goal，适合交互使用；
+- `--goal <slug>`：只使用一个 goal，适合可复现实验；
+- `--goal none`：关闭 goal，作为无偏基线；
+- Python API 的 `goal_boost=False` 继续保留，等价于关闭 goal。
 
 ## 双路召回
 
@@ -135,6 +140,12 @@ oks search "authentication" --limit 5
 # 双路：Episodic（raw/）+ Knowledge（wiki/）
 oks recall "authentication" --limit 5
 
+# 固定单一 Goal，并查看每个评分因子
+oks recall "authentication" --goal team --explain
+
+# 输出机器可读 JSON，供离线评测使用
+oks recall "authentication" --goal none --format json --explain
+
 # 记录一次“真正使用”（召回/搜索本身只读、不计数）
 oks wiki use <slug>
 ```
@@ -142,6 +153,31 @@ oks wiki use <slug>
 > 召回与搜索是**只读**的：一次查询不算一次使用，不会改动 access_count 或页面状态。
 > 只有 `oks wiki use <slug>`（在真正注入/采用某页时调用）才 +1，从而驱动记忆曲线与
 > provisional→active 晋级。这样记忆热度反映的是“真被用上”，而非“被搜过几次”。
+
+## 可解释输出
+
+`--explain` 不改变候选或排序，只为每个 Knowledge hit 增加：
+
+- `score_components`：token、标题/正文子串、topic trace、类型乘数、review、memory score、Goal 的逐项分数；
+- `reasons`：便于人阅读的命中原因；
+- `goal_matches`：具体由哪个 Goal 的 area 或 keyword 命中；
+- `rank`、`channel` 和 `schema_version`：供评测程序稳定消费。
+
+总分可由下面的字段精确重建：
+
+```
+final_score = typed_base
+            + review_decision
+            + review_failure
+            + memory_score
+            + goal_area
+            + goal_keyword
+```
+
+`oks recall` 的 JSON 响应版本为 `recall-response/v1`，`oks search` 为
+`search-response/v1`，单条结果版本为 `recall-hit/v1`。`search --type` 会在
+排序和 `--limit` 之前过滤，避免 Top-N 截断后出现假空结果。JSON 直接写到
+标准输出，不带 Rich 颜色或表格字符。
 
 ## 实现
 

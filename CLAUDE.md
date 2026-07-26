@@ -100,8 +100,8 @@ open-knowledge-studio/
 
 ```bash
 oks init <path>   # scaffold a personal knowledge instance (buckets + memory-tracking .gitignore + register as active KB)
-oks search <query> [--limit 5] [--domain computing] [--type strategy]
-oks recall <query> [--topic-id ID] [--limit 5]
+oks search <query> [--limit 5] [--domain computing] [--type strategy] [--goal active|none|SLUG] [--format table|json] [--explain]
+oks recall <query> [--topic-id ID] [--limit 5] [--goal active|none|SLUG] [--format table|json] [--explain]
 oks wiki list [--domain] [--type] [--status active]
 oks wiki get <slug>
 oks wiki create --title "..." --type concept --area computing --importance 0.7

@@ -15,7 +15,14 @@ from rich.panel import Panel
 from rich.markdown import Markdown
 
 from knowledge_studio import store
-from knowledge_studio.recall import recall, recall_episodic, recall_knowledge
+from knowledge_studio.recall import (
+    RECALL_RESPONSE_SCHEMA,
+    SEARCH_RESPONSE_SCHEMA,
+    describe_goal_selection,
+    recall,
+    recall_episodic,
+    recall_knowledge,
+)
 
 app = typer.Typer(
     name="oks",
@@ -23,6 +30,19 @@ app = typer.Typer(
     no_args_is_help=True,
 )
 console = Console()
+
+
+def _validate_output_format(value: str) -> str:
+    normalized = value.lower().strip()
+    if normalized not in {"table", "json"}:
+        console.print("[red]--format must be one of: table, json[/red]")
+        raise typer.Exit(2)
+    return normalized
+
+
+def _emit_json(data) -> None:
+    """Write machine-readable JSON without Rich markup or ANSI styling."""
+    typer.echo(json.dumps(data, ensure_ascii=False, indent=2))
 
 
 def _version_callback(value: bool):
@@ -63,12 +83,38 @@ def search(
     limit: int = typer.Option(5, "--limit", "-n", help="Max results"),
     scope: Optional[str] = typer.Option(None, "--scope", "--domain", "-d", help="Soft scope: narrow to one area (opt-in, not a hard partition)"),
     type_filter: Optional[str] = typer.Option(None, "--type", "-t", help="Filter by type"),
+    goal: str = typer.Option("active", "--goal", help="Goal mode: active | none | <goal-slug>"),
+    output_format: str = typer.Option("table", "--format", help="Output format: table | json"),
+    explain: bool = typer.Option(False, "--explain", help="Include score components and match reasons"),
 ):
     """Search wiki pages using the 6+1-factor recall engine (read-only)."""
-    results = recall_knowledge(query=query, limit=limit, scope=scope)
+    output_format = _validate_output_format(output_format)
+    try:
+        results = recall_knowledge(
+            query=query,
+            limit=limit,
+            scope=scope,
+            goal=goal,
+            explain=explain,
+            type_filter=type_filter,
+        )
+        goal_context = describe_goal_selection(goal)
+    except ValueError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(2)
 
-    if type_filter:
-        results = [r for r in results if r.get("type") == type_filter]
+    if output_format == "json":
+        _emit_json({
+            "schema_version": SEARCH_RESPONSE_SCHEMA,
+            "query": query,
+            "scope": scope,
+            "limit": limit,
+            "type_filter": type_filter,
+            "goal": goal_context,
+            "result_count": len(results),
+            "knowledge": results,
+        })
+        return
 
     if not results:
         console.print("[dim]No results found.[/dim]")
@@ -81,16 +127,21 @@ def search(
     table.add_column("Area", max_width=12)
     table.add_column("Score", justify="right", max_width=8)
     table.add_column("Relevance", justify="right", max_width=10)
+    if explain:
+        table.add_column("Why", max_width=50)
 
     for r in results:
-        table.add_row(
+        row = [
             r["slug"],
             r["title"],
             r.get("type", ""),
             r.get("area", ""),
             f"{r.get('score', 0):.2f}",
             f"{r.get('relevance', 0):.2f}",
-        )
+        ]
+        if explain:
+            row.append(", ".join(r.get("reasons", [])))
+        table.add_row(*row)
 
     console.print(table)
     console.print(f"\n[dim]{len(results)} result(s) from wiki/[/dim]")
@@ -102,9 +153,28 @@ def recall_cmd(
     topic_id: Optional[int] = typer.Option(None, "--topic-id", help="Filter by topic ID"),
     limit: int = typer.Option(5, "--limit", "-n", help="Max results per path"),
     scope: Optional[str] = typer.Option(None, "--scope", "-s", help="Soft scope: narrow knowledge path to one area (opt-in, not a hard partition)"),
+    goal: str = typer.Option("active", "--goal", help="Goal mode: active | none | <goal-slug>"),
+    output_format: str = typer.Option("table", "--format", help="Output format: table | json"),
+    explain: bool = typer.Option(False, "--explain", help="Include score components and match reasons"),
 ):
     """Two-path recall: episodic (raw/) + knowledge (wiki/)."""
-    result = recall(query=query, topic_id=topic_id, limit=limit, scope=scope)
+    output_format = _validate_output_format(output_format)
+    try:
+        result = recall(
+            query=query,
+            topic_id=topic_id,
+            limit=limit,
+            scope=scope,
+            goal=goal,
+            explain=explain,
+        )
+    except ValueError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(2)
+
+    if output_format == "json":
+        _emit_json(result)
+        return
 
     if result["episodic"]:
         console.print("\n[bold blue]Episodic Memory (raw/ + profiles/)[/bold blue]")
@@ -119,8 +189,11 @@ def recall_cmd(
     if result["knowledge"]:
         console.print("\n[bold green]Semantic Memory (wiki/)[/bold green]")
         for item in result["knowledge"]:
+            preview = item.get("body_preview", "")[:200]
+            if explain and item.get("reasons"):
+                preview += "\n\nwhy: " + ", ".join(item["reasons"])
             console.print(Panel(
-                item.get("body_preview", "")[:200],
+                preview,
                 title=f"[{item.get('type', '')}] {item.get('title', '')} ({item.get('slug', '')})",
                 subtitle=f"score={item.get('score', 0):.2f} relevance={item.get('relevance', 0):.2f}",
                 border_style="green",

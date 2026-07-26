@@ -34,6 +34,7 @@ oks init my-knowledge-base          # 2. scaffold your instance
 cd my-knowledge-base
 oks status                          # 3. use it
 oks search "git branch"             # (empty on a fresh instance — add knowledge first)
+oks recall "git branch" --goal none --format json --explain  # reproducible, inspectable output
 ```
 
 Why pipx? Recent systems ship PEP 668 "externally-managed" Pythons, so a bare
@@ -91,6 +92,7 @@ oks init my-knowledge-base          # 2. 初始化你的知识库实例
 cd my-knowledge-base
 oks status                          # 3. 开始使用
 oks search "git branch"             # （新实例为空——先写入知识再搜）
+oks recall "git branch" --goal none --format json --explain  # 可复现、可解释输出
 ```
 
 为什么用 pipx？新版系统的 Python 普遍启用 PEP 668「外部管理」保护，直接
