@@ -2,6 +2,8 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 
 SCRIPTS = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SCRIPTS))
@@ -39,7 +41,7 @@ def test_candidate_requires_pending_or_explicit_retry():
 
 
 def test_expired_lease_can_be_reclaimed_but_active_lease_cannot():
-    now = worker.datetime(2026, 7, 19, 12, 0, 0)
+    now = worker.datetime(2026, 7, 19, 12, 0, 0, tzinfo=worker.timezone.utc)
     expired = {"fields": {"运行状态": "已领取", "重试": False, "租约到期": "2026-07-19 11:59:59"}}
     active = {"fields": {"运行状态": "已领取", "重试": False, "租约到期": "2026-07-19 12:00:01"}}
     assert worker.is_candidate(expired, now=now)
@@ -1514,3 +1516,478 @@ def test_failed_record_error_text_is_redacted_before_truncation(monkeypatch, tmp
     home_str = str(worker.HOME)
     if len(home_str) > 4:
         assert home_str not in error_text
+
+
+# ── Round 2 / Part A: lark_json bounded exponential retry ─────────────
+
+
+def _fake_completed_process(stdout="", stderr="", returncode=0):
+    return worker.subprocess.CompletedProcess(
+        ["lark-cli"], returncode, stdout, stderr,
+    )
+
+
+def _make_lark_error_response(code, message="error"):
+    return json.dumps({"ok": False, "error": {"code": code, "message": message}})
+
+
+def test_lark_json_retries_on_rate_limited(monkeypatch):
+    calls = []
+    sleeps = []
+
+    def fake_run(*args, **kwargs):
+        calls.append(1)
+        if len(calls) < 3:
+            return _fake_completed_process(
+                stdout=_make_lark_error_response("RATE_LIMITED"),
+                returncode=1,
+            )
+        return _fake_completed_process(stdout='{"ok": true}')
+
+    monkeypatch.setattr(worker.subprocess, "run", fake_run)
+    monkeypatch.setattr(worker.time, "sleep", sleeps.append)
+
+    result = worker.lark_json(
+        worker.WorkerConfig("base", "table", worker.Path("/fake/lark"), worker.Path("/tmp")),
+        "base", "+record-list",
+    )
+
+    assert result == {"ok": True}
+    assert len(calls) == 3
+    assert len(sleeps) == 2
+    # Exponential: 1.0, 2.0
+    assert sleeps[0] == pytest.approx(1.0)
+    assert sleeps[1] == pytest.approx(2.0)
+
+
+def test_lark_json_retries_on_subprocess_timeout(monkeypatch):
+    calls = []
+    sleeps = []
+
+    def fake_run(*args, **kwargs):
+        calls.append(1)
+        if len(calls) < 3:
+            raise worker.subprocess.TimeoutExpired(["lark-cli"], 30)
+        return _fake_completed_process(stdout='{"ok": true}')
+
+    monkeypatch.setattr(worker.subprocess, "run", fake_run)
+    monkeypatch.setattr(worker.time, "sleep", sleeps.append)
+
+    result = worker.lark_json(
+        worker.WorkerConfig("base", "table", worker.Path("/fake/lark"), worker.Path("/tmp")),
+        "base", "+record-list",
+    )
+
+    assert result == {"ok": True}
+    assert len(calls) == 3
+    assert len(sleeps) == 2
+
+
+def test_lark_json_retries_on_oserror(monkeypatch):
+    calls = []
+    sleeps = []
+
+    def fake_run(*args, **kwargs):
+        calls.append(1)
+        if len(calls) < 3:
+            raise ConnectionRefusedError("Connection refused")
+        return _fake_completed_process(stdout='{"ok": true}')
+
+    monkeypatch.setattr(worker.subprocess, "run", fake_run)
+    monkeypatch.setattr(worker.time, "sleep", sleeps.append)
+
+    result = worker.lark_json(
+        worker.WorkerConfig("base", "table", worker.Path("/fake/lark"), worker.Path("/tmp")),
+        "base", "+record-list",
+    )
+
+    assert result == {"ok": True}
+    assert len(calls) == 3
+
+
+def test_lark_json_never_retries_auth_failed(monkeypatch):
+    calls = []
+    sleeps = []
+
+    def fake_run(*args, **kwargs):
+        calls.append(1)
+        return _fake_completed_process(
+            stdout=_make_lark_error_response("AUTH_FAILED"),
+            returncode=1,
+        )
+
+    monkeypatch.setattr(worker.subprocess, "run", fake_run)
+    monkeypatch.setattr(worker.time, "sleep", sleeps.append)
+
+    try:
+        worker.lark_json(
+            worker.WorkerConfig("base", "table", worker.Path("/fake/lark"), worker.Path("/tmp")),
+            "base", "+record-list",
+        )
+    except RuntimeError as exc:
+        assert "AUTH_FAILED" in str(exc)
+    else:
+        raise AssertionError("auth failures must not be retried")
+
+    assert len(calls) == 1
+    assert len(sleeps) == 0
+
+
+def test_lark_json_never_retries_permission_denied(monkeypatch):
+    calls = []
+    sleeps = []
+
+    def fake_run(*args, **kwargs):
+        calls.append(1)
+        return _fake_completed_process(
+            stdout=_make_lark_error_response("PERMISSION_DENIED"),
+            returncode=1,
+        )
+
+    monkeypatch.setattr(worker.subprocess, "run", fake_run)
+    monkeypatch.setattr(worker.time, "sleep", sleeps.append)
+
+    try:
+        worker.lark_json(
+            worker.WorkerConfig("base", "table", worker.Path("/fake/lark"), worker.Path("/tmp")),
+            "base", "+record-list",
+        )
+    except RuntimeError as exc:
+        assert "PERMISSION_DENIED" in str(exc)
+    else:
+        raise AssertionError("permission failures must not be retried")
+
+    assert len(calls) == 1
+    assert len(sleeps) == 0
+
+
+def test_lark_json_exhausts_retries_with_command_context(monkeypatch):
+    calls = []
+    sleeps = []
+
+    def fake_run(*args, **kwargs):
+        calls.append(1)
+        return _fake_completed_process(
+            stdout=_make_lark_error_response("UPSTREAM_UNAVAILABLE"),
+            returncode=1,
+        )
+
+    monkeypatch.setattr(worker.subprocess, "run", fake_run)
+    monkeypatch.setattr(worker.time, "sleep", sleeps.append)
+
+    try:
+        worker.lark_json(
+            worker.WorkerConfig("base", "table", worker.Path("/fake/lark"), worker.Path("/tmp")),
+            "base", "+record-upsert", "--record-id", "rec_1",
+        )
+    except RuntimeError as exc:
+        error_text = str(exc)
+        assert "4 attempts" in error_text or str(1 + worker._LARK_MAX_RETRIES) in error_text
+        assert "base" in error_text
+    else:
+        raise AssertionError("exhausted retries must raise RuntimeError")
+
+    assert len(calls) == 1 + worker._LARK_MAX_RETRIES
+    assert len(sleeps) == worker._LARK_MAX_RETRIES
+
+
+def test_extract_lark_error_code_from_error_dict():
+    assert worker._extract_lark_error_code({"error": {"code": "RATE_LIMITED"}}) == "RATE_LIMITED"
+    assert worker._extract_lark_error_code({"code": "TIMEOUT"}) == "TIMEOUT"
+    assert worker._extract_lark_error_code({"ok": False}) == ""
+
+
+def test_is_retryable_lark_error_detects_transient_codes():
+    assert worker._is_retryable_lark_error({"error": {"code": "RATE_LIMITED"}})
+    assert worker._is_retryable_lark_error({"error": {"code": "UPSTREAM_UNAVAILABLE"}})
+    assert worker._is_retryable_lark_error({"error": {"code": "NETWORK_ERROR"}})
+    assert worker._is_retryable_lark_error({"error": {"code": "TIMEOUT"}})
+    assert not worker._is_retryable_lark_error({"error": {"code": "AUTH_FAILED"}})
+    assert not worker._is_retryable_lark_error({})
+
+
+def test_is_fatal_lark_error_blocks_retry():
+    assert worker._is_fatal_lark_error({"error": {"code": "AUTH_FAILED"}})
+    assert worker._is_fatal_lark_error({"error": {"code": "PERMISSION_DENIED"}})
+    assert worker._is_fatal_lark_error({"error": {"code": "ACCESS_DENIED"}})
+    assert worker._is_fatal_lark_error({"error": {"code": "VALIDATION_ERROR"}})
+    assert not worker._is_fatal_lark_error({"error": {"code": "RATE_LIMITED"}})
+    assert not worker._is_fatal_lark_error({})
+
+
+# ── Round 2 / Part B: aware-UTC lease / run-id time paths ────────────
+
+
+def test_parse_base_datetime_offset_timestamp():
+    result = worker.parse_base_datetime("2026-07-27 12:00:00+00:00")
+    assert result is not None
+    assert result.tzinfo is not None
+    assert result == worker.datetime(2026, 7, 27, 12, 0, 0, tzinfo=worker.timezone.utc)
+
+
+def test_parse_base_datetime_iso_format_with_z():
+    result = worker.parse_base_datetime("2026-07-27T12:00:00Z")
+    assert result is not None
+    assert result.tzinfo is not None
+    assert result == worker.datetime(2026, 7, 27, 12, 0, 0, tzinfo=worker.timezone.utc)
+
+
+def test_parse_base_datetime_rejects_naive_by_default():
+    result = worker.parse_base_datetime("2026-07-27 12:00:00")
+    assert result is None
+
+
+def test_parse_base_datetime_migrates_naive_with_assume_utc():
+    result = worker.parse_base_datetime(
+        "2026-07-27 12:00:00", naive_migration="assume_utc"
+    )
+    assert result is not None
+    assert result.tzinfo is not None
+    assert result == worker.datetime(2026, 7, 27, 12, 0, 0, tzinfo=worker.timezone.utc)
+
+
+def test_parse_base_datetime_offset_with_non_utc():
+    result = worker.parse_base_datetime("2026-07-27 20:00:00+08:00")
+    assert result is not None
+    assert result.tzinfo is not None
+    assert result == worker.datetime(2026, 7, 27, 12, 0, 0, tzinfo=worker.timezone.utc)
+
+
+def test_parse_base_datetime_returns_none_for_empty():
+    assert worker.parse_base_datetime(None) is None
+    assert worker.parse_base_datetime("") is None
+    assert worker.parse_base_datetime("   ") is None
+
+
+def test_lease_format_roundtrips_through_parse():
+    import uuid as _uuid
+    now = worker.datetime.now(worker.timezone.utc)
+    expires = now + worker.timedelta(seconds=3600)
+    formatted = expires.strftime("%Y-%m-%d %H:%M:%S+00:00")
+    parsed = worker.parse_base_datetime(formatted)
+    assert parsed is not None
+    assert parsed.tzinfo is not None
+    assert abs((parsed - expires).total_seconds()) < 1.0
+
+
+def test_claim_record_writes_aware_utc_lease(monkeypatch, tmp_path):
+    config = worker.WorkerConfig(
+        "base", "table", tmp_path / "lark.exe", tmp_path, lease_seconds=60
+    )
+    updates = []
+    monkeypatch.setattr(
+        worker,
+        "get_record",
+        lambda *_: {"record_id": "rec_utc", "fields": {"运行状态": "待处理", "重试": False}},
+    )
+    monkeypatch.setattr(
+        worker,
+        "update_record",
+        lambda _c, _r, patch: updates.append((_r, patch)) or {},
+    )
+    monkeypatch.setattr(worker, "local_claim_lock", lambda _config: worker.contextmanager(lambda: (yield))())
+
+    claimed = worker.claim_record(config, "rec_utc")
+
+    assert claimed is not None
+    lease_str = updates[0][1]["租约到期"]
+    assert "+00:00" in lease_str
+    parsed = worker.parse_base_datetime(lease_str)
+    assert parsed is not None
+    assert parsed.tzinfo is not None
+    # Lease must be in the future
+    assert parsed > worker.datetime.now(worker.timezone.utc)
+
+
+def test_claim_record_run_id_contains_utc_timestamp(monkeypatch, tmp_path):
+    config = worker.WorkerConfig(
+        "base", "table", tmp_path / "lark.exe", tmp_path, lease_seconds=60,
+    )
+    monkeypatch.setattr(
+        worker,
+        "get_record",
+        lambda *_: {"record_id": "rec_runid", "fields": {"运行状态": "待处理", "重试": False}},
+    )
+    monkeypatch.setattr(worker, "update_record", lambda _c, _r, _p: {})
+    monkeypatch.setattr(worker, "local_claim_lock", lambda _config: worker.contextmanager(lambda: (yield))())
+
+    claimed = worker.claim_record(config, "rec_runid")
+
+    assert claimed is not None
+    run_id = claimed[1]
+    assert run_id.startswith("run-")
+    # Run ID timestamp segment: run-YYYYMMDDTHHMMSS-xxxxxxxx
+    ts_part = run_id[4:19]
+    assert len(ts_part) == 15
+    assert ts_part[8] == "T"
+
+
+# -- Round 2 / Part A regression: malformed JSON and narrow OSError retry --
+
+
+def test_lark_json_no_retry_on_malformed_json(monkeypatch):
+    """Malformed/non-JSON output must raise immediately — zero retries."""
+    calls = []
+    sleeps = []
+
+    def fake_run(*args, **kwargs):
+        calls.append(1)
+        return worker.subprocess.CompletedProcess(
+            ["lark-cli"], 0, stdout="not json at all <html>error</html>", stderr="",
+        )
+
+    monkeypatch.setattr(worker.subprocess, "run", fake_run)
+    monkeypatch.setattr(worker.time, "sleep", sleeps.append)
+
+    try:
+        worker.lark_json(
+            worker.WorkerConfig("base", "table", worker.Path("/fake/lark"), worker.Path("/tmp")),
+            "base", "+record-list",
+        )
+    except RuntimeError as exc:
+        assert "non-JSON" in str(exc)
+    else:
+        raise AssertionError("malformed JSON must raise RuntimeError")
+
+    assert len(calls) == 1, f"malformed JSON must receive exactly 1 attempt, got {len(calls)}"
+    assert len(sleeps) == 0
+
+
+def test_lark_json_no_retry_on_non_object_json(monkeypatch):
+    """Non-object (e.g. list) JSON value must raise immediately — zero retries."""
+    calls = []
+    sleeps = []
+
+    def fake_run(*args, **kwargs):
+        calls.append(1)
+        return worker.subprocess.CompletedProcess(
+            ["lark-cli"], 0, stdout='["array", "not", "object"]', stderr="",
+        )
+
+    monkeypatch.setattr(worker.subprocess, "run", fake_run)
+    monkeypatch.setattr(worker.time, "sleep", sleeps.append)
+
+    try:
+        worker.lark_json(
+            worker.WorkerConfig("base", "table", worker.Path("/fake/lark"), worker.Path("/tmp")),
+            "base", "+record-list",
+        )
+    except RuntimeError as exc:
+        assert "non-object" in str(exc)
+    else:
+        raise AssertionError("non-object JSON must raise RuntimeError")
+
+    assert len(calls) == 1, f"non-object JSON must receive exactly 1 attempt, got {len(calls)}"
+    assert len(sleeps) == 0
+
+
+def test_lark_json_no_retry_on_non_transient_oserror(monkeypatch):
+    """Non-transient OSError (e.g. FileNotFoundError) must raise immediately."""
+    calls = []
+    sleeps = []
+
+    def fake_run(*args, **kwargs):
+        calls.append(1)
+        raise FileNotFoundError("lark-cli binary not found")
+
+    monkeypatch.setattr(worker.subprocess, "run", fake_run)
+    monkeypatch.setattr(worker.time, "sleep", sleeps.append)
+
+    try:
+        worker.lark_json(
+            worker.WorkerConfig("base", "table", worker.Path("/fake/lark"), worker.Path("/tmp")),
+            "base", "+record-list",
+        )
+    except FileNotFoundError:
+        pass
+    else:
+        raise AssertionError("FileNotFoundError must propagate immediately")
+
+    assert len(calls) == 1, f"non-transient OSError must receive exactly 1 attempt, got {len(calls)}"
+    assert len(sleeps) == 0
+
+
+def test_lark_json_exhausted_oserror_includes_attempt_count_and_command(monkeypatch):
+    """Exhausted transient OSError retries must report attempt count and command context."""
+    calls = []
+    sleeps = []
+
+    def fake_run(*args, **kwargs):
+        calls.append(1)
+        raise ConnectionRefusedError("Connection refused")
+
+    monkeypatch.setattr(worker.subprocess, "run", fake_run)
+    monkeypatch.setattr(worker.time, "sleep", sleeps.append)
+
+    try:
+        worker.lark_json(
+            worker.WorkerConfig("base", "table", worker.Path("/fake/lark"), worker.Path("/tmp")),
+            "base", "+record-upsert", "--record-id", "rec_target",
+        )
+    except RuntimeError as exc:
+        error_text = str(exc)
+        assert "4 attempts" in error_text or str(1 + worker._LARK_MAX_RETRIES) in error_text
+        assert "base" in error_text
+        assert "Connection refused" in error_text
+    else:
+        raise AssertionError("exhausted transient OSError retries must raise RuntimeError")
+
+    assert len(calls) == 1 + worker._LARK_MAX_RETRIES
+
+
+def test_lark_json_transient_oserror_retries_connection_reset(monkeypatch):
+    """ConnectionResetError (transient) must be retried."""
+    calls = []
+    sleeps = []
+
+    def fake_run(*args, **kwargs):
+        calls.append(1)
+        if len(calls) < 3:
+            raise ConnectionResetError("Connection reset by peer")
+        return worker.subprocess.CompletedProcess(
+            ["lark-cli"], 0, stdout='{"ok": true}', stderr="",
+        )
+
+    monkeypatch.setattr(worker.subprocess, "run", fake_run)
+    monkeypatch.setattr(worker.time, "sleep", sleeps.append)
+
+    result = worker.lark_json(
+        worker.WorkerConfig("base", "table", worker.Path("/fake/lark"), worker.Path("/tmp")),
+        "base", "+record-list",
+    )
+
+    assert result == {"ok": True}
+    assert len(calls) == 3
+
+
+# -- Round 2 / Part B1: production web extractor has no experiment dependency --
+
+
+def test_production_web_extractor_has_no_experiment_import():
+    """The production web extractor module must not import from experiments."""
+    import ast
+    import sys as _sys
+
+    web_path = SCRIPTS / "extractors" / "web.py"
+    if not web_path.is_file():
+        # Module does not exist yet; accept for now (will be created in B1)
+        return
+    source = web_path.read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            module = getattr(node, "module", "") or ""
+            if "experiments" in module:
+                raise AssertionError(
+                    f"production extractor must not import from experiments: {ast.dump(node)}"
+                )
+
+
+def test_package_public_web_uses_production_extractor_not_experiment(monkeypatch, tmp_path):
+    """package_public_web must call production extractor, not experiments/web_raw_probe.py."""
+    import inspect
+
+    source = inspect.getsource(worker.package_public_web)
+    assert "experiments" not in source, (
+        f"package_public_web must not reference experiments/:\n{source}"
+    )

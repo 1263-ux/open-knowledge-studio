@@ -150,9 +150,13 @@ def parse_ocr_roi(raw: str | None) -> tuple[int, int, int, int] | None:
 
 
 def format_media_time(seconds: float) -> str:
-    """Format seconds as mm:ss."""
-    m, s = divmod(int(seconds), 60)
-    return f"{m:02d}:{s:02d}"
+    """Format seconds as mm:ss, or hh:mm:ss for durations >= 1 hour."""
+    value = max(0, int(seconds))
+    hours, remainder = divmod(value, 3600)
+    minutes, secs = divmod(remainder, 60)
+    if hours:
+        return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+    return f"{minutes:02d}:{secs:02d}"
 
 from constants import SCHEMA_VERSION
 

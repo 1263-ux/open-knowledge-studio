@@ -42,6 +42,19 @@ _SECRET_ASSIGNMENT_RE = re.compile(
     re.IGNORECASE,
 )
 RETRYABLE_CODES = {"RATE_LIMITED", "UPSTREAM_UNAVAILABLE", "NETWORK_ERROR", "TIMEOUT"}
+_FATAL_LARK_CODES = {
+    "AUTH_FAILED",
+    "AUTH_REQUIRED",
+    "ACCESS_DENIED",
+    "PERMISSION_DENIED",
+    "INVALID_ARGUMENT",
+    "VALIDATION_ERROR",
+    "NOT_FOUND",
+    "CHALLENGE_REQUIRED",
+}
+_LARK_MAX_RETRIES = 3
+_LARK_BASE_DELAY = 1.0
+_LARK_SUBPROCESS_TIMEOUT = 30.0
 CANDIDATE_FIELDS = [
     "运行状态",
     "运行ID",
@@ -212,20 +225,110 @@ def parse_json_output(result: subprocess.CompletedProcess[str], *, allow_codes: 
     return value
 
 
+def _extract_lark_error_code(value: dict[str, Any]) -> str:
+    error = value.get("error")
+    if isinstance(error, dict):
+        code = error.get("code")
+        if code:
+            return str(code)
+    code = value.get("code")
+    return str(code) if code else ""
+
+
+def _is_retryable_lark_error(value: dict[str, Any]) -> bool:
+    code = _extract_lark_error_code(value)
+    return code in RETRYABLE_CODES
+
+
+def _is_fatal_lark_error(value: dict[str, Any]) -> bool:
+    code = _extract_lark_error_code(value)
+    return code in _FATAL_LARK_CODES
+
+
 def lark_json(config: WorkerConfig, *arguments: str) -> dict[str, Any]:
-    result = subprocess.run(
-        [str(config.lark_cli), *arguments],
-        cwd=ROOT,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        capture_output=True,
-        check=False,
-    )
-    value = parse_json_output(result)
-    if value.get("ok") is not True:
-        raise RuntimeError(f"lark-cli operation failed: {json.dumps(value, ensure_ascii=False)}")
-    return value
+    """Run a lark-cli command and return its parsed JSON response.
+
+    Retries only on structured retryable error codes, TimeoutExpired, and
+    narrowly-intended transient OSError subclasses.  Malformed/non-JSON
+    output and non-object JSON values raise immediately without retry.
+    """
+    command = [str(config.lark_cli), *arguments]
+    last_error: Exception | None = None
+
+    for attempt in range(1 + _LARK_MAX_RETRIES):
+        try:
+            result = subprocess.run(
+                command,
+                cwd=ROOT,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                capture_output=True,
+                check=False,
+                timeout=_LARK_SUBPROCESS_TIMEOUT,
+            )
+        except subprocess.TimeoutExpired as exc:
+            last_error = exc
+            if attempt < _LARK_MAX_RETRIES:
+                time.sleep(_LARK_BASE_DELAY * (2 ** attempt))
+                continue
+            raise RuntimeError(
+                f"lark-cli timed out after {_LARK_MAX_RETRIES + 1} attempts: "
+                f"{' '.join(arguments[:3])}..."
+            ) from exc
+        except OSError as exc:
+            # Only retry narrowly-intended transient OSError subclasses.
+            if isinstance(exc, (ConnectionRefusedError, ConnectionResetError, BrokenPipeError)):
+                last_error = exc
+                if attempt < _LARK_MAX_RETRIES:
+                    time.sleep(_LARK_BASE_DELAY * (2 ** attempt))
+                    continue
+                raise RuntimeError(
+                    f"lark-cli subprocess failed after {_LARK_MAX_RETRIES + 1} attempts: "
+                    f"{' '.join(arguments[:3])}...: {exc}"
+                ) from exc
+            raise
+
+        text = result.stdout.strip()
+        try:
+            value = json.loads(text)
+        except json.JSONDecodeError as exc:
+            # Malformed/non-JSON output — do NOT retry.
+            raise RuntimeError(
+                f"command returned non-JSON output: {text[:400]}"
+            ) from exc
+
+        if not isinstance(value, dict):
+            raise RuntimeError("command returned a non-object JSON value")
+
+        if value.get("ok") is True:
+            return value
+
+        if _is_fatal_lark_error(value):
+            raise RuntimeError(
+                f"lark-cli operation failed: {json.dumps(value, ensure_ascii=False)}"
+            )
+
+        if _is_retryable_lark_error(value):
+            last_error = RuntimeError(
+                f"lark-cli transient error: {json.dumps(value, ensure_ascii=False)}"
+            )
+            if attempt < _LARK_MAX_RETRIES:
+                time.sleep(_LARK_BASE_DELAY * (2 ** attempt))
+                continue
+            raise RuntimeError(
+                f"lark-cli failed after {_LARK_MAX_RETRIES + 1} attempts: "
+                f"{' '.join(arguments[:3])}..."
+            ) from last_error
+
+        raise RuntimeError(
+            f"lark-cli operation failed: {json.dumps(value, ensure_ascii=False)}"
+        )
+
+    raise RuntimeError(
+        f"lark-cli failed after {_LARK_MAX_RETRIES + 1} attempts: "
+        f"{' '.join(arguments[:3])}..."
+    ) from last_error
 
 
 def _connector_binary() -> str:
@@ -384,7 +487,16 @@ def list_review_records(config: WorkerConfig, limit: int = 100) -> list[dict[str
     return records
 
 
-def parse_base_datetime(value: object) -> datetime | None:
+def parse_base_datetime(
+    value: object,
+    *,
+    naive_migration: str = "reject",
+) -> datetime | None:
+    """Parse a Base datetime cell into an aware UTC datetime.
+
+    ``naive_migration`` controls how naive (tz-less) timestamps are handled:
+    ``"reject"`` returns ``None``; ``"assume_utc"`` treats them as UTC.
+    """
     value = scalar_cell(value)
     if not isinstance(value, str) or not value.strip():
         return None
@@ -393,9 +505,11 @@ def parse_base_datetime(value: object) -> datetime | None:
         parsed = datetime.fromisoformat(normalized)
     except ValueError:
         return None
-    if parsed.tzinfo is not None:
-        parsed = parsed.astimezone().replace(tzinfo=None)
-    return parsed
+    if parsed.tzinfo is None:
+        if naive_migration == "reject":
+            return None
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
 
 
 def is_candidate(record: dict[str, Any], *, now: datetime | None = None) -> bool:
@@ -403,14 +517,29 @@ def is_candidate(record: dict[str, Any], *, now: datetime | None = None) -> bool
     status = scalar_cell(fields.get("运行状态"))
     retry = fields.get("重试") is True
     expired = status == "已领取" and (
-        (expires := parse_base_datetime(fields.get("租约到期"))) is not None
-        and expires <= (now or datetime.now().astimezone().replace(tzinfo=None))
+        (expires := parse_base_datetime(fields.get("租约到期"), naive_migration="assume_utc")) is not None
+        and expires <= (now or datetime.now(timezone.utc))
     )
     return status in (None, "", "待处理") or retry or expired
 
 
 @contextmanager
 def local_claim_lock(config: WorkerConfig):
+    """Acquire an exclusive file-based lease lock for the Base+table pair.
+
+    This is a **single-host serialization** primitive, not a distributed
+    coordination lock.  The lock scope is the local filesystem only:
+
+    * On a single machine, only one worker process per (base_token, table_id)
+      pair can hold the lock at a time.
+    * The lock does NOT span hosts, network shares, or containers.  Running
+      workers on multiple machines against the same Base table requires an
+      external coordination mechanism (e.g. a database lease table, Redis
+      Redlock, or a Feishu Base record-level compare-and-swap).
+
+    Implementation:  Uses ``msvcrt.locking`` on Windows, ``fcntl.flock`` on
+    POSIX.  Both provide advisory exclusive locking scoped to the local kernel.
+    """
     lock_dir = ROOT / ".oks" / "locks"
     lock_dir.mkdir(parents=True, exist_ok=True)
     key = hashlib.sha256(f"{config.base_token}/{config.table_id}".encode("utf-8")).hexdigest()[:16]
@@ -447,9 +576,9 @@ def claim_next_record(config: WorkerConfig, limit: int = 100) -> tuple[dict[str,
         if not candidates:
             return None
         record = candidates[0]
-        run_id = f"run-{datetime.now():%Y%m%dT%H%M%S}-{uuid.uuid4().hex[:8]}"
+        run_id = f"run-{datetime.now(timezone.utc):%Y%m%dT%H%M%S}-{uuid.uuid4().hex[:8]}"
         owner = f"{os.environ.get('COMPUTERNAME', 'local')}:{os.getpid()}:{uuid.uuid4().hex[:8]}"
-        expires = datetime.now().astimezone() + timedelta(seconds=config.lease_seconds)
+        expires = datetime.now(timezone.utc) + timedelta(seconds=config.lease_seconds)
         update_record(
             config,
             record["record_id"],
@@ -457,7 +586,7 @@ def claim_next_record(config: WorkerConfig, limit: int = 100) -> tuple[dict[str,
                 "运行状态": "已领取",
                 "运行ID": run_id,
                 "租约所有者": owner,
-                "租约到期": expires.strftime("%Y-%m-%d %H:%M:%S"),
+                "租约到期": expires.strftime("%Y-%m-%d %H:%M:%S+00:00"),
                 "重试": False,
             },
         )
@@ -470,9 +599,9 @@ def claim_record(config: WorkerConfig, record_id: str) -> tuple[dict[str, Any], 
         record = get_record(config, record_id, CAPTURE_FIELDS)
         if not is_candidate(record):
             return None
-        run_id = f"run-{datetime.now():%Y%m%dT%H%M%S}-{uuid.uuid4().hex[:8]}"
+        run_id = f"run-{datetime.now(timezone.utc):%Y%m%dT%H%M%S}-{uuid.uuid4().hex[:8]}"
         owner = f"{os.environ.get('COMPUTERNAME', 'local')}:{os.getpid()}:{uuid.uuid4().hex[:8]}"
-        expires = datetime.now().astimezone() + timedelta(seconds=config.lease_seconds)
+        expires = datetime.now(timezone.utc) + timedelta(seconds=config.lease_seconds)
         update_record(
             config,
             record_id,
@@ -480,7 +609,7 @@ def claim_record(config: WorkerConfig, record_id: str) -> tuple[dict[str, Any], 
                 "运行状态": "已领取",
                 "运行ID": run_id,
                 "租约所有者": owner,
-                "租约到期": expires.strftime("%Y-%m-%d %H:%M:%S"),
+                "租约到期": expires.strftime("%Y-%m-%d %H:%M:%S+00:00"),
                 "重试": False,
             },
         )
@@ -1622,26 +1751,16 @@ def package_public_web(
     output: Path,
     human_context: str,
 ) -> dict[str, Any]:
-    command = [
-        sys.executable,
-        str(ROOT / "scripts" / "experiments" / "web_raw_probe.py"),
-        url,
-        "--output",
-        str(output),
-        "--human-context",
-        human_context or "omitted",
-    ]
-    result = subprocess.run(
-        command,
-        cwd=ROOT,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        capture_output=True,
-        check=False,
-    )
-    if result.returncode != 0:
-        raise RuntimeError((result.stderr or result.stdout).strip())
+    from extractors.web import package_web
+
+    try:
+        package_web(
+            url,
+            output,
+            human_context=human_context or "omitted",
+        )
+    except Exception as exc:
+        raise RuntimeError(str(exc)) from exc
     validation = subprocess.run(
         [_connector_binary(), "validate", str(output)],
         cwd=ROOT,
@@ -1766,7 +1885,7 @@ def complete_browser_snapshot(config: WorkerConfig, record_id: str, snapshot_dir
     if snapshot_url != source_url.split("#", 1)[0].rstrip("/"):
         raise RuntimeError("browser snapshot URL does not match the Base record URL")
 
-    run_id = f"run-{datetime.now():%Y%m%dT%H%M%S}-{uuid.uuid4().hex[:8]}"
+    run_id = f"run-{datetime.now(timezone.utc):%Y%m%dT%H%M%S}-{uuid.uuid4().hex[:8]}"
     capture = capture_envelope(config, record_id, fields)
     capture["source_snapshot"] = {
         "final_url": str(snapshot["url"]),
@@ -1892,7 +2011,7 @@ def process_record(
     fields = record["fields"]
     url = extract_url(fields.get("内容"))
     attachment_descriptors = normalize_attachments(fields.get("附件"))
-    run_id = claimed_run_id or f"run-{datetime.now():%Y%m%dT%H%M%S}-{uuid.uuid4().hex[:8]}"
+    run_id = claimed_run_id or f"run-{datetime.now(timezone.utc):%Y%m%dT%H%M%S}-{uuid.uuid4().hex[:8]}"
     capture = capture_envelope(config, record_id, fields)
     source_hash = capture["content_hash"]
     run_dir = ROOT / ".oks" / "runs" / run_id
