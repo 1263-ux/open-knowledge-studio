@@ -301,6 +301,8 @@ def test_promote_candidate_document_uses_configured_personal_root(monkeypatch, t
     candidate = personal_root / "drafts" / "personal-candidate.md"
     candidate.parent.mkdir(parents=True)
     candidate.write_text(candidate_document(), encoding="utf-8")
+    # Ensure knowledge_studio can be imported even when ROOT is monkeypatched
+    sys.path.insert(0, str(Path(worker.__file__).resolve().parents[1] / "cli"))
     monkeypatch.setattr(worker, "ROOT", studio_root)
     monkeypatch.setenv("OKS_ROOT", str(studio_root))
 
@@ -1043,3 +1045,472 @@ def test_platform_failure_is_attributed_to_video_modality(monkeypatch, tmp_path)
     assert result["modalities"]["text"]["status"] == "skipped"
     assert result["errors"][0]["modality"] == "video"
     assert updates[-1]["运行状态"] == "可重试失败"
+
+
+# ── Fix 1: .oks/ gitignore regression tests ────────────────────────
+
+def test_candidate_state_path_is_under_dot_oks():
+    path = worker.candidate_state_path("rec-test-123")
+    assert ".oks" in path.parts
+    assert "candidates" in path.parts
+    assert path.name == "rec-test-123.json"
+
+
+def test_run_dir_is_under_dot_oks_runs():
+    run_id = "run-20260727T120000-abc12345"
+    run_dir = worker.ROOT / ".oks" / "runs" / run_id
+    assert ".oks" in run_dir.parts
+    assert "runs" in run_dir.parts
+    assert run_dir.name == run_id
+
+
+def test_lock_dir_is_under_dot_oks_locks():
+    lock_dir = worker.ROOT / ".oks" / "locks"
+    assert ".oks" in lock_dir.parts
+    assert "locks" in lock_dir.parts
+
+
+def _git_check_ignore(path: Path) -> bool:
+    """Return True if *path* is ignored by git."""
+    import subprocess
+    result = subprocess.run(
+        ["git", "check-ignore", "-q", str(path)],
+        cwd=worker.ROOT,
+        capture_output=True,
+        check=False,
+    )
+    return result.returncode == 0
+
+
+def test_dot_oks_is_in_gitignore():
+    gitignore = worker.ROOT / ".gitignore"
+    lines = gitignore.read_text(encoding="utf-8").splitlines()
+    assert ".oks/" in lines
+
+
+def test_git_check_ignore_candidates():
+    candidate_path = worker.ROOT / ".oks" / "candidates" / "rec-test-ignore.json"
+    assert _git_check_ignore(candidate_path), (
+        f"git check-ignore must match {candidate_path}; .gitignore rule may be stale"
+    )
+
+
+def test_git_check_ignore_runs():
+    run_path = worker.ROOT / ".oks" / "runs" / "run-20260727T000000-ffffffff"
+    assert _git_check_ignore(run_path), (
+        f"git check-ignore must match {run_path}; .gitignore rule may be stale"
+    )
+
+
+def test_git_check_ignore_locks():
+    lock_path = worker.ROOT / ".oks" / "locks" / "feishu-base-0000000000000000.lock"
+    assert _git_check_ignore(lock_path), (
+        f"git check-ignore must match {lock_path}; .gitignore rule may be stale"
+    )
+
+
+def test_candidate_path_rejects_invalid_record_id():
+    try:
+        worker.candidate_state_path("")
+    except ValueError as error:
+        assert "record_id" in str(error)
+    else:
+        raise AssertionError("Empty record_id must be rejected")
+
+
+# ── Fix 2: Lazy Lark CLI resolver tests ─────────────────────────────
+
+def test_shared_resolver_prefers_lark_cli_exe(monkeypatch, tmp_path):
+    lark = tmp_path / "custom-lark.cmd"
+    lark.write_text("")
+    monkeypatch.setenv("LARK_CLI_EXE", str(lark))
+    from _lark_cli import resolve_lark_cli
+
+    assert resolve_lark_cli() == lark.resolve()
+
+
+def test_shared_resolver_raises_when_cli_missing(monkeypatch):
+    monkeypatch.delenv("LARK_CLI_EXE", raising=False)
+    monkeypatch.setattr("_lark_cli.shutil.which", lambda _name: None)
+    from _lark_cli import resolve_lark_cli
+
+    try:
+        resolve_lark_cli(_platform="posix")
+    except RuntimeError as error:
+        assert "LARK_CLI_EXE" in str(error)
+    else:
+        raise AssertionError("Missing CLI must raise RuntimeError")
+
+
+def test_importing_feishu_module_does_not_require_cli_installation(monkeypatch):
+    """Importing feishu_setup or feishu_base_worker must not resolve the CLI."""
+    monkeypatch.delenv("LARK_CLI_EXE", raising=False)
+    import importlib
+    import feishu_setup
+
+    assert feishu_setup._LARK_CLI is None
+    importlib.reload(feishu_setup)
+    assert feishu_setup._LARK_CLI is None
+
+
+def test_shared_resolver_supports_windows_cmd_and_exe(monkeypatch, tmp_path):
+    """Simulate Windows nt: lark-cli.cmd is found before lark-cli.exe."""
+    monkeypatch.delenv("LARK_CLI_EXE", raising=False)
+    lark_cmd = tmp_path / "lark-cli.cmd"
+    lark_cmd.write_text("")
+    monkeypatch.setattr("_lark_cli.shutil.which", lambda name: str(lark_cmd) if name == "lark-cli.cmd" else None)
+    from _lark_cli import resolve_lark_cli
+
+    assert resolve_lark_cli(_platform="nt").name == "lark-cli.cmd"
+
+
+def test_resolver_windows_falls_back_to_exe(monkeypatch, tmp_path):
+    """Simulate Windows nt: lark-cli.exe resolves when .cmd is absent."""
+    monkeypatch.delenv("LARK_CLI_EXE", raising=False)
+    exe = tmp_path / "lark-cli.exe"
+    exe.write_text("")
+
+    def _which(name):
+        return str(exe) if name == "lark-cli.exe" else None
+
+    monkeypatch.setattr("_lark_cli.shutil.which", _which)
+    from _lark_cli import resolve_lark_cli as win_resolve
+
+    resolved = win_resolve(_platform="nt")
+    assert resolved.name == "lark-cli.exe"
+
+
+def test_resolver_posix_uses_plain_lark_cli(monkeypatch, tmp_path):
+    """Simulate POSIX (Linux/macOS): searches for lark-cli without extension.
+
+    Verifies the resolution branch, not the full Path.resolve() call, so the
+    test runs deterministically on any host OS.
+    """
+    monkeypatch.delenv("LARK_CLI_EXE", raising=False)
+    calls = []
+
+    def _capture_which(name):
+        calls.append(name)
+        return None
+
+    monkeypatch.setattr("_lark_cli.shutil.which", _capture_which)
+    try:
+        from _lark_cli import resolve_lark_cli as posix_resolve
+        posix_resolve(_platform="posix")
+    except RuntimeError:
+        pass  # expected — CLI not found on this machine
+    assert "lark-cli" in calls, (
+        f"POSIX resolver must search for lark-cli, got calls: {calls}"
+    )
+    assert "lark-cli.cmd" not in calls
+    assert "lark-cli.exe" not in calls
+
+
+def test_shared_resolver_uses_path_lookup_when_no_env_var(monkeypatch, tmp_path):
+    monkeypatch.delenv("LARK_CLI_EXE", raising=False)
+    lark = tmp_path / "lark-cli"
+    lark.write_text("")
+    # On actual Windows, the resolver checks .cmd/.exe; on POSIX, "lark-cli".
+    # Test the actual OS path without patching os.name.
+    from _lark_cli import resolve_lark_cli
+    try:
+        resolved = resolve_lark_cli()
+    except RuntimeError:
+        # CLI not installed — skip assertion, path lookup was attempted
+        return
+    assert resolved.name.startswith("lark-cli")
+
+
+# ── Fix 3: Token redaction in Feishu setup ──────────────────────────
+
+def test_redact_token_shows_partial_token():
+    from feishu_setup import _redact_token
+
+    token = "B4s3T0k3nV4lu3Fr0mF3ishu"
+    redacted = _redact_token(token)
+    assert "***" in redacted
+    assert token not in redacted
+    assert redacted.startswith(token[:6])
+    assert redacted.endswith(token[-4:])
+
+
+def test_redact_token_handles_short_token():
+    from feishu_setup import _redact_token
+
+    token = "abc123def456"
+    redacted = _redact_token(token)
+    assert "***" in redacted
+    assert token not in redacted
+
+
+def test_lark_redacts_token_in_error_output(monkeypatch):
+    """_lark() must redact base_token from subprocess stderr before raising."""
+    from feishu_setup import _lark, _redact_token
+    import subprocess as sp
+
+    token = "B4s3T0k3nV4lu3Fr0mF3ishu"
+    monkeypatch.setattr(
+        sp,
+        "run",
+        lambda *_args, **_kwargs: sp.CompletedProcess(
+            ["lark-cli"], returncode=1, stdout="", stderr=f"error: {token} not found"
+        ),
+    )
+    try:
+        _lark(["base", "+base-get"], redact_token=token)
+    except RuntimeError as error:
+        assert token not in str(error)
+        assert _redact_token(token) in str(error)
+    else:
+        raise AssertionError("_lark must raise on non-zero returncode")
+
+
+def test_redact_error_message_replaces_token():
+    from feishu_setup import _redact_text, _redact_token
+
+    token = "B4s3T0k3nV4lu3Fr0mF3ishu"
+    message = f"Error querying Base {token}: permission denied"
+    redacted = _redact_text(message, token)
+    assert token not in redacted
+    assert _redact_token(token) in redacted
+
+
+def test_setup_accepts_show_credentials_flag():
+    from feishu_setup import build_parser
+
+    parser = build_parser()
+    args = parser.parse_args(["--show-credentials"])
+    assert args.show_credentials is True
+
+
+def test_setup_default_hides_credentials():
+    from feishu_setup import build_parser
+
+    parser = build_parser()
+    args = parser.parse_args([])
+    assert args.show_credentials is False
+
+
+def test_setup_redacts_fixture_base_token_by_default(monkeypatch):
+    """End-to-end: setup() with --base-token must redact the token in stdout by default."""
+    import io
+
+    from feishu_setup import _redact_token, build_parser, setup
+
+    token = "B4s3T0k3nV4lu3Fr0mF3ishu"
+    table_id = "tblABC123"
+
+    monkeypatch.setattr("feishu_setup._get_lark_cli", lambda: "/fake/lark-cli")
+
+    def _mock_lark(args, *, timeout=60.0, redact_token=None):
+        sub = args[1] if len(args) > 1 else ""
+        if sub == "+base-get":
+            return {"name": "OKS Base"}
+        if sub == "+table-list":
+            return [{"name": "每日知识采集", "id": table_id}]
+        if sub == "+field-list":
+            return [
+                {"name": "内容", "type": "text"},
+                {"name": "附件", "type": "attachment"},
+                {"name": "思考", "type": "text"},
+                {"name": "希望解决的问题", "type": "text"},
+                {"name": "评级", "type": "select"},
+                {"name": "知识域", "type": "text"},
+            ]
+        if sub == "+form-create":
+            return {"data": {"form_id": "frmXYZ"}, "form_id": "frmXYZ"}
+        if sub == "+field-create":
+            return {"field_id": "fld_new"}
+        return {}
+
+    monkeypatch.setattr("feishu_setup._lark", _mock_lark)
+
+    parser = build_parser()
+    args = parser.parse_args(["--base-token", token])
+
+    stdout = io.StringIO()
+    monkeypatch.setattr("sys.stdout", stdout)
+
+    exit_code = setup(args)
+
+    output = stdout.getvalue()
+    assert exit_code == 0
+    assert token not in output, (
+        f"Full Base token must not appear in default setup output:\n{output}"
+    )
+    assert _redact_token(token) in output, (
+        f"Redacted token {_redact_token(token)!r} must appear in setup output:\n{output}"
+    )
+    assert "--show-credentials" in output, (
+        "Default output must hint about --show-credentials"
+    )
+
+
+def test_setup_shows_fixture_token_only_with_show_credentials(monkeypatch):
+    """End-to-end: --show-credentials must display the full Base token in the final block."""
+    import io
+
+    from feishu_setup import build_parser, setup
+
+    token = "B4s3T0k3nV4lu3Fr0mF3ishu"
+    table_id = "tblABC123"
+
+    monkeypatch.setattr("feishu_setup._get_lark_cli", lambda: "/fake/lark-cli")
+
+    def _mock_lark(args, *, timeout=60.0, redact_token=None):
+        sub = args[1] if len(args) > 1 else ""
+        if sub == "+base-get":
+            return {"name": "OKS Base"}
+        if sub == "+table-list":
+            return [{"name": "每日知识采集", "id": table_id}]
+        if sub == "+field-list":
+            return [
+                {"name": "内容", "type": "text"},
+                {"name": "附件", "type": "attachment"},
+                {"name": "思考", "type": "text"},
+                {"name": "希望解决的问题", "type": "text"},
+                {"name": "评级", "type": "select"},
+                {"name": "知识域", "type": "text"},
+            ]
+        if sub == "+form-create":
+            return {"data": {"form_id": "frmXYZ"}, "form_id": "frmXYZ"}
+        if sub == "+field-create":
+            return {"field_id": "fld_new"}
+        return {}
+
+    monkeypatch.setattr("feishu_setup._lark", _mock_lark)
+
+    parser = build_parser()
+    args = parser.parse_args(["--base-token", token, "--show-credentials"])
+
+    stdout = io.StringIO()
+    monkeypatch.setattr("sys.stdout", stdout)
+
+    exit_code = setup(args)
+
+    output = stdout.getvalue()
+    assert exit_code == 0
+    assert token in output, (
+        f"Full Base token must appear with --show-credentials:\n{output}"
+    )
+    assert "--show-credentials" not in output, (
+        "Output must not hint about --show-credentials when already shown"
+    )
+
+
+def test_setup_redacts_token_in_mocked_lark_failure(monkeypatch):
+    """A lark-cli failure during setup() must not expose the Base token."""
+    import io
+    import subprocess as sp
+
+    from feishu_setup import _redact_token, build_parser, setup
+
+    token = "B4s3T0k3nV4lu3Fr0mF3ishu"
+
+    monkeypatch.setattr("feishu_setup._get_lark_cli", lambda: "/fake/lark-cli")
+
+    monkeypatch.setattr(
+        sp, "run",
+        lambda *_args, **_kwargs: sp.CompletedProcess(
+            ["lark-cli"], returncode=1, stdout="",
+            stderr=f"error: Base {token} not found, permission denied for {token}",
+        ),
+    )
+
+    parser = build_parser()
+    args = parser.parse_args(["--base-token", token])
+
+    stdout = io.StringIO()
+    monkeypatch.setattr("sys.stdout", stdout)
+
+    try:
+        setup(args)
+    except RuntimeError as error:
+        assert token not in str(error), (
+            f"Error message must not expose full token: {error}"
+        )
+        assert _redact_token(token) in str(error), (
+            f"Error message must contain redacted token: {error}"
+        )
+    else:
+        raise AssertionError("setup() must raise RuntimeError when lark-cli fails")
+
+
+# ── Fix 4: Error text redaction in worker ───────────────────────────
+
+def test_redact_error_text_strips_bearer_tokens():
+    message = "failed: Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNq1PStH5hHOqg0"
+    redacted = worker._redact_error_text(message)
+    assert "Bearer eyJ" not in redacted
+    assert "Bearer ***" in redacted
+
+
+def test_redact_error_text_replaces_home_directory():
+    home = str(worker.HOME)
+    if len(home) > 4:
+        message = f"config file not found: {home}/.oks/config.json"
+        redacted = worker._redact_error_text(message)
+        assert home not in redacted
+        assert "~" in redacted
+
+
+def test_redact_error_text_handles_empty_and_none():
+    assert worker._redact_error_text("") == ""
+    assert worker._redact_error_text("plain error") == "plain error"
+
+
+def test_redact_error_text_strips_access_token_assignments():
+    message = "error: access_token=abc123def456ghi789jkl at https://api.example.com"
+    redacted = worker._redact_error_text(message)
+    assert "abc123def456ghi789jkl" not in redacted
+    assert "=***" in redacted
+
+
+def test_redact_error_text_strips_token_and_key_assignments():
+    message = "failed: token=supersecret123 token:moreSecret456 key=base64stuff"
+    redacted = worker._redact_error_text(message)
+    assert "supersecret123" not in redacted
+    assert "moreSecret456" not in redacted
+    assert "base64stuff" not in redacted
+    assert redacted.count("=***") >= 3
+
+
+def test_redact_error_text_strips_api_key_and_secret_assignments():
+    message = "api_key=sk-proj-1234567890abcdef app_secret=mysecretvalue123 secret_key=dontleak"
+    redacted = worker._redact_error_text(message)
+    for secret in ("sk-proj-1234567890abcdef", "mysecretvalue123", "dontleak"):
+        assert secret not in redacted
+    assert redacted.count("=***") >= 3
+
+
+def test_redact_error_text_preserves_short_values():
+    message = "key=abc value=12 status=ok"
+    redacted = worker._redact_error_text(message)
+    # Short values (< 8 chars) are not redacted; they're not credential-like
+    assert "key=abc" in redacted
+    assert "value=12" in redacted
+
+
+def test_failed_record_error_text_is_redacted_before_truncation(monkeypatch, tmp_path):
+    config = worker.WorkerConfig("base", "table", tmp_path / "lark.exe", tmp_path, tmp_path / "python.exe", tmp_path / "out")
+    updates = []
+    monkeypatch.setattr(worker, "update_record", lambda _c, _r, patch: updates.append(patch) or {})
+    monkeypatch.setattr(
+        worker,
+        "probe_source",
+        lambda *_: {
+            "status": "needs_user_action",
+            "error": {"code": "AUTH_REQUIRED", "message": f"auth failed with Bearer secret123abc and path {worker.HOME}/token"},
+        },
+    )
+    result = worker.process_record(
+        config,
+        {"record_id": "rec_1", "fields": {"内容": "https://example.com", "思考": "test"}},
+    )
+    assert result["status"] == "failed"
+    error_text = updates[-1]["错误说明"]
+    assert "Bearer secret123abc" not in error_text
+    assert "Bearer ***" in error_text
+    home_str = str(worker.HOME)
+    if len(home_str) > 4:
+        assert home_str not in error_text

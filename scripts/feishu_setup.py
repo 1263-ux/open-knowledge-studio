@@ -23,31 +23,37 @@ from typing import Any
 
 # ── lark-cli helper ──────────────────────────────────────────────
 
-def _resolve_lark_cli() -> str:
-    configured = os.environ.get("LARK_CLI_EXE")
-    if configured:
-        if Path(configured).is_file():
-            return configured
-    # Windows: prefer .cmd wrapper (subprocess can't run bash scripts directly)
-    if os.name == "nt":
-        for cmd in [
-            shutil.which("lark-cli.cmd"),
-            shutil.which("lark-cli"),
-            Path(os.environ.get("APPDATA", "")) / "npm" / "lark-cli.cmd",
-        ]:
-            if cmd and Path(str(cmd)).is_file():
-                return str(cmd)
-    which = shutil.which("lark-cli")
-    if which:
-        return which
-    raise RuntimeError("lark-cli 未找到。设置 LARK_CLI_EXE 环境变量或通过 npm 安装。")
-
-LARK_CLI = _resolve_lark_cli()
+_LARK_CLI: str | None = None
 
 
-def _lark(args: list[str], *, timeout: float = 60.0) -> dict[str, Any]:
+def _get_lark_cli() -> str:
+    """Lazily resolve and cache the lark-cli path. Never fails at import time."""
+    global _LARK_CLI
+    if _LARK_CLI is not None:
+        return _LARK_CLI
+    from _lark_cli import resolve_lark_cli
+
+    _LARK_CLI = str(resolve_lark_cli())
+    return _LARK_CLI
+
+
+def _redact_token(token: str) -> str:
+    """Show only the first 6 and last 4 characters of a Base token."""
+    if len(token) <= 12:
+        return token[:2] + "***" + token[-2:]
+    return token[:6] + "***" + token[-4:]
+
+
+def _redact_text(text: str, token: str | None) -> str:
+    """Replace every occurrence of *token* in *text* with its redacted form."""
+    if not token:
+        return text
+    return text.replace(token, _redact_token(token))
+
+
+def _lark(args: list[str], *, timeout: float = 60.0, redact_token: str | None = None) -> dict[str, Any]:
     """Run a lark-cli JSON command and return the parsed result."""
-    cmd = [LARK_CLI, *args]
+    cmd = [_get_lark_cli(), *args]
     result = subprocess.run(
         cmd,
         capture_output=True,
@@ -58,6 +64,7 @@ def _lark(args: list[str], *, timeout: float = 60.0) -> dict[str, Any]:
     )
     if result.returncode != 0:
         detail = (result.stderr or result.stdout).strip()
+        detail = _redact_text(detail, redact_token)
         raise RuntimeError(
             f"lark-cli {' '.join(args[:2])} 失败 (exit {result.returncode})\n{detail[-2000:]}"
         )
@@ -67,9 +74,9 @@ def _lark(args: list[str], *, timeout: float = 60.0) -> dict[str, Any]:
         return {"_raw": result.stdout}
 
 
-def _lark_text(args: list[str], *, timeout: float = 60.0) -> str:
+def _lark_text(args: list[str], *, timeout: float = 60.0, redact_token: str | None = None) -> str:
     """Run a lark-cli command and return raw stdout text."""
-    cmd = [LARK_CLI, *args]
+    cmd = [_get_lark_cli(), *args]
     result = subprocess.run(
         cmd,
         capture_output=True,
@@ -80,6 +87,7 @@ def _lark_text(args: list[str], *, timeout: float = 60.0) -> str:
     )
     if result.returncode != 0:
         detail = (result.stderr or result.stdout).strip()
+        detail = _redact_text(detail, redact_token)
         raise RuntimeError(
             f"lark-cli {' '.join(args[:2])} 失败 (exit {result.returncode})\n{detail[-2000:]}"
         )
@@ -145,11 +153,12 @@ WORKER_FIELDS: list[dict[str, Any]] = [
 def setup(args: argparse.Namespace) -> int:
     base_token = args.base_token or os.environ.get("OKS_FEISHU_BASE_TOKEN")
     table_name = args.table_name or "每日知识采集"
+    show_credentials = bool(args.show_credentials)
 
     # ── Step 1: create or reuse Base ──
     if base_token:
-        print(f"[1/4] 使用已有 Base: {base_token}")
-        _existing = _lark(["base", "+base-get", "--base-token", base_token])
+        print(f"[1/4] 使用已有 Base: {_redact_token(base_token)}")
+        _existing = _lark(["base", "+base-get", "--base-token", base_token], redact_token=base_token)
         base_name = _existing.get("name", "OKS Base")
     else:
         base_name = args.base_name or "Open Knowledge Studio"
@@ -174,7 +183,7 @@ def setup(args: argparse.Namespace) -> int:
 
     # ── Step 2: find or create the capture table ──
     print(f"[2/4] 定位/创建采集表: {table_name}")
-    tables = _lark(["base", "+table-list", "--base-token", base_token])
+    tables = _lark(["base", "+table-list", "--base-token", base_token], redact_token=base_token)
     table_list = tables if isinstance(tables, list) else (
         tables.get("data", {}).get("tables", []) or tables.get("items", [])
     )
@@ -188,7 +197,7 @@ def setup(args: argparse.Namespace) -> int:
         print(f"  表已存在: {table_id}")
         existing_fields = _lark([
             "base", "+field-list", "--base-token", base_token, "--table-id", table_id,
-        ])
+        ], redact_token=base_token)
         field_list = existing_fields if isinstance(existing_fields, list) else (
             existing_fields.get("data", {}).get("fields", []) or existing_fields.get("items", [])
         )
@@ -204,7 +213,7 @@ def setup(args: argparse.Namespace) -> int:
             "--name", table_name,
             "--fields", json.dumps(USER_FIELDS[:6], ensure_ascii=False),
             "--format", "json",
-        ])
+        ], redact_token=base_token)
         table_id = result.get("table_id")
         if not table_id:
             raise RuntimeError(f"无法获取 table_id: {json.dumps(result, ensure_ascii=False)}")
@@ -227,11 +236,11 @@ def setup(args: argparse.Namespace) -> int:
                 "--base-token", base_token,
                 "--table-id", table_id,
                 "--json", json.dumps(field_json, ensure_ascii=False),
-            ])
+            ], redact_token=base_token)
             created += 1
             print(f"  + {field['name']}")
         except RuntimeError as exc:
-            print(f"  ! {field['name']}: {exc}")
+            print(f"  ! {field['name']}: {_redact_text(str(exc), base_token)}")
     if created:
         print(f"  新增 {created} 个字段")
     else:
@@ -246,16 +255,17 @@ def setup(args: argparse.Namespace) -> int:
         "--name", f"{table_name} - 采集表单",
         "--description", "[OKS 知识采集] 提交链接或内容，Agent 会自动解析并汇报。",
         "--format", "json",
-    ])
+    ], redact_token=base_token)
     form_data = form_result.get("data", {}) or form_result
     form_id = form_data.get("form_id") or form_data.get("id") or form_result.get("form_id", "")
 
     # ── output configuration ──
+    display_token = base_token if show_credentials else _redact_token(base_token)
     print()
     print("=" * 60)
     print("飞书配置完成。请将以下内容设置为环境变量：")
     print()
-    print(f"  $env:OKS_FEISHU_BASE_TOKEN = \"{base_token}\"")
+    print(f"  $env:OKS_FEISHU_BASE_TOKEN = \"{display_token}\"")
     print(f"  $env:OKS_FEISHU_TABLE_ID   = \"{table_id}\"")
     if form_id:
         print(f"  # Form ID: {form_id}")
@@ -263,12 +273,15 @@ def setup(args: argparse.Namespace) -> int:
     print("或写入 ~/.oks/config.json:")
     print(json.dumps({
         "feishu": {
-            "base_token": base_token,
+            "base_token": display_token,
             "table_id": table_id,
             "table_name": table_name,
             "form_id": form_id,
         }
     }, ensure_ascii=False, indent=2))
+    if not show_credentials:
+        print()
+        print("  [提示] 使用 --show-credentials 查看完整 Base token。")
     print("=" * 60)
 
     return 0
@@ -285,6 +298,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--base-name", default="Open Knowledge Studio", help="新建 Base 的名称")
     parser.add_argument("--table-name", default="每日知识采集", help="采集表名称")
     parser.add_argument("--time-zone", default="Asia/Shanghai")
+    parser.add_argument(
+        "--show-credentials",
+        action="store_true",
+        help="Display the full Base token in output instead of the default redacted form",
+    )
     return parser
 
 

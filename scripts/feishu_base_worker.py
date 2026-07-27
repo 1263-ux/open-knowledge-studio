@@ -29,7 +29,18 @@ import yaml
 
 
 ROOT = Path(__file__).resolve().parents[1]
+HOME = Path.home()
 URL_RE = re.compile(r"https?://[^\s<>\]\[)]+", re.IGNORECASE)
+BEARER_RE = re.compile(r"Bearer\s+[A-Za-z0-9\-._~+/]+=*", re.IGNORECASE)
+# Match access_token / token / key / value assignments that carry a
+# plausibly secret parameter (query-string or colon/equals style).
+# Trigger only when the right-hand side is ≥ 8 base64-ish characters.
+_SECRET_ASSIGNMENT_RE = re.compile(
+    r"(?:(?:access[_\-]?token|api[_\-]?key|app[_\-]?secret|secret[_\-]?key"
+    r"|token|key|value)\s*[=:]\s*)"
+    r"[A-Za-z0-9\-._~+/]{8,}",
+    re.IGNORECASE,
+)
 RETRYABLE_CODES = {"RATE_LIMITED", "UPSTREAM_UNAVAILABLE", "NETWORK_ERROR", "TIMEOUT"}
 CANDIDATE_FIELDS = [
     "运行状态",
@@ -117,29 +128,34 @@ def atomic_write_text(path: Path, value: str) -> None:
         raise
 
 
+def _redact_error_text(text: str) -> str:
+    """Remove Bearer tokens, credential assignments, and home-directory paths.
+
+    Covers Bearer auth headers, ``access_token=...`` / ``token=...`` /
+    ``key=...`` / ``value=...`` parameter assignments (≥8-char value),
+    and home-directory file paths. Callers must truncate after redaction;
+    this function only redacts.
+    """
+    if not text:
+        return text
+    result = BEARER_RE.sub("Bearer ***", text)
+    result = _SECRET_ASSIGNMENT_RE.sub(
+        lambda m: m.group(0).split("=", 1)[0].split(":", 1)[0].rstrip() + "=***",
+        result,
+    )
+    home_str = str(HOME)
+    if home_str and len(home_str) > 4:
+        result = result.replace(home_str, "~")
+        alt = home_str.replace("\\", "/")
+        if alt != home_str:
+            result = result.replace(alt, "~")
+    return result
+
+
 def resolve_lark_cli() -> Path:
-    configured = os.environ.get("LARK_CLI_EXE")
-    candidates: list[Path] = []
-    if configured:
-        candidates.append(Path(configured))
-    appdata = os.environ.get("APPDATA")
-    if appdata:
-        candidates.append(
-            Path(appdata)
-            / "npm"
-            / "node_modules"
-            / "@larksuite"
-            / "cli"
-            / "bin"
-            / "lark-cli.exe"
-        )
-    located = shutil.which("lark-cli.exe")
-    if located:
-        candidates.append(Path(located))
-    for candidate in candidates:
-        if candidate.is_file():
-            return candidate.resolve()
-    raise RuntimeError("lark-cli.exe not found; set LARK_CLI_EXE to its absolute path")
+    from _lark_cli import resolve_lark_cli as _shared_resolve
+
+    return _shared_resolve()
 
 
 def load_config(args: argparse.Namespace) -> WorkerConfig:
@@ -1858,7 +1874,7 @@ def complete_browser_snapshot(config: WorkerConfig, record_id: str, snapshot_dir
                 "运行状态": "可重试失败",
                 "采集模式": "公开浏览器",
                 "错误码": failure["code"],
-                "错误说明": failure["message"][:500],
+                "错误说明": _redact_error_text(failure["message"])[:500],
                 "质量状态": "failed",
                 "Raw Bundle": None,
             },
@@ -1963,10 +1979,10 @@ def process_record(
                     "运行状态": "可重试失败",
                     "采集模式": "附件",
                     "错误码": failure["code"],
-                    "错误说明": failure["message"][:500],
+                    "错误说明": _redact_error_text(failure["message"])[:500],
                     "质量状态": "failed",
                     "Raw Bundle": None,
-                    "总结": f"附件未生成 Raw：{failure['message']}"[:1000],
+                    "总结": f"附件未生成 Raw：{_redact_error_text(failure['message'])}"[:1000],
                 },
             )
         return run
@@ -2012,10 +2028,10 @@ def process_record(
                 "运行状态": state,
                 "采集模式": "登录浏览器" if state == "需授权" else "HTTP",
                 "错误码": code,
-                "错误说明": message[:500],
+                "错误说明": _redact_error_text(message)[:500],
                 "质量状态": "failed",
                 "Raw Bundle": None,
-                "总结": f"未生成 Raw：{code}。{message}"[:1000],
+                "总结": f"未生成 Raw：{code}。{_redact_error_text(message)}"[:1000],
             },
         )
         return run
@@ -2124,10 +2140,10 @@ def process_record(
                     "运行状态": "可重试失败",
                     "采集模式": "平台提取器",
                     "错误码": failure["code"],
-                    "错误说明": failure["message"][:500],
+                    "错误说明": _redact_error_text(failure["message"])[:500],
                     "质量状态": "failed",
                     "Raw Bundle": None,
-                    "总结": f"平台提取器未生成 Raw：{failure['message']}"[:1000],
+                    "总结": f"平台提取器未生成 Raw：{_redact_error_text(failure['message'])}"[:1000],
                 },
             )
         return run
@@ -2197,10 +2213,10 @@ def process_record(
                     "运行状态": "可重试失败",
                     "采集模式": "HTTP",
                     "错误码": failure["code"],
-                    "错误说明": failure["message"][:500],
+                    "错误说明": _redact_error_text(failure["message"])[:500],
                     "质量状态": "failed",
                     "Raw Bundle": None,
-                    "总结": f"公网文件未生成 Raw：{failure['message']}"[:1000],
+                    "总结": f"公网文件未生成 Raw：{_redact_error_text(failure['message'])}"[:1000],
                 },
             )
         return run
@@ -2249,10 +2265,10 @@ def process_record(
                 "运行状态": "可重试失败",
                 "采集模式": "HTTP",
                 "错误码": failure["code"],
-                "错误说明": failure["message"][:500],
+                "错误说明": _redact_error_text(failure["message"])[:500],
                 "质量状态": "failed",
                 "Raw Bundle": None,
-                "总结": f"未生成 Raw：{failure['code']}。{failure['message']}"[:1000],
+                "总结": f"未生成 Raw：{failure['code']}。{_redact_error_text(failure['message'])}"[:1000],
             },
         )
     return run
