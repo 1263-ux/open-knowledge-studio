@@ -27,20 +27,14 @@ import uuid
 
 import yaml
 
-
-ROOT = Path(__file__).resolve().parents[1]
-HOME = Path.home()
-URL_RE = re.compile(r"https?://[^\s<>\]\[)]+", re.IGNORECASE)
-BEARER_RE = re.compile(r"Bearer\s+[A-Za-z0-9\-._~+/]+=*", re.IGNORECASE)
-# Match access_token / token / key / value assignments that carry a
-# plausibly secret parameter (query-string or colon/equals style).
-# Trigger only when the right-hand side is ≥ 8 base64-ish characters.
-_SECRET_ASSIGNMENT_RE = re.compile(
-    r"(?:(?:access[_\-]?token|api[_\-]?key|app[_\-]?secret|secret[_\-]?key"
-    r"|token|key|value)\s*[=:]\s*)"
-    r"[A-Za-z0-9\-._~+/]{8,}",
-    re.IGNORECASE,
+from feishu_worker.config import (
+    WorkerConfig,
+    configured_knowledge_root as _config_configured_knowledge_root,
+    load_config as _config_load_config,
+    resolve_lark_cli,
 )
+
+# ── Retry constants (moved back from config; protocol layer, not Phase 1A) ──
 RETRYABLE_CODES = {"RATE_LIMITED", "UPSTREAM_UNAVAILABLE", "NETWORK_ERROR", "TIMEOUT"}
 _FATAL_LARK_CODES = {
     "AUTH_FAILED",
@@ -55,174 +49,19 @@ _FATAL_LARK_CODES = {
 _LARK_MAX_RETRIES = 3
 _LARK_BASE_DELAY = 1.0
 _LARK_SUBPROCESS_TIMEOUT = 30.0
-CANDIDATE_FIELDS = [
-    "运行状态",
-    "运行ID",
-    "Raw Bundle",
-    "Wiki状态",
-    "候选ID",
-    "候选内容",
-    "审核动作",
-    "审核意见",
-    "修改类型",
-    "审核时间",
-    "Wiki路径",
-]
-CAPTURE_FIELDS = [
-    "内容",
-    "思考",
-    "希望解决的问题",
-    "附件",
-    "运行状态",
-    "运行ID",
-    "来源哈希",
-    "重试",
-    "租约所有者",
-    "租约到期",
-]
-REVIEW_ACTIONS = {"accept", "edit", "reject", "defer"}
-REVIEW_ACTION_RE = re.compile(
-    r"(?<![A-Za-z])(accept|edit|reject|defer)(?![A-Za-z])",
-    re.IGNORECASE,
-)
 
-
-@dataclass(frozen=True)
-class WorkerConfig:
-    base_token: str
-    table_id: str
-    lark_cli: Path
-    output_root: Path
-    identity: str = "user"
-    lease_seconds: int = 3600
-    review_recipient_user_id: str | None = None
-    review_message_identity: str = "bot"
-    knowledge_root: Path | None = None
-
-
-def utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat()
-
-
-def sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(4 * 1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
-def atomic_write_json(path: Path, value: object) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    payload = json.dumps(value, ensure_ascii=False, indent=2) + "\n"
-    handle, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
-    try:
-        with os.fdopen(handle, "w", encoding="utf-8", newline="\n") as stream:
-            stream.write(payload)
-            stream.flush()
-            os.fsync(stream.fileno())
-        os.replace(temporary, path)
-    except BaseException:
-        Path(temporary).unlink(missing_ok=True)
-        raise
-
-
-def atomic_write_text(path: Path, value: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    handle, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
-    try:
-        with os.fdopen(handle, "w", encoding="utf-8", newline="\n") as stream:
-            stream.write(value)
-            stream.flush()
-            os.fsync(stream.fileno())
-        os.replace(temporary, path)
-    except BaseException:
-        Path(temporary).unlink(missing_ok=True)
-        raise
-
-
-def _redact_error_text(text: str) -> str:
-    """Remove Bearer tokens, credential assignments, and home-directory paths.
-
-    Covers Bearer auth headers, ``access_token=...`` / ``token=...`` /
-    ``key=...`` / ``value=...`` parameter assignments (≥8-char value),
-    and home-directory file paths. Callers must truncate after redaction;
-    this function only redacts.
-    """
-    if not text:
-        return text
-    result = BEARER_RE.sub("Bearer ***", text)
-    result = _SECRET_ASSIGNMENT_RE.sub(
-        lambda m: m.group(0).split("=", 1)[0].split(":", 1)[0].rstrip() + "=***",
-        result,
-    )
-    home_str = str(HOME)
-    if home_str and len(home_str) > 4:
-        result = result.replace(home_str, "~")
-        alt = home_str.replace("\\", "/")
-        if alt != home_str:
-            result = result.replace(alt, "~")
-    return result
-
-
-def resolve_lark_cli() -> Path:
-    from _lark_cli import resolve_lark_cli as _shared_resolve
-
-    return _shared_resolve()
+# ── Legacy wrappers: supply ROOT so callers keep one-argument API ──
 
 
 def load_config(args: argparse.Namespace) -> WorkerConfig:
-    base_token = args.base_token or os.environ.get("OKS_FEISHU_BASE_TOKEN")
-    table_id = args.table_id or os.environ.get("OKS_FEISHU_TABLE_ID")
-    if not base_token or not table_id:
-        raise RuntimeError(
-            "Base coordinates are required via --base-token/--table-id or "
-            "OKS_FEISHU_BASE_TOKEN/OKS_FEISHU_TABLE_ID"
-        )
-    knowledge_root = Path(
-        args.knowledge_root
-        or os.environ.get("OKS_KNOWLEDGE_ROOT")
-        or ROOT
-    ).expanduser().resolve()
-    return WorkerConfig(
-        base_token=base_token,
-        table_id=table_id,
-        lark_cli=resolve_lark_cli(),
-        output_root=Path(
-            args.output_root or knowledge_root / "raw" / "feishu-intake"
-        ).expanduser().resolve(),
-        lease_seconds=int(args.lease_seconds),
-        review_recipient_user_id=(
-            args.review_recipient_user_id
-            or os.environ.get("OKS_FEISHU_REVIEW_USER_ID")
-            or None
-        ),
-        review_message_identity=(
-            args.review_message_identity
-            or os.environ.get("OKS_FEISHU_REVIEW_MESSAGE_IDENTITY")
-            or "bot"
-        ),
-        knowledge_root=knowledge_root,
-    )
+    return _config_load_config(args, root=ROOT)
 
 
 def configured_knowledge_root(config: WorkerConfig) -> Path:
-    return (config.knowledge_root or ROOT).expanduser().resolve()
+    return _config_configured_knowledge_root(config, root=ROOT)
 
 
-def parse_json_output(result: subprocess.CompletedProcess[str], *, allow_codes: set[int] = {0}) -> dict[str, Any]:
-    if result.returncode not in allow_codes:
-        raise RuntimeError(
-            f"command failed ({result.returncode}): {(result.stderr or result.stdout).strip()}"
-        )
-    text = result.stdout.strip()
-    try:
-        value = json.loads(text)
-    except json.JSONDecodeError as error:
-        raise RuntimeError(f"command returned non-JSON output: {text[:400]}") from error
-    if not isinstance(value, dict):
-        raise RuntimeError("command returned a non-object JSON value")
-    return value
+# ── Lark CLI protocol helpers (moved back from config; not Phase 1A) ──
 
 
 def _extract_lark_error_code(value: dict[str, Any]) -> str:
@@ -293,7 +132,7 @@ def lark_json(config: WorkerConfig, *arguments: str) -> dict[str, Any]:
         try:
             value = json.loads(text)
         except json.JSONDecodeError as exc:
-            # Malformed/non-JSON output — do NOT retry.
+            # Malformed/non-JSON output -- do NOT retry.
             raise RuntimeError(
                 f"command returned non-JSON output: {text[:400]}"
             ) from exc
@@ -329,6 +168,131 @@ def lark_json(config: WorkerConfig, *arguments: str) -> dict[str, Any]:
         f"lark-cli failed after {_LARK_MAX_RETRIES + 1} attempts: "
         f"{' '.join(arguments[:3])}..."
     ) from last_error
+
+
+ROOT = Path(__file__).resolve().parents[1]
+HOME = Path.home()
+URL_RE = re.compile(r"https?://[^\s<>\]\[)]+", re.IGNORECASE)
+BEARER_RE = re.compile(r"Bearer\s+[A-Za-z0-9\-._~+/]+=*", re.IGNORECASE)
+# Match access_token / token / key / value assignments that carry a
+# plausibly secret parameter (query-string or colon/equals style).
+# Trigger only when the right-hand side is ≥ 8 base64-ish characters.
+_SECRET_ASSIGNMENT_RE = re.compile(
+    r"(?:(?:access[_\-]?token|api[_\-]?key|app[_\-]?secret|secret[_\-]?key"
+    r"|token|key|value)\s*[=:]\s*)"
+    r"[A-Za-z0-9\-._~+/]{8,}",
+    re.IGNORECASE,
+)
+CANDIDATE_FIELDS = [
+    "运行状态",
+    "运行ID",
+    "Raw Bundle",
+    "Wiki状态",
+    "候选ID",
+    "候选内容",
+    "审核动作",
+    "审核意见",
+    "修改类型",
+    "审核时间",
+    "Wiki路径",
+]
+CAPTURE_FIELDS = [
+    "内容",
+    "思考",
+    "希望解决的问题",
+    "附件",
+    "运行状态",
+    "运行ID",
+    "来源哈希",
+    "重试",
+    "租约所有者",
+    "租约到期",
+]
+REVIEW_ACTIONS = {"accept", "edit", "reject", "defer"}
+REVIEW_ACTION_RE = re.compile(
+    r"(?<![A-Za-z])(accept|edit|reject|defer)(?![A-Za-z])",
+    re.IGNORECASE,
+)
+
+
+def utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(4 * 1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def atomic_write_json(path: Path, value: object) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = json.dumps(value, ensure_ascii=False, indent=2) + "\n"
+    handle, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    try:
+        with os.fdopen(handle, "w", encoding="utf-8", newline="\n") as stream:
+            stream.write(payload)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+    except BaseException:
+        Path(temporary).unlink(missing_ok=True)
+        raise
+
+
+def atomic_write_text(path: Path, value: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    handle, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    try:
+        with os.fdopen(handle, "w", encoding="utf-8", newline="\n") as stream:
+            stream.write(value)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+    except BaseException:
+        Path(temporary).unlink(missing_ok=True)
+        raise
+
+
+def _redact_error_text(text: str) -> str:
+    """Remove Bearer tokens, credential assignments, and home-directory paths.
+
+    Covers Bearer auth headers, ``access_token=...`` / ``token=...`` /
+    ``key=...`` / ``value=...`` parameter assignments (≥8-char value),
+    and home-directory file paths. Callers must truncate after redaction;
+    this function only redacts.
+    """
+    if not text:
+        return text
+    result = BEARER_RE.sub("Bearer ***", text)
+    result = _SECRET_ASSIGNMENT_RE.sub(
+        lambda m: m.group(0).split("=", 1)[0].split(":", 1)[0].rstrip() + "=***",
+        result,
+    )
+    home_str = str(HOME)
+    if home_str and len(home_str) > 4:
+        result = result.replace(home_str, "~")
+        alt = home_str.replace("\\", "/")
+        if alt != home_str:
+            result = result.replace(alt, "~")
+    return result
+
+
+def parse_json_output(result: subprocess.CompletedProcess[str], *, allow_codes: set[int] = {0}) -> dict[str, Any]:
+    if result.returncode not in allow_codes:
+        raise RuntimeError(
+            f"command failed ({result.returncode}): {(result.stderr or result.stdout).strip()}"
+        )
+    text = result.stdout.strip()
+    try:
+        value = json.loads(text)
+    except json.JSONDecodeError as error:
+        raise RuntimeError(f"command returned non-JSON output: {text[:400]}") from error
+    if not isinstance(value, dict):
+        raise RuntimeError("command returned a non-object JSON value")
+    return value
 
 
 def _connector_binary() -> str:

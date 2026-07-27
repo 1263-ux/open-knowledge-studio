@@ -1991,3 +1991,78 @@ def test_package_public_web_uses_production_extractor_not_experiment(monkeypatch
     assert "experiments" not in source, (
         f"package_public_web must not reference experiments/:\n{source}"
     )
+
+
+# ── Round 3 Phase 1A: config module extraction compatibility ──────────
+
+
+def test_config_module_re_exports_all_moved_names():
+    """Every name is still a feishu_base_worker attribute.
+
+    Names that stayed in config must be the same object; names moved back to
+    the base worker must still be present as module attributes.
+    """
+    from feishu_worker import config as config_module
+
+    config_names = [
+        "WorkerConfig",
+        "resolve_lark_cli",
+        "load_config",
+        "configured_knowledge_root",
+    ]
+    for name in config_names:
+        assert hasattr(worker, name), (
+            f"feishu_base_worker must expose {name}"
+        )
+        assert hasattr(config_module, name), (
+            f"feishu_worker.config must expose {name}"
+        )
+
+    native_names = [
+        "RETRYABLE_CODES",
+        "_FATAL_LARK_CODES",
+        "_LARK_BASE_DELAY",
+        "_LARK_MAX_RETRIES",
+        "_LARK_SUBPROCESS_TIMEOUT",
+        "lark_json",
+        "_extract_lark_error_code",
+        "_is_fatal_lark_error",
+        "_is_retryable_lark_error",
+    ]
+    for name in native_names:
+        assert hasattr(worker, name), (
+            f"feishu_base_worker must expose {name}"
+        )
+        assert not hasattr(config_module, name), (
+            f"feishu_worker.config must NOT expose {name} (moved back to base worker)"
+        )
+
+
+def test_config_module_importable_independently():
+    """feishu_worker.config can be imported without importing feishu_base_worker."""
+    import importlib
+    import sys
+
+    # Remove feishu_base_worker and all its transitive dependants from
+    # sys.modules so the config import cannot accidentally find it.
+    stale = {k for k in sys.modules if k.startswith("feishu_base_worker")}
+    stale.update(k for k in sys.modules if k.startswith("feishu_worker"))
+    stale.update(k for k in sys.modules if k.startswith("_lark_cli"))
+    for key in stale:
+        del sys.modules[key]
+
+    try:
+        config = importlib.import_module("feishu_worker.config")
+        assert hasattr(config, "WorkerConfig")
+        assert hasattr(config, "load_config")
+        assert hasattr(config, "configured_knowledge_root")
+        assert hasattr(config, "resolve_lark_cli")
+        # These must NOT be present -- they belong to the protocol layer.
+        assert not hasattr(config, "lark_json")
+        assert not hasattr(config, "RETRYABLE_CODES")
+        assert not hasattr(config, "_LARK_MAX_RETRIES")
+    finally:
+        # Restore the original imports so later tests are unaffected.
+        import feishu_base_worker  # noqa: F811
+        import feishu_worker.config  # noqa: F811
+        import _lark_cli  # noqa: F811
