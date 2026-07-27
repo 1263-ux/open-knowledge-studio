@@ -1822,6 +1822,173 @@ def test_claim_record_run_id_contains_utc_timestamp(monkeypatch, tmp_path):
     assert ts_part[8] == "T"
 
 
+# -- Round 3 Phase 3A: DST / offset lease tests --
+
+
+def test_lease_dst_spring_forward_is_still_utc_aware(monkeypatch, tmp_path):
+    """A lease written near a DST spring-forward MUST be aware UTC and must
+    not jump by an hour when the local wall clock changes."""
+    config = worker.WorkerConfig(
+        "base", "table", tmp_path / "lark.exe", tmp_path, lease_seconds=60,
+    )
+    monkeypatch.setattr(
+        worker,
+        "get_record",
+        lambda *_: {"record_id": "rec_dst", "fields": {"运行状态": "待处理", "重试": False}},
+    )
+    updates: list = []
+    monkeypatch.setattr(
+        worker, "update_record", lambda _c, _r, patch: updates.append(patch) or {}
+    )
+    monkeypatch.setattr(
+        worker, "local_claim_lock",
+        lambda _config: worker.contextmanager(lambda: (yield))(),
+    )
+
+    claimed = worker.claim_record(config, "rec_dst")
+    assert claimed is not None
+
+    lease_str = updates[0]["租约到期"]
+    # Must carry an explicit offset
+    assert "+00:00" in lease_str or lease_str.endswith("Z") or "-" in lease_str.split(" ")[-1], (
+        f"Lease must be offset-aware, got: {lease_str!r}"
+    )
+    parsed = worker.parse_base_datetime(lease_str)
+    assert parsed is not None
+    assert parsed.tzinfo is not None
+    # The parsed UTC datetime must be close to now (within lease_seconds)
+    now_utc = worker.datetime.now(worker.timezone.utc)
+    assert abs((parsed - now_utc).total_seconds()) < 120, (
+        f"Lease expiry {parsed} too far from now {now_utc}"
+    )
+
+
+def test_lease_positive_utc_offset_converts_to_utc():
+    """A lease written with an explicit +08:00 offset must be parseable and
+    convert to the equivalent UTC instant."""
+    from feishu_worker.claim import parse_base_datetime as claim_parse
+
+    # +08:00 → should become 04:00 UTC
+    result = claim_parse("2026-08-15 12:00:00+08:00")
+    assert result is not None
+    assert result.tzinfo is not None
+    expected = worker.datetime(2026, 8, 15, 4, 0, 0, tzinfo=worker.timezone.utc)
+    assert result == expected, f"Expected {expected}, got {result}"
+
+
+def test_lease_negative_utc_offset_converts_to_utc():
+    """A lease written with an explicit -05:00 offset must be parseable and
+    convert to the equivalent UTC instant."""
+    from feishu_worker.claim import parse_base_datetime as claim_parse
+
+    # -05:00 → should become 17:00 UTC
+    result = claim_parse("2026-08-15 12:00:00-05:00")
+    assert result is not None
+    assert result.tzinfo is not None
+    expected = worker.datetime(2026, 8, 15, 17, 0, 0, tzinfo=worker.timezone.utc)
+    assert result == expected, f"Expected {expected}, got {result}"
+
+
+def test_lease_with_z_suffix_is_utc():
+    """Lease with Z suffix is parsed as UTC."""
+    from feishu_worker.claim import parse_base_datetime as claim_parse
+
+    result = claim_parse("2026-12-25T00:00:00Z")
+    assert result is not None
+    assert result.tzinfo is not None
+    assert result.utcoffset() == worker.timedelta(0)
+
+
+def test_lease_offset_with_colon_format():
+    """Lease with +05:30 offset (colon format) converts correctly."""
+    from feishu_worker.claim import parse_base_datetime as claim_parse
+
+    result = claim_parse("2026-08-15 12:00:00+05:30")
+    assert result is not None
+    assert result.tzinfo is not None
+    expected = worker.datetime(2026, 8, 15, 6, 30, 0, tzinfo=worker.timezone.utc)
+    assert result == expected, f"Expected {expected}, got {result}"
+
+
+def test_lease_naive_still_rejected_by_default():
+    """Naive lease strings are still rejected (return None) by default."""
+    from feishu_worker.claim import parse_base_datetime as claim_parse
+
+    assert claim_parse("2026-08-15 12:00:00") is None
+    assert claim_parse("2026-08-15T12:00:00") is None
+
+
+def test_lease_naive_accepted_with_migration_flag():
+    """Naive lease strings are accepted when naive_migration='assume_utc'."""
+    from feishu_worker.claim import parse_base_datetime as claim_parse
+
+    result = claim_parse("2026-08-15 12:00:00", naive_migration="assume_utc")
+    assert result is not None
+    assert result.tzinfo is not None
+    assert result == worker.datetime(2026, 8, 15, 12, 0, 0, tzinfo=worker.timezone.utc)
+
+
+def test_lease_roundtrip_through_strftime_and_parse():
+    """Lease written by claim_record roundtrips through strftime/parse correctly."""
+    now = worker.datetime(2026, 7, 27, 14, 30, 45, tzinfo=worker.timezone.utc)
+    formatted = now.strftime("%Y-%m-%d %H:%M:%S+00:00")
+    parsed = worker.parse_base_datetime(formatted)
+    assert parsed is not None
+    assert parsed.tzinfo is not None
+    assert parsed == now
+
+
+def test_candidate_rejects_future_lease():
+    """A record whose lease is in the future is NOT a candidate for reclaim."""
+    now = worker.datetime(2026, 7, 28, 12, 0, 0, tzinfo=worker.timezone.utc)
+    future_lease = {
+        "fields": {
+            "运行状态": "已领取",
+            "重试": False,
+            "租约到期": "2026-07-28 12:00:01",
+        }
+    }
+    assert not worker.is_candidate(future_lease, now=now)
+
+
+def test_candidate_accepts_past_lease():
+    """A record whose lease has expired IS a candidate for reclaim."""
+    now = worker.datetime(2026, 7, 28, 12, 0, 0, tzinfo=worker.timezone.utc)
+    past_lease = {
+        "fields": {
+            "运行状态": "已领取",
+            "重试": False,
+            "租约到期": "2026-07-28 11:59:59",
+        }
+    }
+    assert worker.is_candidate(past_lease, now=now)
+
+
+def test_claim_module_has_subprocess_import():
+    """claim.py carries a fresh subprocess import for future phases."""
+    import importlib
+    import sys
+
+    stale = {k for k in sys.modules if k.startswith("feishu_base_worker")}
+    stale.update(k for k in sys.modules if k.startswith("feishu_worker"))
+    stale.update(k for k in sys.modules if k.startswith("_lark_cli"))
+    for key in stale:
+        del sys.modules[key]
+
+    try:
+        claim = importlib.import_module("feishu_worker.claim")
+        assert hasattr(claim, "subprocess"), (
+            "feishu_worker.claim must import subprocess"
+        )
+    finally:
+        import feishu_base_worker  # noqa: F811
+        import feishu_worker.claim  # noqa: F811
+        import feishu_worker.config  # noqa: F811
+        import feishu_worker.io_utils  # noqa: F811
+        import feishu_worker.base_client  # noqa: F811
+        import _lark_cli  # noqa: F811
+
+
 # -- Round 2 / Part A regression: malformed JSON and narrow OSError retry --
 
 
@@ -2643,3 +2810,170 @@ def test_record_crud_errors_propagate_to_main_cli(monkeypatch, tmp_path):
         assert "AUTH_FAILED" in str(exc)
     else:
         raise AssertionError("lark_json errors must propagate to record CRUD callers")
+
+
+# ── Round 3 Phase 3A: claim module isolation tests ─────────────────────────
+
+
+def test_claim_module_importable_independently():
+    """feishu_worker.claim imports in a fresh subprocess without
+    feishu_base_worker loaded in sys.modules."""
+    import importlib
+    import sys
+
+    stale = {k for k in sys.modules if k.startswith("feishu_base_worker")}
+    stale.update(k for k in sys.modules if k.startswith("feishu_worker"))
+    stale.update(k for k in sys.modules if k.startswith("_lark_cli"))
+    for key in stale:
+        del sys.modules[key]
+
+    try:
+        claim = importlib.import_module("feishu_worker.claim")
+        for name in (
+            "parse_base_datetime",
+            "is_candidate",
+            "local_claim_lock",
+            "claim_next_record",
+            "claim_record",
+            "release_lease",
+        ):
+            assert hasattr(claim, name), (
+                f"feishu_worker.claim must expose {name}"
+            )
+        # These must NOT be present -- they belong to the orchestrator.
+        for name in ("process_record", "parse_candidate_document", "main", "ROOT"):
+            assert not hasattr(claim, name), (
+                f"feishu_worker.claim must NOT expose {name}"
+            )
+        assert "feishu_base_worker" not in sys.modules, (
+            "claim import must not load feishu_base_worker"
+        )
+    finally:
+        import feishu_base_worker  # noqa: F811
+        import feishu_worker.claim  # noqa: F811
+        import feishu_worker.config  # noqa: F811
+        import feishu_worker.io_utils  # noqa: F811
+        import feishu_worker.base_client  # noqa: F811
+        import _lark_cli  # noqa: F811
+
+
+def test_claim_re_exports_all_moved_names():
+    """Every name extracted to claim is importable from feishu_base_worker."""
+    claim_names = [
+        "parse_base_datetime",
+        "is_candidate",
+        "local_claim_lock",
+        "claim_next_record",
+        "claim_record",
+        "release_lease",
+    ]
+    missing = [n for n in claim_names if not hasattr(worker, n)]
+    assert not missing, (
+        f"feishu_base_worker must re-export: {', '.join(missing)}"
+    )
+
+
+def test_all_leaf_modules_importable_without_base_worker():
+    """All four leaf modules (config, io_utils, base_client, claim) import
+    cleanly without feishu_base_worker loaded."""
+    import importlib
+    import sys
+
+    stale = {k for k in sys.modules if k.startswith("feishu_base_worker")}
+    stale.update(k for k in sys.modules if k.startswith("feishu_worker"))
+    stale.update(k for k in sys.modules if k.startswith("_lark_cli"))
+    for key in stale:
+        del sys.modules[key]
+
+    try:
+        for mod_name in (
+            "feishu_worker.config",
+            "feishu_worker.io_utils",
+            "feishu_worker.base_client",
+            "feishu_worker.claim",
+        ):
+            mod = importlib.import_module(mod_name)
+            assert mod is not None, f"Failed to import {mod_name}"
+        assert "feishu_base_worker" not in sys.modules, (
+            "Leaf module imports must not load feishu_base_worker"
+        )
+    finally:
+        import feishu_base_worker  # noqa: F811
+        import feishu_worker.config  # noqa: F811
+        import feishu_worker.io_utils  # noqa: F811
+        import feishu_worker.base_client  # noqa: F811
+        import feishu_worker.claim  # noqa: F811
+        import _lark_cli  # noqa: F811
+
+
+def test_claim_direct_usage_without_legacy_wrappers(monkeypatch, tmp_path):
+    """claim.py functions work when called directly with injected callables
+    (no dependency on feishu_base_worker wrappers)."""
+    from feishu_worker.claim import (
+        claim_next_record,
+        claim_record,
+        release_lease,
+        is_candidate,
+        parse_base_datetime,
+        local_claim_lock,
+    )
+    from feishu_worker.config import WorkerConfig
+
+    config = WorkerConfig(
+        "base", "table", tmp_path / "lark.exe", tmp_path, lease_seconds=60,
+    )
+
+    # ---- claim_next_record ----
+    records = [{"record_id": "rec_1", "fields": {"运行状态": "待处理", "重试": False}}]
+    updates: list = []
+
+    def fake_list(_config, _limit):
+        return records
+
+    def fake_update(_config, record_id, patch):
+        updates.append((record_id, patch))
+        return {}
+
+    @worker.contextmanager
+    def fake_lock(_config):
+        yield
+
+    result = claim_next_record(
+        config,
+        limit=10,
+        _list_fn=fake_list,
+        _update_fn=fake_update,
+        _lock_fn=fake_lock,
+    )
+    assert result is not None
+    assert result[0] == records[0]
+    assert updates[0][0] == "rec_1"
+    assert updates[0][1]["运行状态"] == "已领取"
+
+    # ---- claim_record ----
+    get_calls: list = []
+
+    def fake_get(_config, record_id, projection):
+        get_calls.append((record_id, projection))
+        return {"record_id": record_id, "fields": {"运行状态": "待处理", "重试": False}}
+
+    result2 = claim_record(
+        config, "rec_explicit",
+        _get_fn=fake_get,
+        _update_fn=fake_update,
+        _lock_fn=fake_lock,
+    )
+    assert result2 is not None
+    assert get_calls[0][0] == "rec_explicit"
+
+    # ---- release_lease ----
+    release_updates: list = []
+
+    def fake_release_update(_config, record_id, patch):
+        release_updates.append((record_id, patch))
+        return {}
+
+    release_lease(config, "rec_release", _update_fn=fake_release_update)
+    assert release_updates[0][0] == "rec_release"
+    assert release_updates[0][1]["租约所有者"] is None
+    assert release_updates[0][1]["租约到期"] is None
