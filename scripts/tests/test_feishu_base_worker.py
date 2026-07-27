@@ -1049,6 +1049,46 @@ def test_platform_failure_is_attributed_to_video_modality(monkeypatch, tmp_path)
     assert updates[-1]["运行状态"] == "可重试失败"
 
 
+def test_monkeypatched_worker_update_record_is_invoked_not_subprocess(monkeypatch, tmp_path):
+    """A monkeypatched worker.update_record must be invoked by process_record.
+
+    The pipeline module uses its own module-level bindings for I/O helpers.
+    Without explicit callback injection from the worker wrapper, tests that
+    monkeypatch worker attributes (update_record, probe_source,
+    package_routed_source, etc.) would be silently bypassed and the real
+    subprocess-based implementations would execute instead.
+
+    This is a targeted regression test: it monkeypatches the workerʼs
+    update_record and then calls process_record with a public-web URL.
+    The test fails the pipeline before probe_source so the update_record
+    calls for the initial status write are the only ones that matter.
+    """
+    config = worker.WorkerConfig("base", "table", tmp_path / "lark.exe", tmp_path, tmp_path / "python.exe", tmp_path / "out")
+    updates = []
+    monkeypatch.setattr(worker, "update_record", lambda _c, _r, patch: updates.append(patch) or {})
+    monkeypatch.setattr(
+        worker,
+        "probe_source",
+        lambda *_: {
+            "status": "needs_user_action",
+            "error": {"code": "CHALLENGE_REQUIRED", "message": "captcha required"},
+        },
+    )
+    result = worker.process_record(
+        config,
+        {"record_id": "rec_monkey", "fields": {"内容": "https://example.com", "思考": "regression"}},
+    )
+    # If the pipeline bypassed the monkeypatched update_record and called
+    # its own module-level function, this would have tried to spawn a
+    # subprocess (lark.exe) and either hung or raised a different error.
+    assert result["status"] == "failed"
+    assert len(updates) >= 2, f"Expected at least 2 update_record calls, got {len(updates)}"
+    # First call: 运行状态="已领取" (initial claim state write)
+    assert updates[0]["运行状态"] == "已领取"
+    # Last call: 运行状态="需授权" (probe failure disposition)
+    assert updates[-1]["运行状态"] == "需授权"
+
+
 # ── Fix 1: .oks/ gitignore regression tests ────────────────────────
 
 def test_candidate_state_path_is_under_dot_oks():
