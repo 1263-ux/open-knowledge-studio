@@ -78,6 +78,12 @@ from feishu_worker.capture import (
     envelope_content_hash,
     capture_envelope,
 )
+from feishu_worker.source_router import (
+    _connector_binary as _source_router__connector_binary,
+    package_local_attachment as _source_router_package_local_attachment,
+    package_routed_source as _source_router_package_routed_source,
+    package_public_web as _source_router_package_public_web,
+)
 
 # ── Legacy wrappers: supply ROOT so callers keep one-argument API ──
 
@@ -245,19 +251,8 @@ def list_review_records(config: WorkerConfig, limit: int = 100) -> list[dict[str
 
 
 def _connector_binary() -> str:
-    """Return the oks-connector CLI path.
-
-    Prefers the entry point next to the current Python (pipx venv).
-    Falls back to the source script in dev mode.
-    """
-    suffix = ".exe" if os.name == "nt" else ""
-    injected = Path(sys.executable).parent / f"oks-connector{suffix}"
-    if injected.is_file():
-        return str(injected)
-    script = ROOT / "scripts" / "raw_bundle_adapter.py"
-    if script.is_file():
-        return str(script)
-    raise RuntimeError("oks-connector not found; reinstall open-knowledge-studio")
+    """Return the oks-connector CLI path (delegates to feishu_worker.source_router)."""
+    return _source_router__connector_binary(ROOT)
 
 
 # ── Claim-layer re-exports ──────────────────────────────────────────────────
@@ -1206,97 +1201,13 @@ def download_attachments(config: WorkerConfig, record_id: str, output: Path) -> 
 
 
 def package_local_attachment(config: WorkerConfig, source: Path, output: Path) -> dict[str, Any]:
-    if output.is_dir():
-        validation = subprocess.run(
-            [_connector_binary(), "validate", str(output)],
-            cwd=ROOT,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            capture_output=True,
-            check=False,
-        )
-        report = parse_json_output(validation)
-        if report.get("valid") is True:
-            return report
-        raise RuntimeError(f"existing attachment output is invalid: {json.dumps(report, ensure_ascii=False)}")
-    result = subprocess.run(
-        [
-            _connector_binary(),
-            "ingest",
-            str(source),
-            "--output",
-            str(output),
-            ],
-        cwd=ROOT,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        capture_output=True,
-        check=False,
-    )
-    if result.returncode != 0:
-        raise RuntimeError((result.stderr or result.stdout).strip())
-    validation = subprocess.run(
-        [_connector_binary(), "validate", str(output)],
-        cwd=ROOT,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        capture_output=True,
-        check=False,
-    )
-    report = parse_json_output(validation)
-    if report.get("valid") is not True:
-        raise RuntimeError(f"attachment Raw validation failed: {json.dumps(report, ensure_ascii=False)}")
-    return report
+    """Package a local attachment file into a Raw bundle (delegates to feishu_worker.source_router)."""
+    return _source_router_package_local_attachment(config, source, output, root=ROOT)
 
 
 def package_routed_source(config: WorkerConfig, source: str, output: Path) -> dict[str, Any]:
-    if output.is_dir():
-        validation = subprocess.run(
-            [_connector_binary(), "validate", str(output)],
-            cwd=ROOT,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            capture_output=True,
-            check=False,
-        )
-        report = parse_json_output(validation)
-        if report.get("valid") is True:
-            return report
-        raise RuntimeError(f"existing routed output is invalid: {json.dumps(report, ensure_ascii=False)}")
-    result = subprocess.run(
-        [
-            _connector_binary(),
-            "ingest",
-            source,
-            "--output",
-            str(output),
-            ],
-        cwd=ROOT,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        capture_output=True,
-        check=False,
-    )
-    if result.returncode != 0:
-        raise RuntimeError((result.stderr or result.stdout).strip())
-    validation = subprocess.run(
-        [_connector_binary(), "validate", str(output)],
-        cwd=ROOT,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        capture_output=True,
-        check=False,
-    )
-    report = parse_json_output(validation)
-    if report.get("valid") is not True:
-        raise RuntimeError(f"routed Raw validation failed: {json.dumps(report, ensure_ascii=False)}")
-    return report
+    """Package a platform-routed source into a Raw bundle (delegates to feishu_worker.source_router)."""
+    return _source_router_package_routed_source(config, source, output, root=ROOT)
 
 
 def package_public_web(
@@ -1305,29 +1216,8 @@ def package_public_web(
     output: Path,
     human_context: str,
 ) -> dict[str, Any]:
-    from extractors.web import package_web
-
-    try:
-        package_web(
-            url,
-            output,
-            human_context=human_context or "omitted",
-        )
-    except Exception as exc:
-        raise RuntimeError(str(exc)) from exc
-    validation = subprocess.run(
-        [_connector_binary(), "validate", str(output)],
-        cwd=ROOT,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        capture_output=True,
-        check=False,
-    )
-    report = parse_json_output(validation)
-    if report.get("valid") is not True:
-        raise RuntimeError(f"Raw Bundle validation failed: {json.dumps(report, ensure_ascii=False)}")
-    return report
+    """Package a public web page into a Raw bundle (delegates to feishu_worker.source_router)."""
+    return _source_router_package_public_web(config, url, output, human_context, root=ROOT)
 
 
 def finalize_raw_v2(

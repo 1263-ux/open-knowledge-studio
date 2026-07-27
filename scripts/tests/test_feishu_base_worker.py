@@ -3301,3 +3301,184 @@ def test_all_leaf_modules_importable_without_base_worker_round3():
         import feishu_worker.claim  # noqa: F811
         import feishu_worker.capture  # noqa: F811
         import _lark_cli  # noqa: F811
+
+
+# ── Round 3: source_router module extraction ──────────────────────────────
+
+
+def test_source_router_module_importable_independently():
+    """feishu_worker.source_router imports without feishu_base_worker loaded."""
+    import importlib
+    import sys
+
+    stale = {k for k in sys.modules if k.startswith("feishu_base_worker")}
+    stale.update(k for k in sys.modules if k.startswith("feishu_worker"))
+    stale.update(k for k in sys.modules if k.startswith("_lark_cli"))
+    for key in stale:
+        del sys.modules[key]
+
+    try:
+        sr = importlib.import_module("feishu_worker.source_router")
+        for name in (
+            "_connector_binary",
+            "_run_or_validate",
+            "package_local_attachment",
+            "package_routed_source",
+            "package_public_web",
+        ):
+            assert hasattr(sr, name), (
+                f"feishu_worker.source_router must expose {name}"
+            )
+        # Must NOT expose orchestrator-level names.
+        for name in ("ROOT", "process_record", "main", "load_config"):
+            assert not hasattr(sr, name), (
+                f"feishu_worker.source_router must NOT expose {name}"
+            )
+        assert "feishu_base_worker" not in sys.modules, (
+            "source_router import must not load feishu_base_worker"
+        )
+    finally:
+        import feishu_base_worker  # noqa: F811
+        import feishu_worker.source_router  # noqa: F811
+        import feishu_worker.config  # noqa: F811
+        import feishu_worker.io_utils  # noqa: F811
+        import feishu_worker.base_client  # noqa: F811
+        import _lark_cli  # noqa: F811
+
+
+def test_all_six_leaf_modules_importable_without_base_worker():
+    """All six leaf modules import cleanly without feishu_base_worker loaded."""
+    import importlib
+    import sys
+
+    stale = {k for k in sys.modules if k.startswith("feishu_base_worker")}
+    stale.update(k for k in sys.modules if k.startswith("feishu_worker"))
+    stale.update(k for k in sys.modules if k.startswith("_lark_cli"))
+    for key in stale:
+        del sys.modules[key]
+
+    try:
+        for mod_name in (
+            "feishu_worker.config",
+            "feishu_worker.io_utils",
+            "feishu_worker.base_client",
+            "feishu_worker.claim",
+            "feishu_worker.capture",
+            "feishu_worker.source_router",
+        ):
+            mod = importlib.import_module(mod_name)
+            assert mod is not None, f"Failed to import {mod_name}"
+        assert "feishu_base_worker" not in sys.modules, (
+            "Leaf module imports must not load feishu_base_worker"
+        )
+    finally:
+        import feishu_base_worker  # noqa: F811
+        import feishu_worker.source_router  # noqa: F811
+        import feishu_worker.config  # noqa: F811
+        import feishu_worker.io_utils  # noqa: F811
+        import feishu_worker.base_client  # noqa: F811
+        import feishu_worker.claim  # noqa: F811
+        import feishu_worker.capture  # noqa: F811
+        import _lark_cli  # noqa: F811
+
+
+def test_package_local_attachment_uses_shared_run_or_validate():
+    """package_local_attachment delegates to _run_or_validate."""
+    import inspect
+    from feishu_worker import source_router as sr
+
+    source = inspect.getsource(sr.package_local_attachment)
+    assert "_run_or_validate" in source, (
+        f"package_local_attachment must call _run_or_validate:\n{source}"
+    )
+
+
+def test_package_routed_source_uses_shared_run_or_validate():
+    """package_routed_source delegates to _run_or_validate."""
+    import inspect
+    from feishu_worker import source_router as sr
+
+    source = inspect.getsource(sr.package_routed_source)
+    assert "_run_or_validate" in source, (
+        f"package_routed_source must call _run_or_validate:\n{source}"
+    )
+
+
+def test_source_router_package_public_web_uses_extractors_web():
+    """source_router.package_public_web imports from extractors.web, not experiments/."""
+    import inspect
+    from feishu_worker import source_router as sr
+
+    source = inspect.getsource(sr.package_public_web)
+    assert "extractors.web" in source, (
+        f"package_public_web must import from extractors.web:\n{source}"
+    )
+    assert "experiments" not in source, (
+        f"package_public_web must not reference experiments/:\n{source}"
+    )
+
+
+def test_source_router_module_has_no_experiment_import():
+    """source_router module has zero imports from experiments/."""
+    import ast
+    from feishu_worker import source_router as sr
+
+    source = Path(sr.__file__).read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            module = getattr(node, "module", "") or ""
+            if "experiments" in module:
+                raise AssertionError(
+                    f"source_router must not import from experiments: {ast.dump(node)}"
+                )
+
+
+def test_source_router_re_exports_in_base_worker():
+    """All source_router public names are importable from feishu_base_worker."""
+    names = [
+        "package_local_attachment",
+        "package_routed_source",
+        "package_public_web",
+    ]
+    for name in names:
+        assert hasattr(worker, name), (
+            f"feishu_base_worker must expose {name}"
+        )
+        assert callable(getattr(worker, name)), (
+            f"worker.{name} must be callable"
+        )
+
+
+def test_connector_binary_still_accessible_from_worker():
+    """_connector_binary is still accessible as a feishu_base_worker attribute."""
+    assert hasattr(worker, "_connector_binary")
+    assert callable(worker._connector_binary)
+
+
+def test_source_router_fresh_subprocess_import():
+    """source_router imports in a fresh subprocess without the base worker."""
+    import subprocess
+    import sys
+
+    proc = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import sys; sys.path.insert(0, 'scripts'); "
+            "from feishu_worker.source_router import "
+            "_connector_binary, _run_or_validate, "
+            "package_local_attachment, package_routed_source, package_public_web; "
+            "print('source_router imported OK')",
+        ],
+        cwd=str(SCRIPTS.parent),
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        capture_output=True,
+        check=False,
+    )
+    assert proc.returncode == 0, (
+        f"source_router subprocess import failed:\n{proc.stderr}"
+    )
+    assert "source_router imported OK" in proc.stdout
