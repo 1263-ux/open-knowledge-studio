@@ -205,7 +205,7 @@ def _recommended_capability(source: str) -> str:
     suffix = Path(source.split("?", 1)[0]).suffix.lower()
     if suffix == ".pdf":
         return "pdf"
-    if suffix in {".docx", ".pptx", ".xlsx", ".html", ".htm", ".txt", ".csv"}:
+    if suffix in {".docx", ".pptx", ".xlsx", ".html", ".htm", ".md", ".txt", ".csv"}:
         return "document"
     return "watch"  # video, audio, and platform URLs all route to watch
 
@@ -352,6 +352,10 @@ def feishu_setup(
         console.print("[bold red]找不到 worker 脚本。[/bold red]")
         raise typer.Exit(2)
     setup_script = worker.parent / "feishu_setup.py"
+    if not setup_script.is_file():
+        module = importlib.util.find_spec("feishu_setup")
+        if module and module.origin:
+            setup_script = Path(module.origin)
     if not setup_script.is_file():
         console.print(f"[bold red]找不到: {setup_script}[/bold red]")
         raise typer.Exit(2)

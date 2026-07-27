@@ -47,7 +47,9 @@ def test_expired_lease_can_be_reclaimed_but_active_lease_cannot():
 
 
 def test_claim_next_record_writes_visible_lease(monkeypatch, tmp_path):
-    config = worker.WorkerConfig("base", "table", tmp_path / "lark.exe", tmp_path, tmp_path / "python.exe", tmp_path, lease_seconds=60)
+    config = worker.WorkerConfig(
+        "base", "table", tmp_path / "lark.exe", tmp_path, lease_seconds=60
+    )
     record = {"record_id": "rec_lease", "fields": {"运行状态": "待处理", "重试": False}}
     updates = []
     monkeypatch.setattr(worker, "list_records", lambda *_: [record])
@@ -70,8 +72,6 @@ def test_claim_record_only_reads_and_claims_the_explicit_record(monkeypatch, tmp
         "base",
         "table",
         tmp_path / "lark.exe",
-        tmp_path,
-        tmp_path / "python.exe",
         tmp_path,
         lease_seconds=60,
     )

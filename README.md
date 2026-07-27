@@ -52,12 +52,12 @@ oks feishu listen                # 监听审核回复
 `oks-connector` 已内置，不再需要 `pipx inject`。重型依赖（faster-whisper、MinerU、PaddleOCR）
 通过 `oks capability install` 按需安装，每次安装前提示用户确认。
 
-If Connector is absent, `oks ingest` shows this exact action prominently; it
-no longer needs `pipx inject` when you explicitly pass `--install`. Feishu Base is an
-optional extension: `oks feishu auth`, `oks feishu form --url <form-url>`,
-`oks feishu run-once`, and bounded `oks feishu listen` retain user-controlled
-login and review. See `docs/handoff-cli-feishu-loop-20260724.md` for setup and
-operational boundaries.
+The connector is included in the package; `oks ingest` checks the required
+optional capability and prints the exact installation command when it is
+missing. Feishu Base is an optional extension: `oks feishu auth`,
+`oks feishu form --url <form-url>`, `oks feishu run-once`, and bounded
+`oks feishu listen` retain user-controlled login and review. See
+`docs/handoff-cli-feishu-loop-20260724.md` for setup and operational boundaries.
 
 | OS | Get pipx | Note |
 |----|----------|------|
@@ -102,7 +102,7 @@ Open Knowledge Studio 是一个为 Claude Code 设计的文件式知识库系统
 
 ### 快速开始
 
-前置条件：Python ≥ 3.10、git。Claude Code（或兼容 Agent）可选，但技能工作流
+前置条件：Python ≥ 3.12、git。Claude Code（或兼容 Agent）可选，但技能工作流
 （`/ingest`、`/query`、`/promote`）依赖它——纯 CLI 覆盖搜索/召回/wiki CRUD。
 
 ```bash

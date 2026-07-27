@@ -27,6 +27,8 @@ _MAP = [
     ("settings", "settings"),
 ]
 
+_SCRIPT_ASSETS = ("feishu_base_worker.py", "feishu_setup.py")
+
 
 def main() -> None:
     repo_root = Path(__file__).resolve().parents[2]  # cli/scripts/x.py -> repo root
@@ -44,6 +46,16 @@ def main() -> None:
             continue
         shutil.copytree(src, dest_root / dest_name)
         copied.append(dest_name)
+
+    scripts_dest = dest_root / "scripts"
+    scripts_dest.mkdir()
+    for name in _SCRIPT_ASSETS:
+        source = repo_root / "scripts" / name
+        if source.is_file():
+            shutil.copy2(source, scripts_dest / name)
+            copied.append(f"scripts/{name}")
+        else:
+            print(f"  skip (missing): scripts/{name}")
 
     print(f"Bundled assets into {dest_root}: {', '.join(copied) or '(none)'}")
 

@@ -78,14 +78,7 @@ oks capability install watch
 oks capability install watch --yes
 ```
 
-验收效果：仅安装视频/音频相关 extra。对于本次 GitHub 分支验证，若需严格固定 Connector 分支，改用：
-
-```powershell
-git clone --branch codex/raw-poc-validation https://github.com/1263-ux/oks-connector.git
-pipx inject open-knowledge-studio ".\oks-connector[watch]"
-```
-
-随后重复第 4 步；验收重点是提取器按需要安装，而核心 `oks` 安装不携带它们。
+验收效果：仅安装视频/音频相关 extra；Connector 已随核心包安装，无需额外注入。随后重复第 4 步；验收重点是提取器按需要安装，而核心 `oks` 安装不携带它们。
 
 ## 6. PDF 与文档路由（可选）
 
@@ -101,7 +94,7 @@ oks ingest "D:\fixtures\sample.pdf" --mode quick
 oks ingest "D:\fixtures\sample.docx" --mode quick
 ```
 
-验收效果：CLI 为 PDF 推荐 `pdf` 能力，为 Office/HTML/文本推荐 `document` 能力；未安装时给出准确的 `pipx inject` 下一步，而不静默安装或产生虚假成功。
+验收效果：CLI 为 PDF 推荐 `pdf` 能力，为 Office/HTML/文本推荐 `document` 能力；未安装时给出准确的 `oks capability install <name> --yes` 下一步，而不静默安装或产生虚假成功。
 
 ## 7. 飞书私有扩展（需要用户租户授权）
 
@@ -129,8 +122,8 @@ oks feishu listen --max-events 1 --timeout 5m
 
 本次验收通过，至少应同时满足：
 
-1. 可从两个 GitHub 分支用 `pipx` 安装 `oks` 与 Connector，且 `oks --version`、`oks capability list` 可用。
-2. `pipx inject` 后，`oks ingest` 自己能发现同一 pipx 环境内的 `oks-connector`；不要求 Connector 额外存在于系统 PATH。
+1. 可从 GitHub 用 `pipx` 安装核心包，且 `oks --version`、`oks capability list` 可用。
+2. `oks ingest` 可使用随包提供的 Connector；不要求额外执行 `pipx inject`。
 3. 未安装重型 extra 的情况下，公开 URL 的 `quick` 路径能给出真实的 Raw 结果或真实的受限状态。
 4. `forensic` 是显式档位，字幕存在时使用主题锚点，而非默认全片扫描；进度、预计期限和超时结果可观察。
 5. 视频、PDF、Office/HTML、公式、飞书均能被清楚识别为独立可安装组件；核心包不偷偷安装它们。
