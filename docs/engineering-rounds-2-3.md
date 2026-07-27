@@ -139,11 +139,28 @@ scripts/
 
 ### Phased Migration
 
-**Phase 1 -- Extract io_utils and config (lowest risk)**
-- Move `atomic_write_json`, `atomic_write_text`, `_redact_error_text`, `sha256_file`, `scalar_cell`, `utc_now`, `content_type_extension`, `attachment_capability` to `feishu_worker/io_utils.py`.
+**Phase 1A -- Extract config (COMPLETED)**
 - Move `WorkerConfig`, `load_config`, `configured_knowledge_root`, `resolve_lark_cli` to `feishu_worker/config.py`.
-- Re-export from `feishu_base_worker.py`.
+- Re-export from `feishu_base_worker.py` via legacy one-argument wrappers that supply ROOT.
 - Run full test suite; fix import issues.
+
+**Phase 1B -- Extract io_utils (CURRENT)**
+- Move `atomic_write_json`, `atomic_write_text`, `_redact_error_text`, `sha256_file`, `scalar_cell`, `utc_now`, `content_type_extension`, `attachment_capability` to `feishu_worker/io_utils.py`.
+- Also move `HOME`, `BEARER_RE`, `_SECRET_ASSIGNMENT_RE` (the redaction regex constants are only used by `_redact_error_text`).
+- Re-export every name from `feishu_base_worker.py`.
+- Fix the two remaining Worker-local naive-local clock occurrences (`event_reviewed_at`, `review_candidate`) by using aware UTC internally while preserving local-time human-readable output.
+- Remove unused `tempfile` and `dataclass` imports from the base worker after extraction.
+- Run full test suite; add focused independence tests.
+
+**Phase 1B Acceptance Checks**
+
+- [ ] `feishu_worker/io_utils` imports cleanly in a fresh subprocess with zero modules from `feishu_base_worker` loaded in `sys.modules`.
+- [ ] `feishu_worker/config` imports cleanly in a fresh subprocess with zero modules from `feishu_base_worker` loaded in `sys.modules`.
+- [ ] Every extracted name (`utc_now`, `sha256_file`, `atomic_write_json`, `atomic_write_text`, `_redact_error_text`, `scalar_cell`, `content_type_extension`, `attachment_capability`, `HOME`) is still importable as `worker.<name>`.
+- [ ] Full pytest: `pytest scripts/tests/test_feishu_base_worker.py -v` passes without modification.
+- [ ] CLI smoke: `python scripts/feishu_base_worker.py --help` succeeds.
+- [ ] Zero naive `datetime.now()` calls remain in `feishu_base_worker.py`.
+- [ ] Diff review confirms no behavior change in any moved function.
 
 **Phase 2 -- Extract protocol layer**
 - Move `lark_json`, `parse_json_output`, `base_args`, `update_record`, `create_record`, `list_records`, `get_record`, `list_review_records` to `feishu_worker/protocol.py`.
@@ -189,3 +206,40 @@ No database migrations. No config changes. Pure file reorganization.
 | Test brittleness from monkeypatch paths | Use `import feishu_base_worker as worker` in tests; monkeypatch targets on `worker.subprocess`, `worker.time`, etc. remain valid through re-exports. |
 | Windows path handling in new modules | `io_utils` uses `pathlib.Path` exclusively; already cross-platform. |
 | `ROOT` constant dependence | Keep `ROOT` in `feishu_base_worker.py`; pass it explicitly where needed, or use a shared `config` module reference. |
+
+---
+
+## Codex / Claude Collaboration Gate
+
+The upstream PR remains changes-requested.  Round 3 is implemented under a
+three-party collaboration gate designed to close ALL review suggestions
+systematically across every layer (code, tests, docs, cross-platform).
+
+### Gate Phases
+
+1. **Claude implementation handoff** -- Claude implements each phase in
+   isolation (1A, 1B, 2, 3, 4, 5), writes focused tests, updates docs, and
+   reports exact files and acceptance results.  No commit, no push, no PR,
+   no network, no Feishu calls.
+
+2. **Codex independent evidence** -- After each phase, Codex runs an
+   independent review: re-executes the acceptance checks from scratch, runs
+   the full test suite on every supported platform, and captures
+   screenshot / log evidence.  Codex does not modify code -- it only
+   gathers evidence that the phase passes or flags regressions.
+
+3. **Claude architecture review after all phases** -- After Phase 5, Claude
+   performs a final architecture review across all extracted modules,
+   verifying: no circular imports, all re-exports intact, test file still
+   unmodified, and the five compatibility invariants (public API stability,
+   test backward compatibility, CLI compatibility, no behavior changes,
+   lazy import-time side effects) all hold.
+
+### Phase Order
+
+- Phase 1A: config extraction (complete in Round 3 base)
+- Phase 1B: io_utils extraction + naive-clock fix + Python >=3.12 note
+- Phase 2: protocol extraction (lark_json, parse_json_output, CRUD wrappers)
+- Phase 3: claim + capture + pipeline extraction
+- Phase 4: candidate + review + notification extraction
+- Phase 5: slim entry point (feishu_base_worker.py ~200 lines)

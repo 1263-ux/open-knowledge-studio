@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import argparse
 from contextlib import contextmanager
-from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 import hashlib
 import json
@@ -20,7 +19,6 @@ import re
 import shutil
 import subprocess
 import sys
-import tempfile
 import time
 from typing import Any
 import uuid
@@ -32,6 +30,17 @@ from feishu_worker.config import (
     configured_knowledge_root as _config_configured_knowledge_root,
     load_config as _config_load_config,
     resolve_lark_cli,
+)
+from feishu_worker.io_utils import (
+    HOME,
+    attachment_capability,
+    atomic_write_json,
+    atomic_write_text,
+    content_type_extension,
+    _redact_error_text,
+    scalar_cell,
+    sha256_file,
+    utc_now,
 )
 
 # ── Retry constants (moved back from config; protocol layer, not Phase 1A) ──
@@ -171,18 +180,7 @@ def lark_json(config: WorkerConfig, *arguments: str) -> dict[str, Any]:
 
 
 ROOT = Path(__file__).resolve().parents[1]
-HOME = Path.home()
 URL_RE = re.compile(r"https?://[^\s<>\]\[)]+", re.IGNORECASE)
-BEARER_RE = re.compile(r"Bearer\s+[A-Za-z0-9\-._~+/]+=*", re.IGNORECASE)
-# Match access_token / token / key / value assignments that carry a
-# plausibly secret parameter (query-string or colon/equals style).
-# Trigger only when the right-hand side is ≥ 8 base64-ish characters.
-_SECRET_ASSIGNMENT_RE = re.compile(
-    r"(?:(?:access[_\-]?token|api[_\-]?key|app[_\-]?secret|secret[_\-]?key"
-    r"|token|key|value)\s*[=:]\s*)"
-    r"[A-Za-z0-9\-._~+/]{8,}",
-    re.IGNORECASE,
-)
 CANDIDATE_FIELDS = [
     "运行状态",
     "运行ID",
@@ -213,71 +211,6 @@ REVIEW_ACTION_RE = re.compile(
     r"(?<![A-Za-z])(accept|edit|reject|defer)(?![A-Za-z])",
     re.IGNORECASE,
 )
-
-
-def utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat()
-
-
-def sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(4 * 1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
-def atomic_write_json(path: Path, value: object) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    payload = json.dumps(value, ensure_ascii=False, indent=2) + "\n"
-    handle, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
-    try:
-        with os.fdopen(handle, "w", encoding="utf-8", newline="\n") as stream:
-            stream.write(payload)
-            stream.flush()
-            os.fsync(stream.fileno())
-        os.replace(temporary, path)
-    except BaseException:
-        Path(temporary).unlink(missing_ok=True)
-        raise
-
-
-def atomic_write_text(path: Path, value: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    handle, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
-    try:
-        with os.fdopen(handle, "w", encoding="utf-8", newline="\n") as stream:
-            stream.write(value)
-            stream.flush()
-            os.fsync(stream.fileno())
-        os.replace(temporary, path)
-    except BaseException:
-        Path(temporary).unlink(missing_ok=True)
-        raise
-
-
-def _redact_error_text(text: str) -> str:
-    """Remove Bearer tokens, credential assignments, and home-directory paths.
-
-    Covers Bearer auth headers, ``access_token=...`` / ``token=...`` /
-    ``key=...`` / ``value=...`` parameter assignments (≥8-char value),
-    and home-directory file paths. Callers must truncate after redaction;
-    this function only redacts.
-    """
-    if not text:
-        return text
-    result = BEARER_RE.sub("Bearer ***", text)
-    result = _SECRET_ASSIGNMENT_RE.sub(
-        lambda m: m.group(0).split("=", 1)[0].split(":", 1)[0].rstrip() + "=***",
-        result,
-    )
-    home_str = str(HOME)
-    if home_str and len(home_str) > 4:
-        result = result.replace(home_str, "~")
-        alt = home_str.replace("\\", "/")
-        if alt != home_str:
-            result = result.replace(alt, "~")
-    return result
 
 
 def parse_json_output(result: subprocess.CompletedProcess[str], *, allow_codes: set[int] = {0}) -> dict[str, Any]:
@@ -584,13 +517,6 @@ def release_lease(config: WorkerConfig, record_id: str) -> None:
     update_record(config, record_id, {"租约所有者": None, "租约到期": None})
 
 
-def scalar_cell(value: object) -> object:
-    """Normalize Base single-select reads without changing multi-value fields."""
-    if isinstance(value, list) and len(value) == 1:
-        return value[0]
-    return value
-
-
 def parse_candidate_document(text: str) -> tuple[dict[str, Any], str]:
     if not text.startswith("---"):
         raise ValueError("Candidate must start with YAML frontmatter")
@@ -777,7 +703,7 @@ def event_reviewed_at(value: object) -> str:
     try:
         milliseconds = int(str(value))
     except (TypeError, ValueError):
-        return datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S")
+        return datetime.now(timezone.utc).astimezone().strftime("%Y-%m-%d %H:%M:%S")
     return datetime.fromtimestamp(milliseconds / 1000, timezone.utc).astimezone().strftime(
         "%Y-%m-%d %H:%M:%S"
     )
@@ -1337,7 +1263,7 @@ def review_candidate(config: WorkerConfig, record: dict[str, Any]) -> dict[str, 
             f"Candidate file is unavailable or outside the configured knowledge root: {candidate_path}"
         )
 
-    reviewed_at = scalar_cell(fields.get("审核时间")) or datetime.now().astimezone().strftime(
+    reviewed_at = scalar_cell(fields.get("审核时间")) or datetime.now(timezone.utc).astimezone().strftime(
         "%Y-%m-%d %H:%M:%S"
     )
     comment = str(fields.get("审核意见") or "").strip()
@@ -1524,23 +1450,6 @@ def probe_source(config: WorkerConfig, url: str) -> dict[str, Any]:
     return parse_json_output(result, allow_codes={0, 2})
 
 
-def content_type_extension(content_type: str | None) -> str:
-    return {
-        "application/pdf": ".pdf",
-        "image/png": ".png",
-        "image/jpeg": ".jpg",
-        "image/webp": ".webp",
-        "image/bmp": ".bmp",
-        "image/tiff": ".tiff",
-        "audio/mpeg": ".mp3",
-        "audio/wav": ".wav",
-        "audio/x-wav": ".wav",
-        "audio/mp4": ".m4a",
-        "video/mp4": ".mp4",
-        "video/webm": ".webm",
-    }.get((content_type or "").split(";", 1)[0].strip().lower(), "")
-
-
 def download_public_source(
     config: WorkerConfig,
     url: str,
@@ -1600,19 +1509,6 @@ def download_attachments(config: WorkerConfig, record_id: str, output: Path) -> 
         "--overwrite",
     )
     return sorted(path for path in output.iterdir() if path.is_file())
-
-
-def attachment_capability(path: Path) -> tuple[str, str]:
-    suffix = path.suffix.lower()
-    if suffix in {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tiff"}:
-        return "image.rapidocr", "ocr"
-    if suffix == ".pdf":
-        return "pdf.mineru", "text"
-    if suffix in {".mp4", ".webm", ".mov", ".mkv", ".avi"}:
-        return "video.watch", "asr"
-    if suffix in {".mp3", ".wav", ".m4a", ".aac", ".flac", ".ogg"}:
-        return "audio.faster-whisper", "asr"
-    return "office.markitdown", "text"
 
 
 def package_local_attachment(config: WorkerConfig, source: Path, output: Path) -> dict[str, Any]:

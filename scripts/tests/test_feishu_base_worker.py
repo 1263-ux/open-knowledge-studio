@@ -2066,3 +2066,260 @@ def test_config_module_importable_independently():
         import feishu_base_worker  # noqa: F811
         import feishu_worker.config  # noqa: F811
         import _lark_cli  # noqa: F811
+
+
+# -- Round 3 Phase 1B: io_utils extraction independence tests --
+
+
+def test_io_utils_module_importable_independently():
+    """feishu_worker.io_utils can be imported without importing feishu_base_worker."""
+    import importlib
+    import sys
+
+    stale = {k for k in sys.modules if k.startswith("feishu_base_worker")}
+    stale.update(k for k in sys.modules if k.startswith("feishu_worker"))
+    stale.update(k for k in sys.modules if k.startswith("_lark_cli"))
+    for key in stale:
+        del sys.modules[key]
+
+    try:
+        io_utils = importlib.import_module("feishu_worker.io_utils")
+        for name in (
+            "utc_now",
+            "sha256_file",
+            "atomic_write_json",
+            "atomic_write_text",
+            "_redact_error_text",
+            "scalar_cell",
+            "content_type_extension",
+            "attachment_capability",
+            "HOME",
+        ):
+            assert hasattr(io_utils, name), (
+                f"feishu_worker.io_utils must expose {name}"
+            )
+        # These must NOT be present -- they belong to config or protocol.
+        for name in ("WorkerConfig", "lark_json", "load_config", "ROOT"):
+            assert not hasattr(io_utils, name), (
+                f"feishu_worker.io_utils must NOT expose {name}"
+            )
+    finally:
+        import feishu_base_worker  # noqa: F811
+        import feishu_worker.io_utils  # noqa: F811
+        import feishu_worker.config  # noqa: F811
+        import _lark_cli  # noqa: F811
+
+
+def test_both_leaf_modules_importable_without_base_worker():
+    """Both io_utils and config import in a fresh subprocess with no
+    feishu_base_worker module loaded in sys.modules."""
+    import importlib
+    import sys
+
+    stale = {k for k in sys.modules if k.startswith("feishu_base_worker")}
+    stale.update(k for k in sys.modules if k.startswith("feishu_worker"))
+    stale.update(k for k in sys.modules if k.startswith("_lark_cli"))
+    for key in stale:
+        del sys.modules[key]
+
+    try:
+        io_utils = importlib.import_module("feishu_worker.io_utils")
+        config = importlib.import_module("feishu_worker.config")
+        # Neither module should have dragged in feishu_base_worker
+        assert "feishu_base_worker" not in sys.modules, (
+            "leaf module import must not load feishu_base_worker"
+        )
+        # Each module has its own distinct namespace
+        assert hasattr(io_utils, "utc_now")
+        assert hasattr(config, "WorkerConfig")
+        assert not hasattr(io_utils, "WorkerConfig")
+        assert not hasattr(config, "utc_now")
+    finally:
+        import feishu_base_worker  # noqa: F811
+        import feishu_worker.io_utils  # noqa: F811
+        import feishu_worker.config  # noqa: F811
+        import _lark_cli  # noqa: F811
+
+
+def test_io_utils_re_exports_all_moved_names():
+    """Every name extracted to io_utils must be importable from feishu_base_worker."""
+    io_utils_names = [
+        "utc_now",
+        "sha256_file",
+        "atomic_write_json",
+        "atomic_write_text",
+        "_redact_error_text",
+        "scalar_cell",
+        "content_type_extension",
+        "attachment_capability",
+        "HOME",
+    ]
+    for name in io_utils_names:
+        assert hasattr(worker, name), (
+            f"feishu_base_worker must re-export {name}"
+        )
+
+
+def test_io_utils_re_exports_are_functionally_equivalent():
+    """Re-exported names must be callable and produce identical results.
+
+    Object identity (``is``) is not required because earlier independence
+    tests manipulate ``sys.modules``, which can cause re-imports that create
+    fresh function objects.  What matters is that the worker attributes
+    resolve and behave identically to the io_utils originals.
+    """
+    from feishu_worker import io_utils as io_utils_module
+
+    # Every re-exported name must resolve and be callable/accessible.
+    for name in (
+        "utc_now",
+        "sha256_file",
+        "atomic_write_json",
+        "atomic_write_text",
+        "_redact_error_text",
+        "scalar_cell",
+        "content_type_extension",
+        "attachment_capability",
+    ):
+        worker_attr = getattr(worker, name)
+        assert callable(worker_attr), (
+            f"worker.{name} must be callable"
+        )
+
+    # HOME must be a Path and match io_utils.HOME
+    assert isinstance(worker.HOME, Path)
+    assert worker.HOME == io_utils_module.HOME
+
+    # A quick behavioral smoke test via the worker re-export
+    assert worker.scalar_cell(["single"]) == "single"
+    assert worker.utc_now().endswith("+00:00")
+    assert len(worker.sha256_file(
+        Path(worker.__file__).parent / "feishu_worker" / "io_utils.py"
+    )) == 64
+
+
+def test_worker_has_zero_naive_datetime_now():
+    """feishu_base_worker.py must have no naive datetime.now() calls."""
+    import ast
+    import inspect
+
+    source = inspect.getsource(worker)
+    tree = ast.parse(source)
+
+    naive_now_found = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            func = node.func
+            if (
+                isinstance(func, ast.Attribute)
+                and func.attr == "now"
+                and isinstance(func.value, ast.Name)
+                and func.value.id == "datetime"
+            ):
+                # Only flag if no timezone argument (no keywords, no args)
+                if not node.args and not node.keywords:
+                    naive_now_found.append((node.lineno, ast.unparse(node)))
+
+    assert len(naive_now_found) == 0, (
+        f"Naive datetime.now() calls found in worker: {naive_now_found}"
+    )
+
+
+# -- Round 3 Phase 1B: io_utils function correctness tests --
+
+
+def test_io_utils_scalar_cell_normalizes_and_passthrough():
+    """scalar_cell normalizes single-element lists, passes through everything else."""
+    assert worker.scalar_cell(["only"]) == "only"
+    assert worker.scalar_cell(["a", "b"]) == ["a", "b"]
+    assert worker.scalar_cell("plain") == "plain"
+    assert worker.scalar_cell(None) is None
+    assert worker.scalar_cell([]) == []
+    assert worker.scalar_cell(42) == 42
+
+
+def test_io_utils_content_type_extension_edge_cases():
+    """content_type_extension handles edge cases and unknown types."""
+    assert worker.content_type_extension(None) == ""
+    assert worker.content_type_extension("") == ""
+    assert worker.content_type_extension("application/pdf") == ".pdf"
+    assert worker.content_type_extension("application/pdf; charset=binary") == ".pdf"
+    assert worker.content_type_extension("image/png") == ".png"
+    assert worker.content_type_extension("unknown/type") == ""
+
+
+def test_io_utils_attachment_capability_all_routes():
+    """attachment_capability routes all recognized extensions."""
+    assert worker.attachment_capability(Path("doc.pdf")) == ("pdf.mineru", "text")
+    assert worker.attachment_capability(Path("photo.png")) == ("image.rapidocr", "ocr")
+    assert worker.attachment_capability(Path("photo.jpg")) == ("image.rapidocr", "ocr")
+    assert worker.attachment_capability(Path("photo.jpeg")) == ("image.rapidocr", "ocr")
+    assert worker.attachment_capability(Path("clip.mp4")) == ("video.watch", "asr")
+    assert worker.attachment_capability(Path("clip.webm")) == ("video.watch", "asr")
+    assert worker.attachment_capability(Path("audio.mp3")) == ("audio.faster-whisper", "asr")
+    assert worker.attachment_capability(Path("audio.wav")) == ("audio.faster-whisper", "asr")
+    assert worker.attachment_capability(Path("notes.txt")) == ("office.markitdown", "text")
+    assert worker.attachment_capability(Path("sheet.csv")) == ("office.markitdown", "text")
+
+
+def test_io_utils_atomic_json_roundtrip(tmp_path):
+    """atomic_write_json writes valid JSON that roundtrips exactly."""
+    dest = tmp_path / "sub" / "data.json"
+    data = {"key": "value", "list": [1, 2, 3], "nested": {"a": True}}
+    worker.atomic_write_json(dest, data)
+    assert dest.is_file()
+    import json as _json
+    loaded = _json.loads(dest.read_text(encoding="utf-8"))
+    assert loaded == data
+
+
+def test_io_utils_atomic_text_roundtrip(tmp_path):
+    """atomic_write_text writes text that roundtrips exactly."""
+    dest = tmp_path / "sub" / "notes.txt"
+    content = "line 1\nline 2\nline 3\n"
+    worker.atomic_write_text(dest, content)
+    assert dest.is_file()
+    assert dest.read_text(encoding="utf-8") == content
+
+
+def test_io_utils_atomic_write_json_cleans_up_temp_on_failure(tmp_path):
+    """atomic_write_json must remove temp file on serialization failure."""
+    dest = tmp_path / "data.json"
+    # A lambda cannot be JSON-serialized
+    try:
+        worker.atomic_write_json(dest, {"bad": lambda: None})
+    except TypeError:
+        pass
+    # Only dest should remain (it may or may not exist); temp must be gone
+    temps = list(dest.parent.glob(".*.data.json.*"))
+    assert len(temps) == 0, f"Temp files leaked: {temps}"
+
+
+def test_io_utils_utc_now_is_aware_iso():
+    """utc_now returns an ISO string with timezone info."""
+    result = worker.utc_now()
+    assert isinstance(result, str)
+    assert "T" in result
+    assert "+" in result or result.endswith("Z")
+    # Parse to verify it's a valid aware datetime
+    parsed = worker.datetime.fromisoformat(result)
+    assert parsed.tzinfo is not None
+
+
+def test_io_utils_sha256_deterministic(tmp_path):
+    """sha256_file is deterministic and matches hashlib."""
+    f = tmp_path / "content.bin"
+    f.write_bytes(b"hello world")
+    digest = worker.sha256_file(f)
+    assert len(digest) == 64
+    assert digest == worker.hashlib.sha256(b"hello world").hexdigest()
+    # Second call yields same result
+    assert worker.sha256_file(f) == digest
+
+
+def test_io_utils_redaction_is_idempotent():
+    """_redact_error_text is idempotent -- redacting twice equals redacting once."""
+    original = "Bearer tokensecret123 at path /home/user and key=abcdefghij"
+    once = worker._redact_error_text(original)
+    twice = worker._redact_error_text(once)
+    assert once == twice

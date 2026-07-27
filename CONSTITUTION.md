@@ -5,6 +5,13 @@
 
 ## Engineering Principles
 
+### P0: Python version requirement
+
+The runtime and connector Python modules require Python >= 3.12.
+This is already stated in the project README.  The `from __future__ import
+annotations` usage, `str | None` union syntax, `pathlib.Path` features,
+and `itertools.batched` (used in tests) all depend on 3.12+ semantics.
+
 ### P1: Git IS the migration
 
 The knowledge repo is synced via `git clone/pull`. Schema changes to knowledge
