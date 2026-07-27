@@ -2323,3 +2323,323 @@ def test_io_utils_redaction_is_idempotent():
     once = worker._redact_error_text(original)
     twice = worker._redact_error_text(once)
     assert once == twice
+
+
+# ── Round 3 Phase 2: base_client extraction compatibility ──────────────
+
+
+def test_base_client_module_importable_independently():
+    """feishu_worker.base_client imports in a fresh subprocess without
+    feishu_base_worker loaded in sys.modules."""
+    import importlib
+    import sys
+
+    stale = {k for k in sys.modules if k.startswith("feishu_base_worker")}
+    stale.update(k for k in sys.modules if k.startswith("feishu_worker"))
+    stale.update(k for k in sys.modules if k.startswith("_lark_cli"))
+    for key in stale:
+        del sys.modules[key]
+
+    try:
+        base_client = importlib.import_module("feishu_worker.base_client")
+        for name in (
+            "lark_json",
+            "parse_json_output",
+            "base_args",
+            "update_record",
+            "create_record",
+            "list_records",
+            "get_record",
+            "list_review_records",
+            "RETRYABLE_CODES",
+            "_FATAL_LARK_CODES",
+            "_LARK_MAX_RETRIES",
+            "_LARK_BASE_DELAY",
+            "_LARK_SUBPROCESS_TIMEOUT",
+            "_extract_lark_error_code",
+            "_is_fatal_lark_error",
+            "_is_retryable_lark_error",
+            "_parse_record_rows",
+        ):
+            assert hasattr(base_client, name), (
+                f"feishu_worker.base_client must expose {name}"
+            )
+        assert "feishu_base_worker" not in sys.modules, (
+            "base_client import must not load feishu_base_worker"
+        )
+    finally:
+        import feishu_base_worker  # noqa: F811
+        import feishu_worker.base_client  # noqa: F811
+        import feishu_worker.config  # noqa: F811
+        import feishu_worker.io_utils  # noqa: F811
+        import _lark_cli  # noqa: F811
+
+
+def test_base_client_re_exports_all_moved_names():
+    """Every name extracted to base_client is importable from feishu_base_worker."""
+    base_client_names = [
+        "RETRYABLE_CODES",
+        "_FATAL_LARK_CODES",
+        "_LARK_BASE_DELAY",
+        "_LARK_MAX_RETRIES",
+        "_LARK_SUBPROCESS_TIMEOUT",
+        "_extract_lark_error_code",
+        "_is_fatal_lark_error",
+        "_is_retryable_lark_error",
+        "lark_json",
+        "parse_json_output",
+        "base_args",
+        "update_record",
+        "create_record",
+        "list_records",
+        "get_record",
+        "list_review_records",
+    ]
+    for name in base_client_names:
+        assert hasattr(worker, name), (
+            f"feishu_base_worker must expose {name}"
+        )
+
+
+def test_base_client_names_not_on_config_or_io_utils():
+    """base_client names must stay out of config and io_utils module namespaces."""
+    from feishu_worker import config as config_module
+    from feishu_worker import io_utils as io_utils_module
+
+    protocol_names = {
+        "lark_json", "parse_json_output", "base_args",
+        "update_record", "create_record", "list_records",
+        "get_record", "list_review_records",
+        "RETRYABLE_CODES", "_FATAL_LARK_CODES",
+        "_LARK_MAX_RETRIES", "_LARK_BASE_DELAY", "_LARK_SUBPROCESS_TIMEOUT",
+        "_extract_lark_error_code", "_is_fatal_lark_error", "_is_retryable_lark_error",
+        "_parse_record_rows",
+    }
+    for name in protocol_names:
+        assert not hasattr(config_module, name), (
+            f"feishu_worker.config must NOT expose {name}"
+        )
+        assert not hasattr(io_utils_module, name), (
+            f"feishu_worker.io_utils must NOT expose {name}"
+        )
+
+
+def test_base_client_imports_only_leaf_dependencies():
+    """base_client.py must not import from feishu_base_worker."""
+    import ast
+    from feishu_worker import base_client as bc
+
+    source = __import__("inspect").getsource(bc)
+    tree = ast.parse(source)
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            module = getattr(node, "module", "") or ""
+            if "feishu_base_worker" in module:
+                raise AssertionError(
+                    f"base_client must not import feishu_base_worker: {ast.dump(node)}"
+                )
+
+
+# ── parse_json_output unit tests ───────────────────────────────────────
+
+
+def test_parse_json_output_success():
+    result = worker.subprocess.CompletedProcess(
+        ["lark-cli"], 0, stdout='{"ok": true}', stderr="",
+    )
+    assert worker.parse_json_output(result) == {"ok": True}
+
+
+def test_parse_json_output_allows_non_zero_with_matching_code():
+    result = worker.subprocess.CompletedProcess(
+        ["connector"], 2, stdout='{"status": "ok"}', stderr="",
+    )
+    assert worker.parse_json_output(result, allow_codes={0, 2}) == {"status": "ok"}
+
+
+def test_parse_json_output_rejects_unexpected_return_code():
+    result = worker.subprocess.CompletedProcess(
+        ["lark-cli"], 1, stdout="{}", stderr="command failed",
+    )
+    try:
+        worker.parse_json_output(result)
+    except RuntimeError as exc:
+        assert "1" in str(exc)
+    else:
+        raise AssertionError("unexpected return code must raise RuntimeError")
+
+
+def test_parse_json_output_raises_on_non_json():
+    result = worker.subprocess.CompletedProcess(
+        ["lark-cli"], 0, stdout="not json", stderr="",
+    )
+    try:
+        worker.parse_json_output(result)
+    except RuntimeError as exc:
+        assert "non-JSON" in str(exc)
+    else:
+        raise AssertionError("non-JSON output must raise RuntimeError")
+
+
+def test_parse_json_output_raises_on_non_object():
+    result = worker.subprocess.CompletedProcess(
+        ["lark-cli"], 0, stdout='[1,2,3]', stderr="",
+    )
+    try:
+        worker.parse_json_output(result)
+    except RuntimeError as exc:
+        assert "non-object" in str(exc)
+    else:
+        raise AssertionError("non-object JSON must raise RuntimeError")
+
+
+# ── base_args unit test ────────────────────────────────────────────────
+
+
+def test_base_args_format(tmp_path):
+    config = worker.WorkerConfig(
+        "tok123", "tbl456", tmp_path / "lark.exe", tmp_path,
+    )
+    args = worker.base_args(config)
+    assert args == [
+        "--base-token", "tok123",
+        "--table-id", "tbl456",
+        "--as", "user",
+    ]
+
+
+def test_base_args_respects_explicit_identity(tmp_path):
+    config = worker.WorkerConfig(
+        "tok", "tbl", tmp_path / "lark.exe", tmp_path,
+        identity="bot",
+    )
+    assert worker.base_args(config)[-2:] == ["--as", "bot"]
+
+
+# ── _parse_record_rows unit tests ──────────────────────────────────────
+
+
+def test_parse_record_rows_from_list_format():
+    from feishu_worker.base_client import _parse_record_rows
+
+    rows = [["https://example.com", "待处理", False]]
+    fields = ["内容", "运行状态", "重试"]
+    record_ids = ["rec_1"]
+
+    result = _parse_record_rows(rows, fields, record_ids)
+    assert result == [
+        {"record_id": "rec_1", "fields": {"内容": "https://example.com", "运行状态": "待处理", "重试": False}},
+    ]
+
+
+def test_parse_record_rows_from_dict_format():
+    from feishu_worker.base_client import _parse_record_rows
+
+    rows = [{"record_id": "rec_2", "fields": {"内容": "test", "运行状态": "已领取"}}]
+    fields = ["内容", "运行状态"]
+    record_ids = ["rec_2"]
+
+    result = _parse_record_rows(rows, fields, record_ids)
+    assert result == [
+        {"record_id": "rec_2", "fields": {"内容": "test", "运行状态": "已领取"}},
+    ]
+
+
+def test_parse_record_rows_skips_empty_rows():
+    from feishu_worker.base_client import _parse_record_rows
+
+    result = _parse_record_rows(["not-dict-or-list"], ["f1"], ["rec_1"])
+    assert result == []
+
+
+def test_parse_record_rows_dict_without_record_id_falls_back_to_list():
+    from feishu_worker.base_client import _parse_record_rows
+
+    rows = [{"fields": {"内容": "test"}}]
+    result = _parse_record_rows(rows, ["内容"], ["rec_backup"])
+    assert result == [
+        {"record_id": "rec_backup", "fields": {"内容": "test"}},
+    ]
+
+
+def test_parse_record_rows_handles_extra_ids():
+    from feishu_worker.base_client import _parse_record_rows
+
+    rows = [["a"], ["b"]]
+    result = _parse_record_rows(rows, ["f1"], ["id1", "id2", "id3"])
+    assert len(result) == 2
+    assert result[0]["record_id"] == "id1"
+    assert result[1]["record_id"] == "id2"
+
+
+def test_parse_record_rows_uses_fewer_ids():
+    from feishu_worker.base_client import _parse_record_rows
+
+    rows = [["a"], ["b"]]
+    result = _parse_record_rows(rows, ["f1"], ["only_one"])
+    # First row gets the only id; second gets None and is excluded
+    assert len(result) == 1
+    assert result[0]["record_id"] == "only_one"
+
+
+# ── lark_json / wrapper integration tests ──────────────────────────────
+
+
+def test_worker_lark_json_wrapper_passes_root(monkeypatch, tmp_path):
+    """The worker's lark_json wrapper must forward root=ROOT to base_client."""
+    config = worker.WorkerConfig("base", "table", tmp_path / "lark.exe", tmp_path)
+    captured_root = []
+
+    def capture_root(cfg, *args, root):
+        captured_root.append(root)
+        return {"ok": True}
+
+    monkeypatch.setattr(
+        worker,
+        "_base_client_lark_json",
+        capture_root,
+    )
+
+    worker.lark_json(config, "base", "+record-list")
+    assert captured_root == [worker.ROOT]
+
+
+def test_update_record_includes_json_payload_in_command(monkeypatch, tmp_path):
+    config = worker.WorkerConfig("base", "table", tmp_path / "lark.exe", tmp_path)
+    commands = []
+    monkeypatch.setattr(worker, "lark_json", lambda _c, *args: commands.append(args) or {})
+    worker.update_record(config, "rec_1", {"运行状态": "Raw就绪"})
+    # Positional args: "base", "+record-upsert", *base_args(...), "--record-id", "rec_1", "--json", "{...}"
+    assert commands[0][0] == "base"
+    assert commands[0][1] == "+record-upsert"
+    assert "--record-id" in commands[0]
+    assert commands[0][commands[0].index("--record-id") + 1] == "rec_1"
+    assert "--json" in commands[0]
+
+
+def test_create_record_passes_fields_as_compact_json(monkeypatch, tmp_path):
+    config = worker.WorkerConfig("base", "table", tmp_path / "lark.exe", tmp_path)
+    commands = []
+    monkeypatch.setattr(worker, "lark_json", lambda _c, *args: commands.append(args) or {})
+    worker.create_record(config, {"内容": "https://example.com"})
+    json_idx = commands[0].index("--json") + 1
+    assert "https://example.com" in commands[0][json_idx]
+
+
+def test_record_crud_errors_propagate_to_main_cli(monkeypatch, tmp_path):
+    """RuntimeError from lark_json must propagate through the wrapper
+    so the main() CLI can catch it."""
+    config = worker.WorkerConfig("base", "table", tmp_path / "lark.exe", tmp_path)
+    monkeypatch.setattr(
+        worker,
+        "_base_client_lark_json",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            RuntimeError("AUTH_FAILED")
+        ),
+    )
+    try:
+        worker.update_record(config, "rec_1", {"status": "test"})
+    except RuntimeError as exc:
+        assert "AUTH_FAILED" in str(exc)
+    else:
+        raise AssertionError("lark_json errors must propagate to record CRUD callers")

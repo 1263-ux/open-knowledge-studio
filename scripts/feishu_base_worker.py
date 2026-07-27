@@ -42,22 +42,25 @@ from feishu_worker.io_utils import (
     sha256_file,
     utc_now,
 )
-
-# ── Retry constants (moved back from config; protocol layer, not Phase 1A) ──
-RETRYABLE_CODES = {"RATE_LIMITED", "UPSTREAM_UNAVAILABLE", "NETWORK_ERROR", "TIMEOUT"}
-_FATAL_LARK_CODES = {
-    "AUTH_FAILED",
-    "AUTH_REQUIRED",
-    "ACCESS_DENIED",
-    "PERMISSION_DENIED",
-    "INVALID_ARGUMENT",
-    "VALIDATION_ERROR",
-    "NOT_FOUND",
-    "CHALLENGE_REQUIRED",
-}
-_LARK_MAX_RETRIES = 3
-_LARK_BASE_DELAY = 1.0
-_LARK_SUBPROCESS_TIMEOUT = 30.0
+from feishu_worker.base_client import (
+    RETRYABLE_CODES,
+    _FATAL_LARK_CODES,
+    _LARK_BASE_DELAY,
+    _LARK_MAX_RETRIES,
+    _LARK_SUBPROCESS_TIMEOUT,
+    _extract_lark_error_code,
+    _is_fatal_lark_error,
+    _is_retryable_lark_error,
+    parse_json_output,
+    _parse_record_rows,
+    lark_json as _base_client_lark_json,
+    base_args as _base_client_base_args,
+    update_record as _base_client_update_record,
+    create_record as _base_client_create_record,
+    list_records as _base_client_list_records,
+    get_record as _base_client_get_record,
+    list_review_records as _base_client_list_review_records,
+)
 
 # ── Legacy wrappers: supply ROOT so callers keep one-argument API ──
 
@@ -68,115 +71,6 @@ def load_config(args: argparse.Namespace) -> WorkerConfig:
 
 def configured_knowledge_root(config: WorkerConfig) -> Path:
     return _config_configured_knowledge_root(config, root=ROOT)
-
-
-# ── Lark CLI protocol helpers (moved back from config; not Phase 1A) ──
-
-
-def _extract_lark_error_code(value: dict[str, Any]) -> str:
-    error = value.get("error")
-    if isinstance(error, dict):
-        code = error.get("code")
-        if code:
-            return str(code)
-    code = value.get("code")
-    return str(code) if code else ""
-
-
-def _is_retryable_lark_error(value: dict[str, Any]) -> bool:
-    code = _extract_lark_error_code(value)
-    return code in RETRYABLE_CODES
-
-
-def _is_fatal_lark_error(value: dict[str, Any]) -> bool:
-    code = _extract_lark_error_code(value)
-    return code in _FATAL_LARK_CODES
-
-
-def lark_json(config: WorkerConfig, *arguments: str) -> dict[str, Any]:
-    """Run a lark-cli command and return its parsed JSON response.
-
-    Retries only on structured retryable error codes, TimeoutExpired, and
-    narrowly-intended transient OSError subclasses.  Malformed/non-JSON
-    output and non-object JSON values raise immediately without retry.
-    """
-    command = [str(config.lark_cli), *arguments]
-    last_error: Exception | None = None
-
-    for attempt in range(1 + _LARK_MAX_RETRIES):
-        try:
-            result = subprocess.run(
-                command,
-                cwd=ROOT,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                capture_output=True,
-                check=False,
-                timeout=_LARK_SUBPROCESS_TIMEOUT,
-            )
-        except subprocess.TimeoutExpired as exc:
-            last_error = exc
-            if attempt < _LARK_MAX_RETRIES:
-                time.sleep(_LARK_BASE_DELAY * (2 ** attempt))
-                continue
-            raise RuntimeError(
-                f"lark-cli timed out after {_LARK_MAX_RETRIES + 1} attempts: "
-                f"{' '.join(arguments[:3])}..."
-            ) from exc
-        except OSError as exc:
-            # Only retry narrowly-intended transient OSError subclasses.
-            if isinstance(exc, (ConnectionRefusedError, ConnectionResetError, BrokenPipeError)):
-                last_error = exc
-                if attempt < _LARK_MAX_RETRIES:
-                    time.sleep(_LARK_BASE_DELAY * (2 ** attempt))
-                    continue
-                raise RuntimeError(
-                    f"lark-cli subprocess failed after {_LARK_MAX_RETRIES + 1} attempts: "
-                    f"{' '.join(arguments[:3])}...: {exc}"
-                ) from exc
-            raise
-
-        text = result.stdout.strip()
-        try:
-            value = json.loads(text)
-        except json.JSONDecodeError as exc:
-            # Malformed/non-JSON output -- do NOT retry.
-            raise RuntimeError(
-                f"command returned non-JSON output: {text[:400]}"
-            ) from exc
-
-        if not isinstance(value, dict):
-            raise RuntimeError("command returned a non-object JSON value")
-
-        if value.get("ok") is True:
-            return value
-
-        if _is_fatal_lark_error(value):
-            raise RuntimeError(
-                f"lark-cli operation failed: {json.dumps(value, ensure_ascii=False)}"
-            )
-
-        if _is_retryable_lark_error(value):
-            last_error = RuntimeError(
-                f"lark-cli transient error: {json.dumps(value, ensure_ascii=False)}"
-            )
-            if attempt < _LARK_MAX_RETRIES:
-                time.sleep(_LARK_BASE_DELAY * (2 ** attempt))
-                continue
-            raise RuntimeError(
-                f"lark-cli failed after {_LARK_MAX_RETRIES + 1} attempts: "
-                f"{' '.join(arguments[:3])}..."
-            ) from last_error
-
-        raise RuntimeError(
-            f"lark-cli operation failed: {json.dumps(value, ensure_ascii=False)}"
-        )
-
-    raise RuntimeError(
-        f"lark-cli failed after {_LARK_MAX_RETRIES + 1} attempts: "
-        f"{' '.join(arguments[:3])}..."
-    ) from last_error
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -213,54 +107,24 @@ REVIEW_ACTION_RE = re.compile(
 )
 
 
-def parse_json_output(result: subprocess.CompletedProcess[str], *, allow_codes: set[int] = {0}) -> dict[str, Any]:
-    if result.returncode not in allow_codes:
-        raise RuntimeError(
-            f"command failed ({result.returncode}): {(result.stderr or result.stdout).strip()}"
-        )
-    text = result.stdout.strip()
-    try:
-        value = json.loads(text)
-    except json.JSONDecodeError as error:
-        raise RuntimeError(f"command returned non-JSON output: {text[:400]}") from error
-    if not isinstance(value, dict):
-        raise RuntimeError("command returned a non-object JSON value")
-    return value
+# ── Backward-compatible wrappers (supply ROOT / default projections) ──
 
 
-def _connector_binary() -> str:
-    """Return the oks-connector CLI path.
-
-    Prefers the entry point next to the current Python (pipx venv).
-    Falls back to the source script in dev mode.
-    """
-    suffix = ".exe" if os.name == "nt" else ""
-    injected = Path(sys.executable).parent / f"oks-connector{suffix}"
-    if injected.is_file():
-        return str(injected)
-    script = ROOT / "scripts" / "raw_bundle_adapter.py"
-    if script.is_file():
-        return str(script)
-    raise RuntimeError("oks-connector not found; reinstall open-knowledge-studio")
+def lark_json(config: WorkerConfig, *arguments: str) -> dict[str, Any]:
+    return _base_client_lark_json(config, *arguments, root=ROOT)
 
 
 def base_args(config: WorkerConfig) -> list[str]:
-    return [
-        "--base-token",
-        config.base_token,
-        "--table-id",
-        config.table_id,
-        "--as",
-        config.identity,
-    ]
+    return _base_client_base_args(config)
 
 
 def update_record(config: WorkerConfig, record_id: str, patch: dict[str, Any]) -> dict[str, Any]:
+    """Update one Base record via the worker's monkeypatchable lark_json."""
     return lark_json(
         config,
         "base",
         "+record-upsert",
-        *base_args(config),
+        *_base_client_base_args(config),
         "--record-id",
         record_id,
         "--json",
@@ -269,52 +133,41 @@ def update_record(config: WorkerConfig, record_id: str, patch: dict[str, Any]) -
 
 
 def create_record(config: WorkerConfig, fields: dict[str, Any]) -> dict[str, Any]:
+    """Create one Base record via the worker's monkeypatchable lark_json."""
     return lark_json(
         config,
         "base",
         "+record-upsert",
-        *base_args(config),
+        *_base_client_base_args(config),
         "--json",
         json.dumps(fields, ensure_ascii=False, separators=(",", ":")),
     )
 
 
 def list_records(config: WorkerConfig, limit: int = 100) -> list[dict[str, Any]]:
-    projection = CAPTURE_FIELDS
+    """Fetch capture-field records via the worker's monkeypatchable lark_json."""
     command = [
         "base",
         "+record-list",
-        *base_args(config),
+        *_base_client_base_args(config),
         "--limit",
         str(limit),
         "--format",
         "json",
     ]
-    for field in projection:
+    for field in CAPTURE_FIELDS:
         command.extend(["--field-id", field])
-    # Only fetch pending records (avoid wasting limit on already-processed ones)
     command.extend([
         "--filter-json",
         '{"logic":"and","conditions":[["运行状态","intersects",["待处理"]]]}',
     ])
     envelope = lark_json(config, *command)
     data = envelope.get("data", {})
-    fields = data.get("fields", projection)
-    rows = data.get("data", [])
-    record_ids = data.get("record_id_list", [])
-    records: list[dict[str, Any]] = []
-    for index, row in enumerate(rows):
-        record_id = record_ids[index] if index < len(record_ids) else None
-        if isinstance(row, list):
-            values = dict(zip(fields, row))
-        elif isinstance(row, dict):
-            record_id = row.get("record_id") or row.get("id") or record_id
-            values = row.get("fields", row)
-        else:
-            continue
-        if record_id:
-            records.append({"record_id": record_id, "fields": values})
-    return records
+    return _parse_record_rows(
+        data.get("data", []),
+        data.get("fields", CAPTURE_FIELDS),
+        data.get("record_id_list", []),
+    )
 
 
 def get_record(
@@ -322,11 +175,12 @@ def get_record(
     record_id: str,
     projection: list[str] | None = None,
 ) -> dict[str, Any]:
-    fields_requested = projection or CANDIDATE_FIELDS
+    """Fetch one Base record by id via the worker's monkeypatchable lark_json."""
+    fields_requested = projection if projection is not None else CANDIDATE_FIELDS
     command = [
         "base",
         "+record-get",
-        *base_args(config),
+        *_base_client_base_args(config),
         "--record-id",
         record_id,
         "--format",
@@ -353,10 +207,11 @@ def get_record(
 
 
 def list_review_records(config: WorkerConfig, limit: int = 100) -> list[dict[str, Any]]:
+    """Fetch review-candidate records via the worker's monkeypatchable lark_json."""
     command = [
         "base",
         "+record-list",
-        *base_args(config),
+        *_base_client_base_args(config),
         "--limit",
         str(limit),
         "--format",
@@ -366,22 +221,27 @@ def list_review_records(config: WorkerConfig, limit: int = 100) -> list[dict[str
         command.extend(["--field-id", field])
     envelope = lark_json(config, *command)
     data = envelope.get("data", {})
-    fields = data.get("fields", CANDIDATE_FIELDS)
-    rows = data.get("data", [])
-    record_ids = data.get("record_id_list", [])
-    records: list[dict[str, Any]] = []
-    for index, row in enumerate(rows):
-        record_id = record_ids[index] if index < len(record_ids) else None
-        if isinstance(row, list):
-            values = dict(zip(fields, row))
-        elif isinstance(row, dict):
-            record_id = row.get("record_id") or row.get("id") or record_id
-            values = row.get("fields", row)
-        else:
-            continue
-        if record_id:
-            records.append({"record_id": record_id, "fields": values})
-    return records
+    return _parse_record_rows(
+        data.get("data", []),
+        data.get("fields", CANDIDATE_FIELDS),
+        data.get("record_id_list", []),
+    )
+
+
+def _connector_binary() -> str:
+    """Return the oks-connector CLI path.
+
+    Prefers the entry point next to the current Python (pipx venv).
+    Falls back to the source script in dev mode.
+    """
+    suffix = ".exe" if os.name == "nt" else ""
+    injected = Path(sys.executable).parent / f"oks-connector{suffix}"
+    if injected.is_file():
+        return str(injected)
+    script = ROOT / "scripts" / "raw_bundle_adapter.py"
+    if script.is_file():
+        return str(script)
+    raise RuntimeError("oks-connector not found; reinstall open-knowledge-studio")
 
 
 def parse_base_datetime(
