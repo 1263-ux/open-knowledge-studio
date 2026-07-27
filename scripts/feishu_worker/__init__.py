@@ -5,4 +5,5 @@ Leaf modules (zero imports from feishu_base_worker):
   io_utils     — atomic writes, hashing, redaction, scalar_cell
   base_client  — lark_json, record CRUD, retry helpers
   claim        — parse_base_datetime, is_candidate, lease lock, claim/release
+  capture      — extract_url, normalize_attachments, capture_envelope, hashing
 """

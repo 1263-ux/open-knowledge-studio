@@ -2977,3 +2977,327 @@ def test_claim_direct_usage_without_legacy_wrappers(monkeypatch, tmp_path):
     assert release_updates[0][0] == "rec_release"
     assert release_updates[0][1]["租约所有者"] is None
     assert release_updates[0][1]["租约到期"] is None
+
+
+# ── Round 3 Phase 4: capture module isolation tests ──────────────────────────
+
+
+def test_capture_module_importable_independently():
+    """feishu_worker.capture imports in a fresh subprocess without
+    feishu_base_worker loaded in sys.modules."""
+    import importlib
+    import sys
+
+    stale = {k for k in sys.modules if k.startswith("feishu_base_worker")}
+    stale.update(k for k in sys.modules if k.startswith("feishu_worker"))
+    stale.update(k for k in sys.modules if k.startswith("_lark_cli"))
+    for key in stale:
+        del sys.modules[key]
+
+    try:
+        capture = importlib.import_module("feishu_worker.capture")
+        for name in (
+            "URL_RE",
+            "extract_url",
+            "normalize_attachments",
+            "capture_user_note",
+            "capture_content_hash",
+            "envelope_content_hash",
+            "capture_envelope",
+        ):
+            assert hasattr(capture, name), (
+                f"feishu_worker.capture must expose {name}"
+            )
+        # These must NOT be present -- they belong to the orchestrator.
+        for name in ("process_record", "parse_candidate_document", "main", "ROOT", "lark_json"):
+            assert not hasattr(capture, name), (
+                f"feishu_worker.capture must NOT expose {name}"
+            )
+        assert "feishu_base_worker" not in sys.modules, (
+            "capture import must not load feishu_base_worker"
+        )
+    finally:
+        import feishu_base_worker  # noqa: F811
+        import feishu_worker.capture  # noqa: F811
+        import feishu_worker.config  # noqa: F811
+        import feishu_worker.io_utils  # noqa: F811
+        import feishu_worker.base_client  # noqa: F811
+        import feishu_worker.claim  # noqa: F811
+        import _lark_cli  # noqa: F811
+
+
+def test_capture_module_has_subprocess_import():
+    """capture.py carries a fresh subprocess import for future phases."""
+    import importlib
+    import sys
+
+    stale = {k for k in sys.modules if k.startswith("feishu_base_worker")}
+    stale.update(k for k in sys.modules if k.startswith("feishu_worker"))
+    stale.update(k for k in sys.modules if k.startswith("_lark_cli"))
+    for key in stale:
+        del sys.modules[key]
+
+    try:
+        capture = importlib.import_module("feishu_worker.capture")
+        assert hasattr(capture, "subprocess"), (
+            "feishu_worker.capture must import subprocess"
+        )
+    finally:
+        import feishu_base_worker  # noqa: F811
+        import feishu_worker.capture  # noqa: F811
+        import feishu_worker.config  # noqa: F811
+        import feishu_worker.io_utils  # noqa: F811
+        import feishu_worker.base_client  # noqa: F811
+        import feishu_worker.claim  # noqa: F811
+        import _lark_cli  # noqa: F811
+
+
+def test_capture_re_exports_all_moved_names():
+    """Every name extracted to capture is importable from feishu_base_worker."""
+    capture_names = [
+        "URL_RE",
+        "extract_url",
+        "normalize_attachments",
+        "capture_user_note",
+        "capture_content_hash",
+        "envelope_content_hash",
+        "capture_envelope",
+    ]
+    missing = [n for n in capture_names if not hasattr(worker, n)]
+    assert not missing, (
+        f"feishu_base_worker must re-export: {', '.join(missing)}"
+    )
+
+
+def test_capture_names_not_on_other_leaf_modules():
+    """Capture names must stay out of config, io_utils, base_client, and claim namespaces."""
+    from feishu_worker import config as config_module
+    from feishu_worker import io_utils as io_utils_module
+    from feishu_worker import base_client as base_client_module
+    from feishu_worker import claim as claim_module
+
+    capture_names = {
+        "URL_RE",
+        "extract_url",
+        "normalize_attachments",
+        "capture_user_note",
+        "capture_content_hash",
+        "envelope_content_hash",
+        "capture_envelope",
+    }
+    for name in capture_names:
+        assert not hasattr(config_module, name), (
+            f"feishu_worker.config must NOT expose {name}"
+        )
+        assert not hasattr(io_utils_module, name), (
+            f"feishu_worker.io_utils must NOT expose {name}"
+        )
+        assert not hasattr(base_client_module, name), (
+            f"feishu_worker.base_client must NOT expose {name}"
+        )
+        assert not hasattr(claim_module, name), (
+            f"feishu_worker.claim must NOT expose {name}"
+        )
+
+
+def test_capture_imports_only_leaf_dependencies():
+    """capture.py must not import from feishu_base_worker."""
+    import ast
+    from feishu_worker import capture as cap
+
+    source = __import__("inspect").getsource(cap)
+    tree = ast.parse(source)
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            module = getattr(node, "module", "") or ""
+            if "feishu_base_worker" in module:
+                raise AssertionError(
+                    f"capture must not import feishu_base_worker: {ast.dump(node)}"
+                )
+
+
+# ── Round 3 Phase 4: capture contract regression tests ──────────────────────
+# These lock capture-envelope v0.2 field names and values byte-for-byte.
+
+
+def test_capture_envelope_v02_schema_version():
+    """capture_envelope must produce schema_version oks-capture-envelope/v0.2."""
+    config = worker.WorkerConfig("tok1", "tbl1", worker.Path("/fake/lark"), worker.Path("/tmp"))
+    envelope = worker.capture_envelope(config, "rec_test", {"内容": "hello"})
+    assert envelope["schema_version"] == "oks-capture-envelope/v0.2"
+
+
+def test_capture_envelope_v02_field_names():
+    """capture_envelope must contain every v0.2 field name exactly."""
+    config = worker.WorkerConfig("tok1", "tbl1", worker.Path("/fake/lark"), worker.Path("/tmp"))
+    envelope = worker.capture_envelope(config, "rec_test", {"内容": "hello"})
+    expected_fields = {
+        "schema_version",
+        "capture_id",
+        "capture_revision",
+        "source_type",
+        "source_uri",
+        "captured_at",
+        "submitted_by",
+        "user_note",
+        "content",
+        "content_hash",
+        "hash_algorithm",
+        "source_record",
+        "attachments",
+        "capture_adapter",
+    }
+    missing = expected_fields - set(envelope.keys())
+    assert not missing, f"capture_envelope missing fields: {missing}"
+    extra = set(envelope.keys()) - expected_fields
+    assert not extra, f"capture_envelope has unexpected fields: {extra}"
+
+
+def test_capture_envelope_v02_source_record_shape():
+    """source_record must contain base_token, table_id, record_id, revision."""
+    config = worker.WorkerConfig("tok1", "tbl1", worker.Path("/fake/lark"), worker.Path("/tmp"))
+    envelope = worker.capture_envelope(config, "rec_test", {"内容": "hello"})
+    sr = envelope["source_record"]
+    assert sr["base_token"] == "tok1"
+    assert sr["table_id"] == "tbl1"
+    assert sr["record_id"] == "rec_test"
+    assert sr["revision"] is None
+    assert set(sr.keys()) == {"base_token", "table_id", "record_id", "revision"}
+
+
+def test_capture_envelope_v02_capture_adapter_shape():
+    """capture_adapter must name feishu.base at version 0.1.0."""
+    config = worker.WorkerConfig("tok1", "tbl1", worker.Path("/fake/lark"), worker.Path("/tmp"))
+    envelope = worker.capture_envelope(config, "rec_test", {"内容": "hello"})
+    assert envelope["capture_adapter"] == {"name": "feishu.base", "version": "0.1.0"}
+
+
+def test_capture_envelope_v02_content_hash_algorithm():
+    """content_hash must be a 64-char hex sha256 via sha256-canonical-json-v1."""
+    config = worker.WorkerConfig("tok1", "tbl1", worker.Path("/fake/lark"), worker.Path("/tmp"))
+    envelope = worker.capture_envelope(config, "rec_test", {"内容": "hello"})
+    assert envelope["hash_algorithm"] == "sha256-canonical-json-v1"
+    assert len(envelope["content_hash"]) == 64
+    assert all(c in "0123456789abcdef" for c in envelope["content_hash"])
+
+
+def test_capture_envelope_v02_capture_id_format():
+    """capture_id must be feishu-{record_id}-{12-char content_hash_prefix}."""
+    config = worker.WorkerConfig("tok1", "tbl1", worker.Path("/fake/lark"), worker.Path("/tmp"))
+    envelope = worker.capture_envelope(config, "rec_abc123", {"内容": "hello"})
+    prefix = f"feishu-rec_abc123-{envelope['content_hash'][:12]}"
+    assert envelope["capture_id"] == prefix
+
+
+def test_capture_envelope_v02_captured_at_is_aware_utc():
+    """captured_at must be an aware UTC ISO timestamp."""
+    config = worker.WorkerConfig("tok1", "tbl1", worker.Path("/fake/lark"), worker.Path("/tmp"))
+    envelope = worker.capture_envelope(config, "rec_test", {"内容": "hello"})
+    parsed = worker.datetime.fromisoformat(envelope["captured_at"])
+    assert parsed.tzinfo is not None, "captured_at must be timezone-aware"
+
+
+def test_capture_envelope_v02_attachment_normalization():
+    """normalize_attachments must produce sorted, stable attachment descriptors."""
+    from feishu_worker.capture import normalize_attachments
+
+    raw = [
+        {"file_token": "f2", "name": "b.txt", "size": 10, "mime_type": "text/plain"},
+        {"file_token": "f1", "name": "a.png", "size": 20, "mime_type": "image/png"},
+    ]
+    result = normalize_attachments(raw)
+    # Must be sorted by (source_token, name)
+    assert result[0]["source_token"] == "f1"
+    assert result[0]["name"] == "a.png"
+    assert result[1]["source_token"] == "f2"
+    assert result[1]["name"] == "b.txt"
+    # All descriptor fields present
+    for item in result:
+        assert set(item.keys()) == {
+            "source_token", "name", "size", "mime_type", "sha256", "source_uri",
+        }
+
+
+def test_capture_envelope_v02_attachment_token_fallback():
+    """normalize_attachments must fall back through file_token→token→id for source_token."""
+    from feishu_worker.capture import normalize_attachments
+
+    assert normalize_attachments([{"id": "abc", "name": "x"}])[0]["source_token"] == "abc"
+    assert normalize_attachments([{"token": "tok", "name": "x"}])[0]["source_token"] == "tok"
+    # When no token-like field, falls back to name
+    result = normalize_attachments([{"name": "report.pdf"}])
+    assert result[0]["source_token"] == "report.pdf"
+
+
+def test_capture_envelope_v02_url_extraction():
+    """extract_url must find http/https URLs and strip trailing punctuation."""
+    from feishu_worker.capture import extract_url
+
+    assert extract_url("https://example.com/path") == "https://example.com/path"
+    assert extract_url("[label] https://example.com/a?b=1。") == "https://example.com/a?b=1"
+    assert extract_url("http://foo.bar/baz, and more") == "http://foo.bar/baz"
+    assert extract_url("no url here") is None
+    assert extract_url(None) is None
+    assert extract_url(123) is None
+
+
+def test_capture_envelope_v02_content_hash_deterministic():
+    """capture_content_hash must be deterministic for identical inputs."""
+    from feishu_worker.capture import capture_content_hash
+
+    fields = {"内容": "same content", "思考": "same note"}
+    h1 = capture_content_hash(fields)
+    h2 = capture_content_hash(fields)
+    assert h1 == h2
+
+
+def test_capture_envelope_v02_revision_is_always_one():
+    """capture_revision must always be 1 — envelope is immutable after creation."""
+    config = worker.WorkerConfig("tok1", "tbl1", worker.Path("/fake/lark"), worker.Path("/tmp"))
+    envelope = worker.capture_envelope(config, "rec_test", {"内容": "hello"})
+    assert envelope["capture_revision"] == 1
+
+
+def test_capture_envelope_v02_submitted_by_is_none():
+    """submitted_by must be None — the worker captures, a human submits."""
+    config = worker.WorkerConfig("tok1", "tbl1", worker.Path("/fake/lark"), worker.Path("/tmp"))
+    envelope = worker.capture_envelope(config, "rec_test", {"内容": "hello"})
+    assert envelope["submitted_by"] is None
+
+
+# ── Updated: all five leaf modules importable without base worker ────────────
+
+
+def test_all_leaf_modules_importable_without_base_worker_round3():
+    """All five leaf modules (config, io_utils, base_client, claim, capture) import
+    cleanly without feishu_base_worker loaded."""
+    import importlib
+    import sys
+
+    stale = {k for k in sys.modules if k.startswith("feishu_base_worker")}
+    stale.update(k for k in sys.modules if k.startswith("feishu_worker"))
+    stale.update(k for k in sys.modules if k.startswith("_lark_cli"))
+    for key in stale:
+        del sys.modules[key]
+
+    try:
+        for mod_name in (
+            "feishu_worker.config",
+            "feishu_worker.io_utils",
+            "feishu_worker.base_client",
+            "feishu_worker.claim",
+            "feishu_worker.capture",
+        ):
+            mod = importlib.import_module(mod_name)
+            assert mod is not None, f"Failed to import {mod_name}"
+        assert "feishu_base_worker" not in sys.modules, (
+            "Leaf module imports must not load feishu_base_worker"
+        )
+    finally:
+        import feishu_base_worker  # noqa: F811
+        import feishu_worker.config  # noqa: F811
+        import feishu_worker.io_utils  # noqa: F811
+        import feishu_worker.base_client  # noqa: F811
+        import feishu_worker.claim  # noqa: F811
+        import feishu_worker.capture  # noqa: F811
+        import _lark_cli  # noqa: F811
