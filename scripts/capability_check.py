@@ -19,6 +19,7 @@ _MODULES: dict[str, str] = {
     "rapidocr": "rapidocr",
     "document": "markitdown",
     "pdf": "mineru",
+    "formula": "paddleocr",
 }
 
 _ENV_VARS: dict[str, str] = {
@@ -26,6 +27,7 @@ _ENV_VARS: dict[str, str] = {
     "rapidocr": "OKS_WATCH_PYTHON",
     "document": "OKS_DOCUMENT_PYTHON",
     "pdf": "OKS_MINERU_PYTHON",
+    "formula": "OKS_FORMULA_PYTHON",
 }
 
 

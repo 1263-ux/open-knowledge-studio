@@ -216,6 +216,8 @@ def ingest(
     mode: str = typer.Option("quick", "--mode", help="quick or forensic"),
     timeout_seconds: Optional[float] = typer.Option(None, "--timeout-seconds"),
     progress: bool = typer.Option(True, "--progress/--no-progress"),
+    formula_secondary: bool = typer.Option(False, "--formula-secondary", help="Run PaddleOCR PP-FormulaNet on PDF equation crops."),
+    formula_max_regions: int = typer.Option(20, "--formula-max-regions", help="Cap equation blocks for formula secondary extraction."),
 ):
     """Acquire one source through the built-in connector; no Wiki promotion occurs here."""
     if mode not in {"quick", "forensic"}:
@@ -242,11 +244,33 @@ def ingest(
         ))
         raise typer.Exit(2)
 
+    # ── formula-secondary requires both pdf and formula capabilities ──
+    if formula_secondary:
+        if needed != "pdf":
+            console.print(Panel.fit(
+                "[bold yellow]--formula-secondary 仅对 PDF 文件有效[/bold yellow]\n\n"
+                "当前来源不是 PDF 文件，已忽略 --formula-secondary 选项。",
+                title=t("install_hint"),
+                border_style="yellow",
+            ))
+        elif not _capability_already_installed("formula"):
+            env = _extractor_env_for("formula")
+            console.print(Panel.fit(
+                f"[bold yellow]{t('capability_missing', name='formula')}[/bold yellow]\n\n"
+                f"{t('capability_missing_hint', name='formula', env=env)}",
+                title=t("install_hint"),
+                border_style="yellow",
+            ))
+            raise typer.Exit(2)
+
     cli_args = ["ingest", source, "--mode", mode]
     if timeout_seconds is not None:
         cli_args.extend(["--timeout-seconds", str(timeout_seconds)])
     if progress:
         cli_args.append("--progress")
+    if formula_secondary and needed == "pdf":
+        cli_args.append("--formula-secondary")
+        cli_args.extend(["--formula-max-regions", str(formula_max_regions)])
     try:
         parsed = _connector_parser().parse_args(cli_args)
     except SystemExit as exc:

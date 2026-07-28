@@ -159,6 +159,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     ingest.add_argument("--mineru-backend", default="pipeline")
     ingest.add_argument("--mineru-method", default="auto")
+    ingest.add_argument("--formula-secondary", action="store_true", help="Run PaddleOCR PP-FormulaNet on MinerU equation crops and embed second candidates.")
+    ingest.add_argument("--formula-max-regions", type=int, default=20, help="Cap equation blocks for formula secondary extraction.")
     ingest.add_argument("--overwrite", action="store_true")
     ingest.add_argument(
         "--timeout-seconds", type=float,
@@ -217,7 +219,7 @@ def build_parser() -> argparse.ArgumentParser:
     check.add_argument(
         "extractor",
         nargs="?",
-        choices=["watch", "rapidocr", "markitdown", "mineru", "all"],
+        choices=["watch", "rapidocr", "markitdown", "mineru", "formula", "all"],
         default="all",
     )
     check.add_argument("--minimal", action="store_true", help="仅输出版本兼容性检查，不逐个验证提取器。")
@@ -258,24 +260,28 @@ def _extractor_python(extractor: str) -> Path:
         "rapidocr": "OKS_WATCH_PYTHON",
         "markitdown": "OKS_DOCUMENT_PYTHON",
         "mineru": "OKS_MINERU_PYTHON",
+        "formula": "OKS_FORMULA_PYTHON",
     }[extractor]
     extra = {
         "watch": "watch",
         "rapidocr": "watch",
         "markitdown": "document",
         "mineru": "pdf",
+        "formula": "formula",
     }[extractor]
     module = {
         "watch": "watch_skill",
         "rapidocr": "rapidocr",
         "markitdown": "markitdown",
         "mineru": "mineru",
+        "formula": "paddleocr",
     }[extractor]
 
     # 1. Already installed (via oks capability install) — shared check
     # Map extractor names to capability names for the shared check
     _extractor_to_capability = {"watch": "watch", "rapidocr": "watch",
-                                "markitdown": "document", "mineru": "pdf"}
+                                "markitdown": "document", "mineru": "pdf",
+                                "formula": "formula"}
     capability = _extractor_to_capability.get(extractor, extractor)
     from capability_check import is_capability_available as _cap_ok
     cap_ok, cap_python = _cap_ok(capability)
@@ -297,6 +303,7 @@ def _extractor_python(extractor: str) -> Path:
         "rapidocr": ".venv-watch",
         "markitdown": ".venv-document",
         "mineru": ".venv-pdf",
+        "formula": ".venv-formula",
     }[extractor]
     relative = Path("Scripts/python.exe") if os.name == "nt" else Path("bin/python")
     candidate = root / environment_dir / relative
@@ -361,6 +368,7 @@ def _validate_extractor_python(
         "rapidocr": "rapidocr",
         "markitdown": "markitdown",
         "mineru": "mineru",
+        "formula": "paddleocr",
     }[extractor]
     try:
         import_result = subprocess.run(
@@ -374,6 +382,7 @@ def _validate_extractor_python(
         extra_name = {
             "watch": "watch", "rapidocr": "watch",
             "markitdown": "document", "mineru": "pdf",
+            "formula": "formula",
         }[extractor]
         raise RuntimeError(
             f"{extractor} Python 在 {candidate} 导入 {module_query} 时超时。\n"
@@ -384,6 +393,7 @@ def _validate_extractor_python(
         extra_name = {
             "watch": "watch", "rapidocr": "watch",
             "markitdown": "document", "mineru": "pdf",
+            "formula": "formula",
         }[extractor]
         raise RuntimeError(
             f"{extractor} Python 在 {candidate} 无法导入 {module_query}:\n"
@@ -459,6 +469,33 @@ def ingest_timeout_seconds(args: argparse.Namespace) -> float:
     return 120.0 if canonical_evidence_tier(args.mode) == "quick" else 900.0
 
 
+def _ffprobe_preflight(source: str, plan: dict[str, Any]) -> None:
+    """验证本地视频/音频文件需要 ffprobe 时的系统依赖。
+
+    不自动安装系统包；仅对本地视频/音频文件在需要本地处理时进行检查。
+    URL 源和纯字幕快速模式不需要 ffprobe。
+    """
+    if is_url(source):
+        return  # yt-dlp handles remote acquisition; ffprobe not needed at this layer
+    source_type = plan.get("source_type", "")
+    if source_type not in ("video", "audio"):
+        return
+
+    ffprobe_cmd = os.environ.get("OKS_FFPROBE")
+    if ffprobe_cmd:
+        candidate = shutil.which(ffprobe_cmd) or (ffprobe_cmd if Path(ffprobe_cmd).is_file() else None)
+    else:
+        candidate = shutil.which("ffprobe")
+    if candidate is None:
+        env_hint = " 设置 OKS_FFPROBE 环境变量指向 ffprobe 可执行文件路径；或" if not ffprobe_cmd else ""
+        raise RuntimeError(
+            f"本地{source_type}文件需要 ffprobe（由 ffmpeg 提供），但系统上找不到 ffprobe。\n"
+            f"{env_hint}"
+            f" 安装 ffmpeg: https://ffmpeg.org/download.html\n"
+            f" 完整安装说明: oks capability install watch"
+        )
+
+
 def run_ingest(args: argparse.Namespace) -> int:
     """Route and execute one source without adding Studio review or Wiki behavior."""
     plan = route_plan(args.source)
@@ -489,6 +526,11 @@ def run_ingest(args: argparse.Namespace) -> int:
     tier = canonical_evidence_tier(args.mode)
     started = time.monotonic()
     emit_progress(getattr(args, "progress", False), "routing", 0.02, int(timeout))
+
+    # ── preflight: verify system dependencies before costly extraction ──
+    if extractor == "watch":
+        _ffprobe_preflight(args.source, plan)
+
     if extractor != "mineru":
         command = ingest_child_argv(args, plan, output, extractor_python)
         try:
@@ -523,9 +565,20 @@ def run_ingest(args: argparse.Namespace) -> int:
     with tempfile.TemporaryDirectory(prefix="oks-mineru-") as temporary:
         result_dir = Path(temporary)
         # MinerU 3.4+ uses a standalone CLI entry point, not `python -m mineru`.
-        mineru_cli = str(Path(extractor_python).parent / ("mineru.exe" if os.name == "nt" else "mineru"))
-        if not Path(mineru_cli).is_file():
-            mineru_cli = shutil.which("mineru") or "mineru"
+        # Discover binary from the selected Python environment only; never silently
+        # use an unrelated global binary or bare name that would fail at subprocess.run.
+        scripts_dir = Path(extractor_python).parent
+        mineru_binary_name = "mineru.exe" if os.name == "nt" else "mineru"
+        candidate = scripts_dir / mineru_binary_name
+        if not candidate.is_file():
+            raise RuntimeError(
+                f"在选定的 PDF 提取器环境中找不到 mineru 可执行文件。\n"
+                f"  解释器: {extractor_python}\n"
+                f"  预期位置: {scripts_dir / mineru_binary_name}\n"
+                f"  安装: oks capability install pdf --yes\n"
+                f"  或设置 OKS_MINERU_PYTHON 指向已安装 mineru[pipeline] 的 Python 环境。"
+            )
+        mineru_cli = str(candidate)
         mineru = subprocess.run(
             [
                 mineru_cli,
@@ -546,6 +599,27 @@ def run_ingest(args: argparse.Namespace) -> int:
         if mineru.returncode != 0:
             detail = (mineru.stderr or mineru.stdout).strip()
             raise RuntimeError(f"MinerU extraction failed: {detail[-2000:]}")
+        # ── optional formula secondary extraction ──
+        formula_candidates = None
+        if getattr(args, "formula_secondary", False):
+            formula_candidates = Path(temporary) / "formula-candidates.json"
+            formula_python = _extractor_python("formula")
+            formula_script = Path(__file__).resolve().parent / "formula_candidates.py"
+            formula_result = subprocess.run(
+                [
+                    str(formula_python), str(formula_script),
+                    str(result_dir),
+                    "--output", str(formula_candidates),
+                    "--max-regions", str(getattr(args, "formula_max_regions", 20)),
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+            )
+            if formula_result.returncode != 0:
+                detail = (formula_result.stderr or formula_result.stdout).strip()
+                raise RuntimeError(f"Formula secondary extraction failed: {detail[-2000:]}")
         command = ingest_child_argv(
             args,
             plan,
@@ -553,6 +627,8 @@ def run_ingest(args: argparse.Namespace) -> int:
             Path(sys.executable).resolve(),
             mineru_result=result_dir,
         )
+        if formula_candidates is not None:
+            command.extend(["--formula-candidates", str(formula_candidates)])
         remaining = max(0.1, timeout - (time.monotonic() - started))
         try:
             completed = subprocess.run(
@@ -596,7 +672,7 @@ def run_check(args: argparse.Namespace) -> int:
         return 0
 
     extractors = (
-        ["watch", "rapidocr", "markitdown", "mineru"]
+        ["watch", "rapidocr", "markitdown", "mineru", "formula"]
         if args.extractor == "all"
         else [args.extractor]
     )
@@ -613,6 +689,7 @@ def run_check(args: argparse.Namespace) -> int:
                     "rapidocr": "OKS_WATCH_PYTHON",
                     "markitdown": "OKS_DOCUMENT_PYTHON",
                     "mineru": "OKS_MINERU_PYTHON",
+                    "formula": "OKS_FORMULA_PYTHON",
                 }[ext],
             }
         except (RuntimeError, FileNotFoundError) as exc:

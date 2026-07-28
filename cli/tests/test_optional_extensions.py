@@ -59,6 +59,27 @@ def test_ingest_forwards_mode_timeout_and_progress(monkeypatch):
     assert received["progress"] is True
 
 
+def test_ingest_forwards_formula_secondary_for_pdf(monkeypatch):
+    received = {}
+
+    def fake_run_ingest(parsed):
+        received["formula_secondary"] = parsed.formula_secondary
+        received["formula_max_regions"] = parsed.formula_max_regions
+        return 0
+
+    monkeypatch.setattr(cli, "_connector_command", lambda: "built-in")
+    monkeypatch.setattr(cli, "_capability_already_installed", lambda _name: True)
+    monkeypatch.setattr(cli, "_connector_run_ingest", fake_run_ingest)
+
+    result = runner.invoke(
+        cli.app,
+        ["ingest", "paper.pdf", "--formula-secondary", "--formula-max-regions", "7"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert received == {"formula_secondary": True, "formula_max_regions": 7}
+
+
 def test_capability_install_is_explicit_by_default():
     result = runner.invoke(cli.app, ["capability", "install", "watch"])
 
