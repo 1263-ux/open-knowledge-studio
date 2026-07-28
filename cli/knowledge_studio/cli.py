@@ -126,7 +126,7 @@ _CAPABILITIES = {
     },
     "feishu": {
         "purpose": "Private Base, form, bot review, and bounded listening",
-        "deps": [],
+        "deps": ["requests==2.34.2", "trafilatura==2.1.0"],
     },
 }
 
@@ -163,10 +163,25 @@ def capability_install(
     purpose = info["purpose"]
 
     if name == "feishu":
-        console.print(Panel.fit(
-            f"[bold]{t('feishu_private')}[/bold]",
-            title=t("user_managed_capability"), border_style="cyan",
-        ))
+        deps = info["deps"]
+        cmd = [sys.executable, "-m", "pip", "install"] + deps
+        message = (
+            f"[bold]{t('feishu_private')}[/bold]\n\n"
+            f"Web intake dependencies:\n{' '.join(cmd)}"
+        )
+        if not yes:
+            console.print(Panel.fit(
+                f"{message}\n\nRe-run with --yes to install the web intake dependencies.",
+                title=t("user_managed_capability"), border_style="cyan",
+            ))
+            return
+        console.print(f"[yellow]{t('capability_installing', name=name)}[/yellow]")
+        result = subprocess.run(cmd)
+        if result.returncode != 0:
+            console.print(f"[bold red]{t('capability_failed', name=name, code=result.returncode)}[/bold red]")
+            raise typer.Exit(result.returncode)
+        console.print(f"[green]{t('capability_installed', name=name)}[/green]")
+        console.print(Panel.fit(message, title=t("user_managed_capability"), border_style="cyan"))
         return
 
     if _capability_already_installed(name):

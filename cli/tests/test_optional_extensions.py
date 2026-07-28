@@ -132,6 +132,21 @@ def test_feishu_capability_never_bundles_tenant_configuration():
     assert "lark-cli" in result.output  # appears in both zh/en
 
 
+def test_feishu_capability_installs_only_public_web_dependencies(monkeypatch):
+    received = {}
+
+    def fake_run(command):
+        received["command"] = command
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(cli.subprocess, "run", fake_run)
+
+    result = runner.invoke(cli.app, ["capability", "install", "feishu", "--yes"])
+
+    assert result.exit_code == 0, result.output
+    assert received["command"][-2:] == ["requests==2.34.2", "trafilatura==2.1.0"]
+
+
 def test_feishu_worker_package_is_declared_for_wheel_builds():
     pyproject = Path(__file__).parents[1] / "pyproject.toml"
     config = tomllib.loads(pyproject.read_text(encoding="utf-8"))
