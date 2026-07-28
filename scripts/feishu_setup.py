@@ -171,10 +171,12 @@ def setup(args: argparse.Namespace) -> int:
             "--time-zone", "Asia/Shanghai",
             "--format", "json",
         ])
-        base_token = result.get("base_token") or result.get("base", {}).get("base_token")
+        result_data = result.get("data", {}) if isinstance(result, dict) else {}
+        base = result.get("base", {}) or result_data.get("base", {})
+        base_token = result.get("base_token") or result_data.get("base_token") or base.get("base_token")
         if not base_token:
-            raise RuntimeError(f"无法获取 base_token: {json.dumps(result, ensure_ascii=False)}")
-        permission = result.get("permission_grant", "")
+            raise RuntimeError("无法从 lark-cli 响应获取 Base token")
+        permission = result.get("permission_grant", "") or result_data.get("permission_grant", "")
         if permission:
             print(f"  权限提示: {permission}")
 

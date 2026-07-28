@@ -1457,6 +1457,37 @@ def test_setup_default_hides_credentials():
     assert args.show_credentials is False
 
 
+def test_setup_accepts_current_base_create_response_envelope(monkeypatch):
+    """Current lark-cli nests the created Base under data.base."""
+    import io
+
+    from feishu_setup import USER_FIELDS, build_parser, setup
+
+    token = "B4s3T0k3nV4lu3Fr0mF3ishu"
+    table_id = "tblABC123"
+
+    monkeypatch.setattr("feishu_setup._get_lark_cli", lambda: "/fake/lark-cli")
+
+    def _mock_lark(args, *, timeout=60.0, redact_token=None):
+        sub = args[1] if len(args) > 1 else ""
+        if sub == "+base-create":
+            return {"ok": True, "data": {"base": {"base_token": token}}}
+        if sub == "+table-list":
+            return [{"name": "每日知识采集", "id": table_id}]
+        if sub == "+field-list":
+            return [{"name": field["name"]} for field in USER_FIELDS]
+        if sub == "+form-create":
+            return {"data": {"form_id": "frmXYZ"}}
+        return {}
+
+    monkeypatch.setattr("feishu_setup._lark", _mock_lark)
+    stdout = io.StringIO()
+    monkeypatch.setattr("sys.stdout", stdout)
+
+    assert setup(build_parser().parse_args([])) == 0
+    assert token not in stdout.getvalue()
+
+
 def test_setup_redacts_fixture_base_token_by_default(monkeypatch):
     """End-to-end: setup() with --base-token must redact the token in stdout by default."""
     import io
