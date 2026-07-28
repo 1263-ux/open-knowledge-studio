@@ -5,6 +5,7 @@ import sys
 import tomllib
 import zipfile
 from argparse import Namespace
+from dataclasses import dataclass
 from email.message import Message
 from pathlib import Path
 from types import SimpleNamespace
@@ -58,6 +59,32 @@ def test_watch_prepends_active_interpreter_bin_to_path(monkeypatch):
     assert watch_module.os.environ["PATH"].split(watch_module.os.pathsep)[0] == str(
         Path(watch_module.sys.executable).parent
     )
+
+
+def test_watch_payload_serializes_dataclass_metadata_and_ocr_blocks(tmp_path):
+    @dataclass
+    class Metadata:
+        title: str
+
+    @dataclass
+    class OcrBlock:
+        text: str
+
+    frame = SimpleNamespace(
+        index=0, timestamp_seconds=0.0, path=tmp_path / "frame.png",
+        scene_id="scene-1", phash="abc", reason="sample", ocr_blocks=[OcrBlock("hello")],
+    )
+    result = SimpleNamespace(
+        perception=SimpleNamespace(frames=[frame]),
+        acquisition=SimpleNamespace(video_path=None, audio_path=None, info={}, from_cache=False, acquirer="local"),
+        metadata=Metadata("sample"),
+        transcript=SimpleNamespace(source="none", segments=[]),
+    )
+
+    payload = watch_module.watch_payload(result)
+
+    assert payload["metadata"] == {"title": "sample"}
+    assert payload["perception"]["frames"][0]["ocr_blocks"] == [{"text": "hello"}]
 
 NET_PATH = Path(__file__).parents[1] / "network.py"
 _NET_SPEC = importlib.util.spec_from_file_location("network", NET_PATH)
