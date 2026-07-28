@@ -384,6 +384,18 @@ def feishu_review_once(limit: int = typer.Option(100, "--limit")):
     _run_feishu_worker("review-once", ["--limit", str(limit)])
 
 
+@feishu_app.command("reconcile-review")
+def feishu_reconcile_review(
+    prompt_message_id: str = typer.Option(..., "--prompt-message-id", help="Candidate review prompt message ID"),
+    reply_message_id: str = typer.Option(..., "--reply-message-id", help="Human review reply message ID"),
+):
+    """Recover one review reply that was missed by the bounded event listener."""
+    _run_feishu_worker(
+        "reconcile-review",
+        ["--prompt-message-id", prompt_message_id, "--reply-message-id", reply_message_id],
+    )
+
+
 @feishu_app.command("listen")
 def feishu_listen(max_events: int = typer.Option(1, "--max-events"), timeout: str = typer.Option("5m", "--timeout")):
     """Consume bounded Feishu review replies; use an external scheduler for continuous service."""

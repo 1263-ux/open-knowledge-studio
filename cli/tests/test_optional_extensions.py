@@ -143,6 +143,25 @@ def test_feishu_candidate_and_review_commands_forward_to_worker(monkeypatch):
     ]
 
 
+def test_feishu_reconcile_review_forwards_exact_message_pair(monkeypatch):
+    received = []
+    monkeypatch.setattr(cli, "_run_feishu_worker", lambda command, extra: received.append([command, *extra]))
+
+    result = runner.invoke(
+        cli.app,
+        [
+            "feishu", "reconcile-review",
+            "--prompt-message-id", "om_prompt",
+            "--reply-message-id", "om_reply",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert received == [[
+        "reconcile-review", "--prompt-message-id", "om_prompt", "--reply-message-id", "om_reply",
+    ]]
+
+
 def test_feishu_capability_never_bundles_tenant_configuration():
     result = runner.invoke(cli.app, ["capability", "install", "feishu"])
 
