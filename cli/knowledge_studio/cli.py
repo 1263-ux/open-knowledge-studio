@@ -120,7 +120,7 @@ _CAPABILITIES = {
         "deps": [
             "paddlepaddle==3.2.0",
             "paddleocr==3.7.0",
-            "tokenizers==0.23.1",
+            "tokenizers==0.23.0",
             "ftfy==6.3.1",
         ],
     },

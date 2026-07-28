@@ -88,6 +88,11 @@ def test_capability_install_is_explicit_by_default():
     assert "--yes" in result.output
 
 
+def test_formula_capability_pins_mineru_compatible_tokenizers():
+    """Keep the optional formula install compatible with MinerU's worker."""
+    assert "tokenizers==0.23.0" in cli._CAPABILITIES["formula"]["deps"]
+
+
 def test_feishu_missing_worker_is_actionable(monkeypatch):
     monkeypatch.setattr(cli, "_feishu_worker_path", lambda: None)
 
