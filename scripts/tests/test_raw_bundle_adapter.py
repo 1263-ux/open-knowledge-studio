@@ -47,6 +47,18 @@ assert _W_SPEC and _W_SPEC.loader
 watch_module = importlib.util.module_from_spec(_W_SPEC)
 _W_SPEC.loader.exec_module(watch_module)
 
+
+def test_watch_prepends_active_interpreter_bin_to_path(monkeypatch):
+    monkeypatch.setenv("PATH", "/usr/local/bin")
+    monkeypatch.setattr(watch_module.sys, "executable", "/isolated/venv/bin/python")
+
+    previous = watch_module.prepend_interpreter_bin_to_path()
+
+    assert previous == "/usr/local/bin"
+    assert watch_module.os.environ["PATH"].split(watch_module.os.pathsep)[0] == str(
+        Path(watch_module.sys.executable).parent
+    )
+
 NET_PATH = Path(__file__).parents[1] / "network.py"
 _NET_SPEC = importlib.util.spec_from_file_location("network", NET_PATH)
 assert _NET_SPEC and _NET_SPEC.loader

@@ -715,6 +715,22 @@ def run_watch(args: argparse.Namespace) -> Path:
         return _run_watch_unlocked(args)
 
 
+def prepend_interpreter_bin_to_path() -> str | None:
+    """Make console scripts installed with this interpreter discoverable.
+
+    ``oks capability install watch`` installs ``yt-dlp`` into the active
+    pipx/venv interpreter's bin directory.  That directory is not guaranteed
+    to be in the parent shell's PATH, while Watch Skill resolves yt-dlp as an
+    executable rather than as an import.
+    """
+    previous = os.environ.get("PATH")
+    interpreter_bin = str(Path(sys.executable).parent)
+    entries = (previous or "").split(os.pathsep)
+    if interpreter_bin not in entries:
+        os.environ["PATH"] = interpreter_bin + os.pathsep + (previous or "")
+    return previous
+
+
 def _run_watch_unlocked(args: argparse.Namespace) -> Path:
     if args.output.expanduser().exists() and not args.overwrite:
         raise FileExistsError(f"output already exists: {args.output.expanduser().resolve()}")
@@ -812,6 +828,7 @@ def _run_watch_unlocked(args: argparse.Namespace) -> Path:
         watch_ocr.ocr_frame = roi_ocr
     setting_name = "WATCHSKILL_SUBTITLE_LANGS"
     previous_subtitle_langs = os.environ.get(setting_name)
+    previous_path = prepend_interpreter_bin_to_path()
     if args.subtitle_langs:
         os.environ[setting_name] = args.subtitle_langs
     get_settings.cache_clear()
@@ -938,6 +955,10 @@ def _run_watch_unlocked(args: argparse.Namespace) -> Path:
             os.environ.pop(setting_name, None)
         else:
             os.environ[setting_name] = previous_subtitle_langs
+        if previous_path is None:
+            os.environ.pop("PATH", None)
+        else:
+            os.environ["PATH"] = previous_path
         get_settings.cache_clear()
         shutil.rmtree(work_dir, ignore_errors=True)
 
