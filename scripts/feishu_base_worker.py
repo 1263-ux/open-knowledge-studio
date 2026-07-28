@@ -513,11 +513,12 @@ def promote_candidate_document(
     reviewed_body: str,
     review: dict[str, Any],
     *,
+    root: Path = ROOT,
     knowledge_root: Path | None = None,
 ) -> Path:
     return _review_promote_candidate_document(
         candidate_path, reviewed_body, review,
-        root=ROOT, knowledge_root=knowledge_root,
+        root=root, knowledge_root=knowledge_root,
     )
 
 

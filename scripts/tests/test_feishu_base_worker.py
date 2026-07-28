@@ -3028,6 +3028,22 @@ def test_update_record_includes_json_payload_in_command(monkeypatch, tmp_path):
     assert "--json" in commands[0]
 
 
+def test_promote_candidate_wrapper_forwards_explicit_root(monkeypatch, tmp_path):
+    captured = {}
+
+    def fake_promote(candidate_path, reviewed_body, review, *, root, knowledge_root):
+        captured.update({"root": root, "knowledge_root": knowledge_root})
+        return tmp_path / "wiki" / "accepted.md"
+
+    monkeypatch.setattr(worker, "_review_promote_candidate_document", fake_promote)
+    result = worker.promote_candidate_document(
+        tmp_path / "draft.md", "body", {}, root=tmp_path, knowledge_root=tmp_path / "kb"
+    )
+
+    assert result == tmp_path / "wiki" / "accepted.md"
+    assert captured == {"root": tmp_path, "knowledge_root": tmp_path / "kb"}
+
+
 def test_create_record_passes_fields_as_compact_json(monkeypatch, tmp_path):
     config = worker.WorkerConfig("base", "table", tmp_path / "lark.exe", tmp_path)
     commands = []
