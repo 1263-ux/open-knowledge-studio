@@ -75,10 +75,19 @@ def test_watch_payload_serializes_dataclass_metadata_and_ocr_blocks(tmp_path):
         scene_id="scene-1", phash="abc", reason="sample", ocr_blocks=[OcrBlock("hello")],
     )
     result = SimpleNamespace(
-        perception=SimpleNamespace(frames=[frame]),
-        acquisition=SimpleNamespace(video_path=None, audio_path=None, info={}, from_cache=False, acquirer="local"),
+        perception=SimpleNamespace(
+            frames=[frame], source="local", engine="test", scene_count=1,
+            candidate_count=1, deduped_count=1, focused=False,
+            start_seconds=0.0, end_seconds=1.0,
+        ),
+        acquisition=SimpleNamespace(
+            source="sample.mp4", kind="video", video_path=None, subtitle_path=None,
+            info={}, from_cache=False, acquirer="local",
+        ),
         metadata=Metadata("sample"),
         transcript=SimpleNamespace(source="none", segments=[]),
+        start_seconds=0.0,
+        end_seconds=1.0,
     )
 
     payload = watch_module.watch_payload(result)
