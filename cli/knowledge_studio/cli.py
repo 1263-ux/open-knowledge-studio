@@ -369,6 +369,21 @@ def feishu_run_once(limit: int = typer.Option(100, "--limit")):
     _run_feishu_worker("run-once", ["--limit", str(limit)])
 
 
+@feishu_app.command("publish-candidate")
+def feishu_publish_candidate(
+    record_id: str = typer.Option(..., "--record-id", help="Feishu Base record ID"),
+    candidate_file: str = typer.Option(..., "--candidate-file", help="Agent-authored candidate Markdown file"),
+):
+    """Publish a Candidate to one processed Base record for human review."""
+    _run_feishu_worker("publish-candidate", ["--record-id", record_id, "--candidate-file", candidate_file])
+
+
+@feishu_app.command("review-once")
+def feishu_review_once(limit: int = typer.Option(100, "--limit")):
+    """Apply one bounded Base review action and promote approved Candidate content."""
+    _run_feishu_worker("review-once", ["--limit", str(limit)])
+
+
 @feishu_app.command("listen")
 def feishu_listen(max_events: int = typer.Option(1, "--max-events"), timeout: str = typer.Option("5m", "--timeout")):
     """Consume bounded Feishu review replies; use an external scheduler for continuous service."""

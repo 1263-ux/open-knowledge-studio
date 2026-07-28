@@ -125,6 +125,24 @@ def test_feishu_submit_forwards_optional_context(monkeypatch):
     assert received == ["enqueue", "https://example.com", "--thought", "watch", "--rating", "A"]
 
 
+def test_feishu_candidate_and_review_commands_forward_to_worker(monkeypatch):
+    received = []
+    monkeypatch.setattr(cli, "_run_feishu_worker", lambda command, extra: received.append([command, *extra]))
+
+    publish = runner.invoke(
+        cli.app,
+        ["feishu", "publish-candidate", "--record-id", "rec123", "--candidate-file", "candidate.md"],
+    )
+    review = runner.invoke(cli.app, ["feishu", "review-once", "--limit", "1"])
+
+    assert publish.exit_code == 0, publish.output
+    assert review.exit_code == 0, review.output
+    assert received == [
+        ["publish-candidate", "--record-id", "rec123", "--candidate-file", "candidate.md"],
+        ["review-once", "--limit", "1"],
+    ]
+
+
 def test_feishu_capability_never_bundles_tenant_configuration():
     result = runner.invoke(cli.app, ["capability", "install", "feishu"])
 
