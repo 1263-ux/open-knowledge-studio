@@ -192,6 +192,21 @@ def create_record(config: WorkerConfig, fields: dict[str, Any]) -> dict[str, Any
     )
 
 
+def created_record_id(envelope: dict[str, Any]) -> str:
+    """Normalize current and legacy lark-cli record-create response shapes."""
+    data = envelope.get("data")
+    record = data.get("record") if isinstance(data, dict) else None
+    if not isinstance(record, dict):
+        record = data if isinstance(data, dict) else {}
+    direct = record.get("record_id") or record.get("id")
+    if direct:
+        return str(direct)
+    record_ids = record.get("record_id_list")
+    if isinstance(record_ids, list) and record_ids:
+        return str(record_ids[0])
+    raise RuntimeError("lark-cli did not return a record ID after Base creation")
+
+
 def list_records(config: WorkerConfig, limit: int = 100) -> list[dict[str, Any]]:
     """Fetch capture-field records via the worker's monkeypatchable lark_json."""
     command = [
@@ -909,7 +924,11 @@ def main() -> int:
         }
         if args.rating:
             fields["评级"] = args.rating
-        print(json.dumps(create_record(config, fields), ensure_ascii=False, indent=2))
+        created = create_record(config, fields)
+        print(json.dumps({
+            "record_id": created_record_id(created),
+            "response": created,
+        }, ensure_ascii=False, indent=2))
         return 0
     if args.command == "complete-browser":
         result = complete_browser_snapshot(config, args.record_id, args.snapshot_dir)

@@ -3028,6 +3028,13 @@ def test_update_record_includes_json_payload_in_command(monkeypatch, tmp_path):
     assert "--json" in commands[0]
 
 
+def test_created_record_id_accepts_current_lark_cli_response_shape():
+    assert worker.created_record_id({
+        "ok": True,
+        "data": {"record": {"record_id_list": ["rec_current"]}},
+    }) == "rec_current"
+
+
 def test_promote_candidate_wrapper_forwards_explicit_root(monkeypatch, tmp_path):
     captured = {}
 
