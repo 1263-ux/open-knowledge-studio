@@ -8,4 +8,6 @@ Leaf modules (zero imports from feishu_base_worker):
   capture       — extract_url, normalize_attachments, capture_envelope, hashing
   source_router — connector binary, _run_or_validate, Raw packaging variants
   candidate     — candidate state, document parse/render, fingerprint, publish
+  notification  — render/send review notifications via IM
+  review_events — review state machine, event extraction, reply reconciliation
 """
