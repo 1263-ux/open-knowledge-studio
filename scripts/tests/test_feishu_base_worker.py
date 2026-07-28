@@ -3318,15 +3318,26 @@ def test_capture_envelope_v02_field_names():
 
 
 def test_capture_envelope_v02_source_record_shape():
-    """source_record must contain base_token, table_id, record_id, revision."""
+    """source_record must contain a token fingerprint, never the token itself."""
     config = worker.WorkerConfig("tok1", "tbl1", worker.Path("/fake/lark"), worker.Path("/tmp"))
     envelope = worker.capture_envelope(config, "rec_test", {"内容": "hello"})
     sr = envelope["source_record"]
-    assert sr["base_token"] == "tok1"
+    assert sr["base_token_hash"] == worker.hashlib.sha256(b"tok1").hexdigest()[:12]
+    assert "base_token" not in sr
     assert sr["table_id"] == "tbl1"
     assert sr["record_id"] == "rec_test"
     assert sr["revision"] is None
-    assert set(sr.keys()) == {"base_token", "table_id", "record_id", "revision"}
+    assert set(sr.keys()) == {"base_token_hash", "table_id", "record_id", "revision"}
+
+
+def test_capture_envelope_never_serializes_base_token():
+    """Capture metadata may correlate a Base but must never persist its token."""
+    token = "base_token_that_must_not_reach_the_data_plane"
+    config = worker.WorkerConfig(token, "tbl1", worker.Path("/fake/lark"), worker.Path("/tmp"))
+    envelope = worker.capture_envelope(config, "rec_test", {"内容": "hello"})
+
+    assert envelope["source_uri"] == "feishu-base://tbl1/rec_test"
+    assert token not in worker.json.dumps(envelope, ensure_ascii=False)
 
 
 def test_capture_envelope_v02_capture_adapter_shape():
