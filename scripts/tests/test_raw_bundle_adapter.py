@@ -1182,6 +1182,27 @@ def test_mineru_cli_raises_actionable_error_when_binary_not_found(monkeypatch, t
         assert "oks capability install pdf" in msg
 
 
+def test_validate_extractor_python_preserves_venv_symlink(monkeypatch, tmp_path):
+    """A pipx-style symlink must not resolve to the host interpreter."""
+    host_python = tmp_path / "host-python"
+    host_python.write_text("host")
+    venv_python = tmp_path / "venv-python"
+    try:
+        venv_python.symlink_to(host_python)
+    except OSError:
+        pytest.skip("symlinks are unavailable on this platform")
+
+    def fake_run(command, **_kwargs):
+        result = type("Result", (), {})()
+        result.returncode = 0
+        result.stdout = "3.12\n"
+        result.stderr = ""
+        return result
+
+    monkeypatch.setattr(adapter.subprocess, "run", fake_run)
+    assert adapter._validate_extractor_python(venv_python, "mineru") == venv_python.absolute()
+
+
 def test_mineru_cli_uses_scripts_dir_binary_when_present(monkeypatch, tmp_path):
     """When the mineru binary exists next to extractor_python, it is used
     without falling back to shutil.which."""

@@ -291,7 +291,7 @@ def _extractor_python(extractor: str) -> Path:
     # 2. Explicit env var override
     configured = os.environ.get(environment)
     if configured:
-        candidate = Path(configured).expanduser().resolve()
+        candidate = Path(configured).expanduser().absolute()
         if not candidate.is_file():
             raise FileNotFoundError(f"{environment} does not point to a Python executable: {candidate}")
         return _validate_extractor_python(candidate, extractor, environment=environment)
@@ -308,7 +308,7 @@ def _extractor_python(extractor: str) -> Path:
     relative = Path("Scripts/python.exe") if os.name == "nt" else Path("bin/python")
     candidate = root / environment_dir / relative
     if candidate.is_file():
-        return _validate_extractor_python(candidate.resolve(), extractor, environment=environment)
+        return _validate_extractor_python(candidate.absolute(), extractor, environment=environment)
 
     raise RuntimeError(
         f"{t('capability_missing', name=extractor)}\n"
@@ -323,7 +323,9 @@ def _validate_extractor_python(
     environment: str | None = None,
 ) -> Path:
     """验证发现到的 Python 解释器版本和模块导入能力。"""
-    candidate = candidate.resolve()
+    # Preserve a virtualenv executable symlink. Resolving it would turn a pipx
+    # interpreter into the host Python and hide optional packages.
+    candidate = candidate.absolute()
 
     # 1. 验证解释器能否启动
     try:
@@ -624,7 +626,7 @@ def run_ingest(args: argparse.Namespace) -> int:
             args,
             plan,
             output,
-            Path(sys.executable).resolve(),
+            Path(sys.executable).absolute(),
             mineru_result=result_dir,
         )
         if formula_candidates is not None:

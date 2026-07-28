@@ -41,13 +41,15 @@ def is_capability_available(name: str) -> tuple[bool, Path | None]:
     """
     module = _MODULES.get(name)
     if module and importlib.util.find_spec(module) is not None:
-        return True, Path(sys.executable).resolve()
+        # Do not resolve this path: pipx virtualenv interpreters are often
+        # symlinks to the host Python, and resolving loses the venv context.
+        return True, Path(sys.executable).absolute()
 
     env_var = _ENV_VARS.get(name, "")
     if env_var:
         configured = os.environ.get(env_var)
         if configured:
-            candidate = Path(configured).expanduser().resolve()
+            candidate = Path(configured).expanduser().absolute()
             if candidate.is_file():
                 return True, candidate
 
