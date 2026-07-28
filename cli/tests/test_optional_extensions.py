@@ -1,4 +1,6 @@
+from pathlib import Path
 from types import SimpleNamespace
+import tomllib
 
 from typer.testing import CliRunner
 
@@ -128,6 +130,13 @@ def test_feishu_capability_never_bundles_tenant_configuration():
 
     assert result.exit_code == 0, result.output
     assert "lark-cli" in result.output  # appears in both zh/en
+
+
+def test_feishu_worker_package_is_declared_for_wheel_builds():
+    pyproject = Path(__file__).parents[1] / "pyproject.toml"
+    config = tomllib.loads(pyproject.read_text(encoding="utf-8"))
+
+    assert "feishu_worker" in config["tool"]["setuptools"]["packages"]
 
 
 def test_feishu_setup_forwards_explicit_credential_opt_in(monkeypatch, tmp_path):

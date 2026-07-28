@@ -77,7 +77,7 @@ py-modules = [
     "route",
     "validator",
 ]
-packages = ["knowledge_studio", "extractors"]
+packages = ["knowledge_studio", "extractors", "feishu_worker"]
 
 [tool.setuptools.package-dir]
 "" = "../scripts"
