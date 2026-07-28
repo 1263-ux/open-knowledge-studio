@@ -1203,6 +1203,11 @@ def test_validate_extractor_python_preserves_venv_symlink(monkeypatch, tmp_path)
     assert adapter._validate_extractor_python(venv_python, "mineru") == venv_python.absolute()
 
 
+def test_pdf_ingest_gets_cold_start_timeout_budget(tmp_path):
+    args = adapter.build_parser().parse_args(["ingest", str(tmp_path / "paper.pdf")])
+    assert adapter.ingest_timeout_seconds(args, "mineru") == 900.0
+
+
 def test_mineru_cli_uses_scripts_dir_binary_when_present(monkeypatch, tmp_path):
     """When the mineru binary exists next to extractor_python, it is used
     without falling back to shutil.which."""

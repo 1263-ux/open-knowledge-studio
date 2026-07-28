@@ -462,12 +462,16 @@ def canonical_evidence_tier(mode: str) -> str:
     return {"fast": "quick", "full": "forensic"}.get(mode, mode)
 
 
-def ingest_timeout_seconds(args: argparse.Namespace) -> float:
+def ingest_timeout_seconds(args: argparse.Namespace, extractor: str | None = None) -> float:
     timeout = getattr(args, "timeout_seconds", None)
     if timeout is not None:
         if timeout <= 0:
             raise ValueError("timeout-seconds must be positive")
         return timeout
+    if extractor == "mineru":
+        # MinerU cold-starts a local service and models; its quick path is not
+        # comparable to caption-only video or document extraction.
+        return 900.0
     return 120.0 if canonical_evidence_tier(args.mode) == "quick" else 900.0
 
 
@@ -524,7 +528,7 @@ def run_ingest(args: argparse.Namespace) -> int:
 
     output = (args.output or default_ingest_output(args.source)).expanduser().resolve()
     extractor_python = _extractor_python(extractor)
-    timeout = ingest_timeout_seconds(args)
+    timeout = ingest_timeout_seconds(args, extractor)
     tier = canonical_evidence_tier(args.mode)
     started = time.monotonic()
     emit_progress(getattr(args, "progress", False), "routing", 0.02, int(timeout))
