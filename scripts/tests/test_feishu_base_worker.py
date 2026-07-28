@@ -798,6 +798,68 @@ def test_reconcile_historical_review_is_idempotent_after_promotion(monkeypatch, 
     assert result["correlation_method"] == "p2p_sequence_fallback"
 
 
+def test_reconcile_historical_review_calls_monkeypatched_raw_message(monkeypatch, tmp_path):
+    """Regression: worker monkeypatched raw_message is used transitively during reconcile."""
+    monkeypatch.setattr(worker, "ROOT", tmp_path)
+    worker.atomic_write_json(
+        worker.candidate_state_path("rec_reply"),
+        {
+            "record_id": "rec_reply",
+            "candidate_id": "candidate-1",
+            "revision": 1,
+            "review_notification": {
+                "status": "sent",
+                "message_id": "om_prompt",
+                "chat_id": "oc_personal",
+                "recipient": "ou_reviewer",
+            },
+        },
+    )
+    messages = {
+        "om_prompt": {
+            "message_id": "om_prompt",
+            "chat_id": "oc_personal",
+            "message_position": "2",
+            "create_time": "1784730000000",
+        },
+        "om_reply": {
+            "message_id": "om_reply",
+            "chat_id": "oc_personal",
+            "message_position": "3",
+            "create_time": "1784730001000",
+            "msg_type": "text",
+            "sender": {"id": "ou_reviewer", "sender_type": "user"},
+            "body": {"content": json.dumps({"text": "accept, useful"})},
+        },
+    }
+    raw_calls = []
+    monkeypatch.setattr(
+        worker,
+        "raw_message",
+        lambda _config, message_id: raw_calls.append(message_id) or messages[message_id],
+    )
+    monkeypatch.setattr(
+        worker,
+        "apply_review_reply_event",
+        lambda _config, event: {"processed": True},
+    )
+    config = worker.WorkerConfig(
+        "base", "table", tmp_path / "lark.exe", tmp_path, tmp_path / "python.exe", tmp_path
+    )
+
+    result = worker.reconcile_historical_review_reply(
+        config,
+        prompt_message_id="om_prompt",
+        reply_message_id="om_reply",
+    )
+
+    assert result["processed"] is True
+    assert result["correlation_method"] == "p2p_sequence_fallback"
+    assert raw_calls == ["om_prompt", "om_reply"], (
+        f"monkeypatched raw_message must be called for prompt then reply, got {raw_calls}"
+    )
+
+
 def test_review_listener_uses_bounded_filtered_bot_event_consumer(monkeypatch, tmp_path):
     config = worker.WorkerConfig(
         "base",
