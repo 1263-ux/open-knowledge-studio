@@ -87,6 +87,8 @@ def test_review_action_re_matches():
 def test_parse_review_reply_accepts_action_before_or_after_comment():
     assert parse_review_reply("accept 文章有价值") == ("accept", "文章有价值")
     assert parse_review_reply("文章有价值，accept") == ("accept", "文章有价值")
+    assert parse_review_reply("接受") == ("accept", "")
+    assert parse_review_reply("拒绝，方向不匹配") == ("reject", "方向不匹配")
     assert parse_review_reply("`defer`") == ("defer", "")
 
 

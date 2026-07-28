@@ -48,8 +48,15 @@ from feishu_worker.io_utils import (
 
 # ── Review constants ─────────────────────────────────────────────────────
 REVIEW_ACTIONS = {"accept", "edit", "reject", "defer"}
+REVIEW_ACTION_ALIASES = {
+    "接受": "accept",
+    "通过": "accept",
+    "修改": "edit",
+    "拒绝": "reject",
+    "暂缓": "defer",
+}
 REVIEW_ACTION_RE = re.compile(
-    r"(?<![A-Za-z])(accept|edit|reject|defer)(?![A-Za-z])",
+    r"(?<![A-Za-z\u4e00-\u9fff])(accept|edit|reject|defer|接受|通过|修改|拒绝|暂缓)(?![A-Za-z\u4e00-\u9fff])",
     re.IGNORECASE,
 )
 
@@ -61,7 +68,10 @@ def parse_review_reply(content: str) -> tuple[str, str]:
     """Extract one explicit review action and preserve the user's explanation."""
     text = str(content or "").strip()
     matches = list(REVIEW_ACTION_RE.finditer(text))
-    actions = {match.group(1).lower() for match in matches}
+    actions = {
+        REVIEW_ACTION_ALIASES.get(match.group(1), match.group(1).lower())
+        for match in matches
+    }
     if not matches:
         raise ValueError("review reply must contain accept, edit, reject, or defer")
     if len(actions) != 1:
