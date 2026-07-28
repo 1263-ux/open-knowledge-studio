@@ -1151,6 +1151,68 @@ def test_monkeypatched_worker_update_record_is_invoked_not_subprocess(monkeypatc
     assert updates[-1]["运行状态"] == "需授权"
 
 
+# ── Pipeline dedup helper contract ──────────────────────────────────
+
+
+def test_dedup_helpers_invoked_by_two_branch_paths(monkeypatch, tmp_path):
+    """_complete_bundle and _fail_bundle are invoked by at least two branch paths."""
+    from feishu_worker import pipeline as pipeline_mod
+
+    complete_calls = []
+    fail_calls = []
+
+    def fake_complete(**kwargs):
+        complete_calls.append(kwargs)
+
+    def fake_fail(**kwargs):
+        fail_calls.append(kwargs)
+
+    monkeypatch.setattr(pipeline_mod, "_complete_bundle", fake_complete)
+    monkeypatch.setattr(pipeline_mod, "_fail_bundle", fake_fail)
+    monkeypatch.setattr(worker, "update_record", lambda _c, _r, patch: None)
+
+    config = worker.WorkerConfig(
+        "base", "table",
+        tmp_path / "lark.exe", tmp_path,
+        tmp_path / "python.exe", tmp_path / "out",
+    )
+
+    # --- Branch 1: public-web success ---
+    monkeypatch.setattr(worker, "probe_source", lambda *_: {
+        "status": "ok", "content_type": "text/html",
+    })
+    monkeypatch.setattr(worker, "package_public_web", lambda _c, _u, out, _h: (
+        out.mkdir(parents=True, exist_ok=True),
+        (out / "metadata.json").write_text('{"processing_status":"complete"}', encoding="utf-8"),
+    ) and {"processing_status": "complete"})
+    monkeypatch.setattr(worker, "finalize_raw_v2", lambda *_: {"valid": True, "schema_version": "raw-multimodal/v0.2"})
+
+    worker.process_record(config, {
+        "record_id": "rec_web_ok",
+        "fields": {"内容": "https://example.com/page", "思考": "test"},
+    })
+
+    assert len(complete_calls) == 1, f"Expected 1 _complete_bundle call, got {len(complete_calls)}"
+    assert complete_calls[0]["modality_key"] == "text"
+    assert complete_calls[0]["record_id"] == "rec_web_ok"
+
+    # --- Branch 2: public-web failure ---
+    monkeypatch.setattr(
+        worker, "package_public_web",
+        lambda *_: (_ for _ in ()).throw(RuntimeError("extraction failed")),
+    )
+
+    worker.process_record(config, {
+        "record_id": "rec_web_fail",
+        "fields": {"内容": "https://example.com/page2", "思考": "test"},
+    })
+
+    assert len(fail_calls) == 1, f"Expected 1 _fail_bundle call, got {len(fail_calls)}"
+    assert fail_calls[0]["failure_code"] == "EXTRACTION_FAILED"
+    assert fail_calls[0]["record_id"] == "rec_web_fail"
+    assert fail_calls[0]["clear_outputs"] is False
+
+
 # ── Fix 1: .oks/ gitignore regression tests ────────────────────────
 
 def test_candidate_state_path_is_under_dot_oks():

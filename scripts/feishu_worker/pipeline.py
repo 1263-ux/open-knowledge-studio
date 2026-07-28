@@ -262,6 +262,64 @@ def package_public_web(
     return _source_router_package_public_web(config, url, output, human_context, root=ROOT)
 
 
+# ── Shared tail helpers (dedup attachment / public-file / public-web) ──────
+
+
+def _complete_bundle(
+    *,
+    config: WorkerConfig,
+    record_id: str,
+    run: dict[str, Any],
+    run_dir: Path,
+    capture: dict[str, Any],
+    output: Path,
+    report: dict[str, Any],
+    modality_key: str,
+    extra_metadata: dict[str, str] | None,
+    build_success_patch: Any,
+    _finalize: Any,
+    _update: Any,
+    finalize_source: Path | None = None,
+) -> None:
+    """Success tail: metadata capture-envelope write, outputs, finish_run, finalize, Base update."""
+    metadata_path = output / "metadata.json"
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    metadata["capture_envelope"] = capture
+    if extra_metadata:
+        metadata.update(extra_metadata)
+    atomic_write_json(metadata_path, metadata)
+    quality = report.get("processing_status") or metadata.get("processing_status") or "partial"
+    evidence_count = int(report.get("evidence_count") or 0)
+    run["modalities"][modality_key].update({"status": "succeeded", "evidence_count": evidence_count})
+    run["outputs"] = [{"dataset_id": f"bundle:{capture['capture_id']}", "uri": str(output), "kind": "bundle", "sha256": None}]
+    finish_run(run, "complete" if quality == "complete" else "partial")
+    atomic_write_json(run_dir / "processing-run.json", run)
+    _finalize(config, output, run_dir / "capture-envelope.json", run_dir / "processing-run.json", finalize_source)
+    _update(config, record_id, build_success_patch(quality))
+
+
+def _fail_bundle(
+    *,
+    config: WorkerConfig,
+    record_id: str,
+    run: dict[str, Any],
+    run_dir: Path,
+    error: Exception,
+    failure_code: str,
+    build_failure_patch: Any,
+    _update: Any,
+    clear_outputs: bool = True,
+) -> None:
+    """Failure tail: finish_run, processing-run write, Base update with redaction."""
+    failure = {"code": failure_code, "message": str(error)}
+    if clear_outputs:
+        run["outputs"] = []
+    finish_run(run, "failed", disposition="retryable", error=failure)
+    atomic_write_json(run_dir / "processing-run.json", run)
+    redacted = _redact_error_text(str(error))
+    _update(config, record_id, build_failure_patch(failure_code, redacted))
+
+
 # ── Main pipeline ────────────────────────────────────────────────────────
 
 
@@ -337,53 +395,47 @@ def process_record(
             safe_stem = re.sub(r"[^A-Za-z0-9._-]+", "-", source.stem).strip("-.") or "attachment"
             output = config.output_root / f"feishu-{record_id}-{source_hash[:10]}-{safe_stem}"
             report = _pkg_local(config, source, output)
-            metadata_path = output / "metadata.json"
-            metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
-            metadata["capture_envelope"] = capture
-            atomic_write_json(metadata_path, metadata)
-            quality = report.get("processing_status") or metadata.get("processing_status") or "partial"
-            evidence_count = int(report.get("evidence_count") or 0)
-            run["modalities"][modality].update({"status": "succeeded", "evidence_count": evidence_count})
-            run["outputs"] = [{"dataset_id": f"bundle:{capture['capture_id']}", "uri": str(output), "kind": "bundle", "sha256": None}]
-            finish_run(run, "complete" if quality == "complete" else "partial")
-            atomic_write_json(run_dir / "processing-run.json", run)
-            _finalize(
-                config,
-                output,
-                run_dir / "capture-envelope.json",
-                run_dir / "processing-run.json",
-                source,
-            )
-            _update(
-                config,
-                record_id,
-                {
+            _complete_bundle(
+                config=config,
+                record_id=record_id,
+                run=run,
+                run_dir=run_dir,
+                capture=capture,
+                output=output,
+                report=report,
+                modality_key=modality,
+                extra_metadata=None,
+                build_success_patch=lambda q: {
                     "运行状态": "Raw就绪",
                     "采集模式": "附件",
                     "Raw Bundle": str(output),
-                    "质量状态": quality,
+                    "质量状态": q,
                     "错误码": None,
                     "错误说明": None,
-                    "总结": f"附件 Raw Bundle v0.2 已生成并通过校验；能力={capability}；质量状态={quality}。",
+                    "总结": f"附件 Raw Bundle v0.2 已生成并通过校验；能力={capability}；质量状态={q}。",
                 },
+                _finalize=_finalize,
+                _update=_update,
+                finalize_source=source,
             )
         except Exception as error:
-            failure = {"code": "ATTACHMENT_PROCESSING_FAILED", "message": str(error)}
-            run["outputs"] = []
-            finish_run(run, "failed", disposition="retryable", error=failure)
-            atomic_write_json(run_dir / "processing-run.json", run)
-            _update(
-                config,
-                record_id,
-                {
+            _fail_bundle(
+                config=config,
+                record_id=record_id,
+                run=run,
+                run_dir=run_dir,
+                error=error,
+                failure_code="ATTACHMENT_PROCESSING_FAILED",
+                build_failure_patch=lambda code, msg: {
                     "运行状态": "可重试失败",
                     "采集模式": "附件",
-                    "错误码": failure["code"],
-                    "错误说明": _redact_error_text(failure["message"])[:500],
+                    "错误码": code,
+                    "错误说明": msg[:500],
                     "质量状态": "failed",
                     "Raw Bundle": None,
-                    "总结": f"附件未生成 Raw：{_redact_error_text(failure['message'])}"[:1000],
+                    "总结": f"附件未生成 Raw：{msg}"[:1000],
                 },
+                _update=_update,
             )
         return run
 
@@ -575,100 +627,96 @@ def process_record(
             _update(config, record_id, {"运行状态": "探测中", "来源哈希": source_hash, "采集模式": "HTTP"})
             output = config.output_root / f"feishu-{record_id}-{source_hash[:10]}-{source.stem}"
             report = _pkg_local(config, source, output)
-            metadata_path = output / "metadata.json"
-            metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
-            metadata["capture_envelope"] = capture
-            metadata["fetch_receipt"] = str((run_dir / "fetch-receipt.json").resolve())
-            metadata["acquisition_receipt"] = str((run_dir / "acquisition-receipt.json").resolve())
-            atomic_write_json(metadata_path, metadata)
-            quality = report.get("processing_status") or metadata.get("processing_status") or "partial"
-            evidence_count = int(report.get("evidence_count") or 0)
-            run["modalities"][modality].update({"status": "succeeded", "evidence_count": evidence_count})
-            run["outputs"] = [{"dataset_id": f"bundle:{capture['capture_id']}", "uri": str(output), "kind": "bundle", "sha256": None}]
-            finish_run(run, "complete" if quality == "complete" else "partial")
-            atomic_write_json(run_dir / "processing-run.json", run)
-            _finalize(config, output, run_dir / "capture-envelope.json", run_dir / "processing-run.json", source)
-            _update(
-                config,
-                record_id,
-                {
+            _complete_bundle(
+                config=config,
+                record_id=record_id,
+                run=run,
+                run_dir=run_dir,
+                capture=capture,
+                output=output,
+                report=report,
+                modality_key=modality,
+                extra_metadata={
+                    "fetch_receipt": str((run_dir / "fetch-receipt.json").resolve()),
+                    "acquisition_receipt": str((run_dir / "acquisition-receipt.json").resolve()),
+                },
+                build_success_patch=lambda q: {
                     "运行状态": "Raw就绪",
                     "采集模式": "HTTP",
                     "Raw Bundle": str(output),
-                    "质量状态": quality,
+                    "质量状态": q,
                     "错误码": None,
                     "错误说明": None,
-                    "总结": f"公网文件 Raw Bundle v0.2 已生成并通过校验；能力={capability}；质量状态={quality}。",
+                    "总结": f"公网文件 Raw Bundle v0.2 已生成并通过校验；能力={capability}；质量状态={q}。",
                 },
+                _finalize=_finalize,
+                _update=_update,
+                finalize_source=source,
             )
         except Exception as error:
-            failure = {"code": "PUBLIC_FILE_PROCESSING_FAILED", "message": str(error)}
-            run["outputs"] = []
-            finish_run(run, "failed", disposition="retryable", error=failure)
-            atomic_write_json(run_dir / "processing-run.json", run)
-            _update(
-                config,
-                record_id,
-                {
+            _fail_bundle(
+                config=config,
+                record_id=record_id,
+                run=run,
+                run_dir=run_dir,
+                error=error,
+                failure_code="PUBLIC_FILE_PROCESSING_FAILED",
+                build_failure_patch=lambda code, msg: {
                     "运行状态": "可重试失败",
                     "采集模式": "HTTP",
-                    "错误码": failure["code"],
-                    "错误说明": _redact_error_text(failure["message"])[:500],
+                    "错误码": code,
+                    "错误说明": msg[:500],
                     "质量状态": "failed",
                     "Raw Bundle": None,
-                    "总结": f"公网文件未生成 Raw：{_redact_error_text(failure['message'])}"[:1000],
+                    "总结": f"公网文件未生成 Raw：{msg}"[:1000],
                 },
+                _update=_update,
             )
         return run
 
     output = config.output_root / f"feishu-{record_id}-{source_hash[:10]}"
     try:
         report = _pkg_web(config, url, output, str(fields.get("思考") or ""))
-        metadata_path = output / "metadata.json"
-        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
-        metadata["capture_envelope"] = capture
-        metadata["fetch_receipt"] = str((run_dir / "fetch-receipt.json").resolve())
-        atomic_write_json(metadata_path, metadata)
-        quality = report.get("processing_status") or metadata.get("processing_status") or "partial"
-        evidence_count = int(report.get("evidence_count") or 0)
-        run["modalities"]["text"].update({"status": "succeeded", "evidence_count": evidence_count})
-        run["outputs"] = [{"dataset_id": f"bundle:{capture['capture_id']}", "uri": str(output), "kind": "bundle", "sha256": None}]
-        finish_run(run, "complete" if quality == "complete" else "partial")
-        atomic_write_json(run_dir / "processing-run.json", run)
-        _finalize(
-            config,
-            output,
-            run_dir / "capture-envelope.json",
-            run_dir / "processing-run.json",
-        )
-        _update(
-            config,
-            record_id,
-            {
+        _complete_bundle(
+            config=config,
+            record_id=record_id,
+            run=run,
+            run_dir=run_dir,
+            capture=capture,
+            output=output,
+            report=report,
+            modality_key="text",
+            extra_metadata={"fetch_receipt": str((run_dir / "fetch-receipt.json").resolve())},
+            build_success_patch=lambda q: {
                 "运行状态": "Raw就绪",
                 "采集模式": "HTTP",
                 "Raw Bundle": str(output),
-                "质量状态": quality,
+                "质量状态": q,
                 "错误码": None,
                 "错误说明": None,
-                "总结": f"Raw Bundle v0.2 已生成并通过校验；质量状态={quality}。",
+                "总结": f"Raw Bundle v0.2 已生成并通过校验；质量状态={q}。",
             },
+            _finalize=_finalize,
+            _update=_update,
         )
     except Exception as error:
-        failure = {"code": "EXTRACTION_FAILED", "message": str(error)}
-        finish_run(run, "failed", disposition="retryable", error=failure)
-        atomic_write_json(run_dir / "processing-run.json", run)
-        _update(
-            config,
-            record_id,
-            {
+        _fail_bundle(
+            config=config,
+            record_id=record_id,
+            run=run,
+            run_dir=run_dir,
+            error=error,
+            failure_code="EXTRACTION_FAILED",
+            build_failure_patch=lambda code, msg: {
                 "运行状态": "可重试失败",
                 "采集模式": "HTTP",
-                "错误码": failure["code"],
-                "错误说明": _redact_error_text(failure["message"])[:500],
+                "错误码": code,
+                "错误说明": msg[:500],
                 "质量状态": "failed",
                 "Raw Bundle": None,
-                "总结": f"未生成 Raw：{failure['code']}。{_redact_error_text(failure['message'])}"[:1000],
+                "总结": f"未生成 Raw：{code}。{msg}"[:1000],
             },
+            _update=_update,
+            clear_outputs=False,
         )
     return run
