@@ -502,7 +502,7 @@ def test_personal_reply_updates_exact_linked_candidate_and_records_receipt(monke
     assert updates[0][0] == "rec_reply"
     assert updates[0][1]["审核动作"] == "accept"
     assert updates[0][1]["审核意见"] == "文章有价值"
-    assert updates[0][1]["修改类型"] == ["无修改"]
+    assert updates[0][1]["修改类型"] == "无修改"
     assert second["reason"] == "review_message_already_processed"
     saved = json.loads(state_path.read_text(encoding="utf-8"))
     assert saved["review_reply_events"][0]["message_id"] == "om_reply"
@@ -1852,6 +1852,29 @@ def test_lark_json_never_retries_auth_failed(monkeypatch):
 
     assert len(calls) == 1
     assert len(sleeps) == 0
+
+
+def test_lark_json_reports_redacted_stderr_for_empty_failed_output(monkeypatch):
+    token = "base_token_secret_123456"
+
+    def fake_run(*args, **kwargs):
+        return _fake_completed_process(
+            stdout="",
+            stderr=f"validation failed: token={token}",
+            returncode=1,
+        )
+
+    monkeypatch.setattr(worker.subprocess, "run", fake_run)
+
+    with pytest.raises(RuntimeError) as error:
+        worker.lark_json(
+            worker.WorkerConfig(token, "table", worker.Path("/fake/lark"), worker.Path("/tmp")),
+            "base", "+record-upsert",
+        )
+
+    assert "lark-cli exited 1" in str(error.value)
+    assert token not in str(error.value)
+    assert "token=***" in str(error.value)
 
 
 def test_lark_json_never_retries_permission_denied(monkeypatch):

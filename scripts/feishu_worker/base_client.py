@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from feishu_worker.config import WorkerConfig
+from feishu_worker.io_utils import _redact_error_text
 
 # Signature of a lark_json-compatible callable, for dependency injection.
 LarkFn = Callable[..., dict[str, Any]]
@@ -111,6 +112,15 @@ def lark_json(config: WorkerConfig, *arguments: str, root: Path) -> dict[str, An
         try:
             value = json.loads(text)
         except json.JSONDecodeError as exc:
+            if result.returncode:
+                # Some lark-cli validation failures are written only to stderr.
+                # Preserve the actionable server message without ever echoing the
+                # Base credential supplied in the command arguments.
+                detail = result.stderr.strip() or text or "(no diagnostic output)"
+                detail = _redact_error_text(detail).replace(config.base_token, "***")
+                raise RuntimeError(
+                    f"lark-cli exited {result.returncode}: {detail[:400]}"
+                ) from exc
             # Malformed/non-JSON output -- do NOT retry.
             raise RuntimeError(
                 f"command returned non-JSON output: {text[:400]}"

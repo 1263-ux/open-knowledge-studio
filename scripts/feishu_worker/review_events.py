@@ -330,7 +330,12 @@ def review_candidate(
         "%Y-%m-%d %H:%M:%S"
     )
     comment = str(fields.get("审核意见") or "").strip()
-    change_types = fields.get("修改类型") if isinstance(fields.get("修改类型"), list) else []
+    raw_change_types = fields.get("修改类型")
+    change_types = (
+        raw_change_types
+        if isinstance(raw_change_types, list)
+        else [str(raw_change_types)] if raw_change_types else []
+    )
     if action in {"edit", "reject"} and not comment:
         raise RuntimeError(f"Review action {action} requires 审核意见")
     history_item = {
@@ -485,7 +490,9 @@ def apply_review_reply_event(
     patch = {
         "审核动作": action,
         "审核意见": comment or None,
-        "修改类型": ["无修改"] if action == "accept" else None,
+        # The setup schema deliberately defines this as text, not a multi-select:
+        # it keeps the control plane portable and supports free-form edit reasons.
+        "修改类型": "无修改" if action == "accept" else None,
         "审核时间": event_reviewed_at(event.get("create_time")),
     }
     _update(config, record_id, patch)
