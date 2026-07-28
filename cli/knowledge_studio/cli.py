@@ -365,6 +365,7 @@ def feishu_setup(
     base_token: Optional[str] = typer.Option(None, "--base-token", help="已有 Base token（跳过创建）"),
     base_name: str = typer.Option("Open Knowledge Studio", "--base-name"),
     table_name: str = typer.Option("每日知识采集", "--table-name"),
+    show_credentials: bool = typer.Option(False, "--show-credentials", help="显示完整 Base token（仅限受控终端）"),
 ):
     """自动创建飞书 Base、采集表和表单。需要 lark-cli 已认证。"""
     lark = shutil.which("lark-cli") or shutil.which("lark-cli.exe")
@@ -387,6 +388,8 @@ def feishu_setup(
     if base_token:
         cmd.extend(["--base-token", base_token])
     cmd.extend(["--base-name", base_name, "--table-name", table_name])
+    if show_credentials:
+        cmd.append("--show-credentials")
     raise typer.Exit(subprocess.run(cmd).returncode)
 
 

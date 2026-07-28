@@ -64,6 +64,7 @@ oks-connector = "raw_bundle_adapter:main"
 include-package-data = false
 py-modules = [
     "_shared",
+    "_lark_cli",
     "capability_check",
     "constants",
     "digest",

@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 from typer.testing import CliRunner
 
 from knowledge_studio import cli
@@ -126,3 +128,24 @@ def test_feishu_capability_never_bundles_tenant_configuration():
 
     assert result.exit_code == 0, result.output
     assert "lark-cli" in result.output  # appears in both zh/en
+
+
+def test_feishu_setup_forwards_explicit_credential_opt_in(monkeypatch, tmp_path):
+    worker = tmp_path / "feishu_base_worker.py"
+    worker.write_text("# worker")
+    setup = tmp_path / "feishu_setup.py"
+    setup.write_text("# setup")
+    received = {}
+
+    def fake_run(command):
+        received["command"] = command
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(cli.shutil, "which", lambda _name: "lark-cli")
+    monkeypatch.setattr(cli, "_feishu_worker_path", lambda: worker)
+    monkeypatch.setattr(cli.subprocess, "run", fake_run)
+
+    result = runner.invoke(cli.app, ["feishu", "setup", "--show-credentials"])
+
+    assert result.exit_code == 0, result.output
+    assert received["command"][-1] == "--show-credentials"
