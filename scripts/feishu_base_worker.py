@@ -369,6 +369,8 @@ def send_candidate_review_notification(
     metadata: dict[str, Any],
     body: str,
     fields: dict[str, Any],
+    root: Path = ROOT,
+    _lark_fn: Any | None = None,
 ) -> dict[str, Any]:
     return _candidate_send_candidate_review_notification(
         config,
@@ -377,8 +379,8 @@ def send_candidate_review_notification(
         metadata=metadata,
         body=body,
         fields=fields,
-        root=ROOT,
-        _lark_fn=lark_json,
+        root=root,
+        _lark_fn=_lark_fn or lark_json,
     )
 
 

@@ -1457,6 +1457,32 @@ def test_setup_default_hides_credentials():
     assert args.show_credentials is False
 
 
+def test_worker_notification_wrapper_forwards_candidate_adapter_kwargs(monkeypatch, tmp_path):
+    captured = {}
+    config = worker.WorkerConfig("base", "table", tmp_path / "lark", tmp_path)
+
+    def fake_send(*args, **kwargs):
+        captured.update(kwargs)
+        return {"status": "skipped"}
+
+    monkeypatch.setattr(worker, "_candidate_send_candidate_review_notification", fake_send)
+
+    result = worker.send_candidate_review_notification(
+        config,
+        record_id="rec_1",
+        state={"candidate_id": "candidate", "revision": 1, "candidate_sha256": "hash"},
+        metadata={"title": "Candidate"},
+        body="Candidate body",
+        fields={},
+        root=tmp_path,
+        _lark_fn=lambda *_args, **_kwargs: {},
+    )
+
+    assert result == {"status": "skipped"}
+    assert captured["root"] == tmp_path
+    assert callable(captured["_lark_fn"])
+
+
 def test_setup_accepts_current_base_create_response_envelope(monkeypatch):
     """Current lark-cli nests the created Base under data.base."""
     import io
