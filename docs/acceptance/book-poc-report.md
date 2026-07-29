@@ -1,7 +1,7 @@
 # Book Knowledge Loop POC
 
 - Date: 2026-07-28
-- Overall status: `awaiting_human`
+- Overall status: `completed_with_findings`
 - Scope: one public-domain book chapter, one isolated OKS instance
 - Book: Charles Babbage, *On the Economy of Machinery and Manufactures* (1832)
 - Chapter: Chapter 20, "On the Division of Labour"
@@ -29,10 +29,11 @@
    Agent runtime, model server, or extraction ecosystem. It should call those
    capabilities and preserve their evidence and failure states.
 
-The first loop is **not complete yet**. Capture and Candidate generation have
-run; Wiki promotion is intentionally blocked on human review. Search/recall,
-the B-group answer, and the final quality comparison remain `not_run` until
-that gate is satisfied.
+The first loop is complete as a lifecycle test: Capture, Candidate generation,
+explicit human review, Wiki promotion, search, recall, lint, and B-group
+generation all ran in the isolated KB. The strict A/B success threshold is not
+fully met because the B-group answer did not cite section/line locators even
+though the supplied Wiki context contained them.
 
 ## Source and location
 
@@ -68,6 +69,18 @@ a_group_frozen_without_oks: passed
 b_group_with_oks: not_run
 quality_comparison: not_run
 clean_reproduction: not_run
+```
+
+Post-review update on 2026-07-29:
+
+```yaml
+human_review: passed
+wiki_promotion: passed
+search: passed
+recall: passed
+lint: passed
+b_group_with_oks: passed_with_output_quality_findings
+quality_comparison: failed_strict_traceability_threshold
 ```
 
 Raw is `partial`, not `complete`: coverage checks passed and the original file
@@ -208,20 +221,109 @@ changed. The frozen success criteria require at least a `2.0/6` correctness
 gain, zero unsupported claims if A has zero, at least `5/6` traceable answers,
 and no conversion of labelled inferences into Babbage quotations or facts.
 
+## Human review, promotion, and recall
+
+The user explicitly approved the Candidate on 2026-07-29. Before promotion, the
+Candidate SHA-256 was rechecked:
+
+`f5f5131adf7192184afca2da0fd63a0fc1519a3dfe40993877a608ff0a238914`
+
+Promotion command, with `OKS_ROOT` pointing only at the isolated book POC KB:
+
+```text
+oks drafts promote babbage-division-of-mental-labour
+```
+
+Result:
+
+```text
+Promoted: babbage-division-of-mental-labour ->
+20260729-babbage-on-the-division-of-mental-labour
+```
+
+Promoted Wiki page:
+
+`.codex-tmp/book-poc/kb/wiki/computing/strategies/20260729-babbage-on-the-division-of-mental-labour.md`
+
+Promoted Wiki SHA-256:
+
+`2b921940f7908ec58504d34a35025e969b6c16048e12acf39c5842fa2db61afb`
+
+Lifecycle command results:
+
+| Command | Exit code | Evidence |
+|---|---:|---|
+| `oks search "division of mental labour" --limit 5` | `0` | one Wiki result, relevance `1.87` |
+| `oks recall "Babbage de Prony calculation verification" --limit 5` | `0` | Raw bundle plus Semantic Memory result |
+| `oks lint` | `0` | `All checks passed`; `1` Wiki page; `0` orphan |
+
+Command outputs were preserved under:
+
+`.codex-tmp/book-poc/post-promotion/`
+
+## B group: approved Wiki context
+
+The B run used the same local model, generation options, and no-tools/no-network
+constraint as the frozen A run. The only independent variable was the approved
+Wiki page as context.
+
+Artifact:
+`.codex-tmp/book-poc/evaluation/b-fixed.json`
+
+| Field | Result |
+|---|---|
+| Model | `gpt-oss:20b` |
+| Model ID | `17052f91a42e` |
+| Model size | `13 GB` |
+| Prompt SHA-256 | `89301cb3ffbb03f3a720f7c0a73150dd75c4130b5d4e73b0fe36642d84c6d910` |
+| Context SHA-256 | `27c677603bca1c381d20926289651ddca86a4f8ec3c77f3b1f70a64e3181d670` |
+| Response SHA-256 | `c43ad9c954dfe6e29ff6153c7c32c37830166d112343139c74aabacc58ae39a2` |
+| Artifact SHA-256 | `32fcdc366a4e07df8accdb8cd26c252cb2adce31ceff56180633f6eb486ceee8` |
+| Wall time | `90.045s` |
+
+### B-group scoring
+
+| Question | Score | Reason |
+|---|---:|---|
+| 1 | `0.5` | Responsibilities were correct, but range formatting was corrupted by mojibake and is ambiguous in the stored answer. |
+| 2 | `1.0` | Correctly identifies two independent workshops and reciprocal verification. |
+| 3 | `1.0` | Correctly states the nine-tenths/addition-subtraction accuracy observation. |
+| 4 | `1.0` | Correctly identifies replacement of the third mechanical-calculation section and remaining formula-to-number work. |
+| 5 | `1.0` | Correctly gives `1`, `3`, and `2`, and the repeated-addition mechanism. |
+| 6 | `1.0` | Correctly gives demand and large capital. |
+
+| Metric | Frozen A | B with OKS Wiki | Result |
+|---|---:|---:|---|
+| Correctness | `0/6` | `5.5/6` | improved |
+| Required-fact coverage | `0%` | high | improved |
+| Unsupported factual claims | `0` | `0` | unchanged |
+| Traceable answers with explicit locator | `0/6` | `0/6` | failed threshold |
+| Fabricated quotations | `0` | `0` | passed |
+
+The B answer is materially more useful than A and demonstrates that the
+approved Wiki context carries the necessary facts into generation. It does not
+meet the frozen strict success threshold because the model did not include
+section or line locators in each answer. The immediate product lesson is to
+make traceability an explicit output requirement or post-processing check in
+the Agent prompt/template, not to add more extractors or Feishu machinery.
+
 ## Current primary failure points
 
-1. Human review has not yet occurred, so the knowledge loop cannot be marked
-   complete.
-2. Plain-text Raw evidence has document-level rather than paragraph-level
+1. B-group answers improved substantially but failed the strict traceability
+   threshold because they omitted section/line locators.
+2. The B-group stored response contains mojibake around several numeric ranges,
+   which makes some otherwise-correct facts harder to audit.
+3. Plain-text Raw evidence has document-level rather than paragraph-level
    locators.
-3. Raw warning strings are mojibake in generated JSON even though extracted
+4. Raw warning strings are mojibake in generated JSON even though extracted
    source text is correct UTF-8.
-4. A cloud Codex baseline attempt was `environment_limited`: repeated transport
+5. A cloud Codex baseline attempt was `environment_limited`: repeated transport
    timeouts ended in `401` from an expired API key. The local model supplied the
    successful independent baseline instead.
 
 ## Next gate
 
-A human must review the Candidate and choose `accept`, `edit`, `reject`, or
-`defer`. Only `accept` or an approved edit permits Wiki promotion and the B
-group experiment.
+The next product change should be narrow: update the Agent-facing operation
+prompt or tutorial so generated answers must preserve locators from Recall
+context. Then rerun only the B-group output check against this same approved
+Wiki page. Feishu remains outside this POC's current critical path.

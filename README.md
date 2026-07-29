@@ -83,6 +83,12 @@ See [CONSTITUTION.md](CONSTITUTION.md) for the full memory design.
 
 See [`docs/`](docs/) for in-depth design documentation (GitHub Pages ready).
 
+Current validation references:
+
+- [`docs/architecture/oks-core-architecture.md`](docs/architecture/oks-core-architecture.md) - validated core loop and component boundary.
+- [`docs/deployment/agent-one-prompt-installation.md`](docs/deployment/agent-one-prompt-installation.md) - one-prompt Agent operation guide.
+- [`docs/acceptance/book-poc-report.md`](docs/acceptance/book-poc-report.md) - book POC evidence and findings.
+
 ---
 
 ## 中文
