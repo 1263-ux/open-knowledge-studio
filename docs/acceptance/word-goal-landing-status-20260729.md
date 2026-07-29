@@ -30,7 +30,7 @@ serve this loop.
 | Search / Recall / Lint after promotion | passed | `search=0`, `recall=0`, `lint=0`; outputs preserved in `.codex-tmp/book-poc/post-promotion/` |
 | A/B comparison | passed_with_findings | A `0/6`; B `5.5/6`; strict locator output initially failed |
 | Feishu state corrected to partial | pending | Add `docs/acceptance/feishu-e2e-status.md` |
-| Clean server one-prompt deployment | pending | Remote reachable at `root@47.82.119.154`; Python 3.12.3, git, pipx present |
+| Clean server one-prompt deployment | passed_with_findings | See `docs/acceptance/clean-server-deployment-report.md`; found and fixed Raw host-directory leak |
 | General one-prompt Agent guide | partial | `docs/deployment/agent-one-prompt-installation.md` exists; needs clean-server validation result |
 | Anti-bot and lightweight deployment research | pending | Requires dated source-backed report |
 | Architecture docs and diagram | partial | New Mermaid architecture exists; README links added; old docs/assets still conflict |
@@ -54,10 +54,8 @@ These are explicitly not current implementation targets:
 1. Correct Feishu status documentation as `partial`, without retesting or
    redesigning Feishu.
 2. Add future-considerations for over-designed ideas and deferred platform work.
-3. Run clean-server deployment from an isolated directory using a single prompt
-   and minimal dependencies.
-4. Write anti-bot/lightweight deployment research with official and dated
+3. Write anti-bot/lightweight deployment research with official and dated
    sources.
-5. Produce the Kimi K3 case from legal public sources, with verified/inferred
+4. Produce the Kimi K3 case from legal public sources, with verified/inferred
    labels and an OKS recall/evaluation record.
-6. Align README/docs entry points and record all commits.
+5. Align README/docs entry points and record all commits.
