@@ -103,7 +103,7 @@ Candidate:
 `.codex-tmp/book-poc/kb/drafts/babbage-division-of-mental-labour.md`
 
 Reviewed Candidate SHA-256:
-`9392090bfb466043eea945d0a20ae2b9b9ec5a4f7cae7ed75e3cf9e456f741a1`.
+`f5f5131adf7192184afca2da0fd63a0fc1519a3dfe40993877a608ff0a238914`.
 
 It separates source-supported facts from `[inferred]` engineering lessons and
 records the source URL, SHA-256, chapter, source lines, Raw lines, and author
@@ -114,6 +114,14 @@ against source lines 5872-6084 and Raw lines 5763-5973. No unsupported factual
 claim was found. Its two engineering lessons remain explicitly `[inferred]`.
 The review added the missing acquisition-URL limitation. Human acceptance is
 still outstanding.
+
+A separate read-only Claude Code review also found no factual contradiction,
+but identified three precision issues. The Candidate now labels its four-part
+control model as an Agent synthesis, restores the first section's
+many-people-at-once condition, and preserves Babbage's stronger statement that
+the second section could verify without repeating or even examining the whole
+of the third section's work. Claude's result was advisory only and is not a
+human approval.
 
 The same review exposed a separate CLI failure: YAML parsed `drafted_at` as a
 `date`, causing `oks drafts list` to crash before review. Commit `f6784a7`
