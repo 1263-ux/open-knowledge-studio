@@ -17,8 +17,8 @@ has_children: true
 |------|--------|----------|
 | **理念** | 知识库即模型，你每天用反馈训练它，人人都是标注师 | [理念 →](philosophy.md) |
 | **每日循环** | 收集 → 入料 → 分级 → 审查 → 沉淀 → 召回的训练闭环 | [每日循环 →](daily-loop.md) |
-| **Memory** | 从原始材料蒸馏出的持久知识——一个 concept、strategy 或 anti-pattern | [Memories →](memories.md) |
-| **Raw Material** | 蒸馏前的入料层——文章、论文、仓库笔记、对话 | [Raw Materials →](raw-materials.md) |
+| **Memory** | 从原始材料蒸馏出的持久知识——一个 concept、strategy 或 anti-pattern | [Wiki →](wiki.md) |
+| **Raw Material** | 蒸馏前的入料层——文章、论文、仓库笔记、对话 | [Raw 标准 →](raw-multimodal-standard.md) |
 | **召回引擎** | 6+1 因子评分找到最相关知识：token overlap + substring + topic trace + type boost + 审查加分 + memory curve | [召回引擎 →](recall-engine.md) |
 | **Dreaming 循环** | 人工审查的知识演化：raw → AI 蒸馏 → drafts → 人工审查 → wiki | [Dreaming 循环 →](dreaming-cycle.md) |
 
@@ -39,13 +39,15 @@ wiki/（策展知识，带衰减）
 Studio 当前以飞书多维表格作为 Capture、状态与人工审核控制面，真实运行证据和待办集中在两份文档中：
 
 - **[自进化学习主 Loop](core-learning-loop-poc.md)** — 当前唯一实施清单与验收门；
-- **[阶段历史与验收简报](phase-history-summary.md)** — Capture → Raw → Candidate → 个人审核 → Wiki → Recall 的真实结果与限制。
+- **[Word 目标落地看板](acceptance/word-goal-landing-status-20260729.md)** — Capture → Raw → Candidate → 个人审核 → Wiki → Recall 的真实结果与限制。
 
 多模态 Raw 协议的机器事实源位于独立 `oks-connector` 仓库的 `schemas/` 与 `capabilities/`；Studio 只保留生命周期和调用入口，不复制第二套 Schema。
 
 ## 架构总览
 
-<img src="assets/architecture-overview.svg" alt="Architecture Overview" style="max-width:100%;height:auto;" />
+当前验收后的主架构以核心知识闭环为准：[OKS Core Architecture](architecture/oks-core-architecture.md)。
+
+旧 SVG 图只作为历史图示保留；不要把图中“设计存在”的模块理解为“真实环境已全部验收通过”。
 
 <img src="assets/pipeline.svg" alt="Pipeline" style="max-width:100%;height:auto;" />
 
@@ -76,8 +78,8 @@ oks search "your query"
 - **[每日循环](daily-loop.md)** — 把训练闭环变成每天都能跑的流程
 - **[自动驾驶](autonomous.md)** — 人类判断随自动化程度如何分级（L0→L5）
 - **[案例](cases.md)** — 托管你的简历 / GitHub / 科研，看循环怎么落地
-- **[使用你的知识](memories.md)** — wiki 页面结构、类型和搜索
-- **[Raw Materials](raw-materials.md)** — 原始材料、A/B/C 分级、蒸馏工作流
+- **[使用你的知识](wiki.md)** — wiki 页面结构、类型和搜索
+- **[Raw Materials](raw-multimodal-standard.md)** — 原始材料、证据和 Raw Bundle 边界
 
 ---
 

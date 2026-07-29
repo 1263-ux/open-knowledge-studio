@@ -6,6 +6,9 @@ Use this prompt when asking a new Agent to validate or operate OKS from a clean
 environment. It is intentionally narrow: prove the core lifecycle before
 testing heavy extractors or Feishu.
 
+Validation status: `passed_with_findings` on remote clean-server test. Evidence:
+`docs/acceptance/clean-server-deployment-report.md`.
+
 ## One-Prompt
 
 ```text
@@ -31,7 +34,8 @@ Suggested source:
 Required commands:
 - oks --version
 - oks init <isolated-root>
-- oks ingest <source> --output <isolated-root>
+- export OKS_ROOT=<isolated-root>
+- oks ingest <source> --mode quick --progress
 - oks drafts list
 - oks drafts promote <slug> only after human approval
 - oks search "<query>"
@@ -66,3 +70,7 @@ environments:
 Feishu-specific work must use runtime credentials only and a dedicated test
 Base. It must not touch a business Base, persist secrets, or be treated as a
 precondition for the CLI learning loop.
+
+Observed CLI correction: `oks status --root <path>` is not a real command.
+Use `OKS_ROOT=<path> oks status`, or rely on the active KB config written by
+`oks init <path>`.
