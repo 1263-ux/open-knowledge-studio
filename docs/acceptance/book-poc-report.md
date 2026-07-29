@@ -57,6 +57,7 @@ oks_init_isolated: passed
 raw_bundle_generation: passed
 raw_bundle_validation: passed
 raw_processing_status: partial
+exact_fetch_url_recording: failed
 candidate_generation: passed
 human_review: awaiting_human
 wiki_promotion: not_run
@@ -73,6 +74,11 @@ was preserved, but the extractor emits one document-level evidence record and
 does not provide page or paragraph locators for plain text. The Candidate adds
 auditable file-line and author-paragraph locations, but that does not erase the
 Raw evidence limitation.
+
+The Project Gutenberg landing page and the downloaded file's SHA-256 are
+recorded, but the acquisition run did not preserve the exact final plain-text
+download URL or redirect chain. The local original remains verifiable; network
+acquisition provenance for this run is incomplete.
 
 ## Observed product failure and fix
 
@@ -96,9 +102,29 @@ Raw validator returned valid=true
 Candidate:
 `.codex-tmp/book-poc/kb/drafts/babbage-division-of-mental-labour.md`
 
+Reviewed Candidate SHA-256:
+`9392090bfb466043eea945d0a20ae2b9b9ec5a4f7cae7ed75e3cf9e456f741a1`.
+
 It separates source-supported facts from `[inferred]` engineering lessons and
 records the source URL, SHA-256, chapter, source lines, Raw lines, and author
 paragraph numbers. Promotion must not occur until a human accepts or edits it.
+
+On 2026-07-29 the Candidate's seven source-supported claims were checked
+against source lines 5872-6084 and Raw lines 5763-5973. No unsupported factual
+claim was found. Its two engineering lessons remain explicitly `[inferred]`.
+The review added the missing acquisition-URL limitation. Human acceptance is
+still outstanding.
+
+The same review exposed a separate CLI failure: YAML parsed `drafted_at` as a
+`date`, causing `oks drafts list` to crash before review. Commit `f6784a7`
+converts display cells to strings and adds a regression test. Verification:
+
+```text
+6 targeted CLI tests passed
+148 repository tests passed
+oks drafts list displayed the Candidate and 2026-07-28
+git diff --check passed
+```
 
 ## Acceptance questions
 
