@@ -31,6 +31,7 @@ serve this loop.
 | A/B comparison | passed_with_findings | A `0/6`; B `5.5/6`; strict locator output initially failed |
 | Feishu state corrected to partial | pending | Add `docs/acceptance/feishu-e2e-status.md` |
 | Clean server one-prompt deployment | passed_with_findings | See `docs/acceptance/clean-server-deployment-report.md`; found and fixed Raw host-directory leak |
+| OpenClaw autonomous prompt execution | not_run | Gateway `127.0.0.1:18789` was not reachable during final probe; Shell-based Agent validation completed instead |
 | General one-prompt Agent guide | partial | `docs/deployment/agent-one-prompt-installation.md` exists; needs clean-server validation result |
 | Anti-bot and lightweight deployment research | passed_initial | `docs/research/platform-antibot-and-lightweight-deployment.md` |
 | Architecture docs and diagram | partial | New Mermaid architecture exists; README links added; old docs/assets still conflict |
