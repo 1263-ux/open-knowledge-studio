@@ -605,11 +605,11 @@ def drafts_list():
 
     for d in drafts:
         table.add_row(
-            d["slug"],
-            d.get("title", d["slug"]),
-            d.get("draft_type", ""),
-            d.get("draft_area", ""),
-            d.get("drafted_at", ""),
+            str(d["slug"]),
+            str(d.get("title", d["slug"])),
+            str(d.get("draft_type", "")),
+            str(d.get("draft_area", "")),
+            str(d.get("drafted_at", "")),
         )
 
     console.print(table)
