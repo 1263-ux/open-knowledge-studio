@@ -88,6 +88,10 @@ Current validation references:
 - [`docs/architecture/oks-core-architecture.md`](docs/architecture/oks-core-architecture.md) - validated core loop and component boundary.
 - [`docs/deployment/agent-one-prompt-installation.md`](docs/deployment/agent-one-prompt-installation.md) - one-prompt Agent operation guide.
 - [`docs/acceptance/book-poc-report.md`](docs/acceptance/book-poc-report.md) - book POC evidence and findings.
+- [`docs/acceptance/clean-server-deployment-report.md`](docs/acceptance/clean-server-deployment-report.md) - clean server installation and loop evidence.
+- [`docs/acceptance/feishu-e2e-status.md`](docs/acceptance/feishu-e2e-status.md) - corrected Feishu partial E2E status.
+- [`docs/research/platform-antibot-and-lightweight-deployment.md`](docs/research/platform-antibot-and-lightweight-deployment.md) - platform boundary and lightweight dependency research.
+- [`docs/cases/kimi-k3-deep-analysis.md`](docs/cases/kimi-k3-deep-analysis.md) - source-limited Kimi K3 case.
 
 ---
 

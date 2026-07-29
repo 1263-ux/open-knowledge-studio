@@ -32,9 +32,9 @@ serve this loop.
 | Feishu state corrected to partial | pending | Add `docs/acceptance/feishu-e2e-status.md` |
 | Clean server one-prompt deployment | passed_with_findings | See `docs/acceptance/clean-server-deployment-report.md`; found and fixed Raw host-directory leak |
 | General one-prompt Agent guide | partial | `docs/deployment/agent-one-prompt-installation.md` exists; needs clean-server validation result |
-| Anti-bot and lightweight deployment research | pending | Requires dated source-backed report |
+| Anti-bot and lightweight deployment research | passed_initial | `docs/research/platform-antibot-and-lightweight-deployment.md` |
 | Architecture docs and diagram | partial | New Mermaid architecture exists; README links added; old docs/assets still conflict |
-| Kimi K3 case | pending | Requires source-backed OKS-style case report and server desktop copy |
+| Kimi K3 case | source_limited_initial_case | `docs/cases/kimi-k3-deep-analysis.md`; copied to `/root/Desktop/kimi-k3-deep-analysis.md` |
 | Final report with commits and unresolved issues | pending | Finish after deployment, research, and case |
 
 ## Cancelled for This Round
@@ -54,8 +54,6 @@ These are explicitly not current implementation targets:
 1. Correct Feishu status documentation as `partial`, without retesting or
    redesigning Feishu.
 2. Add future-considerations for over-designed ideas and deferred platform work.
-3. Write anti-bot/lightweight deployment research with official and dated
-   sources.
-4. Produce the Kimi K3 case from legal public sources, with verified/inferred
-   labels and an OKS recall/evaluation record.
-5. Align README/docs entry points and record all commits.
+3. Align README/docs entry points and record all commits.
+4. Decide whether to rename the Kimi case if no stable official `Kimi K3`
+   source exists.
