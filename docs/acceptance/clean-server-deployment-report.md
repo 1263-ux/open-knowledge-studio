@@ -4,7 +4,10 @@ Date: 2026-07-29
 
 Remote host: `root@47.82.119.154`
 
-Test root: `/opt/oks-word-landing-20260729b`
+Test root during execution: `/opt/oks-word-landing-20260729b`
+
+Evidence archive after cleanup:
+`/opt/oks-word-landing-evidence-20260729`
 
 Production project not touched: `/home/artboy-knowledge-studio`
 
@@ -99,9 +102,9 @@ Regression:
 
 ## Evidence Files on Remote
 
-All evidence is under:
+All surviving evidence is under:
 
-`/opt/oks-word-landing-20260729b/reports/`
+`/opt/oks-word-landing-evidence-20260729/`
 
 Important files:
 
@@ -122,3 +125,21 @@ Important files:
 - `lint.log`
 - `status-final.log`
 - `wiki-files.txt`
+
+## Cleanup Result
+
+After archiving report files and SHA-256 manifests:
+
+- removed `/opt/oks-word-landing-20260729`;
+- removed `/opt/oks-word-landing-20260729b`;
+- removed the failed-run `/root/raw` test output;
+- removed `/tmp/oks-head-87315a3.tar`;
+- removed `/tmp/oks-head-1e7cfaf.tar`;
+- uninstalled the root-user pipx `open-knowledge-studio` test install.
+
+Preserved:
+
+- `/opt/oks-word-landing-evidence-20260729`;
+- `/home/artboy-knowledge-studio`;
+- `/home/openclaw`;
+- `/root/Desktop/kimi-k3-deep-analysis.md`.
