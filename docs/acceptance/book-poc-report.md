@@ -63,7 +63,8 @@ human_review: awaiting_human
 wiki_promotion: not_run
 search: not_run
 recall: not_run
-a_group_without_oks: passed
+a_group_exploratory_without_oks: passed
+a_group_frozen_without_oks: passed
 b_group_with_oks: not_run
 quality_comparison: not_run
 clean_reproduction: not_run
@@ -171,6 +172,41 @@ Baseline artifact: `.codex-tmp/book-poc/baseline/a-group.md`.
 
 These values are provisional until the B-group response is generated and both
 groups are scored with the same rubric.
+
+### Frozen A group
+
+Because the exploratory run did not retain its exact generation options, it is
+not sufficient as the final causal control. A second A run used the frozen
+protocol in `book-poc-ab-protocol.md`: local `gpt-oss:20b` model ID
+`17052f91a42e`, temperature `0`, seed `20260729`, top-p `1`, maximum `2048`
+generated tokens, and no tools/network/OKS context.
+
+The model abstained:
+
+> I’m sorry, but I don’t have enough information to answer these questions accurately.
+
+| Metric | Frozen A result |
+|---|---:|
+| Answer correctness | `0/6` |
+| Required-fact coverage | `0%` |
+| Source fidelity | `passed` (no unsupported factual claim) |
+| Traceability | `0/6` |
+| Hallucinations | `0` |
+
+Artifact:
+`.codex-tmp/book-poc/evaluation/a-fixed.json`
+
+- Prompt SHA-256:
+  `12a38860d74342d8613cc90982dc03f5c131f9d61d97a259616cde078956a9af`
+- Response SHA-256:
+  `87d2d4a2f121417b2b87e7474826e5e5ff7be001e14c25de428587ff5bddacd2`
+- Artifact SHA-256:
+  `ecdb9fb9ab92cdadf4c8c5471678778a2672abb8eb5efcfd20865aa9b50e44ff`
+
+The B group will use the same request with only the approved Wiki context
+changed. The frozen success criteria require at least a `2.0/6` correctness
+gain, zero unsupported claims if A has zero, at least `5/6` traceable answers,
+and no conversion of labelled inferences into Babbage quotations or facts.
 
 ## Current primary failure points
 
