@@ -60,6 +60,39 @@ validator_module = importlib.util.module_from_spec(_VAL_SPEC)
 _VAL_SPEC.loader.exec_module(validator_module)
 
 
+def test_default_ingest_output_uses_oks_root_raw(tmp_path, monkeypatch):
+    kb = tmp_path / "kb"
+    (kb / "wiki").mkdir(parents=True)
+    source = tmp_path / "source.txt"
+    source.write_text("hello", encoding="utf-8")
+    monkeypatch.setenv("OKS_ROOT", str(kb))
+    monkeypatch.chdir(tmp_path)
+
+    output = adapter.default_ingest_output(str(source))
+
+    assert output.parent == (kb / "raw").resolve()
+
+
+def test_default_ingest_output_prefers_current_kb_before_config(tmp_path, monkeypatch):
+    configured = tmp_path / "configured"
+    current = tmp_path / "current"
+    (configured / "wiki").mkdir(parents=True)
+    (current / "wiki").mkdir(parents=True)
+    config_dir = tmp_path / "home" / ".oks"
+    config_dir.mkdir(parents=True)
+    (config_dir / "config.json").write_text(
+        json.dumps({"knowledge_base_path": str(configured)}),
+        encoding="utf-8",
+    )
+    monkeypatch.delenv("OKS_ROOT", raising=False)
+    monkeypatch.setattr(adapter.Path, "home", lambda: tmp_path / "home")
+    monkeypatch.chdir(current)
+
+    output = adapter.default_ingest_output("note.txt")
+
+    assert output.parent == (current / "raw").resolve()
+
+
 class FakeProbeResponse:
     def __init__(
         self,
@@ -377,6 +410,8 @@ def test_route_plan_selects_mature_extractors():
 
 
 def test_ingest_defaults_to_quick_tier_and_unique_run_output(monkeypatch, tmp_path):
+    monkeypatch.delenv("OKS_ROOT", raising=False)
+    monkeypatch.setattr(adapter.Path, "home", lambda: tmp_path / "home")
     monkeypatch.chdir(tmp_path)
     args = adapter.build_parser().parse_args(
         ["ingest", "https://www.youtube.com/watch?v=abc123"]
