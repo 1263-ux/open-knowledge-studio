@@ -3,19 +3,9 @@
 Enables cross-project access: any project can find the knowledge base
 via the global config, without being inside the OKS repo.
 
-Config structure:
-{
-    "knowledge_base_path": "/path/to/open-knowledge-studio",
-    "api_keys": {
-        "openai": "",
-        "anthropic": ""
-    },
-    "handlers": {
-        "video": {"frame_interval": 30, "frames_per_batch": 9, "whisper_model": "base"},
-        "audio": {"whisper_model": "base"},
-        "image": {"vision_model": "gpt-4o", "max_tokens": 1000}
-    }
-}
+The core CLI stores only the active knowledge-base path. It does not own model
+API keys or multimodal handler configuration. Existing custom keys are preserved
+when an older config is read and saved.
 """
 from __future__ import annotations
 
@@ -27,24 +17,6 @@ from typing import Any
 
 DEFAULT_CONFIG: dict[str, Any] = {
     "knowledge_base_path": "",
-    "api_keys": {
-        "openai": "",
-        "anthropic": "",
-    },
-    "handlers": {
-        "video": {
-            "frame_interval": 30,
-            "frames_per_batch": 9,
-            "whisper_model": "base",
-        },
-        "audio": {
-            "whisper_model": "base",
-        },
-        "image": {
-            "vision_model": "gpt-4o",
-            "max_tokens": 1000,
-        },
-    },
 }
 
 

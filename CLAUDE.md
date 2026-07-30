@@ -100,8 +100,8 @@ open-knowledge-studio/
 
 ```bash
 oks init <path>   # scaffold a personal knowledge instance (buckets + memory-tracking .gitignore + register as active KB)
-oks search <query> [--limit 5] [--domain computing] [--type strategy]
-oks recall <query> [--topic-id ID] [--limit 5]
+oks search <query> [--limit 5] [--domain computing] [--type strategy] [--goal active|none|SLUG] [--format table|json] [--explain]
+oks recall <query> [--topic-id ID] [--limit 5] [--goal active|none|SLUG] [--format table|json] [--explain]
 oks wiki list [--domain] [--type] [--status active]
 oks wiki get <slug>
 oks wiki create --title "..." --type concept --area computing --importance 0.7
@@ -112,6 +112,15 @@ oks distill [--dry-run]
 oks lint | status | metrics | decay
 oks hook install [--editor claude|qoder|both] [--path DIR]   # opt-in auto-recall on prompt
 oks hook status
+oks eval recall <dataset.yaml> --output <run.json>
+oks eval compare <baseline.json> <candidate.json> [--output <comparison.json>]
+oks trace start <goal-id> [--run-id ID]
+oks trace append <run-id> --type <event> --actor <actor> --payload '<json>'
+oks trace judge <run-id> --outcome pass --comment "..."
+oks trace feedback <run-id> --outcome accepted --comment "..."
+oks trace propose <run-id> --kind wiki|skill --title "..." --summary "..."
+oks trace finish <run-id> --result '{"outcome":"success"}'
+oks trace validate <run-id> [--completed]
 oks config init | show | set <key> <value>
 ```
 

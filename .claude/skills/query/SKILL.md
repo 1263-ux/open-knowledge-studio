@@ -10,7 +10,7 @@ Use the 6-factor recall engine to find relevant wiki pages and episodic memory, 
 
 ## Steps
 
-1. **Run recall** — Execute `oks recall "<user question>" --limit 5`
+1. **Run recall** — Execute `oks recall "<user question>" --limit 5 --format json --explain`. Use `--goal <slug>` when the user or task names one primary goal; otherwise keep the default active-goal mode.
 2. **Parse results** — Extract wiki pages (semantic) and raw/profile matches (episodic)
 3. **Generate source labels** — For each recalled wiki page, determine label dynamically:
 

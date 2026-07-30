@@ -18,7 +18,7 @@ Open Knowledge Studio is a knowledge base system designed to work with Claude Co
 - **Dreaming cycle**: AI distills raw materials into draft proposals, humans review and promote to wiki
 - **Decay system**: memory curve scoring with type-specific λ, tier classification (hot/warm/cold/evictable)
 - **22 knowledge domains**: soft convention — directories created on demand
-- **CLI tool (`oks`)**: search, recall, wiki CRUD, drafts, distill, lint, status, metrics
+- **CLI tool (`oks`)**: search, recall, offline evaluation, execution traces, wiki CRUD, drafts, distill, lint, status, metrics
 - **8 Claude Code skills**: start, ingest, query, lint, compile, status, archive, promote
 - **4 hooks**: pre-compact snapshot, session-start loading, wiki-write validation, opt-in auto-recall on prompt (`oks hook install`)
 
@@ -34,6 +34,8 @@ oks init my-knowledge-base          # 2. scaffold your instance
 cd my-knowledge-base
 oks status                          # 3. use it
 oks search "git branch"             # (empty on a fresh instance — add knowledge first)
+oks recall "git branch" --goal none --format json --explain  # reproducible, inspectable output
+oks eval recall eval/datasets/team-v1.yaml --output eval/runs/baseline.json
 ```
 
 Why pipx? Recent systems ship PEP 668 "externally-managed" Pythons, so a bare
@@ -76,7 +78,7 @@ Open Knowledge Studio 是一个为 Claude Code 设计的文件式知识库系统
 - **Dreaming 循环**：AI 将原始材料蒸馏为草稿提案，人工审查后提升为 wiki
 - **衰减系统**：记忆曲线评分，类型特定 λ，tier 分级（hot/warm/cold/evictable）
 - **22 个知识域**：软约定——目录按需创建，不预建骨架
-- **CLI 工具（`oks`）**：搜索、召回、wiki CRUD、草稿、蒸馏、健康检查、状态、指标
+- **CLI 工具（`oks`）**：搜索、召回、离线评测、执行轨迹、wiki CRUD、草稿、蒸馏、健康检查、状态、指标
 - **8 个 Claude Code 技能**：start, ingest, query, lint, compile, status, archive, promote
 - **4 个钩子**：压缩前快照、会话加载、写入验证、可选的提问自动召回（`oks hook install`）
 
@@ -91,6 +93,8 @@ oks init my-knowledge-base          # 2. 初始化你的知识库实例
 cd my-knowledge-base
 oks status                          # 3. 开始使用
 oks search "git branch"             # （新实例为空——先写入知识再搜）
+oks recall "git branch" --goal none --format json --explain  # 可复现、可解释输出
+oks eval recall eval/datasets/team-v1.yaml --output eval/runs/baseline.json
 ```
 
 为什么用 pipx？新版系统的 Python 普遍启用 PEP 668「外部管理」保护，直接
