@@ -1268,6 +1268,8 @@ raw/executions/*/.append.lock
 
 _ASSET_MAP = [
     ("claude", ".claude"),
+    ("codex", ".codex"),
+    ("agents", ".agents"),
     ("templates", "templates"),
     ("_meta", "_meta"),
     ("settings", "settings"),

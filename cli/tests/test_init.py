@@ -8,15 +8,40 @@ from knowledge_studio.cli import app
 runner = CliRunner()
 
 # Contract: what `oks init` must produce. Buckets come from _INSTANCE_DIRS;
-# .claude/templates/_meta/settings are the materialized shareable assets.
+# the dotted editor dirs, templates, _meta and settings are materialized assets.
 EXPECTED_BUCKETS = [
     "profiles/users", "profiles/projects", "profiles/recipes", "profiles/goals",
     "raw", "wiki", "drafts",
 ]
 EXPECTED_TOP_LEVEL = {
-    ".claude", "_meta", "settings", "templates",
+    ".claude", ".codex", ".agents", "_meta", "settings", "templates",
     "profiles", "raw", "wiki", "drafts", ".gitignore",
 }
+
+
+def _load_map(path: Path) -> list[tuple[str, str]]:
+    """Read the _MAP literal without importing the module (setup.py runs setup())."""
+    source = path.read_text(encoding="utf-8")
+    start = source.index("_MAP = [")
+    end = source.index("]", start) + 1
+    namespace: dict = {}
+    exec(source[start:end], namespace)
+    return namespace["_MAP"]
+
+
+def test_asset_maps_agree_across_build_and_init():
+    """A drift here ships assets that never land, or land under the wrong name."""
+    from knowledge_studio.cli import _ASSET_MAP
+
+    cli_dir = Path(__file__).parents[1]
+    bundle_map = _load_map(cli_dir / "scripts" / "bundle_assets.py")
+    setup_map = _load_map(cli_dir / "setup.py")
+
+    assert bundle_map == setup_map, "bundle_assets and setup must vendor the same dirs"
+    # _ASSET_MAP reverses the mapping: (bundled name, on-disk name).
+    assert [(dest, src) for src, dest in bundle_map] == _ASSET_MAP
+    assert (".codex", "codex") in bundle_map
+    assert (".agents", "agents") in bundle_map
 
 
 def test_init_scaffolds_buckets_and_data_gitignore(tmp_path):

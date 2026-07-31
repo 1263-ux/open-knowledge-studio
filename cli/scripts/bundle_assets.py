@@ -20,8 +20,11 @@ import shutil
 from pathlib import Path
 
 # (source dir name at repo root, dest dir name under _assets/)
+# Leading dots are stripped for the bundle; cli._ASSET_MAP restores them.
 _MAP = [
     (".claude", "claude"),
+    (".codex", "codex"),
+    (".agents", "agents"),
     ("templates", "templates"),
     ("_meta", "_meta"),
     ("settings", "settings"),

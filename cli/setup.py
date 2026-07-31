@@ -19,6 +19,8 @@ from setuptools.command.sdist import sdist
 
 _MAP = [
     (".claude", "claude"),
+    (".codex", "codex"),
+    (".agents", "agents"),
     ("templates", "templates"),
     ("_meta", "_meta"),
     ("settings", "settings"),
