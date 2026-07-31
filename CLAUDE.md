@@ -43,6 +43,9 @@ pipx avoids PEP 668 `externally-managed-environment` errors on Ubuntu 24.04+ and
 macOS Homebrew Python (get pipx: `sudo apt install pipx` / `brew install pipx` /
 Windows `py -m pip install --user pipx && py -m pipx ensurepath`).
 
+Developers working from source: `pipx install ./cli --force` to install the
+local checkout directly.
+
 ## Core Pipeline
 
 ```

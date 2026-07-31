@@ -40,12 +40,14 @@ Requirements:
 * Git
 * pipx
 
-Install from source:
+Install from source (developers/contributors):
 
 ```bash
 pipx install ./cli --force
 oks --version
 ```
+
+End users install the published package: `pipx install open-knowledge-studio`.
 
 Install from Git:
 
@@ -98,7 +100,7 @@ OKS keeps the core lightweight. Heavy capabilities are installed only when neede
 
 | Capability | Purpose |
 |---|---|
-| `document` | TXT, Markdown, Office, HTML |
+| `document` | Office (docx/pptx/xlsx), HTML, CSV — .md/.txt 开箱可用，无需安装 |
 | `pdf` | PDF extraction |
 | `formula` | Formula and OCR-related extraction |
 | `watch` | Video, audio and subtitle extraction |
