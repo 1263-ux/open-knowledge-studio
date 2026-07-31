@@ -14,7 +14,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import shutil
 import subprocess
 import sys
 import time
@@ -23,26 +22,9 @@ from typing import Any
 
 # ── lark-cli helper ──────────────────────────────────────────────
 
-def _resolve_lark_cli() -> str:
-    configured = os.environ.get("LARK_CLI_EXE")
-    if configured:
-        if Path(configured).is_file():
-            return configured
-    # Windows: prefer .cmd wrapper (subprocess can't run bash scripts directly)
-    if os.name == "nt":
-        for cmd in [
-            shutil.which("lark-cli.cmd"),
-            shutil.which("lark-cli"),
-            Path(os.environ.get("APPDATA", "")) / "npm" / "lark-cli.cmd",
-        ]:
-            if cmd and Path(str(cmd)).is_file():
-                return str(cmd)
-    which = shutil.which("lark-cli")
-    if which:
-        return which
-    raise RuntimeError("lark-cli 未找到。设置 LARK_CLI_EXE 环境变量或通过 npm 安装。")
+from _lark_cli import resolve_lark_cli
 
-LARK_CLI = _resolve_lark_cli()
+LARK_CLI = str(resolve_lark_cli())
 
 
 def _lark(args: list[str], *, timeout: float = 60.0) -> dict[str, Any]:

@@ -130,29 +130,7 @@ def atomic_write_text(path: Path, value: str) -> None:
         raise
 
 
-def resolve_lark_cli() -> Path:
-    configured = os.environ.get("LARK_CLI_EXE")
-    candidates: list[Path] = []
-    if configured:
-        candidates.append(Path(configured))
-    appdata = os.environ.get("APPDATA")
-    if appdata:
-        candidates.append(
-            Path(appdata)
-            / "npm"
-            / "node_modules"
-            / "@larksuite"
-            / "cli"
-            / "bin"
-            / "lark-cli.exe"
-        )
-    located = shutil.which("lark-cli.exe")
-    if located:
-        candidates.append(Path(located))
-    for candidate in candidates:
-        if candidate.is_file():
-            return candidate.resolve()
-    raise RuntimeError("lark-cli.exe not found; set LARK_CLI_EXE to its absolute path")
+from _lark_cli import resolve_lark_cli  # noqa: E402
 
 
 def load_config(args: argparse.Namespace) -> WorkerConfig:
@@ -1396,7 +1374,7 @@ def capture_envelope(config: WorkerConfig, record_id: str, fields: dict[str, Any
         "capture_id": f"feishu-{record_id}-{content_hash[:12]}",
         "capture_revision": 1,
         "source_type": "feishu_base",
-        "source_uri": f"feishu-base://{config.base_token}/{config.table_id}/{record_id}",
+        "source_uri": f"feishu-base://{config.table_id}/{record_id}",
         "captured_at": utc_now(),
         "submitted_by": None,
         "user_note": capture_user_note(fields),
@@ -1404,7 +1382,7 @@ def capture_envelope(config: WorkerConfig, record_id: str, fields: dict[str, Any
         "content_hash": content_hash,
         "hash_algorithm": "sha256-canonical-json-v1",
         "source_record": {
-            "base_token": config.base_token,
+            "base_token_hash": hashlib.sha256(config.base_token.encode("utf-8")).hexdigest()[:12],
             "table_id": config.table_id,
             "record_id": record_id,
             "revision": None,
