@@ -4,6 +4,7 @@ import json
 import sys
 import tomllib
 import zipfile
+import subprocess
 from argparse import Namespace
 from email.message import Message
 from pathlib import Path
@@ -91,6 +92,38 @@ def test_default_ingest_output_prefers_current_kb_before_config(tmp_path, monkey
     output = adapter.default_ingest_output("note.txt")
 
     assert output.parent == (current / "raw").resolve()
+
+
+def test_capability_env_python_must_import_required_module(tmp_path, monkeypatch):
+    import capability_check
+
+    fake_python = tmp_path / ("python.exe" if os.name == "nt" else "python")
+    fake_python.write_text("", encoding="utf-8")
+    monkeypatch.setenv("OKS_DOCUMENT_PYTHON", str(fake_python))
+    monkeypatch.setattr(capability_check.importlib.util, "find_spec", lambda _module: None)
+    monkeypatch.setattr(
+        capability_check.subprocess,
+        "run",
+        lambda *_args, **_kwargs: subprocess.CompletedProcess(_args[0], 1),
+    )
+
+    assert capability_check.is_capability_available("document") == (False, None)
+
+
+def test_capability_env_python_is_available_only_after_import_probe(tmp_path, monkeypatch):
+    import capability_check
+
+    fake_python = tmp_path / ("python.exe" if os.name == "nt" else "python")
+    fake_python.write_text("", encoding="utf-8")
+    monkeypatch.setenv("OKS_DOCUMENT_PYTHON", str(fake_python))
+    monkeypatch.setattr(capability_check.importlib.util, "find_spec", lambda _module: None)
+    monkeypatch.setattr(
+        capability_check.subprocess,
+        "run",
+        lambda *_args, **_kwargs: subprocess.CompletedProcess(_args[0], 0),
+    )
+
+    assert capability_check.is_capability_available("document") == (True, fake_python.resolve())
 
 
 class FakeProbeResponse:

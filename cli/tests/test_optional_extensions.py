@@ -1,4 +1,5 @@
 from typer.testing import CliRunner
+import subprocess
 
 from knowledge_studio import cli
 
@@ -8,12 +9,23 @@ runner = CliRunner()
 
 def test_ingest_missing_connector_shows_explicit_action(monkeypatch):
     monkeypatch.setattr(cli, "_connector_command", lambda: None)
+    monkeypatch.setattr(cli, "_connector_error", "")
 
     result = runner.invoke(cli.app, ["ingest", "https://example.com/video"])
 
     assert result.exit_code == 2
     assert "Connector" in result.output  # appears in both zh/en
     assert result.exit_code == 2
+
+
+def test_ingest_reports_stale_connector_contract(monkeypatch):
+    monkeypatch.setattr(cli, "_connector_command", lambda: None)
+    monkeypatch.setattr(cli, "_connector_error", "Bundled connector is too old")
+
+    result = runner.invoke(cli.app, ["ingest", "notes.txt"])
+
+    assert result.exit_code == 2
+    assert "too old" in result.output
 
 
 def test_ingest_recommends_capability_install(monkeypatch):
@@ -65,6 +77,36 @@ def test_capability_install_is_explicit_by_default():
     assert result.exit_code == 0, result.output
     assert "pip" in result.output  # pip install command shown (may wrap in panel)
     assert "--yes" in result.output
+
+
+def test_capability_install_verifies_import_after_pip_success(monkeypatch):
+    checks = iter([False, False])
+    monkeypatch.setattr(cli, "_capability_already_installed", lambda _name: next(checks))
+    monkeypatch.setattr(
+        cli.subprocess,
+        "run",
+        lambda command: subprocess.CompletedProcess(command, 0),
+    )
+
+    result = runner.invoke(cli.app, ["capability", "install", "document", "--yes"])
+
+    assert result.exit_code == 2
+    assert "cannot" in result.output and "import" in result.output
+
+
+def test_capability_install_succeeds_only_after_import_verification(monkeypatch):
+    checks = iter([False, True])
+    monkeypatch.setattr(cli, "_capability_already_installed", lambda _name: next(checks))
+    monkeypatch.setattr(
+        cli.subprocess,
+        "run",
+        lambda command: subprocess.CompletedProcess(command, 0),
+    )
+
+    result = runner.invoke(cli.app, ["capability", "install", "document", "--yes"])
+
+    assert result.exit_code == 0, result.output
+    assert "document" in result.output
 
 
 def test_feishu_missing_worker_is_actionable(monkeypatch):
