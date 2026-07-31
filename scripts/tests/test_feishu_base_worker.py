@@ -3809,6 +3809,21 @@ def test_connector_binary_still_accessible_from_worker():
     assert callable(worker._connector_binary)
 
 
+def test_connector_binary_dev_fallback_runs_through_interpreter(tmp_path, monkeypatch):
+    """A bare .py path as argv[0] fails on Windows (WinError 193)."""
+    from feishu_worker.source_router import _connector_binary
+
+    script = tmp_path / "scripts" / "raw_bundle_adapter.py"
+    script.parent.mkdir(parents=True)
+    script.write_text("# stub", encoding="utf-8")
+    # Force the dev fallback: no entry point next to the interpreter.
+    monkeypatch.setattr(Path, "is_file", lambda self: self == script)
+
+    argv = _connector_binary(tmp_path)
+    assert argv == [sys.executable, str(script)]
+    assert not argv[0].endswith(".py")
+
+
 def test_source_router_fresh_subprocess_import():
     """source_router imports in a fresh subprocess without the base worker."""
     import subprocess

@@ -19,19 +19,20 @@ from feishu_worker.base_client import parse_json_output
 from feishu_worker.config import WorkerConfig
 
 
-def _connector_binary(root: Path) -> str:
-    """Return the oks-connector CLI path.
+def _connector_binary(root: Path) -> list[str]:
+    """Return the argv prefix that invokes the oks-connector CLI.
 
-    Prefers the entry point next to the current Python (pipx venv).
-    Falls back to the source script in dev mode.
+    Prefers the entry point next to the current Python (pipx venv). Falls back
+    to running the source script through the interpreter — a bare ``.py`` path
+    is not directly executable on Windows (WinError 193).
     """
     suffix = ".exe" if os.name == "nt" else ""
     injected = Path(sys.executable).parent / f"oks-connector{suffix}"
     if injected.is_file():
-        return str(injected)
+        return [str(injected)]
     script = root / "scripts" / "raw_bundle_adapter.py"
     if script.is_file():
-        return str(script)
+        return [sys.executable, str(script)]
     raise RuntimeError("oks-connector not found; reinstall open-knowledge-studio")
 
 
@@ -45,7 +46,7 @@ def _run_or_validate(output: Path, ingest_argv: list[str], root: Path) -> dict[s
     """
     if output.is_dir():
         validation = subprocess.run(
-            [_connector_binary(root), "validate", str(output)],
+            [*_connector_binary(root), "validate", str(output)],
             cwd=root,
             text=True,
             encoding="utf-8",
@@ -71,7 +72,7 @@ def _run_or_validate(output: Path, ingest_argv: list[str], root: Path) -> dict[s
     if result.returncode != 0:
         raise RuntimeError((result.stderr or result.stdout).strip())
     validation = subprocess.run(
-        [_connector_binary(root), "validate", str(output)],
+        [*_connector_binary(root), "validate", str(output)],
         cwd=root,
         text=True,
         encoding="utf-8",
@@ -93,7 +94,7 @@ def package_local_attachment(
     """Package a local attachment file into a Raw bundle."""
     return _run_or_validate(
         output,
-        [_connector_binary(root), "ingest", str(source), "--output", str(output)],
+        [*_connector_binary(root), "ingest", str(source), "--output", str(output)],
         root,
     )
 
@@ -104,7 +105,7 @@ def package_routed_source(
     """Package a platform-routed source (e.g. Bilibili video) into a Raw bundle."""
     return _run_or_validate(
         output,
-        [_connector_binary(root), "ingest", source, "--output", str(output)],
+        [*_connector_binary(root), "ingest", source, "--output", str(output)],
         root,
     )
 
@@ -125,7 +126,7 @@ def package_public_web(
     except Exception as exc:
         raise RuntimeError(str(exc)) from exc
     validation = subprocess.run(
-        [_connector_binary(root), "validate", str(output)],
+        [*_connector_binary(root), "validate", str(output)],
         cwd=root,
         text=True,
         encoding="utf-8",

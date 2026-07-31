@@ -58,7 +58,7 @@ def base_args(config: WorkerConfig) -> list[str]:
     return _base_client_base_args(config)
 
 
-def _connector_binary() -> str:
+def _connector_binary() -> list[str]:
     return _source_router__connector_binary(ROOT)
 
 
@@ -163,7 +163,7 @@ def finalize_raw_v2(
 ) -> dict[str, Any]:
     connector = _connector_binary()
     command = [
-            connector,
+            *connector,
             "finalize-v2",
             str(output),
             "--capture-envelope",
@@ -191,7 +191,7 @@ def finalize_raw_v2(
 def probe_source(config: WorkerConfig, url: str) -> dict[str, Any]:
     connector = _connector_binary()
     result = subprocess.run(
-        [connector, "probe", url],
+        [*connector, "probe", url],
         cwd=ROOT,
         text=True,
         encoding="utf-8",
@@ -218,7 +218,7 @@ def download_public_source(
     connector = _connector_binary()
     result = subprocess.run(
         [
-            connector,
+            *connector,
             "fetch",
             url,
             "--output",

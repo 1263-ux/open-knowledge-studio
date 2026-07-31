@@ -298,7 +298,7 @@ def list_review_records(config: WorkerConfig, limit: int = 100) -> list[dict[str
     )
 
 
-def _connector_binary() -> str:
+def _connector_binary() -> list[str]:
     """Return the oks-connector CLI path (delegates to feishu_worker.source_router)."""
     return _source_router__connector_binary(ROOT)
 
@@ -561,7 +561,7 @@ def process_next_review(config: WorkerConfig, limit: int = 100) -> dict[str, Any
 def probe_source(config: WorkerConfig, url: str) -> dict[str, Any]:
     connector = _connector_binary()
     result = subprocess.run(
-        [connector, "probe", url],
+        [*connector, "probe", url],
         cwd=ROOT,
         text=True,
         encoding="utf-8",
@@ -588,7 +588,7 @@ def download_public_source(
     connector = _connector_binary()
     result = subprocess.run(
         [
-            connector,
+            *connector,
             "fetch",
             url,
             "--output",
@@ -662,7 +662,7 @@ def finalize_raw_v2(
 ) -> dict[str, Any]:
     connector = _connector_binary()
     command = [
-            connector,
+            *connector,
             "finalize-v2",
             str(output),
             "--capture-envelope",
