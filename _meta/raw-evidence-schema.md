@@ -7,8 +7,8 @@
 
 ## Why this exists
 
-Multimodal L1 tools (the independent `oks-connector`
-package) emit a **Raw Bundle**: a directory holding a primary Markdown file
+Multimodal L1 tools (the connector package bundled under `scripts/`)
+emit a **Raw Bundle**: a directory holding a primary Markdown file
 plus a provenance sidecar. See `docs/raw-multimodal-standard.md` for the full
 `raw-multimodal/v0.1` output contract.
 
