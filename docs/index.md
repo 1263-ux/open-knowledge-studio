@@ -36,20 +36,20 @@ wiki/（策展知识，带衰减）
 
 ## 当前真实 POC
 
-Studio 当前以飞书多维表格作为 Capture、状态与人工审核控制面，真实运行证据和待办集中在两份文档中：
+Studio 当前以核心知识闭环为主线。飞书多维表格只作为可选 Capture、状态与人工审核控制面，不是 OKS 运行的必要条件。真实运行证据和待办集中在两份文档中：
 
 - **[自进化学习主 Loop](core-learning-loop-poc.md)** — 当前唯一实施清单与验收门；
 - **[Word 目标落地看板](acceptance/word-goal-landing-status-20260729.md)** — Capture → Raw → Candidate → 个人审核 → Wiki → Recall 的真实结果与限制。
 
-多模态 Raw 协议的机器事实源位于独立 `oks-connector` 仓库的 `schemas/` 与 `capabilities/`；Studio 只保留生命周期和调用入口，不复制第二套 Schema。
+多模态 Raw 协议的机器事实源位于本仓库 `schemas/`；Studio 只保留生命周期和调用入口，不复制第二套 Schema。
 
 ## 架构总览
 
-当前验收后的主架构以核心知识闭环为准：[OKS Core Architecture](architecture/oks-core-architecture.md)。
+当前主架构图以核心知识闭环为准，并显式区分已验证、部分验证、尚未验证、人工门禁和外部能力来源：
 
-旧 SVG 图只作为历史图示保留；不要把图中“设计存在”的模块理解为“真实环境已全部验收通过”。
+[OKS Core Architecture](architecture/oks-core-architecture.md)
 
-<img src="assets/pipeline.svg" alt="Pipeline" style="max-width:100%;height:auto;" />
+旧 SVG 主架构图已移除，避免把“设计存在”误读成“真实环境已全部验收通过”。
 
 ## 独特之处
 

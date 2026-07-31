@@ -95,7 +95,7 @@ open-knowledge-studio/
 | `/status` | Overview: wiki count, tier distribution, drafts, quality |
 | `/archive` | Extract conversation Q&A → AI summarize → drafts/ (never writes wiki directly) |
 | `/promote` | Review drafts/ → promote/reject/edit |
-| `/media-ingest` | Experimental compatibility adapter; current protocol baseline: `oks-connector/schemas/` and `oks-connector/capabilities/` |
+| `/media-ingest` | Experimental compatibility adapter; current protocol baseline: `schemas/` |
 
 ## CLI Commands
 

@@ -12,7 +12,6 @@ Studio 不再维护另一份多模态字段标准。当前机器可读事实源�
 - `schemas/capability-manifest.schema.json`
 - `schemas/processing-run.schema.json`
 - `schemas/raw-bundle-v0.2.schema.json`
-- `capabilities/`
 
 当前 Bundle 版本是 `raw-multimodal/v0.2`。Studio 只负责 Capture 编排、Candidate、人工审核、Wiki 晋升与召回；来源获取后的机械解析、证据定位、质量状态和失败事实由 connector 负责。
 
