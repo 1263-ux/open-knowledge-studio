@@ -44,6 +44,42 @@ def test_asset_maps_agree_across_build_and_init():
     assert (".agents", "agents") in bundle_map
 
 
+def _load_tuple(path: Path, name: str) -> tuple[str, ...]:
+    """Read a module-level tuple literal without importing the module."""
+    source = path.read_text(encoding="utf-8")
+    start = source.index(f"{name} = ")
+    end = source.index(")", start) + 1
+    namespace: dict = {}
+    exec(source[start:end], namespace)
+    return namespace[name]
+
+
+def test_dev_only_skills_are_excluded_from_every_build_path():
+    """Maintainer PR-review skills must never ship to a user's knowledge base."""
+    from knowledge_studio.cli import _DEV_ONLY_ASSET_NAMES as cli_names
+
+    cli_dir = Path(__file__).parents[1]
+    bundle_names = _load_tuple(cli_dir / "scripts" / "bundle_assets.py", "_DEV_ONLY_ASSET_NAMES")
+    setup_names = _load_tuple(cli_dir / "setup.py", "_DEV_ONLY_ASSET_NAMES")
+
+    # cli's copy governs source checkouts, where the build-time ignore is absent.
+    assert bundle_names == setup_names == cli_names
+    assert "review-upstream-pr" in bundle_names
+    assert "upstream-pr-remediation" in bundle_names
+
+
+def test_init_never_materializes_dev_only_skills(tmp_path):
+    target = tmp_path / "kb"
+    assert runner.invoke(app, ["init", str(target), "--no-git", "--no-set-default"]).exit_code == 0
+
+    skills = target / ".claude" / "skills"
+    installed = {entry.name for entry in skills.iterdir()} if skills.is_dir() else set()
+    assert "review-upstream-pr" not in installed
+    assert "upstream-pr-remediation" not in installed
+    # User-facing skills still arrive.
+    assert {"ingest", "query", "promote"} <= installed
+
+
 def test_init_scaffolds_buckets_and_data_gitignore(tmp_path):
     target = tmp_path / "kb"
     result = runner.invoke(app, ["init", str(target), "--no-git", "--no-set-default"])

@@ -30,6 +30,12 @@ _MAP = [
 # caches are build noise.
 _CONNECTOR_IGNORE = shutil.ignore_patterns("test_*.py", "tests", "__pycache__", "*.pyc")
 
+# Maintainer-only skills: they drive the upstream-PR review workflow and must
+# never reach a user's knowledge base, where they would pollute skill discovery
+# and could be auto-matched by an agent. Kept in the repo for development.
+_DEV_ONLY_ASSET_NAMES = ("review-upstream-pr", "upstream-pr-remediation")
+_DEV_ONLY_IGNORE = shutil.ignore_patterns(*_DEV_ONLY_ASSET_NAMES)
+
 
 def _repo_root() -> Path:
     return Path(__file__).resolve().parent.parent
@@ -55,7 +61,7 @@ def _vendor_assets() -> None:
     for src_name, dest_name in _MAP:
         src = repo_root / src_name
         if src.is_dir():
-            shutil.copytree(src, dest_root / dest_name)
+            shutil.copytree(src, dest_root / dest_name, ignore=_DEV_ONLY_IGNORE)
     worker = repo_root / "scripts" / "feishu_base_worker.py"
     if worker.is_file():
         worker_dest = dest_root / "scripts"
@@ -63,9 +69,24 @@ def _vendor_assets() -> None:
         shutil.copy2(worker, worker_dest / worker.name)
 
 
+def _purge_stale_build_copies(*relative: str) -> None:
+    """Drop build/lib mirrors of vendored trees.
+
+    build_py copies into build/lib incrementally and never deletes, so a tree
+    that was vendored before an exclusion was added keeps shipping from there —
+    observed as removed maintainer skills reappearing in a fresh wheel.
+    """
+    build_lib = Path(__file__).resolve().parent / "build" / "lib"
+    for name in relative:
+        stale = build_lib / name
+        if stale.exists():
+            shutil.rmtree(stale, ignore_errors=True)
+
+
 def _sync_from_checkout() -> None:
     repo_root = _repo_root()
     if (repo_root / ".claude").is_dir() and (repo_root / "templates").is_dir():
+        _purge_stale_build_copies("knowledge_studio/_assets", "oks_connector")
         _vendor_assets()
         _vendor_connector()
 

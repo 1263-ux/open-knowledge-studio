@@ -1275,6 +1275,11 @@ _ASSET_MAP = [
     ("settings", "settings"),
 ]
 
+# Maintainer-only skills. Kept in the repo for development, never installed into
+# a user's knowledge base. Must match setup.py / bundle_assets.py — a source
+# checkout copies from the repo root, so the build-time exclusion is not enough.
+_DEV_ONLY_ASSET_NAMES = ("review-upstream-pr", "upstream-pr-remediation")
+
 
 def _asset_source() -> tuple[Path | None, bool]:
     """Locate the shareable asset layer. Returns (base, is_packaged).
@@ -1299,6 +1304,7 @@ def _asset_source() -> tuple[Path | None, bool]:
 def _materialize_assets(root: Path, base: Path, is_packaged: bool, overwrite: bool) -> list[str]:
     import shutil
 
+    ignore = shutil.ignore_patterns(*_DEV_ONLY_ASSET_NAMES)
     done: list[str] = []
     for pkg_name, dest_name in _ASSET_MAP:
         src = base / (pkg_name if is_packaged else dest_name)
@@ -1308,7 +1314,7 @@ def _materialize_assets(root: Path, base: Path, is_packaged: bool, overwrite: bo
         if dest.exists() and not overwrite:
             continue
         # Merge-copy: refresh bundled files in place, keep user-owned files.
-        shutil.copytree(src, dest, dirs_exist_ok=True)
+        shutil.copytree(src, dest, dirs_exist_ok=True, ignore=ignore)
         done.append(dest_name)
     return done
 

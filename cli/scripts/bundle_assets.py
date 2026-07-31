@@ -32,6 +32,12 @@ _MAP = [
 
 _SCRIPT_ASSETS = ("feishu_base_worker.py", "feishu_setup.py")
 
+# Maintainer-only skills: they drive the upstream-PR review workflow and must
+# never reach a user's knowledge base, where they would pollute skill discovery
+# and could be auto-matched by an agent. Kept in the repo for development.
+_DEV_ONLY_ASSET_NAMES = ("review-upstream-pr", "upstream-pr-remediation")
+_DEV_ONLY_IGNORE = shutil.ignore_patterns(*_DEV_ONLY_ASSET_NAMES)
+
 
 def main() -> None:
     repo_root = Path(__file__).resolve().parents[2]  # cli/scripts/x.py -> repo root
@@ -47,7 +53,7 @@ def main() -> None:
         if not src.is_dir():
             print(f"  skip (missing): {src_name}")
             continue
-        shutil.copytree(src, dest_root / dest_name)
+        shutil.copytree(src, dest_root / dest_name, ignore=_DEV_ONLY_IGNORE)
         copied.append(dest_name)
 
     scripts_dest = dest_root / "scripts"
