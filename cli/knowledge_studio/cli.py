@@ -368,10 +368,25 @@ def _run_feishu_worker(command: str, extra: list[str]) -> None:
     raise typer.Exit(subprocess.run([sys.executable, str(worker), command, *extra]).returncode)
 
 
+def _resolve_lark_cli() -> str | None:
+    """Reuse the connector's shared resolver (LARK_CLI_EXE, Windows .cmd, npm)."""
+    try:
+        from oks_connector._lark_cli import resolve_lark_cli
+    except ImportError:
+        try:
+            from _lark_cli import resolve_lark_cli
+        except ImportError:
+            return shutil.which("lark-cli") or shutil.which("lark-cli.exe")
+    try:
+        return str(resolve_lark_cli())
+    except RuntimeError:
+        return None
+
+
 @feishu_app.command("auth")
 def feishu_auth():
     """Show the configured Lark CLI authentication state; login remains user-controlled."""
-    lark = shutil.which("lark-cli") or shutil.which("lark-cli.exe")
+    lark = _resolve_lark_cli()
     if lark is None:
         console.print("[bold red]lark-cli is not installed.[/bold red] Install and authenticate it before Feishu actions.")
         raise typer.Exit(2)
@@ -446,7 +461,7 @@ def feishu_setup(
     show_credentials: bool = typer.Option(False, "--show-credentials", help="显示完整 Base token（仅限受控终端）"),
 ):
     """自动创建飞书 Base、采集表和表单。需要 lark-cli 已认证。"""
-    lark = shutil.which("lark-cli") or shutil.which("lark-cli.exe")
+    lark = _resolve_lark_cli()
     if lark is None:
         console.print("[bold red]lark-cli 未安装。[/bold red]")
         raise typer.Exit(2)

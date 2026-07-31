@@ -220,7 +220,7 @@ def test_feishu_setup_forwards_explicit_credential_opt_in(monkeypatch, tmp_path)
         received["command"] = command
         return SimpleNamespace(returncode=0)
 
-    monkeypatch.setattr(cli.shutil, "which", lambda _name: "lark-cli")
+    monkeypatch.setattr(cli, "_resolve_lark_cli", lambda: "lark-cli")
     monkeypatch.setattr(cli, "_feishu_worker_path", lambda: worker)
     monkeypatch.setattr(cli.subprocess, "run", fake_run)
 
@@ -228,3 +228,15 @@ def test_feishu_setup_forwards_explicit_credential_opt_in(monkeypatch, tmp_path)
 
     assert result.exit_code == 0, result.output
     assert received["command"][-1] == "--show-credentials"
+
+
+def test_feishu_commands_honor_lark_cli_exe_override(monkeypatch, tmp_path):
+    """setup must use the shared resolver, so LARK_CLI_EXE works there too."""
+    fake_cli = tmp_path / "lark-cli-custom"
+    fake_cli.write_text("#!/bin/sh\n")
+    fake_cli.chmod(0o755)
+    monkeypatch.setenv("LARK_CLI_EXE", str(fake_cli))
+    # Prove the resolver is used rather than a bare PATH lookup.
+    monkeypatch.setattr(cli.shutil, "which", lambda _name: None)
+
+    assert cli._resolve_lark_cli() == str(fake_cli.resolve())

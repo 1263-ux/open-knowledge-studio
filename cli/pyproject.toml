@@ -47,7 +47,9 @@ watch = [
 formula = [
     "paddlepaddle==3.2.0",
     "paddleocr==3.7.0",
-    "tokenizers==0.23.0",
+    # Keep in sync with cli._CAPABILITIES: MinerU 3.4.4 allows
+    # >=0.22.0,<=0.23.0, but 0.23.0 is not published for the supported index.
+    "tokenizers==0.22.1",
     "ftfy==6.3.1",
 ]
 

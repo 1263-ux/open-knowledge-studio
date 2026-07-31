@@ -41,6 +41,20 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _fsync_dir(path: Path) -> None:
+    """Persist the rename itself, per CONSTITUTION A5."""
+    try:
+        fd = os.open(str(path), os.O_RDONLY)
+    except OSError:
+        return
+    try:
+        os.fsync(fd)
+    except OSError:
+        pass
+    finally:
+        os.close(fd)
+
+
 def atomic_write_json(path: Path, value: object) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = json.dumps(value, ensure_ascii=False, indent=2) + "\n"
@@ -51,6 +65,7 @@ def atomic_write_json(path: Path, value: object) -> None:
             stream.flush()
             os.fsync(stream.fileno())
         os.replace(temporary, path)
+        _fsync_dir(path.parent)
     except BaseException:
         Path(temporary).unlink(missing_ok=True)
         raise
@@ -65,6 +80,7 @@ def atomic_write_text(path: Path, value: str) -> None:
             stream.flush()
             os.fsync(stream.fileno())
         os.replace(temporary, path)
+        _fsync_dir(path.parent)
     except BaseException:
         Path(temporary).unlink(missing_ok=True)
         raise
