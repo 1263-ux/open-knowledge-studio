@@ -39,7 +39,7 @@ parent: 内部机制
 | 认知 | `wiki/` | 策划知识（memories） | 类型特定 λ | 6+1 因子召回 |
 | 认知 | `drafts/` | Dreaming 候选 | 无 | N/A（人工审查） |
 | 配置 | `settings/` | 运行时旋钮：路由表、衰减、intake | 无 | 直接读取（运行时读路由表） |
-| Schema | `_meta/` | 数据形状契约：frontmatter/learning | 无 | 读时应用；CI 强制 |
+| Schema | `_meta/` | 数据形状契约：raw evidence / trace / eval | 无 | 读时应用；CI 强制 |
 
 ## 当前仓库结构
 

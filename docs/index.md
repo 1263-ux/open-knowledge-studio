@@ -34,14 +34,15 @@ wiki/（策展知识，带衰减）
 注入 Agent 上下文
 ```
 
-## 当前真实 POC
+## 当前架构与进度
 
-Studio 当前以核心知识闭环为主线。飞书多维表格只作为可选 Capture、状态与人工审核控制面，不是 OKS 运行的必要条件。真实运行证据和待办集中在两份文档中：
+Studio 以核心知识闭环为主线，飞书多维表格仅作为可选 Capture/状态/审核控制面。
+架构事实源和本轮工程记录见：
 
-- **[自进化学习主 Loop](core-learning-loop-poc.md)** — 当前唯一实施清单与验收门；
-- **[Word 目标落地看板](acceptance/word-goal-landing-status-20260729.md)** — Capture → Raw → Candidate → 个人审核 → Wiki → Recall 的真实结果与限制。
+- **[核心架构](architecture/oks-core-architecture.md)** — 当前主事实源，区分已验证/部分验证/尚未验证
+- **[工程轮次 2-3](engineering-rounds-2-3.md)** — v0.3.0 合并后的架构加固与安全修复
 
-多模态 Raw 协议的机器事实源位于本仓库 `schemas/`；Studio 只保留生命周期和调用入口，不复制第二套 Schema。
+多模态 Raw 协议的机器事实源位于本仓库 `schemas/`；Studio 只保留生命周期和调用入口。
 
 ## 架构总览
 

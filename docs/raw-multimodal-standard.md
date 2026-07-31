@@ -17,8 +17,6 @@ Studio 不再维护另一份多模态字段标准。当前机器可读事实源�
 
 设计边界与迁移历史见：
 
-- [自进化学习主 Loop](core-learning-loop-poc.md)
-- [阶段历史汇总](phase-history-summary.md)
 - [架构设计](architecture.md)
 
 旧版 v0.1 长篇字段示例已移除，避免与 connector 的 Schema 和 Capability Manifest 发生双重事实源污染。
