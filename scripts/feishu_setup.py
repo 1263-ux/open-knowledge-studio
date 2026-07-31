@@ -21,6 +21,22 @@ import time
 from pathlib import Path
 from typing import Any
 
+if str(Path(__file__).resolve().parent) not in sys.path:
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+from feishu_worker.states import (  # noqa: E402
+    CAPTURE_MODE_OPTIONS,
+    QUALITY_STATUS_OPTIONS,
+    REVIEW_ACTION_OPTIONS,
+    RUN_STATUS_OPTIONS,
+    WIKI_STATUS_OPTIONS,
+)
+
+
+def _options(values: tuple[str, ...]) -> list[dict[str, str]]:
+    """Render a states.py tuple as lark-cli select options."""
+    return [{"name": value} for value in values]
+
+
 # ── lark-cli helper ──────────────────────────────────────────────
 
 _LARK_CLI: str | None = None
@@ -110,37 +126,25 @@ USER_FIELDS: list[dict[str, Any]] = [
 
 # Worker control fields (hidden from the form)
 WORKER_FIELDS: list[dict[str, Any]] = [
-    {"name": "运行状态", "type": "select", "options": [
-        {"name": "待处理"}, {"name": "探针中"}, {"name": "采集中"}, {"name": "待审核"},
-        {"name": "已接受"}, {"name": "已拒绝"}, {"name": "已延迟"}, {"name": "失败"},
-        {"name": "跳过"}, {"name": "已完成"},
-    ]},
+    {"name": "运行状态", "type": "select", "options": _options(RUN_STATUS_OPTIONS)},
     {"name": "运行ID", "type": "text"},
     {"name": "来源哈希", "type": "text"},
     {"name": "重试", "type": "number"},
     {"name": "租约所有者", "type": "text"},
     {"name": "租约到期", "type": "text"},
     {"name": "Raw Bundle", "type": "text"},
-    {"name": "Wiki状态", "type": "select", "options": [
-        {"name": "未提交"}, {"name": "草稿中"}, {"name": "已晋升"}, {"name": "不再晋升"},
-    ]},
+    {"name": "Wiki状态", "type": "select", "options": _options(WIKI_STATUS_OPTIONS)},
     {"name": "候选ID", "type": "text"},
     {"name": "候选内容", "type": "text"},
-    {"name": "审核动作", "type": "select", "options": [
-        {"name": "accept"}, {"name": "edit"}, {"name": "reject"}, {"name": "defer"},
-    ]},
+    {"name": "审核动作", "type": "select", "options": _options(REVIEW_ACTION_OPTIONS)},
     {"name": "审核意见", "type": "text"},
     {"name": "修改类型", "type": "text"},
     {"name": "审核时间", "type": "text"},
     {"name": "Wiki路径", "type": "text"},
     {"name": "错误码", "type": "text"},
     {"name": "错误说明", "type": "text"},
-    {"name": "采集模式", "type": "select", "options": [
-        {"name": "quick"}, {"name": "forensic"},
-    ]},
-    {"name": "质量状态", "type": "select", "options": [
-        {"name": "passed"}, {"name": "partial"}, {"name": "failed"},
-    ]},
+    {"name": "采集模式", "type": "select", "options": _options(CAPTURE_MODE_OPTIONS)},
+    {"name": "质量状态", "type": "select", "options": _options(QUALITY_STATUS_OPTIONS)},
     {"name": "总结", "type": "text"},
     {"name": "状态", "type": "select", "options": [
         {"name": "active"}, {"name": "archived"},

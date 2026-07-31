@@ -184,11 +184,29 @@ def test_feishu_capability_installs_only_public_web_dependencies(monkeypatch):
     assert received["command"][-2:] == ["requests==2.34.2", "trafilatura==2.1.0"]
 
 
-def test_feishu_worker_package_is_declared_for_wheel_builds():
+def test_connector_packages_are_declared_for_wheel_builds():
     pyproject = Path(__file__).parents[1] / "pyproject.toml"
     config = tomllib.loads(pyproject.read_text(encoding="utf-8"))
+    packages = config["tool"]["setuptools"]["packages"]
 
-    assert "feishu_worker" in config["tool"]["setuptools"]["packages"]
+    assert "oks_connector" in packages
+    assert "oks_connector.feishu_worker" in packages
+    assert "oks_connector.extractors" in packages
+
+
+def test_wheel_never_installs_generic_top_level_names():
+    """Generic names in site-packages would collide with unrelated user packages."""
+    pyproject = Path(__file__).parents[1] / "pyproject.toml"
+    config = tomllib.loads(pyproject.read_text(encoding="utf-8"))
+    setuptools_config = config["tool"]["setuptools"]
+
+    installed_tops = {name.split(".")[0] for name in setuptools_config["packages"]}
+    installed_tops |= {
+        name.split(".")[0] for name in setuptools_config.get("py-modules", [])
+    }
+    assert installed_tops == {"knowledge_studio", "oks_connector"}
+    for reserved in ("i18n", "constants", "digest", "network", "route", "validator"):
+        assert reserved not in installed_tops
 
 
 def test_feishu_setup_forwards_explicit_credential_opt_in(monkeypatch, tmp_path):

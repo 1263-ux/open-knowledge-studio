@@ -47,6 +47,7 @@ from feishu_worker.base_client import (
     _LARK_BASE_DELAY,
     _LARK_MAX_RETRIES,
     _LARK_SUBPROCESS_TIMEOUT,
+    CLAIMABLE_STATUSES,
     _extract_lark_error_code,
     _is_fatal_lark_error,
     _is_retryable_lark_error,
@@ -220,9 +221,15 @@ def list_records(config: WorkerConfig, limit: int = 100) -> list[dict[str, Any]]
     ]
     for field in CAPTURE_FIELDS:
         command.extend(["--field-id", field])
+    # Fetch every claimable status: is_candidate() also accepts retry-flagged
+    # records and 已领取 records with an expired lease. Filtering to 待处理 here
+    # would make retries and crash recovery unreachable.
     command.extend([
         "--filter-json",
-        '{"logic":"and","conditions":[["运行状态","intersects",["待处理"]]]}',
+        json.dumps(
+            {"logic": "and", "conditions": [["运行状态", "intersects", list(CLAIMABLE_STATUSES)]]},
+            ensure_ascii=False,
+        ),
     ])
     envelope = lark_json(config, *command)
     data = envelope.get("data", {})

@@ -115,7 +115,7 @@ oks sync [--pull]
 
 ## Project-specific operating rules
 
-- The operational personal knowledge instance is `D:\knowledge\oks-personal-knowledge`; this repository remains reusable Studio code.
+- Personal knowledge lives in a separate instance created by `oks init <path>`; this repository remains reusable Studio code.
 - Every push, Pull Request create/update/close, Merge, Pages/Release publication, deployment, remote setting change, or external message requires explicit user authorization for that exact action. Without it, stop after local edits, validation, diff review, and read-only remote inspection.
 - Context compaction is controlled by the client or runtime. Do not claim that this file can set an automatic threshold or that an unexposed usage percentage is known.
 - If the client explicitly reports 80% usage, or at major milestones and around unusually large tool output, preserve a structured checkpoint containing the goal, decisions, authorization boundary, changed files, verification, open issues, and exact next step.

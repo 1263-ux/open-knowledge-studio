@@ -1411,8 +1411,14 @@ def test_redact_token_handles_short_token():
 
 def test_lark_redacts_token_in_error_output(monkeypatch):
     """_lark() must redact base_token from subprocess stderr before raising."""
+    import feishu_setup
     from feishu_setup import _lark, _redact_token
     import subprocess as sp
+
+    # Hermetic: never resolve the real lark-cli, and leave the module-level
+    # cache untouched for other tests.
+    monkeypatch.setattr(feishu_setup, "_LARK_CLI", None)
+    monkeypatch.setattr(feishu_setup, "_get_lark_cli", lambda: "/fake/lark-cli")
 
     token = "B4s3T0k3nV4lu3Fr0mF3ishu"
     monkeypatch.setattr(
@@ -1429,6 +1435,75 @@ def test_lark_redacts_token_in_error_output(monkeypatch):
         assert _redact_token(token) in str(error)
     else:
         raise AssertionError("_lark must raise on non-zero returncode")
+
+
+def test_setup_select_options_cover_every_worker_written_value():
+    """A Base created by setup must accept every status the worker writes.
+
+    Bitable rejects unknown select options with INVALID_ARGUMENT, which this
+    pipeline treats as fatal (no retry) — so a mismatch bricks the first upsert.
+    """
+    import re
+
+    from feishu_setup import WORKER_FIELDS
+    from feishu_worker.states import (
+        CAPTURE_MODE_OPTIONS,
+        QUALITY_STATUS_OPTIONS,
+        RUN_STATUS_OPTIONS,
+        WIKI_STATUS_OPTIONS,
+    )
+
+    declared = {
+        field["name"]: {option["name"] for option in field["options"]}
+        for field in WORKER_FIELDS
+        if field["type"] == "select"
+    }
+    assert declared["运行状态"] == set(RUN_STATUS_OPTIONS)
+    assert declared["采集模式"] == set(CAPTURE_MODE_OPTIONS)
+    assert declared["质量状态"] == set(QUALITY_STATUS_OPTIONS)
+    assert declared["Wiki状态"] == set(WIKI_STATUS_OPTIONS)
+
+    # Scan the pipeline sources for literal writes and prove they are declared.
+    root = Path(__file__).resolve().parent.parent
+    sources = [root / "feishu_base_worker.py", *sorted((root / "feishu_worker").glob("*.py"))]
+    for field_name, allowed in (
+        ("运行状态", declared["运行状态"]),
+        ("采集模式", declared["采集模式"]),
+        ("质量状态", declared["质量状态"]),
+        ("Wiki状态", declared["Wiki状态"]),
+    ):
+        pattern = re.compile(rf'"{field_name}":\s*"([^"]+)"')
+        for source in sources:
+            if source.name.startswith("test_"):
+                continue
+            for written in pattern.findall(source.read_text(encoding="utf-8")):
+                assert written in allowed, (
+                    f"{source.name} writes {field_name}={written!r} but setup does not declare it"
+                )
+
+
+def test_claim_filter_covers_retry_and_lease_recovery():
+    """list_records must fetch every status is_candidate() can accept."""
+    from feishu_worker.states import (
+        CLAIMABLE_STATUSES,
+        RUN_STATUS_CLAIMED,
+        RUN_STATUS_PENDING,
+        RUN_STATUS_RETRYABLE,
+    )
+
+    # Retry-flagged and expired-lease records are not 待处理; filtering to
+    # 待处理 alone made both paths unreachable in run-once.
+    assert RUN_STATUS_PENDING in CLAIMABLE_STATUSES
+    assert RUN_STATUS_RETRYABLE in CLAIMABLE_STATUSES
+    assert RUN_STATUS_CLAIMED in CLAIMABLE_STATUSES
+
+    for source in (
+        Path(__file__).resolve().parent.parent / "feishu_base_worker.py",
+        Path(__file__).resolve().parent.parent / "feishu_worker" / "base_client.py",
+    ):
+        text = source.read_text(encoding="utf-8")
+        assert 'intersects",["待处理"]' not in text, f"{source.name} still hardcodes 待处理-only filter"
+        assert "CLAIMABLE_STATUSES" in text
 
 
 def test_redact_error_message_replaces_token():

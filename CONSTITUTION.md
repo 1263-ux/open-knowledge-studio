@@ -291,3 +291,22 @@ All persistent writes use the `mkstemp + fsync + os.replace` pattern.
 fsync after replace is required for crash safety.
 
 **Do not** write wiki pages or config with bare `open(path, 'w')`.
+
+---
+
+## Revision history
+
+Invariant-level changes must be recorded here so they are traceable without
+archaeology through 20k-line diffs.
+
+- **2026-07-31 — P5 reversed** (oks-connector integration): P5 previously
+  forbade `oks ingest <input>` internal dispatch and in-CLI modality
+  detection. It now defines `oks ingest` as the orchestration entry point
+  routing to Level-1 extractors. Rationale: suffix-based routing is format
+  dispatch, not knowledge judgment; the surviving invariant is that ingest
+  **never summarizes, grades, or promotes**, and L1 extractors remain
+  directly callable by the Agent. Accepted by the maintainer during review
+  of the connector merge.
+- **2026-07-31 — traces defined as provenance** (P3/A1): `raw/executions/`
+  registered in A1; traces excluded from recall and reachable only through
+  wiki evidence links.

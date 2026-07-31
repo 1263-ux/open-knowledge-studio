@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "'D:\\XiangMuLuoDi\\Clone\\1263-ux\\claude-code-knowledge-studios\\.codex\\hooks\\validate-wiki-write.sh'"
+            "command": ".codex/hooks/validate-wiki-write.sh"
           }
         ]
       }
@@ -16,7 +16,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "'D:\\XiangMuLuoDi\\Clone\\1263-ux\\claude-code-knowledge-studios\\.codex\\hooks\\pre-compact.sh'"
+            "command": ".codex/hooks/pre-compact.sh"
           }
         ]
       }
@@ -26,7 +26,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "'D:\\XiangMuLuoDi\\Clone\\1263-ux\\claude-code-knowledge-studios\\.codex\\hooks\\session-start.sh'"
+            "command": ".codex/hooks/session-start.sh"
           }
         ]
       }

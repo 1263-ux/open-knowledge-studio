@@ -138,7 +138,7 @@ oks config init | show | set <key> <value>
 
 ## Project-specific safety rules
 
-- The operational personal knowledge instance is `D:\knowledge\oks-personal-knowledge`; this repository is reusable Studio code and must not remain the long-term destination for personal Wiki or Raw state.
+- Personal knowledge lives in a separate instance created by `oks init <path>`; this repository is reusable Studio code and must not remain the long-term destination for personal Wiki or Raw state.
 - Every `git push`, Pull Request create/update/close, Merge, Pages/Release publication, deployment, remote setting change, or external message requires the user's explicit authorization for that exact action. A general “continue” or authorization for a different action does not count.
 - Without that authorization, stop after local editing, validation, diff review, and read-only remote inspection. A Draft PR is still an external action.
 - Context compaction is controlled by the client or runtime; this file cannot set an automatic threshold or reveal an unexposed usage percentage. If the client explicitly reports 80% usage, or at major milestones and around unusually large tool output, preserve a structured checkpoint before invoking an actually available compaction mechanism.

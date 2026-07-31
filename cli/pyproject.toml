@@ -58,30 +58,20 @@ Documentation = "https://open-agent-power.github.io/open-knowledge-studio/"
 
 [project.scripts]
 oks = "knowledge_studio.cli:app"
-oks-connector = "raw_bundle_adapter:main"
+oks-connector = "oks_connector.raw_bundle_adapter:main"
 
 [tool.setuptools]
 include-package-data = false
-py-modules = [
-    "_shared",
-    "_lark_cli",
-    "capability_check",
-    "constants",
-    "digest",
-    "feishu_setup",
-    "formula_candidates",
-    "i18n",
-    "multimodal_feedback",
-    "network",
-    "raw_bundle_adapter",
-    "route",
-    "validator",
+packages = [
+    "knowledge_studio",
+    "oks_connector",
+    "oks_connector.extractors",
+    "oks_connector.feishu_worker",
 ]
-packages = ["knowledge_studio", "extractors", "feishu_worker"]
 
 [tool.setuptools.package-dir]
-"" = "../scripts"
 "knowledge_studio" = "knowledge_studio"
+"oks_connector" = "../scripts"
 
 [tool.setuptools.package-data]
 knowledge_studio = ["_assets/**/*", "_assets/scripts/*.py"]

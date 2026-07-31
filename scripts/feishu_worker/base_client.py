@@ -17,6 +17,7 @@ from typing import Any
 
 from feishu_worker.config import WorkerConfig
 from feishu_worker.io_utils import _redact_error_text
+from feishu_worker.states import CLAIMABLE_STATUSES
 
 # Signature of a lark_json-compatible callable, for dependency injection.
 LarkFn = Callable[..., dict[str, Any]]
@@ -277,10 +278,15 @@ def list_records(
     ]
     for field in projection:
         command.extend(["--field-id", field])
-    # Only fetch pending records (avoid wasting limit on already-processed ones)
+    # Fetch every claimable status, not just 待处理: is_candidate() also accepts
+    # retry-flagged records and 已领取 records whose lease expired. Filtering to
+    # 待处理 here would make retries and crash recovery unreachable.
     command.extend([
         "--filter-json",
-        '{"logic":"and","conditions":[["运行状态","intersects",["待处理"]]]}',
+        json.dumps(
+            {"logic": "and", "conditions": [["运行状态", "intersects", list(CLAIMABLE_STATUSES)]]},
+            ensure_ascii=False,
+        ),
     ])
     envelope = _lark(config, *command, root=root)
     data = envelope.get("data", {})

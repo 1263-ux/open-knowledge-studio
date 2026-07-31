@@ -30,17 +30,27 @@ from knowledge_studio.recall import (
     recall_knowledge,
 )
 
-# ── ingest: direct import from bundled scripts/ ──────────────────────
-_SCRIPTS = Path(__file__).resolve().parent.parent.parent / "scripts"
-if str(_SCRIPTS) not in sys.path:
-    sys.path.insert(0, str(_SCRIPTS))
-
+# ── ingest: connector lives in the oks_connector package once installed,
+# or under ../scripts in a source checkout ───────────────────────────
 _connector_available = False
 try:
-    from raw_bundle_adapter import build_parser as _connector_parser, run_ingest as _connector_run_ingest
+    from oks_connector.raw_bundle_adapter import (
+        build_parser as _connector_parser,
+        run_ingest as _connector_run_ingest,
+    )
     _connector_available = True
 except ImportError:
-    pass
+    _SCRIPTS = Path(__file__).resolve().parent.parent.parent / "scripts"
+    if str(_SCRIPTS) not in sys.path:
+        sys.path.insert(0, str(_SCRIPTS))
+    try:
+        from raw_bundle_adapter import (
+            build_parser as _connector_parser,
+            run_ingest as _connector_run_ingest,
+        )
+        _connector_available = True
+    except ImportError:
+        pass
 
 
 def _configure_utf8_stdio() -> None:
