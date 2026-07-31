@@ -217,7 +217,7 @@ def build_parser() -> argparse.ArgumentParser:
     check.add_argument(
         "extractor",
         nargs="?",
-        choices=["watch", "rapidocr", "markitdown", "mineru", "all"],
+        choices=["watch", "rapidocr", "markitdown", "mineru", "formula", "all"],
         default="all",
     )
     check.add_argument("--minimal", action="store_true", help="仅输出版本兼容性检查，不逐个验证提取器。")
@@ -286,24 +286,28 @@ def _extractor_python(extractor: str) -> Path:
         "rapidocr": "OKS_WATCH_PYTHON",
         "markitdown": "OKS_DOCUMENT_PYTHON",
         "mineru": "OKS_MINERU_PYTHON",
+        "formula": "OKS_FORMULA_PYTHON",
     }[extractor]
     extra = {
         "watch": "watch",
         "rapidocr": "watch",
         "markitdown": "document",
         "mineru": "pdf",
+        "formula": "formula",
     }[extractor]
     module = {
         "watch": "watch_skill",
         "rapidocr": "rapidocr",
         "markitdown": "markitdown",
         "mineru": "mineru",
+        "formula": "paddleocr",
     }[extractor]
 
     # 1. Already installed (via oks capability install) — shared check
     # Map extractor names to capability names for the shared check
     _extractor_to_capability = {"watch": "watch", "rapidocr": "watch",
-                                "markitdown": "document", "mineru": "pdf"}
+                                "markitdown": "document", "mineru": "pdf",
+                                "formula": "formula"}
     capability = _extractor_to_capability.get(extractor, extractor)
     from capability_check import is_capability_available as _cap_ok
     cap_ok, cap_python = _cap_ok(capability)
@@ -325,6 +329,7 @@ def _extractor_python(extractor: str) -> Path:
         "rapidocr": ".venv-watch",
         "markitdown": ".venv-document",
         "mineru": ".venv-pdf",
+        "formula": ".venv-formula",
     }[extractor]
     relative = Path("Scripts/python.exe") if os.name == "nt" else Path("bin/python")
     candidate = root / environment_dir / relative
@@ -389,6 +394,7 @@ def _validate_extractor_python(
         "rapidocr": "rapidocr",
         "markitdown": "markitdown",
         "mineru": "mineru",
+        "formula": "paddleocr",
     }[extractor]
     try:
         import_result = subprocess.run(
@@ -402,6 +408,7 @@ def _validate_extractor_python(
         extra_name = {
             "watch": "watch", "rapidocr": "watch",
             "markitdown": "document", "mineru": "pdf",
+            "formula": "formula",
         }[extractor]
         raise RuntimeError(
             f"{extractor} Python 在 {candidate} 导入 {module_query} 时超时。\n"
@@ -412,6 +419,7 @@ def _validate_extractor_python(
         extra_name = {
             "watch": "watch", "rapidocr": "watch",
             "markitdown": "document", "mineru": "pdf",
+            "formula": "formula",
         }[extractor]
         raise RuntimeError(
             f"{extractor} Python 在 {candidate} 无法导入 {module_query}:\n"
@@ -624,7 +632,7 @@ def run_check(args: argparse.Namespace) -> int:
         return 0
 
     extractors = (
-        ["watch", "rapidocr", "markitdown", "mineru"]
+        ["watch", "rapidocr", "markitdown", "mineru", "formula"]
         if args.extractor == "all"
         else [args.extractor]
     )
@@ -641,6 +649,7 @@ def run_check(args: argparse.Namespace) -> int:
                     "rapidocr": "OKS_WATCH_PYTHON",
                     "markitdown": "OKS_DOCUMENT_PYTHON",
                     "mineru": "OKS_MINERU_PYTHON",
+                    "formula": "OKS_FORMULA_PYTHON",
                 }[ext],
             }
         except (RuntimeError, FileNotFoundError) as exc:

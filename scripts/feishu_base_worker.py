@@ -1171,9 +1171,9 @@ def promote_candidate_document(
     metadata["status"] = "draft"
     metadata["review"] = review
     atomic_write_text(candidate_path, render_candidate_document(metadata, reviewed_body))
-    cli_root = str(ROOT / "cli")
-    if cli_root not in sys.path:
-        sys.path.insert(0, cli_root)
+    _cli_root = str(Path(__file__).resolve().parents[1] / "cli")
+    if _cli_root not in sys.path:
+        sys.path.insert(0, _cli_root)
     from knowledge_studio import store
 
     previous_root = os.environ.get("OKS_ROOT")

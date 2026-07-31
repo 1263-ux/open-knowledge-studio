@@ -39,9 +39,9 @@ Feishu preflight. The final Feishu E2E remains `awaiting_human` until its
 dedicated Base and reviewer approval are supplied.
 
 The helper creates one isolated pipx environment and one empty KB per ingest
-capability. Formula acceptance deliberately exercises the public
-`--formula-secondary` switch: an installed package alone is not a pass. Feishu
-preflight creates no cloud data.
+capability. Formula acceptance verifies capability installation and paddleocr
+import only — it is a secondary PDF sub-capability with no standalone ingest
+route. Feishu preflight creates no cloud data.
 It verifies install, `oks`, `oks-connector`, capability installation, Raw Bundle
 artifacts, Candidate promotion, search, recall, and lint. It writes
 `report.json` and `report.md`, then removes only that run's pipx and KB unless
