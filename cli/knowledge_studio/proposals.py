@@ -23,6 +23,8 @@ def create_proposal(run_id: str, kind: str, title: str, summary: str) -> Path:
     if kind not in PROPOSAL_KINDS:
         raise ValueError("kind must be one of: wiki, skill")
     manifest = load_manifest(run_id)
+    if manifest.get("status") == "completed":
+        raise ValueError(f"Trace is already completed: {run_id}")
     directory = drafts_dir() / "proposals" / kind
     path = directory / f"{run_id}-{_slugify(title)}.md"
     if path.exists():

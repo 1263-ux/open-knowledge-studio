@@ -1,7 +1,9 @@
 """Append-only execution traces for agent, judge, tool, and human events."""
 from __future__ import annotations
 
+import contextlib
 import json
+import os
 import re
 import uuid
 from datetime import UTC, datetime
@@ -9,6 +11,15 @@ from pathlib import Path
 from typing import Any
 
 from knowledge_studio.store import _atomic_write, raw_dir, repo_root
+
+try:
+    import fcntl
+except ImportError:  # Windows
+    fcntl = None
+try:
+    import msvcrt
+except ImportError:  # POSIX
+    msvcrt = None
 
 TRACE_SCHEMA = "trace-event/v1"
 MANIFEST_SCHEMA = "run-manifest/v1"
@@ -18,10 +29,21 @@ EVENT_TYPES = {
     "blocker", "proposal", "final_result",
 }
 ACTORS = {"agent", "judge", "human", "tool", "system"}
+# An agent must not unblock itself by appending another comment.
+UNBLOCKING_EVENT_TYPES = {"human_action", "human_comment", "checkpoint"}
 SENSITIVE_KEYS = {
     "authorization", "api_key", "apikey", "cookie", "password",
     "secret", "token", "access_token", "refresh_token",
 }
+# Best-effort value scan: catches well-known credential shapes only.
+SENSITIVE_VALUE_PATTERNS = (
+    ("aws-access-key", re.compile(r"\bAKIA[0-9A-Z]{16}\b")),
+    ("github-token", re.compile(r"\bgh[pousr]_[A-Za-z0-9]{20,}\b")),
+    ("openai-key", re.compile(r"\bsk-[A-Za-z0-9_-]{20,}\b")),
+    ("slack-token", re.compile(r"\bxox[baprs]-[A-Za-z0-9-]{10,}\b")),
+    ("bearer-token", re.compile(r"\bBearer\s+[A-Za-z0-9._~+/-]{16,}", re.IGNORECASE)),
+    ("private-key-block", re.compile(r"-----BEGIN (?:[A-Z ]+ )?PRIVATE KEY-----")),
+)
 _RUN_ID = re.compile(r"^[A-Za-z0-9._-]+$")
 
 
@@ -58,6 +80,34 @@ def _check_sensitive(value: Any, path: str = "payload") -> None:
     elif isinstance(value, list):
         for index, child in enumerate(value):
             _check_sensitive(child, f"{path}[{index}]")
+    elif isinstance(value, str):
+        for label, pattern in SENSITIVE_VALUE_PATTERNS:
+            if pattern.search(value):
+                raise ValueError(f"Credential-like value ({label}) is not allowed in trace: {path}")
+
+
+@contextlib.contextmanager
+def _append_lock(run_id: str):
+    """Serialize the read-sequence-then-append critical section across processes."""
+    lock_path = _run_dir(run_id) / ".append.lock"
+    handle = lock_path.open("a+b")
+    try:
+        if fcntl is not None:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+        elif msvcrt is not None:
+            handle.seek(0)
+            msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
+        try:
+            yield
+        finally:
+            if fcntl is not None:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+            elif msvcrt is not None:
+                handle.seek(0)
+                with contextlib.suppress(OSError):
+                    msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+    finally:
+        handle.close()
 
 
 def _read_events(path: Path) -> list[dict[str, Any]]:
@@ -117,30 +167,33 @@ def append_event(
     refs = evidence_refs or []
     if not all(isinstance(ref, str) for ref in refs):
         raise ValueError("evidence_refs must contain strings")
+    _check_sensitive(refs, "evidence_refs")
 
     events_path, manifest_path = _paths(run_id)
-    manifest = load_manifest(run_id)
-    if manifest["status"] == "completed":
-        raise ValueError(f"Trace is already completed: {run_id}")
-    events = _read_events(events_path)
-    sequence = len(events) + 1
-    event = {
-        "schema_version": TRACE_SCHEMA,
-        "event_id": f"{run_id}:{sequence}", "run_id": run_id,
-        "sequence": sequence, "timestamp": _now(),
-        "event_type": event_type, "actor": actor,
-        "payload": payload, "evidence_refs": refs,
-    }
-    with events_path.open("a", encoding="utf-8", newline="\n") as handle:
-        handle.write(json.dumps(event, ensure_ascii=False, separators=(",", ":")) + "\n")
-        handle.flush()
-    manifest["event_count"] = sequence
-    manifest["updated_at"] = event["timestamp"]
-    if event_type == "blocker":
-        manifest["status"] = "blocked"
-    elif manifest["status"] == "blocked":
-        manifest["status"] = "running"
-    _atomic_write(manifest_path, json.dumps(manifest, ensure_ascii=False, indent=2) + "\n")
+    with _append_lock(run_id):
+        manifest = load_manifest(run_id)
+        if manifest["status"] == "completed":
+            raise ValueError(f"Trace is already completed: {run_id}")
+        events = _read_events(events_path)
+        sequence = len(events) + 1
+        event = {
+            "schema_version": TRACE_SCHEMA,
+            "event_id": f"{run_id}:{sequence}", "run_id": run_id,
+            "sequence": sequence, "timestamp": _now(),
+            "event_type": event_type, "actor": actor,
+            "payload": payload, "evidence_refs": refs,
+        }
+        with events_path.open("a", encoding="utf-8", newline="\n") as handle:
+            handle.write(json.dumps(event, ensure_ascii=False, separators=(",", ":")) + "\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        manifest["event_count"] = sequence
+        manifest["updated_at"] = event["timestamp"]
+        if event_type == "blocker":
+            manifest["status"] = "blocked"
+        elif manifest["status"] == "blocked" and event_type in UNBLOCKING_EVENT_TYPES:
+            manifest["status"] = "running"
+        _atomic_write(manifest_path, json.dumps(manifest, ensure_ascii=False, indent=2) + "\n")
     return event
 
 
@@ -150,11 +203,12 @@ def finish_trace(run_id: str, result: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("result.outcome must be one of: success, partial, failure, invalid")
     event = append_event(run_id, "final_result", "agent", result)
     _, manifest_path = _paths(run_id)
-    manifest = load_manifest(run_id)
-    manifest["status"] = "completed"
-    manifest["result"] = result
-    manifest["updated_at"] = event["timestamp"]
-    _atomic_write(manifest_path, json.dumps(manifest, ensure_ascii=False, indent=2) + "\n")
+    with _append_lock(run_id):
+        manifest = load_manifest(run_id)
+        manifest["status"] = "completed"
+        manifest["result"] = result
+        manifest["updated_at"] = event["timestamp"]
+        _atomic_write(manifest_path, json.dumps(manifest, ensure_ascii=False, indent=2) + "\n")
     return manifest
 
 

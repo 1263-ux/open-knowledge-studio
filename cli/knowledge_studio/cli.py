@@ -214,7 +214,7 @@ def recall_cmd(
 def eval_recall(
     dataset: Path = typer.Argument(help="YAML recall dataset"),
     output: Path = typer.Option(..., "--output", "-o", help="Output run JSON"),
-    limit: int = typer.Option(5, "--limit", "-n", min=1, help="Retrieved items per case"),
+    limit: int = typer.Option(5, "--limit", "-n", min=5, help="Retrieved items per case (>=5 keeps recall@5 meaningful)"),
 ):
     """Run a deterministic, read-only recall evaluation."""
     from knowledge_studio.evaluation import run_evaluation
@@ -845,6 +845,9 @@ Thumbs.db
 
 # OKS local per-machine state (access counts, fingerprints) — NOT synced
 .oks/
+
+# Trace append locks (runtime state, not trace content)
+raw/executions/*/.append.lock
 
 # NOTE: wiki/, drafts/, profiles/ are intentionally TRACKED — they ARE your
 # memory. Unlike the open-knowledge-studio code repo (which ignores wiki/ &

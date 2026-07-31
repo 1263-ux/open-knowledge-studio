@@ -333,6 +333,27 @@ def test_recall_is_read_only(kb_root):
     assert get_wiki_page("git-branching")["access_count"] == 0
 
 
+def test_episodic_recall_excludes_execution_traces(kb_root):
+    """Traces are provenance: an agent's own comments must not come back as memory."""
+    from knowledge_studio.recall import recall_episodic
+
+    material = kb_root / "raw" / "2026" / "07" / "30" / "articles"
+    material.mkdir(parents=True)
+    _atomic_write(material / "kafka-notes.md", "kafka rebalance notes from a human")
+
+    run = kb_root / "raw" / "executions" / "run-x"
+    run.mkdir(parents=True)
+    _atomic_write(run / "notes.md", "kafka rebalance guessed by the agent")
+    _atomic_write(
+        run / "events.jsonl",
+        json.dumps({"event_type": "ai_comment", "payload": {"comment": "kafka rebalance"}}) + "\n",
+    )
+
+    paths = [hit["source_path"] for hit in recall_episodic("kafka rebalance", limit=10)]
+    assert any("kafka-notes.md" in path for path in paths)
+    assert not any("executions" in path for path in paths)
+
+
 def test_record_access_promotes_provisional(kb_root, monkeypatch):
     """The explicit-use signal increments access_count and promotes at 3 uses."""
     import yaml

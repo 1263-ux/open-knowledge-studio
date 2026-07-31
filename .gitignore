@@ -29,6 +29,9 @@ Thumbs.db
 cli/.oks/
 cli/knowledge_studio.egg-info/
 
+# Trace append locks (runtime state, not trace content)
+raw/executions/*/.append.lock
+
 # Qoder local runtime state (scheduled tasks etc.)
 .qoder/
 

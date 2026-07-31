@@ -184,7 +184,7 @@ final_score = typed_base
 源码：`cli/knowledge_studio/recall.py`
 
 核心函数：
-- `recall_episodic(query)` — 按关键词 + 新鲜度搜索 raw/
+- `recall_episodic(query)` — 按关键词 + 新鲜度搜索 raw/，跳过 `raw/executions/`（执行轨迹是溯源证据，不参与召回）
 - `recall_knowledge(query, topic_id)` — 通过 6+1 因子评分所有 wiki/ 页面
 - `recall(query, topic_id)` — 合并双路
 

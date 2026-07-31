@@ -34,4 +34,5 @@ raw/
 ## Recall
 
 `recall_episodic()` searches `raw/` by keyword + freshness scoring.
-Freshness decays at `0.95^days_old`.
+Freshness decays at `0.95^days_old`. `raw/executions/` is skipped —
+execution traces are provenance, not recallable memory.

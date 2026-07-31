@@ -26,6 +26,11 @@ Directory fsync after replace is required for crash safety.
   LLM does not write knowledge to `raw/`.
 - `wiki/` contains curated knowledge written by LLM via the Dreaming cycle,
   approved by humans through `drafts/` review.
+- `raw/executions/` holds append-only execution traces. A trace is provenance —
+  a record of what happened, not knowledge. Traces are **excluded from recall**
+  (`recall_episodic` skips `raw/executions/`) and are reached only through
+  evidence links on a wiki page, so an agent's own commentary can never be fed
+  back to it as memory.
 
 ### P4: CLI core is API-free, external tools may use AI APIs
 
@@ -117,10 +122,13 @@ open-knowledge-studio/
 │   ├── recipes/{slug}.md         # Executable automation recipes
 │   └── goals/{slug}.md           # Goals & objectives (influences recall)
 ├── raw/                          # ② Original records
-│   └── {YYYY}/{MM}/{DD}/
-│       └── {source}/             # articles | papers | videos | audio | repos | misc
-│           ├── {slug}.md
-│           └── {slug}.jsonl
+│   ├── {YYYY}/{MM}/{DD}/
+│   │   └── {source}/             # articles | papers | videos | audio | repos | misc
+│   │       ├── {slug}.md
+│   │       └── {slug}.jsonl
+│   └── executions/{run-id}/      # Append-only execution traces
+│       ├── events.jsonl
+│       └── run.json
 ├── wiki/                         # ③ Curated knowledge
 │   └── {domain}/{type}/{slug}.md  # concepts/ | strategies/ | anti-patterns/
 ├── drafts/                       # ④ Dreaming candidates
@@ -158,7 +166,8 @@ Type-specific decay λ: concept=0.0 (no decay), strategy=0.014, anti-pattern=0.0
 
 **Recall paths** (`recall.py`):
 
-- `recall_episodic()` — searches `raw/` by keyword + freshness.
+- `recall_episodic()` — searches `raw/` by keyword + freshness, excluding
+  `raw/executions/` (provenance, not memory).
 - `recall_knowledge()` — scores `wiki/` pages by relevance + curve.
 - `recall()` — combines both layers.
 
@@ -183,6 +192,9 @@ recall, scope, and decay:
 - Semantic Memory → `wiki/`
 - Draft Memory → `drafts/`
 - Procedural Memory → `.claude/skills/` (managed by Claude Code)
+
+`raw/executions/` is **not** a memory type: it is provenance, excluded from
+recall and reached only through evidence links.
 
 **Recipes** (`profiles/recipes/`): Executable automation patterns with triggers,
 steps, tools, and schedules. Not cognitive knowledge (wiki/ strategy) —

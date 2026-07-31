@@ -7,13 +7,14 @@ import math
 import subprocess
 import time
 from datetime import UTC, datetime
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any
 
 import yaml
 
 from knowledge_studio.recall import recall_knowledge
-from knowledge_studio.store import repo_root
+from knowledge_studio.store import _atomic_write, repo_root
 
 DATASET_SCHEMA = "recall-case/v1"
 RUN_SCHEMA = "recall-eval-run/v1"
@@ -45,13 +46,21 @@ def _kb_snapshot(root: Path) -> str:
     return digest.hexdigest()
 
 
-def _git_commit(root: Path) -> str | None:
+def _kb_commit(root: Path) -> str | None:
+    """Commit of the knowledge-base instance, not of the CLI code."""
     try:
         return subprocess.run(
             ["git", "rev-parse", "HEAD"], cwd=root, check=True,
             capture_output=True, text=True,
         ).stdout.strip()
     except (OSError, subprocess.CalledProcessError):
+        return None
+
+
+def _code_version() -> str | None:
+    try:
+        return version("open-knowledge-studio")
+    except PackageNotFoundError:
         return None
 
 
@@ -109,6 +118,8 @@ def _case_metrics(slugs: list[str], relevant: set[str], forbidden: set[str]) -> 
 
 
 def run_evaluation(dataset_path: str | Path, output_path: str | Path, *, limit: int = 5) -> dict[str, Any]:
+    if limit < 5:
+        raise ValueError("limit must be >= 5 so recall_at_5 and ndcg_at_5 stay meaningful")
     dataset_path = Path(dataset_path).expanduser().resolve()
     output_path = Path(output_path).expanduser().resolve()
     dataset = load_dataset(dataset_path)
@@ -152,7 +163,8 @@ def run_evaluation(dataset_path: str | Path, output_path: str | Path, *, limit: 
         "schema_version": RUN_SCHEMA,
         "generated_at": _utc_now(),
         "manifest": {
-            "code_commit": _git_commit(root),
+            "code_version": _code_version(),
+            "kb_commit": _kb_commit(root),
             "dataset_path": str(dataset_path),
             "dataset_sha256": _sha256(dataset_path),
             "dataset_id": dataset["dataset_id"],
@@ -166,7 +178,7 @@ def run_evaluation(dataset_path: str | Path, output_path: str | Path, *, limit: 
         "cases": cases,
     }
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    _atomic_write(output_path, json.dumps(result, ensure_ascii=False, indent=2) + "\n")
     return result
 
 
@@ -177,6 +189,8 @@ def compare_runs(baseline_path: str | Path, candidate_path: str | Path, output_p
         raise ValueError("Both inputs must use recall-eval-run/v1")
     if baseline["manifest"]["dataset_sha256"] != candidate["manifest"]["dataset_sha256"]:
         raise ValueError("Cannot compare runs from different dataset snapshots")
+    if baseline["manifest"].get("limit") != candidate["manifest"].get("limit"):
+        raise ValueError("Cannot compare runs evaluated with different limits")
     keys = sorted(set(baseline["metrics"]) & set(candidate["metrics"]) - {"case_count"})
     result = {
         "schema_version": COMPARISON_SCHEMA,
@@ -193,5 +207,5 @@ def compare_runs(baseline_path: str | Path, candidate_path: str | Path, output_p
     if output_path:
         path = Path(output_path).expanduser().resolve()
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        _atomic_write(path, json.dumps(result, ensure_ascii=False, indent=2) + "\n")
     return result

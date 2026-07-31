@@ -162,7 +162,14 @@ def recall_episodic(
 
     rd = raw_dir()
     if rd.exists():
+        # Execution traces are provenance, not memory: they are reached through
+        # wiki evidence links, never recalled. Without this an agent's own
+        # comments outrank the human-collected material they were derived from.
+        executions = rd / "executions"
+
         for f in rd.rglob("*.md"):
+            if executions in f.parents:
+                continue
             try:
                 content = f.read_text(encoding="utf-8").lower()
                 if _matches_query(content, query_lower, query_tokens):
@@ -180,6 +187,8 @@ def recall_episodic(
                 continue
 
         for f in rd.rglob("*.jsonl"):
+            if executions in f.parents:
+                continue
             try:
                 for line in f.read_text(encoding="utf-8").splitlines():
                     if not line.strip():

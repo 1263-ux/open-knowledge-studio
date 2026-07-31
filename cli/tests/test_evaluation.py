@@ -46,8 +46,34 @@ def test_evaluation_metrics_manifest_and_read_only(tmp_path, monkeypatch):
     assert result["metrics"]["stale_leakage"] == 0.0
     assert result["manifest"]["dataset_sha256"]
     assert result["manifest"]["kb_snapshot_before"] == result["manifest"]["kb_snapshot_after"]
+    assert "code_commit" not in result["manifest"]
+    assert "kb_commit" in result["manifest"] and "code_version" in result["manifest"]
     assert (wiki / "alpha.md").read_bytes() == before
     assert not (tmp_path / ".oks").exists()
+
+
+def test_limit_below_five_is_rejected(tmp_path, monkeypatch):
+    monkeypatch.setenv("OKS_ROOT", str(tmp_path))
+    dataset = _dataset(tmp_path / "dataset.yaml")
+    try:
+        run_evaluation(dataset, tmp_path / "runs" / "small.json", limit=3)
+    except ValueError as exc:
+        assert "limit must be >= 5" in str(exc)
+    else:
+        raise AssertionError("limit below 5 should be rejected")
+
+
+def test_compare_rejects_different_limits(tmp_path):
+    left = {"schema_version": "recall-eval-run/v1", "manifest": {"dataset_sha256": "a", "limit": 5}, "metrics": {}}
+    right = {"schema_version": "recall-eval-run/v1", "manifest": {"dataset_sha256": "a", "limit": 10}, "metrics": {}}
+    (tmp_path / "left.json").write_text(json.dumps(left), encoding="utf-8")
+    (tmp_path / "right.json").write_text(json.dumps(right), encoding="utf-8")
+    try:
+        compare_runs(tmp_path / "left.json", tmp_path / "right.json")
+    except ValueError as exc:
+        assert "different limits" in str(exc)
+    else:
+        raise AssertionError("comparison should reject mismatched limits")
 
 
 def test_dataset_validation_and_run_comparison(tmp_path, monkeypatch):

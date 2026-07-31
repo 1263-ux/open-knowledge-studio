@@ -7,13 +7,24 @@ from knowledge_studio.cli import app
 
 runner = CliRunner()
 
+# Contract: what `oks init` must produce. Buckets come from _INSTANCE_DIRS;
+# .claude/templates/_meta/settings are the materialized shareable assets.
+EXPECTED_BUCKETS = [
+    "profiles/users", "profiles/projects", "profiles/recipes", "profiles/goals",
+    "raw", "wiki", "drafts",
+]
+EXPECTED_TOP_LEVEL = {
+    ".claude", "_meta", "settings", "templates",
+    "profiles", "raw", "wiki", "drafts", ".gitignore",
+}
+
 
 def test_init_scaffolds_buckets_and_data_gitignore(tmp_path):
     target = tmp_path / "kb"
     result = runner.invoke(app, ["init", str(target), "--no-git", "--no-set-default"])
     assert result.exit_code == 0, result.output
 
-    for d in ["wiki", "drafts", "raw", "profiles/goals", "settings", "_meta", "templates"]:
+    for d in EXPECTED_BUCKETS:
         assert (target / d).is_dir(), f"missing bucket {d}"
 
     gi = (target / ".gitignore").read_text(encoding="utf-8")
@@ -21,6 +32,37 @@ def test_init_scaffolds_buckets_and_data_gitignore(tmp_path):
     assert ".oks/" in gi
     assert "wiki/**/*.md" not in gi
     assert "drafts/*.md" not in gi
+
+
+def test_init_structure_matches_contract_exactly(tmp_path):
+    """Guard against silent drift between `oks init` and the documented layout."""
+    target = tmp_path / "kb"
+    result = runner.invoke(app, ["init", str(target), "--no-git", "--no-set-default"])
+    assert result.exit_code == 0, result.output
+
+    assert {entry.name for entry in target.iterdir()} == EXPECTED_TOP_LEVEL
+    # A fresh instance carries no execution traces or proposals: those paths are
+    # created on first use, so users who never trace never see the directories.
+    assert not (target / "raw" / "executions").exists()
+    assert not (target / "drafts" / "proposals").exists()
+
+
+def test_trace_and_proposal_paths_are_created_on_demand(tmp_path, monkeypatch):
+    """`oks trace` must work on a freshly initialized instance."""
+    target = tmp_path / "kb"
+    assert runner.invoke(app, ["init", str(target), "--no-git", "--no-set-default"]).exit_code == 0
+    monkeypatch.setenv("OKS_ROOT", str(target))
+
+    from knowledge_studio.proposals import create_proposal
+    from knowledge_studio.trace import start_trace
+
+    start_trace("goal-init", "run-init")
+    run_dir = target / "raw" / "executions" / "run-init"
+    assert (run_dir / "events.jsonl").is_file()
+    assert (run_dir / "run.json").is_file()
+
+    proposal = create_proposal("run-init", "wiki", "Init lesson", "Scaffold works.")
+    assert proposal.parent == target / "drafts" / "proposals" / "wiki"
 
 
 def test_init_materializes_shareable_assets(tmp_path):
