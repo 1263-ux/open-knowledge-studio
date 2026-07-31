@@ -184,6 +184,25 @@ def test_feishu_capability_installs_only_public_web_dependencies(monkeypatch):
     assert received["command"][-2:] == ["requests==2.34.2", "trafilatura==2.1.0"]
 
 
+def test_no_direct_url_dependencies_block_pypi_upload():
+    """PyPI rejects any Requires-Dist with a direct URL — that breaks releases.
+
+    Runtime-only installs (git checkouts, private forks) belong in
+    cli._CAPABILITIES, which is passed to `pip install` and never becomes
+    package metadata.
+    """
+    pyproject = Path(__file__).parents[1] / "pyproject.toml"
+    config = tomllib.loads(pyproject.read_text(encoding="utf-8"))
+    project = config["project"]
+
+    declared = list(project.get("dependencies", []))
+    for extra_deps in project.get("optional-dependencies", {}).values():
+        declared.extend(extra_deps)
+
+    offenders = [dep for dep in declared if "@ git+" in dep or "@ http" in dep]
+    assert not offenders, f"direct URL dependencies make the release unpublishable: {offenders}"
+
+
 def test_connector_packages_are_declared_for_wheel_builds():
     pyproject = Path(__file__).parents[1] / "pyproject.toml"
     config = tomllib.loads(pyproject.read_text(encoding="utf-8"))

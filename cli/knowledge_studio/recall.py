@@ -114,11 +114,15 @@ def recall(
     goal_boost: bool = True,
     goal: str | None = None,
     explain: bool = False,
+    user_id: str | None = None,
+    project_slug: str | None = None,
 ) -> dict[str, Any]:
     """Two-path recall: episodic (search) + knowledge (stability).
 
-    scope narrows only the knowledge path (wiki area); episodic recall stays
-    global since raw/ is time-partitioned and has no area.
+    scope narrows the knowledge path (wiki area). user_id / project_slug name
+    the current identity so the episodic path may include those private
+    profiles; without them A2 scope filtering excludes every user/project
+    profile rather than leaking one.
     """
     goal_context = _resolve_goal_context(goal, goal_boost=goal_boost)
     return {
@@ -134,7 +138,10 @@ def recall(
             "domains": sorted(goal_context["domains"]),
             "keywords": sorted(goal_context["keywords"]),
         },
-        "episodic": recall_episodic(query=query, topic_id=topic_id, limit=limit),
+        "episodic": recall_episodic(
+            query=query, topic_id=topic_id, limit=limit,
+            user_id=user_id, project_slug=project_slug,
+        ),
         "knowledge": _recall_knowledge_with_context(
             query=query,
             topic_id=topic_id,
@@ -146,12 +153,44 @@ def recall(
     }
 
 
+def _profile_in_scope(
+    path: Path, profiles_dir: Path, user_id: str | None, project_slug: str | None
+) -> bool:
+    """Enforce CONSTITUTION A2 scope filtering for profiles/.
+
+    User and project profiles are private: they are recallable only when the
+    caller names the current identity. Anything unnamed is excluded rather than
+    leaked. team.md, goals/ and recipes/ are shared, so they stay recallable.
+    """
+    try:
+        relative = path.relative_to(profiles_dir)
+    except ValueError:
+        return False
+    parts = relative.parts
+    if not parts:
+        return False
+    if parts[0] == "users":
+        return user_id is not None and len(parts) > 1 and parts[1] == user_id
+    if parts[0] == "projects":
+        if project_slug is None or len(parts) < 2:
+            return False
+        return parts[1] in (project_slug, f"{project_slug}.md")
+    return True
+
+
 def recall_episodic(
     query: str = "",
     topic_id: int | None = None,
     limit: int = DEFAULT_RECALL_LIMIT,
+    user_id: str | None = None,
+    project_slug: str | None = None,
 ) -> list[dict[str, Any]]:
-    """Search episodic memory (raw/) by keyword with freshness weighting."""
+    """Search episodic memory (raw/) by keyword with freshness weighting.
+
+    Profiles under users/ and projects/ are private per CONSTITUTION A2: they
+    are returned only when *user_id* / *project_slug* name the current identity.
+    Leaving them unset excludes those profiles instead of leaking them.
+    """
     if not query.strip():
         return []
 
@@ -210,6 +249,8 @@ def recall_episodic(
     profiles_dir = root / "profiles"
     if profiles_dir.exists():
         for f in profiles_dir.rglob("*.md"):
+            if not _profile_in_scope(f, profiles_dir, user_id, project_slug):
+                continue
             try:
                 content = f.read_text(encoding="utf-8").lower()
                 if _matches_query(content, query_lower, query_tokens):

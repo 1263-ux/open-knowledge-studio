@@ -567,6 +567,8 @@ def recall_cmd(
     goal: str = typer.Option("active", "--goal", help="Goal mode: active | none | <goal-slug>"),
     output_format: str = typer.Option("table", "--format", help="Output format: table | json"),
     explain: bool = typer.Option(False, "--explain", help="Include score components and match reasons"),
+    user: Optional[str] = typer.Option(None, "--user", envvar="OKS_USER", help="Current user id; required to recall your own profiles/users/<id>/ (A2 scope)"),
+    project: Optional[str] = typer.Option(None, "--project", envvar="OKS_PROJECT", help="Current project slug; required to recall profiles/projects/<slug> (A2 scope)"),
 ):
     """Two-path recall: episodic (raw/) + knowledge (wiki/)."""
     output_format = _validate_output_format(output_format)
@@ -578,6 +580,8 @@ def recall_cmd(
             scope=scope,
             goal=goal,
             explain=explain,
+            user_id=user,
+            project_slug=project,
         )
     except ValueError as e:
         console.print(f"[red]{e}[/red]")

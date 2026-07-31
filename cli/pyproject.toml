@@ -42,7 +42,9 @@ watch = [
     "scenedetect>=0.7,<0.8",
     "imagehash>=4.3,<5",
     "yt-dlp==2026.7.4",
-    "watch-skill @ git+https://github.com/oxbshw/watch-skill.git@bf177b09a4c8a4d850c878f3965caecf971555e6",
+    # watch-skill is intentionally absent: PyPI rejects any Requires-Dist with a
+    # direct URL, so listing it here makes the whole release unpublishable.
+    # `oks capability install watch` installs it at runtime (see cli._CAPABILITIES).
 ]
 formula = [
     "paddlepaddle==3.2.0",
@@ -73,7 +75,7 @@ packages = [
 
 [tool.setuptools.package-dir]
 "knowledge_studio" = "knowledge_studio"
-"oks_connector" = "../scripts"
+"oks_connector" = "oks_connector"
 
 [tool.setuptools.package-data]
 knowledge_studio = ["_assets/**/*", "_assets/scripts/*.py"]

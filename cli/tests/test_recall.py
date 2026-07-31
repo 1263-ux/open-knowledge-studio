@@ -354,6 +354,36 @@ def test_episodic_recall_excludes_execution_traces(kb_root):
     assert not any("executions" in path for path in paths)
 
 
+def test_episodic_recall_never_leaks_other_identities(kb_root):
+    """CONSTITUTION A2: another user's preferences / another project's facts stay out."""
+    from knowledge_studio.recall import recall_episodic
+
+    profiles = kb_root / "profiles"
+    (profiles / "users" / "alice").mkdir(parents=True)
+    (profiles / "users" / "bob").mkdir(parents=True)
+    (profiles / "projects").mkdir(parents=True)
+    _atomic_write(profiles / "team.md", "team standard: redis caching everywhere")
+    _atomic_write(profiles / "users" / "alice" / "profile.md", "alice tunes redis caching")
+    _atomic_write(profiles / "users" / "bob" / "profile.md", "bob tunes redis caching, salary 50k")
+    _atomic_write(profiles / "projects" / "mine.md", "mine uses redis caching")
+    _atomic_write(profiles / "projects" / "theirs.md", "theirs uses redis caching, confidential")
+
+    # Without an identity, every private profile is excluded rather than leaked.
+    anonymous = [hit["source_path"] for hit in recall_episodic("redis caching", limit=10)]
+    assert any("team.md" in path for path in anonymous)
+    assert not any("users/" in path for path in anonymous)
+    assert not any("projects/" in path for path in anonymous)
+
+    scoped = [
+        hit["source_path"]
+        for hit in recall_episodic("redis caching", limit=10, user_id="alice", project_slug="mine")
+    ]
+    assert any("alice" in path for path in scoped)
+    assert any("mine.md" in path for path in scoped)
+    assert not any("bob" in path for path in scoped)
+    assert not any("theirs.md" in path for path in scoped)
+
+
 def test_record_access_promotes_provisional(kb_root, monkeypatch):
     """The explicit-use signal increments access_count and promotes at 3 uses."""
     import yaml
