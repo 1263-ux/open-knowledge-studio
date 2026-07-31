@@ -1,112 +1,100 @@
-# Clean Server Deployment Report
+# 干净服务器部署报告
 
-Date: 2026-07-29
+日期：2026-07-29
 
-Remote host: `root@47.82.119.154`
+远程主机：`root@47.82.119.154`
 
-Test root during execution: `/opt/oks-word-landing-20260729b`
+测试根目录：`/opt/oks-word-landing-20260729b`
 
-Evidence archive after cleanup:
-`/opt/oks-word-landing-evidence-20260729`
+清理后证据存档：`/opt/oks-word-landing-evidence-20260729`
 
-Production project not touched: `/home/artboy-knowledge-studio`
+生产项目未触碰：`/home/artboy-knowledge-studio`
 
-OpenClaw process not touched:
-`/usr/bin/node /home/openclaw/dist/index.js gateway --port 18789`
+OpenClaw 进程未触碰：`/usr/bin/node /home/openclaw/dist/index.js gateway --port 18789`
 
-## Source State
+## 源码状态
 
-The tested source was the local repository `HEAD` after commit:
+测试使用的源码来自本地仓库 `HEAD`，对应提交：
 
 `1e7cfaf fix: write ingest raw bundles under active kb`
 
-Source archive:
+源码压缩包：
 
 `/tmp/oks-head-1e7cfaf.tar`
 
-Source archive SHA-256:
+压缩包 SHA-256：
 
 `cebe900b532aa4b08f15f16148b5526eddff3c8be9c682c78aa5cdf226c22158`
 
-## Environment
+## 环境
 
-| Check | Result |
+| 检查项 | 结果 |
 |---|---|
-| Hostname | `iZj6cbtjyd0o9lwltqg7weZ` |
+| 主机名 | `iZj6cbtjyd0o9lwltqg7weZ` |
 | Python | `Python 3.12.3` |
 | Git | `git version 2.43.0` |
 | pipx | `1.4.3` |
-| Root filesystem | `79G`, `60G` available before test |
+| 根文件系统 | `79G`，测试前可用 `60G` |
 
-## Commands and Results
+## 命令与结果
 
-| Step | Result |
+| 步骤 | 结果 |
 |---|---|
-| `pipx install /opt/oks-word-landing-20260729b/src/cli --force` | passed |
+| `pipx install /opt/oks-word-landing-20260729b/src/cli --force` | 通过 |
 | `oks --version` | `oks 0.2.4` |
-| `oks init /opt/oks-word-landing-20260729b/kb` | passed |
-| `OKS_ROOT=/opt/oks-word-landing-20260729b/kb oks status` | passed |
-| `oks ingest <txt>` before document install | failed as expected with missing `document` capability, exit `2` |
-| `oks capability install document --yes` | passed |
-| `oks ingest <txt> --mode quick --progress` | passed |
-| Raw location assertion | passed; latest bundle is inside isolated KB |
-| Candidate draft creation | passed; Agent-authored minimal draft stored under isolated `drafts/` |
-| `oks drafts promote babbage-clean-server-poc` | passed |
-| `oks search "Babbage clean server mental labour"` | passed |
-| `oks recall "Babbage clean server mental labour verification"` | passed |
-| `oks lint` | passed |
-| `oks status` final | passed; `1` Wiki page, `0` drafts |
+| `oks init /opt/oks-word-landing-20260729b/kb` | 通过 |
+| `OKS_ROOT=/opt/oks-word-landing-20260729b/kb oks status` | 通过 |
+| 未安装 document 能力时 `oks ingest <txt>` | 预期失败，缺失 `document` 能力，退出码 `2` |
+| `oks capability install document --yes` | 通过 |
+| `oks ingest <txt> --mode quick --progress` | 通过 |
+| Raw 位置断言 | 通过；最新 bundle 位于隔离 KB 内 |
+| Candidate 草稿创建 | 通过；Agent 编写的最小草稿存储在隔离的 `drafts/` 下 |
+| `oks drafts promote babbage-clean-server-poc` | 通过 |
+| `oks search "Babbage clean server mental labour"` | 通过 |
+| `oks recall "Babbage clean server mental labour verification"` | 通过 |
+| `oks lint` | 通过 |
+| `oks status` 最终状态 | 通过；`1` 条 Wiki 页面，`0` 条草稿 |
 
-## Resource Cost
+## 资源消耗
 
-| Operation | Wall time | Peak RSS |
+| 操作 | 耗时 | 峰值 RSS |
 |---|---:|---:|
-| Core `pipx install` | `11.58s` | `276304 KB` |
-| `document` capability install | `10.92s` | `109508 KB` |
-| TXT ingest after document install | `0.87s` | `111432 KB` |
+| 核心 `pipx install` | `11.58s` | `276304 KB` |
+| `document` 能力安装 | `10.92s` | `109508 KB` |
+| 安装 document 后 TXT 摄入 | `0.87s` | `111432 KB` |
 
-The test-owned root directory was about `8.7 MB`, not counting shared pipx
-virtualenv/cache storage.
+测试目录大小约 `8.7 MB`，不含共享的 pipx virtualenv/cache。
 
-## Critical Finding and Fix
+## 关键发现与修复
 
-The first clean-server attempt found a real product failure:
+首次干净服务器尝试发现了一个真实的产品缺陷：
 
-`oks ingest` honored capability detection but wrote Raw to `/root/raw/...`
-instead of the active isolated KB. This violated the acceptance rule that Raw
-must not fall into the host directory.
+`oks ingest` 进行了能力检测，但将 Raw 写入 `/root/raw/...` 而非当前激活的隔离 KB。这违反了"Raw 不得落入宿主机目录"的验收规则。
 
-Fix:
+修复提交：
 
 `1e7cfaf fix: write ingest raw bundles under active kb`
 
-Regression:
+回归验证：
 
-- `scripts/tests/test_raw_bundle_adapter.py`: `42 passed`
-- full test suite: `150 passed`
-- remote retest: Raw bundle path
-  `/opt/oks-word-landing-20260729b/kb/raw/20260729-232027-687843-0be7cbe1-pg4238-af31a5cc`
+- `scripts/tests/test_raw_bundle_adapter.py`：`42 passed`
+- 完整测试套件：`150 passed`
+- 远程复测：Raw bundle 路径 `/opt/oks-word-landing-20260729b/kb/raw/20260729-232027-687843-0be7cbe1-pg4238-af31a5cc`
 
-## Remaining Findings
+## 遗留发现
 
-- `oks status --root <path>` is not a real command. The correct mechanism is
-  `OKS_ROOT=<path> oks status` or active config from `oks init`.
-- `oks-connector --version` still reports `0.1.0` while `oks --version` reports
-  `0.2.4`; this should be aligned.
-- The clean-server Candidate was minimal and Agent-authored from the already
-  approved Babbage content. It proves the CLI lifecycle, not a fresh human
-  semantic review.
-- Public network download of a guessed Gutenberg TXT URL returned `404`; the
-  retest used the locally preserved public-domain source file with a recorded
-  SHA-256.
+- `oks status --root <path>` 不是合法命令。正确方式是 `OKS_ROOT=<path> oks status` 或通过 `oks init` 设置的活动配置。
+- `oks-connector --version` 仍报告 `0.1.0`，而 `oks --version` 报告 `0.2.4`；应统一。
+- 干净服务器 Candidate 内容是最小化的、Agent 编写的，来自已批准的 Babbage 内容。它证明了 CLI 生命周期，但不构成全新的人工语义审核。
+- 对猜测的 Gutenberg TXT URL 的公网下载返回 `404`；复测使用的是本地保存的公共领域源文件，并记录了 SHA-256。
 
-## Evidence Files on Remote
+## 远程证据文件
 
-All surviving evidence is under:
+所有留存的证据位于：
 
 `/opt/oks-word-landing-evidence-20260729/`
 
-Important files:
+重要文件：
 
 - `source-archive.sha256`
 - `pipx-install.log`
@@ -126,20 +114,20 @@ Important files:
 - `status-final.log`
 - `wiki-files.txt`
 
-## Cleanup Result
+## 清理结果
 
-After archiving report files and SHA-256 manifests:
+归档报告文件和 SHA-256 清单后：
 
-- removed `/opt/oks-word-landing-20260729`;
-- removed `/opt/oks-word-landing-20260729b`;
-- removed the failed-run `/root/raw` test output;
-- removed `/tmp/oks-head-87315a3.tar`;
-- removed `/tmp/oks-head-1e7cfaf.tar`;
-- uninstalled the root-user pipx `open-knowledge-studio` test install.
+- 已删除 `/opt/oks-word-landing-20260729`；
+- 已删除 `/opt/oks-word-landing-20260729b`；
+- 已删除失败运行的 `/root/raw` 测试输出；
+- 已删除 `/tmp/oks-head-87315a3.tar`；
+- 已删除 `/tmp/oks-head-1e7cfaf.tar`；
+- 已卸载 root 用户的 pipx `open-knowledge-studio` 测试安装。
 
-Preserved:
+保留：
 
-- `/opt/oks-word-landing-evidence-20260729`;
-- `/home/artboy-knowledge-studio`;
-- `/home/openclaw`;
-- `/root/Desktop/kimi-k3-deep-analysis.md`.
+- `/opt/oks-word-landing-evidence-20260729`；
+- `/home/artboy-knowledge-studio`；
+- `/home/openclaw`；
+- `/root/Desktop/kimi-k3-deep-analysis.md`。
