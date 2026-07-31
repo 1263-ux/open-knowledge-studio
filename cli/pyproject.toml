@@ -70,7 +70,6 @@ py-modules = [
     "feishu_setup",
     "formula_candidates",
     "i18n",
-    "multimodal_feedback",
     "network",
     "raw_bundle_adapter",
     "route",
