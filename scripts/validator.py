@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 import tempfile
-from _shared import sha256_file
+from _shared import _fsync_dir, sha256_file
 from constants import SCHEMA_VERSION, RAW_V2_VERSION
 from route import is_url
 
@@ -160,14 +160,7 @@ def _atomic_write_text(path: Path, text: str) -> None:
         handle.flush()
         os.fsync(handle.fileno())
     os.replace(Path(handle.name), path)
-    try:
-        dir_fd = os.open(str(path.parent), os.O_RDONLY)
-        try:
-            os.fsync(dir_fd)
-        finally:
-            os.close(dir_fd)
-    except OSError:
-        pass
+    _fsync_dir(path.parent)
 
 
 def _source_snapshot(bundle: Path, metadata: dict[str, Any], explicit_source: Path | None = None) -> Path:

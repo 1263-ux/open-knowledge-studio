@@ -52,56 +52,50 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
-def write_json(path: Path, value: Any) -> None:
-    payload = json.dumps(value, ensure_ascii=False, indent=2) + "\n"
-    fd, tmp = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+def _fsync_dir(path: Path) -> None:
+    """Persist the rename itself, per CONSTITUTION A5."""
     try:
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            f.write(payload)
-            f.flush()
-            os.fsync(f.fileno())
-        os.replace(tmp, str(path))
+        fd = os.open(str(path), os.O_RDONLY)
+    except OSError:
+        return
+    try:
+        os.fsync(fd)
+    except OSError:
+        pass
+    finally:
+        os.close(fd)
+
+
+def _atomic_write_text(path: Path, payload: str) -> None:
+    """mkstemp + fsync + os.replace + dir fsync, per CONSTITUTION P2/A5.
+
+    Raw Bundle artifacts are the only record of a long extraction run, so a
+    torn metadata.json or evidence.jsonl means redoing all of that work.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    handle, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    try:
+        with os.fdopen(handle, "w", encoding="utf-8", newline="\n") as stream:
+            stream.write(payload)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
         _fsync_dir(path.parent)
-    except Exception:
-        if os.path.exists(tmp):
-            try:
-                os.unlink(tmp)
-            except OSError:
-                pass
+    except BaseException:
+        Path(temporary).unlink(missing_ok=True)
         raise
+
+
+def write_json(path: Path, value: Any) -> None:
+    _atomic_write_text(path, json.dumps(value, ensure_ascii=False, indent=2) + "\n")
 
 
 def write_jsonl(path: Path, values: Iterable[dict[str, Any]]) -> int:
-    count = 0
-    fd, tmp = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as handle:
-            for value in values:
-                handle.write(json.dumps(value, ensure_ascii=False) + "\n")
-                count += 1
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(tmp, str(path))
-        _fsync_dir(path.parent)
-    except Exception:
-        if os.path.exists(tmp):
-            try:
-                os.unlink(tmp)
-            except OSError:
-                pass
-        raise
-    return count
-
-
-def _fsync_dir(path: Path) -> None:
-    try:
-        fd = os.open(str(path), os.O_RDONLY)
-        try:
-            os.fsync(fd)
-        finally:
-            os.close(fd)
-    except OSError:
-        pass
+    lines = []
+    for value in values:
+        lines.append(json.dumps(value, ensure_ascii=False) + "\n")
+    _atomic_write_text(path, "".join(lines))
+    return len(lines)
 
 
 def exactly_one(root: Path, pattern: str) -> Path:
@@ -191,9 +185,13 @@ def parse_ocr_roi(raw: str | None) -> tuple[int, int, int, int] | None:
 
 
 def format_media_time(seconds: float) -> str:
-    """Format seconds as mm:ss."""
-    m, s = divmod(int(seconds), 60)
-    return f"{m:02d}:{s:02d}"
+    """Format seconds as mm:ss, or hh:mm:ss for durations >= 1 hour."""
+    value = max(0, int(seconds))
+    hours, remainder = divmod(value, 3600)
+    minutes, secs = divmod(remainder, 60)
+    if hours:
+        return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+    return f"{minutes:02d}:{secs:02d}"
 
 from constants import SCHEMA_VERSION
 

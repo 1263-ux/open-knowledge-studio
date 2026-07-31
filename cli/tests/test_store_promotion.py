@@ -43,6 +43,43 @@ The reviewed body is preserved as the Wiki page content.
     assert not draft.exists()
 
 
+def test_promote_draft_marks_the_superseded_page(monkeypatch, tmp_path):
+    """CONSTITUTION A4: promotion must not leave the replaced page active."""
+    monkeypatch.setenv("OKS_ROOT", str(tmp_path))
+    old_slug = store.write_wiki_page(
+        title="Old caching guidance",
+        content="Use a single global cache.",
+        wiki_type="strategy",
+        area="computing",
+    ).stem
+
+    draft = tmp_path / "drafts" / "caching-v2.md"
+    draft.parent.mkdir(exist_ok=True)
+    draft.write_text(
+        f'''---
+title: "Caching guidance v2"
+draft_type: strategy
+draft_area: computing
+relates_to: {old_slug}
+relationship: supersedes
+status: draft
+---
+
+Per-tenant caches replace the single global cache.
+''',
+        encoding="utf-8",
+    )
+
+    new_slug = store.promote_draft("caching-v2")
+    old_page = store.get_wiki_page(old_slug)
+    new_page = store.get_wiki_page(new_slug)
+
+    assert old_page["status"] == "superseded"
+    assert old_page["superseded_by"] == new_slug
+    assert new_page["relates_to"] == old_slug
+    assert new_page["relationship"] == "supersedes"
+
+
 def test_promote_draft_uses_explicit_slug_hint_for_non_ascii_title(monkeypatch, tmp_path):
     monkeypatch.setenv("OKS_ROOT", str(tmp_path))
     draft = tmp_path / "drafts" / "feishu-review-return-provenance.md"

@@ -17,13 +17,14 @@ import sys
 import tempfile
 import threading
 import time
+from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from _shared import (
     emit_json, emit_progress, write_json, write_jsonl,
-    normalize_ocr_text, order_ocr_blocks, parse_ocr_roi,
+    order_ocr_blocks, parse_ocr_roi,
     format_media_time, sha256_file, prepare_output,
 )
 from route import is_url, platform_for, route_plan
@@ -91,15 +92,6 @@ def render_transcript(payload: dict[str, Any]) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
-def format_media_time(seconds: float) -> str:
-    value = max(0, int(seconds))
-    hours, remainder = divmod(value, 3600)
-    minutes, secs = divmod(remainder, 60)
-    if hours:
-        return f"{hours:02d}:{minutes:02d}:{secs:02d}"
-    return f"{minutes:02d}:{secs:02d}"
-
-
 def group_transcript_segments(
     segments: list[dict[str, Any]], max_chars: int = 220, max_gap: float = 1.5
 ) -> list[dict[str, Any]]:
@@ -135,87 +127,11 @@ def group_transcript_segments(
     return groups
 
 
-def normalize_ocr_text(value: str) -> str:
+def _normalize_ocr_strict(value: str) -> str:
+    """Normalize OCR text for similarity comparison (strips non-word chars, lowercases)."""
     return re.sub(r"\W+", "", value, flags=re.UNICODE).lower()
 
 
-def order_ocr_blocks(blocks: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Restore basic top-to-bottom, left-to-right order from OCR bboxes.
-
-    This changes only presentation order. Text, confidence and coordinates are
-    copied unchanged, and ``source_index`` preserves the extractor order.
-    """
-    positioned: list[dict[str, Any]] = []
-    unpositioned: list[dict[str, Any]] = []
-    for index, original in enumerate(blocks):
-        block = dict(original)
-        block.setdefault("source_index", index)
-        bbox = block.get("bbox")
-        if not isinstance(bbox, (list, tuple)) or len(bbox) != 4:
-            unpositioned.append(block)
-            continue
-        left, top, right, bottom = (float(value) for value in bbox)
-        block["_layout"] = {
-            "left": left,
-            "top": top,
-            "right": right,
-            "bottom": bottom,
-            "center": (top + bottom) / 2,
-            "height": max(1.0, bottom - top),
-        }
-        positioned.append(block)
-
-    positioned.sort(
-        key=lambda item: (
-            item["_layout"]["top"],
-            item["_layout"]["left"],
-            item["source_index"],
-        )
-    )
-    lines: list[dict[str, Any]] = []
-    for block in positioned:
-        layout = block["_layout"]
-        best_line: dict[str, Any] | None = None
-        best_distance = float("inf")
-        for line in lines:
-            overlap = max(
-                0.0,
-                min(layout["bottom"], line["bottom"])
-                - max(layout["top"], line["top"]),
-            )
-            overlap_ratio = overlap / min(layout["height"], line["height"])
-            distance = abs(layout["center"] - line["center"])
-            tolerance = max(layout["height"], line["height"]) * 0.6
-            if (overlap_ratio >= 0.4 or distance <= tolerance) and distance < best_distance:
-                best_line = line
-                best_distance = distance
-        if best_line is None:
-            lines.append(
-                {
-                    "top": layout["top"],
-                    "bottom": layout["bottom"],
-                    "center": layout["center"],
-                    "height": layout["height"],
-                    "blocks": [block],
-                }
-            )
-            continue
-        best_line["blocks"].append(block)
-        best_line["top"] = min(best_line["top"], layout["top"])
-        best_line["bottom"] = max(best_line["bottom"], layout["bottom"])
-        best_line["center"] = (best_line["top"] + best_line["bottom"]) / 2
-        best_line["height"] = max(1.0, best_line["bottom"] - best_line["top"])
-
-    ordered: list[dict[str, Any]] = []
-    for line in sorted(lines, key=lambda item: (item["top"], item["center"])):
-        for block in sorted(
-            line["blocks"],
-            key=lambda item: (item["_layout"]["left"], item["source_index"]),
-        ):
-            block.pop("_layout", None)
-            ordered.append(block)
-    ordered.extend(unpositioned)
-    return ordered
 
 
 def format_evidence_refs(evidence_ids: list[str]) -> str:
@@ -238,7 +154,7 @@ def select_visual_summaries(
             if str(block.get("text", "")).strip()
         ]
         text = "\n".join(dict.fromkeys(blocks))
-        normalized = normalize_ocr_text(text)
+        normalized = _normalize_ocr_strict(text)
         similarity = (
             difflib.SequenceMatcher(None, previous, normalized).ratio()
             if previous and normalized
@@ -668,21 +584,6 @@ benchmark: {str(bool(benchmark)).lower()}
     return output
 
 
-def parse_ocr_roi(value: str | None) -> tuple[int, int, int, int] | None:
-    """Parse an explicit pixel ROI without guessing the user's content area."""
-    if not value:
-        return None
-    try:
-        values = tuple(int(part.strip()) for part in value.split(","))
-    except ValueError as exc:
-        raise ValueError("OCR ROI must be x1,y1,x2,y2 integers") from exc
-    if len(values) != 4:
-        raise ValueError("OCR ROI must contain exactly four integers")
-    x1, y1, x2, y2 = values
-    if min(values) < 0 or x2 <= x1 or y2 <= y1:
-        raise ValueError("OCR ROI must satisfy 0 <= x1 < x2 and 0 <= y1 < y2")
-    return values
-
 
 def _adaptive_scene_detector(video_path: Path, start: float | None, end: float | None):
     from scenedetect import AdaptiveDetector, detect
@@ -815,6 +716,22 @@ def run_watch(args: argparse.Namespace) -> Path:
         return _run_watch_unlocked(args)
 
 
+def prepend_interpreter_bin_to_path() -> str | None:
+    """Make console scripts installed with this interpreter discoverable.
+
+    ``oks capability install watch`` installs ``yt-dlp`` into the active
+    pipx/venv interpreter's bin directory.  That directory is not guaranteed
+    to be in the parent shell's PATH, while Watch Skill resolves yt-dlp as an
+    executable rather than as an import.
+    """
+    previous = os.environ.get("PATH")
+    interpreter_bin = str(Path(sys.executable).parent)
+    entries = (previous or "").split(os.pathsep)
+    if interpreter_bin not in entries:
+        os.environ["PATH"] = interpreter_bin + os.pathsep + (previous or "")
+    return previous
+
+
 def _run_watch_unlocked(args: argparse.Namespace) -> Path:
     if args.output.expanduser().exists() and not args.overwrite:
         raise FileExistsError(f"output already exists: {args.output.expanduser().resolve()}")
@@ -912,6 +829,7 @@ def _run_watch_unlocked(args: argparse.Namespace) -> Path:
         watch_ocr.ocr_frame = roi_ocr
     setting_name = "WATCHSKILL_SUBTITLE_LANGS"
     previous_subtitle_langs = os.environ.get(setting_name)
+    previous_path = prepend_interpreter_bin_to_path()
     if args.subtitle_langs:
         os.environ[setting_name] = args.subtitle_langs
     get_settings.cache_clear()
@@ -1038,6 +956,10 @@ def _run_watch_unlocked(args: argparse.Namespace) -> Path:
             os.environ.pop(setting_name, None)
         else:
             os.environ[setting_name] = previous_subtitle_langs
+        if previous_path is None:
+            os.environ.pop("PATH", None)
+        else:
+            os.environ["PATH"] = previous_path
         get_settings.cache_clear()
         shutil.rmtree(work_dir, ignore_errors=True)
 

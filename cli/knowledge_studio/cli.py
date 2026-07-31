@@ -20,29 +20,37 @@ from rich.markdown import Markdown
 from rich.markup import escape
 
 from knowledge_studio import store
-from knowledge_studio.store import _atomic_write
 from knowledge_studio.i18n import t
-from knowledge_studio.recall import recall, recall_episodic, recall_knowledge
+from knowledge_studio.recall import (
+    RECALL_RESPONSE_SCHEMA,
+    SEARCH_RESPONSE_SCHEMA,
+    describe_goal_selection,
+    recall,
+    recall_episodic,
+    recall_knowledge,
+)
 
-# ── ingest: direct import from bundled scripts/ ──────────────────────
-_SCRIPTS = Path(__file__).resolve().parent.parent.parent / "scripts"
-if str(_SCRIPTS) not in sys.path:
-    sys.path.insert(0, str(_SCRIPTS))
-
+# ── ingest: connector lives in the oks_connector package once installed,
+# or under ../scripts in a source checkout ───────────────────────────
 _connector_available = False
-_connector_error = ""
 try:
-    import raw_bundle_adapter as _connector_module
-    from raw_bundle_adapter import build_parser as _connector_parser, run_ingest as _connector_run_ingest
-    if not hasattr(_connector_module, "default_raw_root"):
-        _connector_error = (
-            "Bundled connector is too old: missing default_raw_root(). "
-            "Reinstall open-knowledge-studio so oks and oks-connector come from the same build."
+    from oks_connector.raw_bundle_adapter import (
+        build_parser as _connector_parser,
+        run_ingest as _connector_run_ingest,
+    )
+    _connector_available = True
+except ImportError:
+    _SCRIPTS = Path(__file__).resolve().parent.parent.parent / "scripts"
+    if str(_SCRIPTS) not in sys.path:
+        sys.path.insert(0, str(_SCRIPTS))
+    try:
+        from raw_bundle_adapter import (
+            build_parser as _connector_parser,
+            run_ingest as _connector_run_ingest,
         )
-    else:
         _connector_available = True
-except ImportError as exc:
-    _connector_error = str(exc)
+    except ImportError:
+        pass
 
 
 def _configure_utf8_stdio() -> None:
@@ -70,6 +78,19 @@ app = typer.Typer(
 console = Console()
 
 
+def _validate_output_format(value: str) -> str:
+    normalized = value.lower().strip()
+    if normalized not in {"table", "json"}:
+        console.print("[red]--format must be one of: table, json[/red]")
+        raise typer.Exit(2)
+    return normalized
+
+
+def _emit_json(data) -> None:
+    """Write machine-readable JSON without Rich markup or ANSI styling."""
+    typer.echo(json.dumps(data, ensure_ascii=False, indent=2))
+
+
 def _version_callback(value: bool):
     if value:
         from importlib.metadata import version, PackageNotFoundError
@@ -94,12 +115,16 @@ wiki_app = typer.Typer(help="Wiki page management.")
 drafts_app = typer.Typer(help="Draft proposal management.")
 config_app = typer.Typer(help="Global configuration (~/.oks/config.json).")
 hook_app = typer.Typer(help="Optional editor hooks (opt-in auto-recall injection).")
+eval_app = typer.Typer(help="Offline recall evaluation and run comparison.")
+trace_app = typer.Typer(help="Append-only execution traces and feedback.")
 feishu_app = typer.Typer(help="Optional Feishu Base intake, review, and event-listening extension.")
 capability_app = typer.Typer(help="Optional modality capabilities; core dependencies stay lightweight.")
 app.add_typer(wiki_app, name="wiki")
 app.add_typer(drafts_app, name="drafts")
 app.add_typer(config_app, name="config")
 app.add_typer(hook_app, name="hook")
+app.add_typer(eval_app, name="eval")
+app.add_typer(trace_app, name="trace")
 app.add_typer(feishu_app, name="feishu")
 app.add_typer(capability_app, name="capability")
 
@@ -129,13 +154,15 @@ _CAPABILITIES = {
         "deps": [
             "paddlepaddle==3.2.0",
             "paddleocr==3.7.0",
-            "tokenizers==0.23.1",
+            # MinerU 3.4.4 requires >=0.22.0,<=0.23.0. 0.23.0 is not
+            # published for the supported interpreter index, while 0.22.1 is.
+            "tokenizers==0.22.1",
             "ftfy==6.3.1",
         ],
     },
     "feishu": {
         "purpose": "Private Base, form, bot review, and bounded listening",
-        "deps": [],
+        "deps": ["requests==2.34.2", "trafilatura==2.1.0"],
     },
 }
 
@@ -172,10 +199,25 @@ def capability_install(
     purpose = info["purpose"]
 
     if name == "feishu":
-        console.print(Panel.fit(
-            f"[bold]{t('feishu_private')}[/bold]",
-            title=t("user_managed_capability"), border_style="cyan",
-        ))
+        deps = info["deps"]
+        cmd = [sys.executable, "-m", "pip", "install"] + deps
+        message = (
+            f"[bold]{t('feishu_private')}[/bold]\n\n"
+            f"Web intake dependencies:\n{' '.join(cmd)}"
+        )
+        if not yes:
+            console.print(Panel.fit(
+                f"{message}\n\nRe-run with --yes to install the web intake dependencies.",
+                title=t("user_managed_capability"), border_style="cyan",
+            ))
+            return
+        console.print(f"[yellow]{t('capability_installing', name=name)}[/yellow]")
+        result = subprocess.run(cmd)
+        if result.returncode != 0:
+            console.print(f"[bold red]{t('capability_failed', name=name, code=result.returncode)}[/bold red]")
+            raise typer.Exit(result.returncode)
+        console.print(f"[green]{t('capability_installed', name=name)}[/green]")
+        console.print(Panel.fit(message, title=t("user_managed_capability"), border_style="cyan"))
         return
 
     if _capability_already_installed(name):
@@ -198,10 +240,6 @@ def capability_install(
     if result.returncode != 0:
         console.print(f"[bold red]{t('capability_failed', name=name, code=result.returncode)}[/bold red]")
         raise typer.Exit(result.returncode)
-    importlib.invalidate_caches()
-    if not _capability_already_installed(name):
-        console.print(f"[bold red]{t('capability_verify_failed', name=name)}[/bold red]")
-        raise typer.Exit(2)
     console.print(f"[green]{t('capability_installed', name=name)}[/green]")
 
 
@@ -229,18 +267,17 @@ def ingest(
     mode: str = typer.Option("quick", "--mode", help="quick or forensic"),
     timeout_seconds: Optional[float] = typer.Option(None, "--timeout-seconds"),
     progress: bool = typer.Option(True, "--progress/--no-progress"),
+    formula_secondary: bool = typer.Option(False, "--formula-secondary", help="Run PaddleOCR PP-FormulaNet on PDF equation crops."),
+    formula_max_regions: int = typer.Option(20, "--formula-max-regions", help="Cap equation blocks for formula secondary extraction."),
 ):
     """Acquire one source through the built-in connector; no Wiki promotion occurs here."""
     if mode not in {"quick", "forensic"}:
         raise typer.BadParameter("--mode must be quick or forensic")
     connector = _connector_command()
     if connector is None:
-        detail = t('connector_missing_hint')
-        if _connector_error:
-            detail = f"{detail}\n\n{_connector_error}"
         console.print(Panel.fit(
             f"[bold red]{t('connector_missing')}[/bold red]\n\n"
-            f"{detail}",
+            f"{t('connector_missing_hint')}",
             title=t("action_required"),
             border_style="red",
         ))
@@ -258,11 +295,33 @@ def ingest(
         ))
         raise typer.Exit(2)
 
+    # ── formula-secondary requires both pdf and formula capabilities ──
+    if formula_secondary:
+        if needed != "pdf":
+            console.print(Panel.fit(
+                "[bold yellow]--formula-secondary 仅对 PDF 文件有效[/bold yellow]\n\n"
+                "当前来源不是 PDF 文件，已忽略 --formula-secondary 选项。",
+                title=t("install_hint"),
+                border_style="yellow",
+            ))
+        elif not _capability_already_installed("formula"):
+            env = _extractor_env_for("formula")
+            console.print(Panel.fit(
+                f"[bold yellow]{t('capability_missing', name='formula')}[/bold yellow]\n\n"
+                f"{t('capability_missing_hint', name='formula', env=env)}",
+                title=t("install_hint"),
+                border_style="yellow",
+            ))
+            raise typer.Exit(2)
+
     cli_args = ["ingest", source, "--mode", mode]
     if timeout_seconds is not None:
         cli_args.extend(["--timeout-seconds", str(timeout_seconds)])
     if progress:
         cli_args.append("--progress")
+    if formula_secondary and needed == "pdf":
+        cli_args.append("--formula-secondary")
+        cli_args.extend(["--formula-max-regions", str(formula_max_regions)])
     try:
         parsed = _connector_parser().parse_args(cli_args)
     except SystemExit as exc:
@@ -309,10 +368,25 @@ def _run_feishu_worker(command: str, extra: list[str]) -> None:
     raise typer.Exit(subprocess.run([sys.executable, str(worker), command, *extra]).returncode)
 
 
+def _resolve_lark_cli() -> str | None:
+    """Reuse the connector's shared resolver (LARK_CLI_EXE, Windows .cmd, npm)."""
+    try:
+        from oks_connector._lark_cli import resolve_lark_cli
+    except ImportError:
+        try:
+            from _lark_cli import resolve_lark_cli
+        except ImportError:
+            return shutil.which("lark-cli") or shutil.which("lark-cli.exe")
+    try:
+        return str(resolve_lark_cli())
+    except RuntimeError:
+        return None
+
+
 @feishu_app.command("auth")
 def feishu_auth():
     """Show the configured Lark CLI authentication state; login remains user-controlled."""
-    lark = shutil.which("lark-cli") or shutil.which("lark-cli.exe")
+    lark = _resolve_lark_cli()
     if lark is None:
         console.print("[bold red]lark-cli is not installed.[/bold red] Install and authenticate it before Feishu actions.")
         raise typer.Exit(2)
@@ -346,6 +420,33 @@ def feishu_run_once(limit: int = typer.Option(100, "--limit")):
     _run_feishu_worker("run-once", ["--limit", str(limit)])
 
 
+@feishu_app.command("publish-candidate")
+def feishu_publish_candidate(
+    record_id: str = typer.Option(..., "--record-id", help="Feishu Base record ID"),
+    candidate_file: str = typer.Option(..., "--candidate-file", help="Agent-authored candidate Markdown file"),
+):
+    """Publish a Candidate to one processed Base record for human review."""
+    _run_feishu_worker("publish-candidate", ["--record-id", record_id, "--candidate-file", candidate_file])
+
+
+@feishu_app.command("review-once")
+def feishu_review_once(limit: int = typer.Option(100, "--limit")):
+    """Apply one bounded Base review action and promote approved Candidate content."""
+    _run_feishu_worker("review-once", ["--limit", str(limit)])
+
+
+@feishu_app.command("reconcile-review")
+def feishu_reconcile_review(
+    prompt_message_id: str = typer.Option(..., "--prompt-message-id", help="Candidate review prompt message ID"),
+    reply_message_id: str = typer.Option(..., "--reply-message-id", help="Human review reply message ID"),
+):
+    """Recover one review reply that was missed by the bounded event listener."""
+    _run_feishu_worker(
+        "reconcile-review",
+        ["--prompt-message-id", prompt_message_id, "--reply-message-id", reply_message_id],
+    )
+
+
 @feishu_app.command("listen")
 def feishu_listen(max_events: int = typer.Option(1, "--max-events"), timeout: str = typer.Option("5m", "--timeout")):
     """Consume bounded Feishu review replies; use an external scheduler for continuous service."""
@@ -357,9 +458,10 @@ def feishu_setup(
     base_token: Optional[str] = typer.Option(None, "--base-token", help="已有 Base token（跳过创建）"),
     base_name: str = typer.Option("Open Knowledge Studio", "--base-name"),
     table_name: str = typer.Option("每日知识采集", "--table-name"),
+    show_credentials: bool = typer.Option(False, "--show-credentials", help="显示完整 Base token（仅限受控终端）"),
 ):
     """自动创建飞书 Base、采集表和表单。需要 lark-cli 已认证。"""
-    lark = shutil.which("lark-cli") or shutil.which("lark-cli.exe")
+    lark = _resolve_lark_cli()
     if lark is None:
         console.print("[bold red]lark-cli 未安装。[/bold red]")
         raise typer.Exit(2)
@@ -379,6 +481,8 @@ def feishu_setup(
     if base_token:
         cmd.extend(["--base-token", base_token])
     cmd.extend(["--base-name", base_name, "--table-name", table_name])
+    if show_credentials:
+        cmd.append("--show-credentials")
     raise typer.Exit(subprocess.run(cmd).returncode)
 
 
@@ -390,12 +494,38 @@ def search(
     limit: int = typer.Option(5, "--limit", "-n", help="Max results"),
     scope: Optional[str] = typer.Option(None, "--scope", "--domain", "-d", help="Soft scope: narrow to one area (opt-in, not a hard partition)"),
     type_filter: Optional[str] = typer.Option(None, "--type", "-t", help="Filter by type"),
+    goal: str = typer.Option("active", "--goal", help="Goal mode: active | none | <goal-slug>"),
+    output_format: str = typer.Option("table", "--format", help="Output format: table | json"),
+    explain: bool = typer.Option(False, "--explain", help="Include score components and match reasons"),
 ):
     """Search wiki pages using the 6+1-factor recall engine (read-only)."""
-    results = recall_knowledge(query=query, limit=limit, scope=scope)
+    output_format = _validate_output_format(output_format)
+    try:
+        results = recall_knowledge(
+            query=query,
+            limit=limit,
+            scope=scope,
+            goal=goal,
+            explain=explain,
+            type_filter=type_filter,
+        )
+        goal_context = describe_goal_selection(goal)
+    except ValueError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(2)
 
-    if type_filter:
-        results = [r for r in results if r.get("type") == type_filter]
+    if output_format == "json":
+        _emit_json({
+            "schema_version": SEARCH_RESPONSE_SCHEMA,
+            "query": query,
+            "scope": scope,
+            "limit": limit,
+            "type_filter": type_filter,
+            "goal": goal_context,
+            "result_count": len(results),
+            "knowledge": results,
+        })
+        return
 
     if not results:
         console.print("[dim]No results found.[/dim]")
@@ -408,16 +538,21 @@ def search(
     table.add_column("Area", max_width=12)
     table.add_column("Score", justify="right", max_width=8)
     table.add_column("Relevance", justify="right", max_width=10)
+    if explain:
+        table.add_column("Why", max_width=50)
 
     for r in results:
-        table.add_row(
+        row = [
             r["slug"],
             r["title"],
             r.get("type", ""),
             r.get("area", ""),
             f"{r.get('score', 0):.2f}",
             f"{r.get('relevance', 0):.2f}",
-        )
+        ]
+        if explain:
+            row.append(", ".join(r.get("reasons", [])))
+        table.add_row(*row)
 
     console.print(table)
     console.print(f"\n[dim]{len(results)} result(s) from wiki/[/dim]")
@@ -429,9 +564,32 @@ def recall_cmd(
     topic_id: Optional[int] = typer.Option(None, "--topic-id", help="Filter by topic ID"),
     limit: int = typer.Option(5, "--limit", "-n", help="Max results per path"),
     scope: Optional[str] = typer.Option(None, "--scope", "-s", help="Soft scope: narrow knowledge path to one area (opt-in, not a hard partition)"),
+    goal: str = typer.Option("active", "--goal", help="Goal mode: active | none | <goal-slug>"),
+    output_format: str = typer.Option("table", "--format", help="Output format: table | json"),
+    explain: bool = typer.Option(False, "--explain", help="Include score components and match reasons"),
+    user: Optional[str] = typer.Option(None, "--user", envvar="OKS_USER", help="Current user id; required to recall your own profiles/users/<id>/ (A2 scope)"),
+    project: Optional[str] = typer.Option(None, "--project", envvar="OKS_PROJECT", help="Current project slug; required to recall profiles/projects/<slug> (A2 scope)"),
 ):
     """Two-path recall: episodic (raw/) + knowledge (wiki/)."""
-    result = recall(query=query, topic_id=topic_id, limit=limit, scope=scope)
+    output_format = _validate_output_format(output_format)
+    try:
+        result = recall(
+            query=query,
+            topic_id=topic_id,
+            limit=limit,
+            scope=scope,
+            goal=goal,
+            explain=explain,
+            user_id=user,
+            project_slug=project,
+        )
+    except ValueError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(2)
+
+    if output_format == "json":
+        _emit_json(result)
+        return
 
     if result["episodic"]:
         console.print("\n[bold blue]Episodic Memory (raw/ + profiles/)[/bold blue]")
@@ -446,8 +604,11 @@ def recall_cmd(
     if result["knowledge"]:
         console.print("\n[bold green]Semantic Memory (wiki/)[/bold green]")
         for item in result["knowledge"]:
+            preview = item.get("body_preview", "")[:200]
+            if explain and item.get("reasons"):
+                preview += "\n\nwhy: " + ", ".join(item["reasons"])
             console.print(Panel(
-                item.get("body_preview", "")[:200],
+                preview,
                 title=f"[{item.get('type', '')}] {item.get('title', '')} ({item.get('slug', '')})",
                 subtitle=f"score={item.get('score', 0):.2f} relevance={item.get('relevance', 0):.2f}",
                 border_style="green",
@@ -456,6 +617,206 @@ def recall_cmd(
 
     if not result["episodic"] and not result["knowledge"]:
         console.print("[dim]No results from either path.[/dim]")
+
+
+# --- Offline evaluation --------------------------------------------------
+
+@eval_app.command("recall")
+def eval_recall(
+    dataset: Path = typer.Argument(help="YAML recall dataset"),
+    output: Path = typer.Option(..., "--output", "-o", help="Output run JSON"),
+    limit: int = typer.Option(5, "--limit", "-n", min=5, help="Retrieved items per case (>=5 keeps recall@5 meaningful)"),
+):
+    """Run a deterministic, read-only recall evaluation."""
+    from knowledge_studio.evaluation import run_evaluation
+
+    try:
+        result = run_evaluation(dataset, output, limit=limit)
+    except (OSError, ValueError, RuntimeError) as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1)
+    _emit_json({"output": str(output.resolve()), "metrics": result["metrics"]})
+
+
+@eval_app.command("compare")
+def eval_compare(
+    baseline: Path = typer.Argument(help="Baseline run JSON"),
+    candidate: Path = typer.Argument(help="Candidate run JSON"),
+    output: Optional[Path] = typer.Option(None, "--output", "-o", help="Optional comparison JSON"),
+):
+    """Compare two runs produced from the same dataset snapshot."""
+    from knowledge_studio.evaluation import compare_runs
+
+    try:
+        result = compare_runs(baseline, candidate, output)
+    except (OSError, ValueError, KeyError) as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1)
+    _emit_json(result)
+
+
+# --- Execution traces ---------------------------------------------------
+
+def _parse_json_object(value: str, option: str) -> dict:
+    try:
+        parsed = json.loads(value)
+    except json.JSONDecodeError as e:
+        console.print(f"[red]{option} must be valid JSON: {e}[/red]")
+        raise typer.Exit(2)
+    if not isinstance(parsed, dict):
+        console.print(f"[red]{option} must be a JSON object[/red]")
+        raise typer.Exit(2)
+    return parsed
+
+
+@trace_app.command("start")
+def trace_start(
+    goal_id: str = typer.Argument(help="Goal identifier"),
+    run_id: Optional[str] = typer.Option(None, "--run-id", help="Stable run identifier"),
+):
+    """Start an execution trace with a goal event."""
+    from knowledge_studio.trace import start_trace
+
+    try:
+        result = start_trace(goal_id, run_id)
+    except (OSError, ValueError) as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1)
+    _emit_json(result)
+
+
+@trace_app.command("append")
+def trace_append(
+    run_id: str = typer.Argument(help="Run identifier"),
+    event_type: str = typer.Option(..., "--type", help="Trace event type"),
+    actor: str = typer.Option(..., "--actor", help="agent | judge | human | tool | system"),
+    payload: str = typer.Option("{}", "--payload", help="JSON object without secrets"),
+    evidence: list[str] = typer.Option([], "--evidence", help="Repeatable evidence reference"),
+):
+    """Append one typed event to a running trace."""
+    from knowledge_studio.trace import append_event
+
+    try:
+        event = append_event(run_id, event_type, actor, _parse_json_object(payload, "--payload"), evidence)
+    except (OSError, ValueError) as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1)
+    _emit_json(event)
+
+
+@trace_app.command("judge")
+def trace_judge(
+    run_id: str = typer.Argument(help="Run identifier"),
+    outcome: str = typer.Option(..., "--outcome", help="pass | fail | uncertain"),
+    comment: str = typer.Option(..., "--comment", help="Judge rationale"),
+):
+    """Record an external or deterministic judge result."""
+    from knowledge_studio.trace import append_event
+
+    try:
+        event = append_event(run_id, "judge_comment", "judge", {"outcome": outcome, "comment": comment})
+    except (OSError, ValueError) as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1)
+    _emit_json(event)
+
+
+@trace_app.command("feedback")
+def trace_feedback(
+    run_id: str = typer.Argument(help="Run identifier"),
+    outcome: str = typer.Option(..., "--outcome", help="accepted | rejected | needs_changes"),
+    comment: str = typer.Option(..., "--comment", help="Human feedback"),
+):
+    """Record human feedback without changing formal knowledge."""
+    from knowledge_studio.trace import append_event
+
+    try:
+        event = append_event(run_id, "human_comment", "human", {"outcome": outcome, "comment": comment})
+    except (OSError, ValueError) as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1)
+    _emit_json(event)
+
+
+@trace_app.command("blocker")
+def trace_blocker(
+    run_id: str = typer.Argument(help="Run identifier"),
+    reason: str = typer.Option(..., "--reason", help="Why execution cannot continue"),
+    needed: str = typer.Option(..., "--needed", help="Condition required to resume"),
+):
+    """Record a blocker and the exact condition needed to resume."""
+    from knowledge_studio.trace import append_event
+
+    try:
+        event = append_event(run_id, "blocker", "agent", {"reason": reason, "needed": needed})
+    except (OSError, ValueError) as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1)
+    _emit_json(event)
+
+
+@trace_app.command("propose")
+def trace_propose(
+    run_id: str = typer.Argument(help="Run identifier"),
+    kind: str = typer.Option(..., "--kind", help="wiki | skill"),
+    title: str = typer.Option(..., "--title", help="Proposal title"),
+    summary: str = typer.Option(..., "--summary", help="Proposed content summary"),
+):
+    """Write a review-only proposal under drafts/proposals/."""
+    from knowledge_studio.proposals import create_proposal
+
+    try:
+        path = create_proposal(run_id, kind, title, summary)
+    except (OSError, ValueError) as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1)
+    _emit_json({"path": str(path), "applied": False})
+
+
+@trace_app.command("finish")
+def trace_finish(
+    run_id: str = typer.Argument(help="Run identifier"),
+    result: str = typer.Option(..., "--result", help="Final result JSON object"),
+):
+    """Finish a trace with exactly one final_result event."""
+    from knowledge_studio.trace import finish_trace
+
+    try:
+        manifest = finish_trace(run_id, _parse_json_object(result, "--result"))
+    except (OSError, ValueError) as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1)
+    _emit_json(manifest)
+
+
+@trace_app.command("validate")
+def trace_validate(
+    run_id: str = typer.Argument(help="Run identifier"),
+    completed: bool = typer.Option(False, "--completed", help="Require a completed run"),
+):
+    """Validate event ordering, types, manifest consistency, and secret safety."""
+    from knowledge_studio.trace import validate_trace
+
+    try:
+        result = validate_trace(run_id, require_completed=completed)
+    except (OSError, ValueError) as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1)
+    _emit_json(result)
+    if not result["valid"]:
+        raise typer.Exit(1)
+
+
+@trace_app.command("show")
+def trace_show(run_id: str = typer.Argument(help="Run identifier")):
+    """Print a trace and its manifest as JSON."""
+    from knowledge_studio.trace import show_trace
+
+    try:
+        _emit_json(show_trace(run_id))
+    except (OSError, ValueError) as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1)
 
 
 # ── Wiki ─────────────────────────────────────────────────────────
@@ -621,11 +982,11 @@ def drafts_list():
 
     for d in drafts:
         table.add_row(
-            str(d["slug"]),
-            str(d.get("title", d["slug"])),
-            str(d.get("draft_type", "")),
-            str(d.get("draft_area", "")),
-            str(d.get("drafted_at", "")),
+            d["slug"],
+            d.get("title", d["slug"]),
+            d.get("draft_type", ""),
+            d.get("draft_area", ""),
+            d.get("drafted_at", ""),
         )
 
     console.print(table)
@@ -823,26 +1184,14 @@ def config_show():
     console.print(f"[dim]Config file: {config_path()}[/dim]\n")
     console.print(Panel.fit(
         f"[bold]Knowledge Base[/bold]\n  {config.get('knowledge_base_path', '(not set)')}\n\n"
-        f"[bold]API Keys[/bold]\n"
-        f"  openai: {'✓ set' if config.get('api_keys', {}).get('openai') else '✗ empty'}\n"
-        f"  anthropic: {'✓ set' if config.get('api_keys', {}).get('anthropic') else '✗ empty'}\n\n"
-        f"[bold]Handler Config[/bold]",
+        f"[dim]The core CLI stores no model credentials or handler configuration.[/dim]",
         border_style="cyan",
     ))
-
-    handlers = config.get("handlers", {})
-    if handlers:
-        table = Table(show_header=True, header_style="bold cyan")
-        table.add_column("Handler", max_width=15)
-        table.add_column("Settings", max_width=50)
-        for name, settings in handlers.items():
-            table.add_row(name, ", ".join(f"{k}={v}" for k, v in settings.items()))
-        console.print(table)
 
 
 @config_app.command("set")
 def config_set(
-    key: str = typer.Argument(help="Config key (e.g., api_keys.openai, handlers.video.frame_interval)"),
+    key: str = typer.Argument(help="Config key (normally knowledge_base_path)"),
     value: str = typer.Argument(help="Config value"),
 ):
     """Set a config value."""
@@ -908,6 +1257,9 @@ Thumbs.db
 # OKS local per-machine state (access counts, fingerprints) — NOT synced
 .oks/
 
+# Trace append locks (runtime state, not trace content)
+raw/executions/*/.append.lock
+
 # NOTE: wiki/, drafts/, profiles/ are intentionally TRACKED — they ARE your
 # memory. Unlike the open-knowledge-studio code repo (which ignores wiki/ &
 # drafts/ so it ships clean), an instance commits its knowledge to git.
@@ -916,30 +1268,43 @@ Thumbs.db
 
 _ASSET_MAP = [
     ("claude", ".claude"),
+    ("codex", ".codex"),
+    ("agents", ".agents"),
     ("templates", "templates"),
     ("_meta", "_meta"),
     ("settings", "settings"),
 ]
 
+# Maintainer-only skills. Kept in the repo for development, never installed into
+# a user's knowledge base. Must match setup.py / bundle_assets.py — a source
+# checkout copies from the repo root, so the build-time exclusion is not enough.
+_DEV_ONLY_ASSET_NAMES = ("review-upstream-pr", "upstream-pr-remediation")
+
 
 def _asset_source() -> tuple[Path | None, bool]:
     """Locate the shareable asset layer. Returns (base, is_packaged).
 
-    Priority: bundled `_assets/` inside the installed package (release build),
-    else the dev repo root (walk up for a dir containing .claude + templates).
+    A source checkout is authoritative during development; `_assets/` may be a
+    stale build artifact. Installed wheels have no repo root and use `_assets/`.
     """
+    for parent in Path(__file__).resolve().parents:
+        if (
+            (parent / ".git").exists()
+            and (parent / ".claude").is_dir()
+            and (parent / "templates").is_dir()
+            and (parent / "_meta").is_dir()
+        ):
+            return parent, False
     packaged = Path(__file__).resolve().parent / "_assets"
     if packaged.is_dir() and any(packaged.iterdir()):
         return packaged, True
-    for parent in Path(__file__).resolve().parents:
-        if (parent / ".claude").is_dir() and (parent / "templates").is_dir():
-            return parent, False
     return None, False
 
 
 def _materialize_assets(root: Path, base: Path, is_packaged: bool, overwrite: bool) -> list[str]:
     import shutil
 
+    ignore = shutil.ignore_patterns(*_DEV_ONLY_ASSET_NAMES)
     done: list[str] = []
     for pkg_name, dest_name in _ASSET_MAP:
         src = base / (pkg_name if is_packaged else dest_name)
@@ -949,7 +1314,7 @@ def _materialize_assets(root: Path, base: Path, is_packaged: bool, overwrite: bo
         if dest.exists() and not overwrite:
             continue
         # Merge-copy: refresh bundled files in place, keep user-owned files.
-        shutil.copytree(src, dest, dirs_exist_ok=True)
+        shutil.copytree(src, dest, dirs_exist_ok=True, ignore=ignore)
         done.append(dest_name)
     return done
 
@@ -1152,9 +1517,14 @@ def _wire_userpromptsubmit(settings_path: Path, command: str) -> str:
         stale["command"] = command
     else:
         ups.append({"hooks": [{"type": "command", "command": command}]})
-    _atomic_write(
-        settings_path,
-        json.dumps(data, indent=2, ensure_ascii=False) + "\n",
+    settings_path.parent.mkdir(parents=True, exist_ok=True)
+    # This file belongs to the user's editor and holds permissions, other hooks
+    # and MCP servers. Keep a backup and write atomically (CONSTITUTION P2/A5)
+    # so a torn write can never destroy configuration we do not own.
+    if settings_path.is_file():
+        shutil.copy2(settings_path, settings_path.with_suffix(".json.oks-bak"))
+    store._atomic_write(
+        settings_path, json.dumps(data, indent=2, ensure_ascii=False) + "\n"
     )
     return "wired"
 

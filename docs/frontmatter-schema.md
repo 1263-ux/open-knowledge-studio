@@ -3,133 +3,77 @@ title: Frontmatter Schema
 nav_order: 21
 parent: 参考
 ---
-# Frontmatter Schema v0.7
 
-*Wiki 页面、draft 和画像的 YAML frontmatter 规范。*
+# Frontmatter Schema v1.0
 
-Wiki 页面、draft 和画像的 YAML frontmatter 规范。
+本页是 wiki 页面 frontmatter 的日常使用规则。底层数据形状契约见 `_meta/raw-evidence-schema.md`。
 
 ## Wiki 页面
 
 ```yaml
 ---
-# IDENTITY（身份）
-title: "Title"
-type: concept | strategy | anti-pattern
-area: <domain>
-
-# TRUST（信任）
-status: provisional | active | stale | dropped | superseded
-importance: 0.0-1.0
-confidence: 0.0-1.0
-
-# ACCESS（访问）
+title: "Use Typer for CLI tools"
+type: strategy                 # concept | strategy | anti-pattern
+area: computing
+status: provisional            # provisional | active | stale | dropped | superseded
+source_type: auto              # auto | manual
+importance: 0.7                # 0 到 1
+confidence: 0.8                # 0 到 1
+created: "2026-07-27T12:00:00Z"
 pinned: false
 archived: false
-access_count: 0
-
-# PROVENANCE（来源）
-created: "ISO datetime"
-source_type: auto | manual
-fingerprint: "<sha256[:16]>"
-
-# LINK（关联）
-tags: "comma, separated"
-traces: [{id, type, url}]    # 可选
-review: {decision_correct, outcome, reviewer}  # 可选
-
-# EXT（扩展）
-superseded_by: "<slug>"      # 当 status: superseded 时
-
-# RELATIONSHIPS（知识关系）
-relates_to: "<slug>"           # 关联的旧页面 slug
-relationship: supersedes|enriches|confirms|challenges
-enriched_by: "<slug>"          # 被哪个页面补充（旧页面字段）
-confirmed_by: "<slug>"         # 被哪个页面确认（旧页面字段）
-challenged_by: "<slug>"        # 被哪个页面挑战（旧页面字段）
+tags: "python, cli"
+fingerprint: "0123456789abcdef"
+traces:
+  - id: "run-001"
+    kind: execution
+    url: "raw/executions/run-001/events.jsonl"
+review:
+  decision_correct: true
+  outcome: success
+  lesson: ""
+relates_to: "older-page"
+relationship: confirms         # supersedes | enriches | confirms | challenges
 ---
 ```
 
-## 字段分类
+`title`、`type`、`area` 是必填身份字段。`access_count`、记忆分数、tier 和质量分数由 CLI 在读取时计算，不写回 frontmatter。
 
-- **IDENTITY** — title, type, area（均为必填）
-- **TRUST** — status, importance, confidence
-- **ACCESS** — pinned, archived, access_count
-- **PROVENANCE** — created, source_type, fingerprint
-- **LINK** — tags, traces, review
-- **EXT** — superseded_by
-- **RELATIONSHIPS** — relates_to, relationship, enriched_by, confirmed_by, challenged_by
-
-### 字段说明
-
-| 分类 | 字段 | 说明 |
-|------|------|------|
-| IDENTITY | `title` | 页面标题 |
-| IDENTITY | `type` | 知识类型：concept（概念）、strategy（策略）、anti-pattern（反模式） |
-| IDENTITY | `area` | 所属知识域（22 个域之一） |
-| TRUST | `status` | 页面状态：provisional（临时）、active（活跃）、stale（过期）、dropped（废弃）、superseded（已替代） |
-| TRUST | `importance` | 重要性 0.0-1.0，影响记忆曲线评分 |
-| TRUST | `confidence` | 置信度 0.0-1.0，随访问增强提升 |
-| ACCESS | `pinned` | 是否固定，pinned 页面获得 +0.5 加成 |
-| ACCESS | `archived` | 是否归档 |
-| ACCESS | `access_count` | 被显式使用的次数（`oks wiki use`；召回只读、不计数） |
-| PROVENANCE | `created` | 创建时间 |
-| PROVENANCE | `source_type` | 来源类型：auto（AI 生成）、manual（手写） |
-| PROVENANCE | `fingerprint` | 内容指纹，前 16 位 sha256，用于去重 |
-| LINK | `tags` | 逗号分隔的标签 |
-| LINK | `traces` | 关联的 trace 列表（可选） |
-| LINK | `review` | 审查结果（可选） |
-| EXT | `superseded_by` | 替代此页面的新页面 slug |
+关系约束：`relationship` 必须和 `relates_to` 同时存在；`status: superseded` 必须填写 `superseded_by`；`traces` 必须是对象列表且不得保存密钥、Token、Cookie 等凭据。
 
 ## Draft
 
 ```yaml
 ---
-title: "..."
-draft_type: concept | strategy | anti-pattern
-draft_area: <domain>
-source_pages: [<slug>, ...]
-drafted_at: "YYYY-MM-DD"
+title: "CLI framework decision"
+draft_type: strategy
+draft_area: computing
+source_pages: ["raw/source-note.md"]
+source_note: "Optional provenance note"
+drafted_at: "2026-07-27"
 status: draft
 ---
 ```
 
-{: .note }
-Draft frontmatter 是 wiki 页面的前置状态。`source_pages` 记录了 draft 来自哪些 raw materials，形成来源链路。当 draft 被 promote 后，frontmatter 转换为 wiki 页面格式，`draft_type` → `type`，`draft_area` → `area`。
+Draft 是待审提案。AI 生成内容先进入 `drafts/`，只有明确的人类操作才能提升到正式 `wiki/`。
 
-## 知识关系字段
+## Goal profile
 
-RELATIONSHIPS 字段用于建立新旧知识页面之间的关系网络，支持知识的演进追踪和冲突感知。
+```yaml
+---
+title: "Ship structured memory"
+type: goal
+status: active
+domains: [computing]
+keywords: [recall, evaluation, trace]
+---
+```
 
-### 新页面字段
+Goal 位于 `profiles/goals/`。`--goal active` 合并活跃目标，`--goal <slug>` 固定一个目标，`--goal none` 作为无目标基线。
 
-- **`relates_to`** — 新页面关联的旧页面 slug。新页面通过此字段声明它与哪个已有页面有关系。
-- **`relationship`** — 声明关系类型，取值 `supersedes`、`enriches`、`confirms`、`challenges`。
+## 机器契约
 
-### 旧页面字段
-
-旧页面通过以下被动字段记录被新页面引用的关系：
-
-- **`enriched_by`** — 被哪个新页面补充（新页面提供了额外细节或上下文）。
-- **`confirmed_by`** — 被哪个新页面确认（新页面验证了旧页面的结论）。
-- **`challenged_by`** — 被哪个新页面挑战（新页面质疑或推翻了旧页面的结论）。
-
-### 关系类型及效果
-
-| 关系 | 新页面声明 | 旧页面被动字段 | 效果 |
-|------|-----------|---------------|------|
-| **supersedes** | `relationship: supersedes` | `status` → `superseded` + `superseded_by` | 旧页面被标记为已替代，召回时降权 |
-| **enriches** | `relationship: enriches` | `enriched_by` | 旧页面保留有效，新页面提供补充信息，召回时两者均可返回 |
-| **confirms** | `relationship: confirms` | `confirmed_by` | 旧页面 confidence 提升，新旧页面互相增强 |
-| **challenges** | `relationship: challenges` | `challenged_by` | 旧页面 confidence 降低，召回时附带冲突警告 |
-
-`supersedes` 是最强的关系 — 旧页面被明确替代，状态变为 `superseded`，并通过 `superseded_by` 指向新页面。其余三种关系保留旧页面的有效状态，但在召回时影响排序和置信度。
-
-## 下一步
-
-* **[Memories](memories.md)**：frontmatter 字段如何影响记忆结构与召回
-* **[架构设计](architecture.md)**：认知桶结构与生命周期
-* **[Dreaming 循环](dreaming-cycle.md)**：draft 如何被审查并提升为 wiki
+`_meta/recall-case.schema.json`、`_meta/trace-event.schema.json` 和 `_meta/run-manifest.schema.json` 分别约束评测数据集、执行事件和运行清单。
 
 ---
 

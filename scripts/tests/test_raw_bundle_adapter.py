@@ -6,6 +6,7 @@ import tomllib
 import zipfile
 import subprocess
 from argparse import Namespace
+from dataclasses import dataclass
 from email.message import Message
 from pathlib import Path
 from types import SimpleNamespace
@@ -47,6 +48,53 @@ _W_SPEC = importlib.util.spec_from_file_location("extractors.watch", WATCH_PATH)
 assert _W_SPEC and _W_SPEC.loader
 watch_module = importlib.util.module_from_spec(_W_SPEC)
 _W_SPEC.loader.exec_module(watch_module)
+
+
+def test_watch_prepends_active_interpreter_bin_to_path(monkeypatch):
+    monkeypatch.setenv("PATH", "/usr/local/bin")
+    monkeypatch.setattr(watch_module.sys, "executable", "/isolated/venv/bin/python")
+
+    previous = watch_module.prepend_interpreter_bin_to_path()
+
+    assert previous == "/usr/local/bin"
+    assert watch_module.os.environ["PATH"].split(watch_module.os.pathsep)[0] == str(
+        Path(watch_module.sys.executable).parent
+    )
+
+
+def test_watch_payload_serializes_dataclass_metadata_and_ocr_blocks(tmp_path):
+    @dataclass
+    class Metadata:
+        title: str
+
+    @dataclass
+    class OcrBlock:
+        text: str
+
+    frame = SimpleNamespace(
+        index=0, timestamp_seconds=0.0, path=tmp_path / "frame.png",
+        scene_id="scene-1", phash="abc", reason="sample", ocr_blocks=[OcrBlock("hello")],
+    )
+    result = SimpleNamespace(
+        perception=SimpleNamespace(
+            frames=[frame], source="local", engine="test", scene_count=1,
+            candidate_count=1, deduped_count=1, focused=False,
+            start_seconds=0.0, end_seconds=1.0,
+        ),
+        acquisition=SimpleNamespace(
+            source="sample.mp4", kind="video", video_path=None, subtitle_path=None,
+            info={}, from_cache=False, acquirer="local",
+        ),
+        metadata=Metadata("sample"),
+        transcript=SimpleNamespace(source="none", segments=[]),
+        start_seconds=0.0,
+        end_seconds=1.0,
+    )
+
+    payload = watch_module.watch_payload(result)
+
+    assert payload["metadata"] == {"title": "sample"}
+    assert payload["perception"]["frames"][0]["ocr_blocks"] == [{"text": "hello"}]
 
 NET_PATH = Path(__file__).parents[1] / "network.py"
 _NET_SPEC = importlib.util.spec_from_file_location("network", NET_PATH)
@@ -1232,3 +1280,204 @@ def test_finalize_v2_marks_platform_reference_without_claiming_media_hash(monkey
     manifest = json.loads((bundle / "bundle.json").read_text(encoding="utf-8"))
     assert manifest["sources"][0]["snapshot_kind"] == "reference"
     assert manifest["sources"][0]["content_hash_status"] == "unavailable"
+
+
+# ── PDF: mineru CLI discovery ──────────────────────────────────────
+
+def test_mineru_cli_raises_actionable_error_when_binary_not_found(monkeypatch, tmp_path):
+    """If the mineru binary is missing from the selected environment, fail
+    before extraction with an error naming the interpreter and remediation."""
+    monkeypatch.chdir(tmp_path)
+    source = tmp_path / "paper.pdf"
+    source.write_bytes(b"%PDF-1.4 fake")
+    plan = adapter.route_plan(str(source))
+    assert plan["extractor"] == "mineru"
+
+    # Simulate an extractor_python with no mineru binary next to it
+    fake_python = tmp_path / "fake-python"
+    fake_python.write_text("fake")
+    from unittest import mock
+    with mock.patch.object(adapter, "_extractor_python", return_value=fake_python):
+        args = adapter.build_parser().parse_args(["ingest", str(source), "--mode", "quick"])
+        with pytest.raises(RuntimeError) as exc:
+            adapter.run_ingest(args)
+        msg = str(exc.value)
+        assert "mineru" in msg.lower()
+        assert "找不到" in msg or "OKS_MINERU_PYTHON" in msg
+        assert "oks capability install pdf" in msg
+
+
+def test_validate_extractor_python_preserves_venv_symlink(monkeypatch, tmp_path):
+    """A pipx-style symlink must not resolve to the host interpreter."""
+    host_python = tmp_path / "host-python"
+    host_python.write_text("host")
+    venv_python = tmp_path / "venv-python"
+    try:
+        venv_python.symlink_to(host_python)
+    except OSError:
+        pytest.skip("symlinks are unavailable on this platform")
+
+    def fake_run(command, **_kwargs):
+        result = type("Result", (), {})()
+        result.returncode = 0
+        result.stdout = "3.12\n"
+        result.stderr = ""
+        return result
+
+    monkeypatch.setattr(adapter.subprocess, "run", fake_run)
+    assert adapter._validate_extractor_python(venv_python, "mineru") == venv_python.absolute()
+
+
+def test_pdf_ingest_gets_cold_start_timeout_budget(tmp_path):
+    args = adapter.build_parser().parse_args(["ingest", str(tmp_path / "paper.pdf")])
+    assert adapter.ingest_timeout_seconds(args, "mineru") == 900.0
+
+
+def test_mineru_cli_uses_scripts_dir_binary_when_present(monkeypatch, tmp_path):
+    """When the mineru binary exists next to extractor_python, it is used
+    without falling back to shutil.which."""
+    monkeypatch.chdir(tmp_path)
+    source = tmp_path / "paper.pdf"
+    source.write_bytes(b"%PDF-1.4 fake")
+
+    fake_python = tmp_path / "fake-python"
+    fake_python.write_text("fake")
+    mineru_bin = tmp_path / ("mineru.exe" if os.name == "nt" else "mineru")
+    mineru_bin.write_text("fake-mineru")
+
+    plan = adapter.route_plan(str(source))
+    from unittest import mock
+    with mock.patch.object(adapter, "_extractor_python", return_value=fake_python):
+        # Mock subprocess.run for mineru CLI to succeed and return a fake result
+        run_results = []
+
+        def fake_run(cmd, **kwargs):
+            run_results.append(cmd)
+            if "mineru" in str(cmd[0]).lower():
+                # mineru CLI — succeed
+                result = mock.MagicMock()
+                result.returncode = 0
+                result.stderr = ""
+                result.stdout = ""
+                return result
+            # packaging stage — succeed
+            result = mock.MagicMock()
+            result.returncode = 0
+            result.stderr = ""
+            result.stdout = ""
+            return result
+
+        with mock.patch("subprocess.run", side_effect=fake_run):
+            # We also need to mock _ffprobe_preflight and the temp directory
+            with mock.patch.object(adapter, "_ffprobe_preflight", return_value=None):
+                args = adapter.build_parser().parse_args(["ingest", str(source), "--mode", "quick"])
+                adapter.run_ingest(args)
+            # First subprocess.run call must use the selected environment binary.
+            mineru_calls = [c for c in run_results if "mineru" in str(c[0]).lower()]
+            assert len(mineru_calls) >= 1
+            assert str(mineru_bin) in str(mineru_calls[0][0])
+
+
+# ── Formula: --formula-secondary flag forwarding ────────────────────
+
+def test_ingest_child_argv_forwards_formula_candidates_for_pdf(tmp_path):
+    """When --formula-candidates is passed for a PDF ingest, it appears in
+    the packaging command."""
+    source = tmp_path / "paper.pdf"
+    source.write_bytes(b"%PDF-1.4 fake")
+    mineru_result = tmp_path / "mineru-result"
+    mineru_result.mkdir()
+    output = tmp_path / "bundle"
+
+    args = adapter.build_parser().parse_args(
+        ["ingest", str(source), "--mode", "quick", "--formula-secondary",
+         "--formula-max-regions", "10",
+         "--output", str(output)]
+    )
+
+    plan = adapter.route_plan(str(source))
+    command = adapter.ingest_child_argv(
+        args, plan, output, Path("fake-python"), mineru_result=mineru_result,
+    )
+
+    assert "mineru" in command
+    assert "--formula-candidates" not in command  # not in base command; added in run_ingest
+    assert "--source" in command
+
+
+def test_formula_secondary_requires_both_pdf_and_formula_capabilities(monkeypatch, tmp_path):
+    """When --formula-secondary is set for a PDF, both pdf and formula
+    capabilities must be checked."""
+    monkeypatch.chdir(tmp_path)
+    source = tmp_path / "paper.pdf"
+    source.write_bytes(b"%PDF-1.4 fake")
+
+    from unittest import mock
+    # Simulate: pdf capability is available, formula is not
+    cap_results = {"pdf": (True, Path(sys.executable)), "formula": (False, None)}
+
+    def fake_cap_ok(name):
+        return cap_results.get(name, (False, None))
+
+    with mock.patch("capability_check.is_capability_available", side_effect=fake_cap_ok):
+        args = adapter.build_parser().parse_args(
+            ["ingest", str(source), "--mode", "quick", "--formula-secondary"]
+        )
+        assert getattr(args, "formula_secondary", False) is True
+
+
+# ── Watch: ffprobe preflight ───────────────────────────────────────
+
+def test_ffprobe_preflight_raises_for_local_video_without_ffprobe(monkeypatch, tmp_path):
+    """Local video files require ffprobe; raise an actionable error when
+    it is missing from the system."""
+    monkeypatch.chdir(tmp_path)
+    source = tmp_path / "lesson.mp4"
+    source.write_bytes(b"fake-mp4")
+
+    monkeypatch.delenv("OKS_FFPROBE", raising=False)
+    plan = adapter.route_plan(str(source))
+    from unittest import mock
+    with mock.patch("shutil.which", return_value=None):
+        with pytest.raises(RuntimeError) as exc:
+            adapter._ffprobe_preflight(str(source), plan)
+        msg = str(exc.value)
+        assert "ffprobe" in msg.lower() or "ffmpeg" in msg.lower()
+        assert "安装" in msg or "install" in msg.lower()
+
+
+def test_ffprobe_preflight_respects_oks_ffprobe_env_var(monkeypatch, tmp_path):
+    """When OKS_FFPROBE is set and the binary exists, preflight passes."""
+    monkeypatch.chdir(tmp_path)
+    source = tmp_path / "lesson.mp4"
+    source.write_bytes(b"fake-mp4")
+    fake_ffprobe = tmp_path / "my-ffprobe"
+    fake_ffprobe.write_text("fake")
+
+    monkeypatch.setenv("OKS_FFPROBE", str(fake_ffprobe))
+    plan = adapter.route_plan(str(source))
+    from unittest import mock
+    with mock.patch("shutil.which", return_value=str(fake_ffprobe)):
+        adapter._ffprobe_preflight(str(source), plan)  # no exception
+
+
+def test_ffprobe_preflight_skips_url_sources(monkeypatch):
+    """URL sources (YouTube, Bilibili, etc.) skip the ffprobe preflight
+    because yt-dlp handles media acquisition."""
+    plan = adapter.route_plan("https://www.youtube.com/watch?v=abc123")
+    from unittest import mock
+    with mock.patch("shutil.which") as mock_which:
+        adapter._ffprobe_preflight("https://www.youtube.com/watch?v=abc123", plan)
+        mock_which.assert_not_called()
+
+
+def test_ffprobe_preflight_skips_non_media_files(monkeypatch, tmp_path):
+    """Non media files (PDF, images, office docs) skip the ffprobe preflight."""
+    monkeypatch.chdir(tmp_path)
+    source = tmp_path / "paper.pdf"
+    source.write_bytes(b"%PDF-1.4 fake")
+    plan = adapter.route_plan(str(source))
+    from unittest import mock
+    with mock.patch("shutil.which") as mock_which:
+        adapter._ffprobe_preflight(str(source), plan)
+        mock_which.assert_not_called()

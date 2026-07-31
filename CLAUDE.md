@@ -104,8 +104,8 @@ open-knowledge-studio/
 
 ```bash
 oks init <path>   # scaffold a personal knowledge instance (buckets + memory-tracking .gitignore + register as active KB)
-oks search <query> [--limit 5] [--domain computing] [--type strategy]
-oks recall <query> [--topic-id ID] [--limit 5]
+oks search <query> [--limit 5] [--domain computing] [--type strategy] [--goal active|none|SLUG] [--format table|json] [--explain]
+oks recall <query> [--topic-id ID] [--limit 5] [--goal active|none|SLUG] [--format table|json] [--explain]
 oks wiki list [--domain] [--type] [--status active]
 oks wiki get <slug>
 oks wiki create --title "..." --type concept --area computing --importance 0.7
@@ -116,6 +116,15 @@ oks distill [--dry-run]
 oks lint | status | metrics | decay
 oks hook install [--editor claude|qoder|both] [--path DIR]   # opt-in auto-recall on prompt
 oks hook status
+oks eval recall <dataset.yaml> --output <run.json>
+oks eval compare <baseline.json> <candidate.json> [--output <comparison.json>]
+oks trace start <goal-id> [--run-id ID]
+oks trace append <run-id> --type <event> --actor <actor> --payload '<json>'
+oks trace judge <run-id> --outcome pass --comment "..."
+oks trace feedback <run-id> --outcome accepted --comment "..."
+oks trace propose <run-id> --kind wiki|skill --title "..." --summary "..."
+oks trace finish <run-id> --result '{"outcome":"success"}'
+oks trace validate <run-id> [--completed]
 oks config init | show | set <key> <value>
 ```
 
@@ -132,7 +141,7 @@ oks config init | show | set <key> <value>
 
 ## Project-specific safety rules
 
-- The operational personal knowledge instance is `D:\knowledge\oks-personal-knowledge`; this repository is reusable Studio code and must not remain the long-term destination for personal Wiki or Raw state.
+- Personal knowledge lives in a separate instance created by `oks init <path>`; this repository is reusable Studio code and must not remain the long-term destination for personal Wiki or Raw state.
 - Every `git push`, Pull Request create/update/close, Merge, Pages/Release publication, deployment, remote setting change, or external message requires the user's explicit authorization for that exact action. A general “continue” or authorization for a different action does not count.
 - Without that authorization, stop after local editing, validation, diff review, and read-only remote inspection. A Draft PR is still an external action.
 - Context compaction is controlled by the client or runtime; this file cannot set an automatic threshold or reveal an unexposed usage percentage. If the client explicitly reports 80% usage, or at major milestones and around unusually large tool output, preserve a structured checkpoint before invoking an actually available compaction mechanism.

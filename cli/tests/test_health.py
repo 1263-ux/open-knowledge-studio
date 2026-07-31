@@ -85,3 +85,19 @@ def test_health_check_coverage(kb_root):
     assert result["summary"]["total_wiki_pages"] == 2
     assert result["summary"]["dropped"] == 1
     assert result["summary"]["coverage_pct"] == 50.0
+
+
+def test_health_check_validates_schema_invariants(kb_root):
+    from knowledge_studio.health import run_health_check
+    wiki = kb_root / "wiki" / "computing" / "concepts"
+    _write_page(wiki / "invalid.md", {
+        "title": "Invalid", "type": "unknown", "area": "computing",
+        "status": "superseded", "importance": 2, "pinned": "no",
+        "relationship": "confirms", "tags": "test",
+    })
+    warnings = "\n".join(run_health_check()["warnings"])
+    assert "invalid 'type'" in warnings
+    assert "invalid 'importance'" in warnings
+    assert "invalid 'pinned'" in warnings
+    assert "must pair 'relationship'" in warnings
+    assert "missing 'superseded_by'" in warnings

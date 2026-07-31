@@ -7,10 +7,10 @@
 
 ## Why this exists
 
-Multimodal L1 tools (the connector package bundled under `scripts/`)
-emit a **Raw Bundle**: a directory holding a primary Markdown file
-plus a provenance sidecar. See `docs/raw-multimodal-standard.md` for the full
-`raw-multimodal/v0.1` output contract.
+The Studio connector (`oks-connector`) emits a **Raw Bundle**: a directory
+holding a primary Markdown file plus provenance sidecars. See
+`docs/raw-multimodal-standard.md` for the full `raw-multimodal/v0.2` output
+contract and compatibility guarantees.
 
 The core CLI (`oks`) must **not** hardcode that layout. Per P4/P5 the core does
 only filesystem operations and recall scoring; recall over `raw/` is generic
@@ -21,13 +21,30 @@ into `cli/`.
 ## Contract
 
 A `raw/` entry may be a **Bundle directory** under the usual
-`raw/{YYYY}/{MM}/{DD}/{source}/` tree:
+`raw/{YYYY}/{MM}/{DD}/{source}/` tree.
+
+**v0.2 bundle** (current):
 
 ```
 raw/2026/07/17/videos/{slug}/
-├── content.md          # primary extracted text (any *.md name)
-├── evidence.jsonl      # provenance sidecar (any *.jsonl name)
-└── assets/             # optional extracted media (frames, images)
+├── bundle.json          # schema_version: raw-multimodal/v0.2
+├── capture-envelope.json
+├── processing-runs.jsonl
+├── content.md           # primary extracted text
+├── evidence.jsonl       # provenance sidecar
+├── metadata.json        # preserved v0.1 metadata (if migrated)
+├── quality-report.json  # processing_status: complete|partial|failed
+└── assets/              # optional extracted media (frames, images)
+```
+
+**v0.1 bundle** (legacy, reader-compatible):
+```
+raw/2026/07/17/videos/{slug}/
+├── content.md          # primary extracted text
+├── evidence.jsonl      # provenance sidecar
+├── metadata.json       # source_uri, captured_at, source_type
+├── quality-report.json # processing_status: complete|partial|failed
+└── assets/             # optional extracted media
 ```
 
 - **Primary text** — any `*.md` file. Faithful extraction only (P3): the tool
@@ -58,4 +75,4 @@ desired.
   schema and key core logic off the declared generic shape (`*.md` primary,
   `*.jsonl` sidecar with `text`), never off a specific filename.
 - **Do not** let the core import the L1 adapter. Tools are spawned by the Agent
-  via Bash; the core only reads the files they wrote.
+  via Bash per the capability check layer (`scripts/capability_check.py`); the core only reads the files they wrote.

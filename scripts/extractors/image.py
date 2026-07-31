@@ -14,7 +14,7 @@ from _shared import (
     order_ocr_blocks, parse_ocr_roi, prepare_output,
     sha256_file, write_json, write_jsonl, format_media_time,
 )
-# Import from parent module — safe because this module is loaded lazily
+# Import from sibling module — safe because this module is loaded lazily
 from constants import SCHEMA_VERSION
 from _shared import common_metadata, coverage_report, source_identity
 

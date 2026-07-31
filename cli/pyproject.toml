@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "open-knowledge-studio"
-version = "0.2.4"
+version = "0.3.0"
 description = "File-based knowledge engineering CLI for Claude Code"
 readme = "README.md"
 license = {text = "MIT"}
@@ -26,7 +26,9 @@ classifiers = [
 dependencies = [
     "typer>=0.12",
     "rich>=13",
+    "python-frontmatter>=1",
     "jieba>=0.42",
+    "gitpython>=3",
     "pyyaml>=6",
 ]
 
@@ -40,12 +42,16 @@ watch = [
     "scenedetect>=0.7,<0.8",
     "imagehash>=4.3,<5",
     "yt-dlp==2026.7.4",
-    "watch-skill @ git+https://github.com/oxbshw/watch-skill.git@bf177b09a4c8a4d850c878f3965caecf971555e6",
+    # watch-skill is intentionally absent: PyPI rejects any Requires-Dist with a
+    # direct URL, so listing it here makes the whole release unpublishable.
+    # `oks capability install watch` installs it at runtime (see cli._CAPABILITIES).
 ]
 formula = [
     "paddlepaddle==3.2.0",
     "paddleocr==3.7.0",
-    "tokenizers==0.23.1",
+    # Keep in sync with cli._CAPABILITIES: MinerU 3.4.4 allows
+    # >=0.22.0,<=0.23.0, but 0.23.0 is not published for the supported index.
+    "tokenizers==0.22.1",
     "ftfy==6.3.1",
 ]
 
@@ -56,28 +62,20 @@ Documentation = "https://open-agent-power.github.io/open-knowledge-studio/"
 
 [project.scripts]
 oks = "knowledge_studio.cli:app"
-oks-connector = "raw_bundle_adapter:main"
+oks-connector = "oks_connector.raw_bundle_adapter:main"
 
 [tool.setuptools]
 include-package-data = false
-py-modules = [
-    "_shared",
-    "capability_check",
-    "constants",
-    "digest",
-    "feishu_setup",
-    "formula_candidates",
-    "i18n",
-    "network",
-    "raw_bundle_adapter",
-    "route",
-    "validator",
+packages = [
+    "knowledge_studio",
+    "oks_connector",
+    "oks_connector.extractors",
+    "oks_connector.feishu_worker",
 ]
-packages = ["knowledge_studio", "extractors"]
 
 [tool.setuptools.package-dir]
-"" = "../scripts"
 "knowledge_studio" = "knowledge_studio"
+"oks_connector" = "oks_connector"
 
 [tool.setuptools.package-data]
 knowledge_studio = ["_assets/**/*", "_assets/scripts/*.py"]

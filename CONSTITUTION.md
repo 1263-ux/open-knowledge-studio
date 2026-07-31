@@ -5,6 +5,13 @@
 
 ## Engineering Principles
 
+### P0: Python version requirement
+
+The runtime and connector Python modules require Python >= 3.12.
+This is already stated in the project README.  The `from __future__ import
+annotations` usage, `str | None` union syntax, `pathlib.Path` features,
+and `itertools.batched` (used in tests) all depend on 3.12+ semantics.
+
 ### P1: Git IS the migration
 
 The knowledge repo is synced via `git clone/pull`. Schema changes to knowledge
@@ -26,6 +33,11 @@ Directory fsync after replace is required for crash safety.
   LLM does not write knowledge to `raw/`.
 - `wiki/` contains curated knowledge written by LLM via the Dreaming cycle,
   approved by humans through `drafts/` review.
+- `raw/executions/` holds append-only execution traces and `raw/.logs/` holds
+  tool- and AI-written digests. Both are provenance — a record of what
+  happened, not knowledge. They are **excluded from recall**
+  (`recall_episodic` skips both) and are reached only through evidence links on
+  a wiki page, so an agent's own output can never be fed back to it as memory.
 
 ### P4: CLI core is API-free, external tools may use AI APIs
 
@@ -107,10 +119,13 @@ open-knowledge-studio/
 │   ├── recipes/{slug}.md         # Executable automation recipes
 │   └── goals/{slug}.md           # Goals & objectives (influences recall)
 ├── raw/                          # ② Original records
-│   └── {YYYY}/{MM}/{DD}/
-│       └── {source}/             # articles | papers | videos | audio | repos | misc
-│           ├── {slug}.md
-│           └── {slug}.jsonl
+│   ├── {YYYY}/{MM}/{DD}/
+│   │   └── {source}/             # articles | papers | videos | audio | repos | misc
+│   │       ├── {slug}.md
+│   │       └── {slug}.jsonl
+│   └── executions/{run-id}/      # Append-only execution traces
+│       ├── events.jsonl
+│       └── run.json
 ├── wiki/                         # ③ Curated knowledge
 │   └── {domain}/{type}/{slug}.md  # concepts/ | strategies/ | anti-patterns/
 ├── drafts/                       # ④ Dreaming candidates
@@ -146,7 +161,8 @@ Type-specific decay λ: concept=0.0 (no decay), strategy=0.014, anti-pattern=0.0
 
 **Recall paths** (`recall.py`):
 
-- `recall_episodic()` — searches `raw/` by keyword + freshness.
+- `recall_episodic()` — searches `raw/` by keyword + freshness, excluding
+  `raw/executions/` (provenance, not memory).
 - `recall_knowledge()` — scores `wiki/` pages by relevance + curve.
 - `recall()` — combines both layers.
 
@@ -171,6 +187,9 @@ recall, scope, and decay:
 - Semantic Memory → `wiki/`
 - Draft Memory → `drafts/`
 - Procedural Memory → `.claude/skills/` (managed by Claude Code)
+
+`raw/executions/` is **not** a memory type: it is provenance, excluded from
+recall and reached only through evidence links.
 
 **Recipes** (`profiles/recipes/`): Executable automation patterns with triggers,
 steps, tools, and schedules. Not cognitive knowledge (wiki/ strategy) —
@@ -270,3 +289,33 @@ All persistent writes use the `mkstemp + fsync + os.replace` pattern.
 fsync after replace is required for crash safety.
 
 **Do not** write wiki pages or config with bare `open(path, 'w')`.
+
+---
+
+## Revision history
+
+Invariant-level changes must be recorded here so they are traceable without
+archaeology through 20k-line diffs.
+
+- **2026-07-31 — P5 reversed** (oks-connector integration): P5 previously
+  forbade `oks ingest <input>` internal dispatch and in-CLI modality
+  detection. It now defines `oks ingest` as the orchestration entry point
+  routing to Level-1 extractors. Rationale: suffix-based routing is format
+  dispatch, not knowledge judgment; the surviving invariant is that ingest
+  **never summarizes, grades, or promotes**, and L1 extractors remain
+  directly callable by the Agent. Accepted by the maintainer during review
+  of the connector merge.
+- **2026-07-31 — traces defined as provenance** (P3/A1): `raw/executions/`
+  registered in A1; traces excluded from recall and reachable only through
+  wiki evidence links.
+- **2026-07-31 — A2 scope filtering enforced in code**: `recall_episodic`
+  previously walked all of `profiles/`, returning other users' and other
+  projects' profiles at the highest weight. Private profiles are now opt-in
+  via `--user` / `--project` (`OKS_USER` / `OKS_PROJECT`); unnamed identities
+  are excluded rather than leaked.
+- **2026-07-31 — P3 exclusion widened to `raw/.logs/`**: AI-written digests
+  were being recalled as if they were human-collected material. `raw/.logs/`
+  now joins `raw/executions/` outside recall.
+- **2026-07-31 — A4 relationships reachable**: `promote_draft` dropped
+  `relates_to` / `relationship`, so no production path could mark a page
+  superseded. Promotion now carries them through.

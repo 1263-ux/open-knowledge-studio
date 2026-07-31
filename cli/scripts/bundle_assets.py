@@ -20,14 +20,23 @@ import shutil
 from pathlib import Path
 
 # (source dir name at repo root, dest dir name under _assets/)
+# Leading dots are stripped for the bundle; cli._ASSET_MAP restores them.
 _MAP = [
     (".claude", "claude"),
+    (".codex", "codex"),
+    (".agents", "agents"),
     ("templates", "templates"),
     ("_meta", "_meta"),
     ("settings", "settings"),
 ]
 
 _SCRIPT_ASSETS = ("feishu_base_worker.py", "feishu_setup.py")
+
+# Maintainer-only skills: they drive the upstream-PR review workflow and must
+# never reach a user's knowledge base, where they would pollute skill discovery
+# and could be auto-matched by an agent. Kept in the repo for development.
+_DEV_ONLY_ASSET_NAMES = ("review-upstream-pr", "upstream-pr-remediation")
+_DEV_ONLY_IGNORE = shutil.ignore_patterns(*_DEV_ONLY_ASSET_NAMES)
 
 
 def main() -> None:
@@ -44,7 +53,7 @@ def main() -> None:
         if not src.is_dir():
             print(f"  skip (missing): {src_name}")
             continue
-        shutil.copytree(src, dest_root / dest_name)
+        shutil.copytree(src, dest_root / dest_name, ignore=_DEV_ONLY_IGNORE)
         copied.append(dest_name)
 
     scripts_dest = dest_root / "scripts"

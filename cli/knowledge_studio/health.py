@@ -14,6 +14,10 @@ from knowledge_studio.store import repo_root, wiki_dir, drafts_dir, raw_dir
 
 _logger = logging.getLogger(__name__)
 
+WIKI_TYPES = {"concept", "strategy", "anti-pattern"}
+WIKI_STATUSES = {"provisional", "active", "stale", "dropped", "superseded"}
+RELATIONSHIPS = {"supersedes", "enriches", "confirms", "challenges"}
+
 
 def run_health_check() -> dict:
     """Run all health checks. Returns {errors, warnings, info, summary}."""
@@ -91,6 +95,29 @@ def _check_wiki_page(md: Path, errors: list, warnings: list) -> str:
         for field in ("title", "type", "area"):
             if not meta.get(field):
                 warnings.append(f"Wiki page {md.name} missing '{field}'")
+
+        if meta.get("type") and meta["type"] not in WIKI_TYPES:
+            warnings.append(f"Wiki page {md.name} has invalid 'type': {meta['type']}")
+        if meta.get("status", "active") not in WIKI_STATUSES:
+            warnings.append(f"Wiki page {md.name} has invalid 'status': {meta.get('status')}")
+        for field in ("importance", "confidence"):
+            if field in meta:
+                value = meta[field]
+                if not isinstance(value, (int, float)) or isinstance(value, bool) or not 0 <= value <= 1:
+                    warnings.append(f"Wiki page {md.name} has invalid '{field}': expected 0..1")
+        for field in ("pinned", "archived"):
+            if field in meta and not isinstance(meta[field], bool):
+                warnings.append(f"Wiki page {md.name} has invalid '{field}': expected boolean")
+        if "traces" in meta and not isinstance(meta["traces"], list):
+            warnings.append(f"Wiki page {md.name} has invalid 'traces': expected list")
+        relationship = meta.get("relationship")
+        relates_to = meta.get("relates_to")
+        if bool(relationship) != bool(relates_to):
+            warnings.append(f"Wiki page {md.name} must pair 'relationship' with 'relates_to'")
+        if relationship and relationship not in RELATIONSHIPS:
+            warnings.append(f"Wiki page {md.name} has invalid 'relationship': {relationship}")
+        if meta.get("status") == "superseded" and not meta.get("superseded_by"):
+            warnings.append(f"Wiki page {md.name} is superseded but missing 'superseded_by'")
 
         status = meta.get("status", "active")
         if status == "dropped":

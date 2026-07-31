@@ -159,6 +159,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     ingest.add_argument("--mineru-backend", default="pipeline")
     ingest.add_argument("--mineru-method", default="auto")
+    ingest.add_argument("--formula-secondary", action="store_true", help="Run PaddleOCR PP-FormulaNet on MinerU equation crops and embed second candidates.")
+    ingest.add_argument("--formula-max-regions", type=int, default=20, help="Cap equation blocks for formula secondary extraction.")
     ingest.add_argument("--overwrite", action="store_true")
     ingest.add_argument(
         "--timeout-seconds", type=float,
@@ -317,7 +319,7 @@ def _extractor_python(extractor: str) -> Path:
     # 2. Explicit env var override
     configured = os.environ.get(environment)
     if configured:
-        candidate = Path(configured).expanduser().resolve()
+        candidate = Path(configured).expanduser().absolute()
         if not candidate.is_file():
             raise FileNotFoundError(f"{environment} does not point to a Python executable: {candidate}")
         return _validate_extractor_python(candidate, extractor, environment=environment)
@@ -334,7 +336,7 @@ def _extractor_python(extractor: str) -> Path:
     relative = Path("Scripts/python.exe") if os.name == "nt" else Path("bin/python")
     candidate = root / environment_dir / relative
     if candidate.is_file():
-        return _validate_extractor_python(candidate.resolve(), extractor, environment=environment)
+        return _validate_extractor_python(candidate.absolute(), extractor, environment=environment)
 
     raise RuntimeError(
         f"{t('capability_missing', name=extractor)}\n"
@@ -349,7 +351,9 @@ def _validate_extractor_python(
     environment: str | None = None,
 ) -> Path:
     """验证发现到的 Python 解释器版本和模块导入能力。"""
-    candidate = candidate.resolve()
+    # Preserve a virtualenv executable symlink. Resolving it would turn a pipx
+    # interpreter into the host Python and hide optional packages.
+    candidate = candidate.absolute()
 
     # 1. 验证解释器能否启动
     try:
@@ -486,13 +490,44 @@ def canonical_evidence_tier(mode: str) -> str:
     return {"fast": "quick", "full": "forensic"}.get(mode, mode)
 
 
-def ingest_timeout_seconds(args: argparse.Namespace) -> float:
+def ingest_timeout_seconds(args: argparse.Namespace, extractor: str | None = None) -> float:
     timeout = getattr(args, "timeout_seconds", None)
     if timeout is not None:
         if timeout <= 0:
             raise ValueError("timeout-seconds must be positive")
         return timeout
+    if extractor == "mineru":
+        # MinerU cold-starts a local service and models; its quick path is not
+        # comparable to caption-only video or document extraction.
+        return 900.0
     return 120.0 if canonical_evidence_tier(args.mode) == "quick" else 900.0
+
+
+def _ffprobe_preflight(source: str, plan: dict[str, Any]) -> None:
+    """验证本地视频/音频文件需要 ffprobe 时的系统依赖。
+
+    不自动安装系统包；仅对本地视频/音频文件在需要本地处理时进行检查。
+    URL 源和纯字幕快速模式不需要 ffprobe。
+    """
+    if is_url(source):
+        return  # yt-dlp handles remote acquisition; ffprobe not needed at this layer
+    source_type = plan.get("source_type", "")
+    if source_type not in ("video", "audio"):
+        return
+
+    ffprobe_cmd = os.environ.get("OKS_FFPROBE")
+    if ffprobe_cmd:
+        candidate = shutil.which(ffprobe_cmd) or (ffprobe_cmd if Path(ffprobe_cmd).is_file() else None)
+    else:
+        candidate = shutil.which("ffprobe")
+    if candidate is None:
+        env_hint = " 设置 OKS_FFPROBE 环境变量指向 ffprobe 可执行文件路径；或" if not ffprobe_cmd else ""
+        raise RuntimeError(
+            f"本地{source_type}文件需要 ffprobe（由 ffmpeg 提供），但系统上找不到 ffprobe。\n"
+            f"{env_hint}"
+            f" 安装 ffmpeg: https://ffmpeg.org/download.html\n"
+            f" 完整安装说明: oks capability install watch"
+        )
 
 
 def run_ingest(args: argparse.Namespace) -> int:
@@ -521,10 +556,15 @@ def run_ingest(args: argparse.Namespace) -> int:
 
     output = (args.output or default_ingest_output(args.source)).expanduser().resolve()
     extractor_python = _extractor_python(extractor)
-    timeout = ingest_timeout_seconds(args)
+    timeout = ingest_timeout_seconds(args, extractor)
     tier = canonical_evidence_tier(args.mode)
     started = time.monotonic()
     emit_progress(getattr(args, "progress", False), "routing", 0.02, int(timeout))
+
+    # ── preflight: verify system dependencies before costly extraction ──
+    if extractor == "watch":
+        _ffprobe_preflight(args.source, plan)
+
     if extractor != "mineru":
         command = ingest_child_argv(args, plan, output, extractor_python)
         try:
@@ -559,9 +599,20 @@ def run_ingest(args: argparse.Namespace) -> int:
     with tempfile.TemporaryDirectory(prefix="oks-mineru-") as temporary:
         result_dir = Path(temporary)
         # MinerU 3.4+ uses a standalone CLI entry point, not `python -m mineru`.
-        mineru_cli = str(Path(extractor_python).parent / ("mineru.exe" if os.name == "nt" else "mineru"))
-        if not Path(mineru_cli).is_file():
-            mineru_cli = shutil.which("mineru") or "mineru"
+        # Discover binary from the selected Python environment only; never silently
+        # use an unrelated global binary or bare name that would fail at subprocess.run.
+        scripts_dir = Path(extractor_python).parent
+        mineru_binary_name = "mineru.exe" if os.name == "nt" else "mineru"
+        candidate = scripts_dir / mineru_binary_name
+        if not candidate.is_file():
+            raise RuntimeError(
+                f"在选定的 PDF 提取器环境中找不到 mineru 可执行文件。\n"
+                f"  解释器: {extractor_python}\n"
+                f"  预期位置: {scripts_dir / mineru_binary_name}\n"
+                f"  安装: oks capability install pdf --yes\n"
+                f"  或设置 OKS_MINERU_PYTHON 指向已安装 mineru[pipeline] 的 Python 环境。"
+            )
+        mineru_cli = str(candidate)
         mineru = subprocess.run(
             [
                 mineru_cli,
@@ -582,13 +633,36 @@ def run_ingest(args: argparse.Namespace) -> int:
         if mineru.returncode != 0:
             detail = (mineru.stderr or mineru.stdout).strip()
             raise RuntimeError(f"MinerU extraction failed: {detail[-2000:]}")
+        # ── optional formula secondary extraction ──
+        formula_candidates = None
+        if getattr(args, "formula_secondary", False):
+            formula_candidates = Path(temporary) / "formula-candidates.json"
+            formula_python = _extractor_python("formula")
+            formula_script = Path(__file__).resolve().parent / "formula_candidates.py"
+            formula_result = subprocess.run(
+                [
+                    str(formula_python), str(formula_script),
+                    str(result_dir),
+                    "--output", str(formula_candidates),
+                    "--max-regions", str(getattr(args, "formula_max_regions", 20)),
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+            )
+            if formula_result.returncode != 0:
+                detail = (formula_result.stderr or formula_result.stdout).strip()
+                raise RuntimeError(f"Formula secondary extraction failed: {detail[-2000:]}")
         command = ingest_child_argv(
             args,
             plan,
             output,
-            Path(sys.executable).resolve(),
+            Path(sys.executable).absolute(),
             mineru_result=result_dir,
         )
+        if formula_candidates is not None:
+            command.extend(["--formula-candidates", str(formula_candidates)])
         remaining = max(0.1, timeout - (time.monotonic() - started))
         try:
             completed = subprocess.run(

@@ -67,12 +67,13 @@ def _as_str_set(value) -> set[str]:
     return {item.lower() for item in items if item}
 
 
-def load_active_goals() -> list[dict]:
-    """Return active goals (type==goal, status==active) as normalized dicts.
+def load_goals(*, active_only: bool = False) -> list[dict]:
+    """Return normalized goal profiles.
 
-    Each entry has lowercased 'domains' and 'keywords' string sets, used by
-    recall to boost pages that fall within an active goal's scope. Returns an
-    empty list when profiles/goals is absent or holds no active goals.
+    Domains and keywords are lowercased sets so recall can match them without
+    repeating normalization. Explicit goal selection may use an inactive goal
+    for a reproducible historical evaluation; the default recall path still
+    calls :func:`load_active_goals` and only sees active goals.
     """
     gd = goals_dir()
     if not gd.exists():
@@ -83,15 +84,33 @@ def load_active_goals() -> list[dict]:
         meta = parse_wiki_file(path)
         if not meta:
             continue
-        if meta.get("type") != "goal" or meta.get("status") != "active":
+        if meta.get("type") != "goal":
+            continue
+        status = str(meta.get("status", "active")).lower().strip()
+        if active_only and status != "active":
             continue
         goals.append({
             "slug": meta.get("slug", path.stem),
             "title": meta.get("title", path.stem),
+            "status": status,
             "domains": _as_str_set(meta.get("domains")),
             "keywords": _as_str_set(meta.get("keywords")),
         })
     return goals
+
+
+def load_active_goals() -> list[dict]:
+    """Return active goals used by the default goal-aware recall mode."""
+    return load_goals(active_only=True)
+
+
+def get_goal(slug: str) -> dict | None:
+    """Return one goal by slug, regardless of status."""
+    wanted = slug.lower().strip()
+    return next(
+        (goal for goal in load_goals() if str(goal.get("slug", "")).lower() == wanted),
+        None,
+    )
 
 
 def _access_log_path() -> Path:
@@ -576,6 +595,11 @@ def promote_draft(
         review=meta.get("review") if isinstance(meta.get("review"), dict) else None,
         human_note=human_note,
         slug_hint=slug_hint,
+        # A4: carry the declared relationship through, otherwise the superseded
+        # page stays active and both versions get recalled side by side.
+        supersedes=meta.get("supersedes"),
+        relates_to=meta.get("relates_to"),
+        relationship=meta.get("relationship"),
     )
 
     draft_path.unlink()
