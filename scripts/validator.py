@@ -160,6 +160,14 @@ def _atomic_write_text(path: Path, text: str) -> None:
         handle.flush()
         os.fsync(handle.fileno())
     os.replace(Path(handle.name), path)
+    try:
+        dir_fd = os.open(str(path.parent), os.O_RDONLY)
+        try:
+            os.fsync(dir_fd)
+        finally:
+            os.close(dir_fd)
+    except OSError:
+        pass
 
 
 def _source_snapshot(bundle: Path, metadata: dict[str, Any], explicit_source: Path | None = None) -> Path:

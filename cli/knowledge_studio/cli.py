@@ -20,6 +20,7 @@ from rich.markdown import Markdown
 from rich.markup import escape
 
 from knowledge_studio import store
+from knowledge_studio.store import _atomic_write
 from knowledge_studio.i18n import t
 from knowledge_studio.recall import recall, recall_episodic, recall_knowledge
 
@@ -29,11 +30,19 @@ if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
 _connector_available = False
+_connector_error = ""
 try:
+    import raw_bundle_adapter as _connector_module
     from raw_bundle_adapter import build_parser as _connector_parser, run_ingest as _connector_run_ingest
-    _connector_available = True
-except ImportError:
-    pass
+    if not hasattr(_connector_module, "default_raw_root"):
+        _connector_error = (
+            "Bundled connector is too old: missing default_raw_root(). "
+            "Reinstall open-knowledge-studio so oks and oks-connector come from the same build."
+        )
+    else:
+        _connector_available = True
+except ImportError as exc:
+    _connector_error = str(exc)
 
 
 def _configure_utf8_stdio() -> None:
@@ -189,6 +198,10 @@ def capability_install(
     if result.returncode != 0:
         console.print(f"[bold red]{t('capability_failed', name=name, code=result.returncode)}[/bold red]")
         raise typer.Exit(result.returncode)
+    importlib.invalidate_caches()
+    if not _capability_already_installed(name):
+        console.print(f"[bold red]{t('capability_verify_failed', name=name)}[/bold red]")
+        raise typer.Exit(2)
     console.print(f"[green]{t('capability_installed', name=name)}[/green]")
 
 
@@ -222,9 +235,12 @@ def ingest(
         raise typer.BadParameter("--mode must be quick or forensic")
     connector = _connector_command()
     if connector is None:
+        detail = t('connector_missing_hint')
+        if _connector_error:
+            detail = f"{detail}\n\n{_connector_error}"
         console.print(Panel.fit(
             f"[bold red]{t('connector_missing')}[/bold red]\n\n"
-            f"{t('connector_missing_hint')}",
+            f"{detail}",
             title=t("action_required"),
             border_style="red",
         ))
@@ -1136,9 +1152,9 @@ def _wire_userpromptsubmit(settings_path: Path, command: str) -> str:
         stale["command"] = command
     else:
         ups.append({"hooks": [{"type": "command", "command": command}]})
-    settings_path.parent.mkdir(parents=True, exist_ok=True)
-    settings_path.write_text(
-        json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    _atomic_write(
+        settings_path,
+        json.dumps(data, indent=2, ensure_ascii=False) + "\n",
     )
     return "wired"
 

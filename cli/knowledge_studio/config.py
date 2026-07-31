@@ -82,6 +82,8 @@ def save_config(config: dict[str, Any]) -> None:
     try:
         with os.fdopen(fd, "w") as f:
             json.dump(config, f, indent=2, ensure_ascii=False)
+            f.flush()
+            os.fsync(f.fileno())
         os.replace(tmp, path)
     except Exception:
         with contextlib.suppress(OSError):

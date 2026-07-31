@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from _shared import write_json
+
 
 def write_digest(bundle: Path) -> None:
     """Generate digest.md inside the bundle for Agent quick-scan."""
@@ -72,4 +74,4 @@ def update_raw_index(bundle: Path) -> None:
         "evidence_count": qr.get("evidence_count", 0),
         "warnings": [w for w in qr.get("warnings", []) if w],
     })
-    index_path.write_text(json.dumps(entries, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    write_json(index_path, entries)
