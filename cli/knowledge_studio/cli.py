@@ -4,8 +4,12 @@ Typer-based CLI for knowledge base search, wiki CRUD, drafts, and maintenance.
 """
 from __future__ import annotations
 
+import importlib.util
 import json
 from pathlib import Path
+import shutil
+import subprocess
+import sys
 from typing import Optional
 
 import typer
@@ -13,8 +17,10 @@ from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
 from rich.markdown import Markdown
+from rich.markup import escape
 
 from knowledge_studio import store
+from knowledge_studio.i18n import t
 from knowledge_studio.recall import (
     RECALL_RESPONSE_SCHEMA,
     SEARCH_RESPONSE_SCHEMA,
@@ -23,6 +29,36 @@ from knowledge_studio.recall import (
     recall_episodic,
     recall_knowledge,
 )
+
+# ── ingest: direct import from bundled scripts/ ──────────────────────
+_SCRIPTS = Path(__file__).resolve().parent.parent.parent / "scripts"
+if str(_SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(_SCRIPTS))
+
+_connector_available = False
+try:
+    from raw_bundle_adapter import build_parser as _connector_parser, run_ingest as _connector_run_ingest
+    _connector_available = True
+except ImportError:
+    pass
+
+
+def _configure_utf8_stdio() -> None:
+    """Keep Unicode Raw evidence printable in Windows legacy code pages."""
+    if sys.platform != "win32":
+        return
+
+    for stream in (sys.stdout, sys.stderr):
+        encoding = (getattr(stream, "encoding", None) or "").lower().replace("-", "")
+        reconfigure = getattr(stream, "reconfigure", None)
+        if encoding not in {"utf8", "utf8sig"} and callable(reconfigure):
+            try:
+                reconfigure(encoding="utf-8", errors="replace")
+            except (OSError, ValueError):
+                pass
+
+
+_configure_utf8_stdio()
 
 app = typer.Typer(
     name="oks",
@@ -71,12 +107,358 @@ config_app = typer.Typer(help="Global configuration (~/.oks/config.json).")
 hook_app = typer.Typer(help="Optional editor hooks (opt-in auto-recall injection).")
 eval_app = typer.Typer(help="Offline recall evaluation and run comparison.")
 trace_app = typer.Typer(help="Append-only execution traces and feedback.")
+feishu_app = typer.Typer(help="Optional Feishu Base intake, review, and event-listening extension.")
+capability_app = typer.Typer(help="Optional modality capabilities; core dependencies stay lightweight.")
 app.add_typer(wiki_app, name="wiki")
 app.add_typer(drafts_app, name="drafts")
 app.add_typer(config_app, name="config")
 app.add_typer(hook_app, name="hook")
 app.add_typer(eval_app, name="eval")
 app.add_typer(trace_app, name="trace")
+app.add_typer(feishu_app, name="feishu")
+app.add_typer(capability_app, name="capability")
+
+_CAPABILITIES = {
+    "watch": {
+        "purpose": "Video/audio subtitles, ASR, frames, and OCR",
+        "deps": [
+            "faster-whisper==1.2.1",
+            "rapidocr==3.9.1",
+            "onnxruntime==1.27.0",
+            "scenedetect>=0.7,<0.8",
+            "imagehash>=4.3,<5",
+            "yt-dlp==2026.7.4",
+            "watch-skill @ git+https://github.com/oxbshw/watch-skill.git@bf177b09a4c8a4d850c878f3965caecf971555e6",
+        ],
+    },
+    "document": {
+        "purpose": "Office, HTML, and text extraction",
+        "deps": ["markitdown[docx,pptx]==0.1.6"],
+    },
+    "pdf": {
+        "purpose": "MinerU PDF layout and asset evidence",
+        "deps": ["mineru[pipeline]==3.4.4", "six==1.17.0"],
+    },
+    "formula": {
+        "purpose": "PaddleOCR formula candidates",
+        "deps": [
+            "paddlepaddle==3.2.0",
+            "paddleocr==3.7.0",
+            # MinerU 3.4.4 requires >=0.22.0,<=0.23.0. 0.23.0 is not
+            # published for the supported interpreter index, while 0.22.1 is.
+            "tokenizers==0.22.1",
+            "ftfy==6.3.1",
+        ],
+    },
+    "feishu": {
+        "purpose": "Private Base, form, bot review, and bounded listening",
+        "deps": ["requests==2.34.2", "trafilatura==2.1.0"],
+    },
+}
+
+
+@capability_app.command("list")
+def capability_list():
+    """List optional capabilities and their explicit install boundary."""
+    table = Table(show_header=True, header_style="bold cyan")
+    table.add_column("Capability")
+    table.add_column("Purpose")
+    table.add_column("Install")
+    for name, info in _CAPABILITIES.items():
+        install = "user-managed lark-cli" if name == "feishu" else f"oks capability install {name}"
+        table.add_row(name, info["purpose"], install)
+    console.print(table)
+
+
+def _capability_already_installed(name: str) -> bool:
+    """Check whether a capability is available (delegates to shared module)."""
+    from capability_check import is_capability_available
+    ok, _ = is_capability_available(name)
+    return ok
+
+
+@capability_app.command("install")
+def capability_install(
+    name: str = typer.Argument(..., help="watch, document, pdf, formula, or feishu"),
+    yes: bool = typer.Option(False, "--yes", help="Execute the displayed installation command"),
+):
+    """Show or explicitly install one optional capability (heavy dependencies)."""
+    info = _CAPABILITIES.get(name)
+    if info is None:
+        raise typer.BadParameter(f"unknown capability: {name}; run `oks capability list`")
+    purpose = info["purpose"]
+
+    if name == "feishu":
+        deps = info["deps"]
+        cmd = [sys.executable, "-m", "pip", "install"] + deps
+        message = (
+            f"[bold]{t('feishu_private')}[/bold]\n\n"
+            f"Web intake dependencies:\n{' '.join(cmd)}"
+        )
+        if not yes:
+            console.print(Panel.fit(
+                f"{message}\n\nRe-run with --yes to install the web intake dependencies.",
+                title=t("user_managed_capability"), border_style="cyan",
+            ))
+            return
+        console.print(f"[yellow]{t('capability_installing', name=name)}[/yellow]")
+        result = subprocess.run(cmd)
+        if result.returncode != 0:
+            console.print(f"[bold red]{t('capability_failed', name=name, code=result.returncode)}[/bold red]")
+            raise typer.Exit(result.returncode)
+        console.print(f"[green]{t('capability_installed', name=name)}[/green]")
+        console.print(Panel.fit(message, title=t("user_managed_capability"), border_style="cyan"))
+        return
+
+    if _capability_already_installed(name):
+        console.print(f"[green]{t('capability_already', name=name)}[/green]")
+        return
+
+    deps = info["deps"]
+    cmd = [sys.executable, "-m", "pip", "install"] + deps
+
+    if not yes:
+        console.print(Panel.fit(
+            f"[bold]{name}[/bold]: {purpose}\n\n"
+            f"{t('capability_install_prompt', n=len(deps), cmd=' '.join(cmd))}",
+            title=t("optional_install"), border_style="yellow",
+        ))
+        return
+
+    console.print(f"[yellow]{t('capability_installing', name=name)}[/yellow]")
+    result = subprocess.run(cmd)
+    if result.returncode != 0:
+        console.print(f"[bold red]{t('capability_failed', name=name, code=result.returncode)}[/bold red]")
+        raise typer.Exit(result.returncode)
+    console.print(f"[green]{t('capability_installed', name=name)}[/green]")
+
+
+def _connector_install_hint() -> str:
+    return ""  # no-op: connector is built into the monorepo
+
+
+def _connector_command() -> str | None:
+    """Connector is bundled as ``scripts/raw_bundle_adapter`` — no separate binary needed."""
+    return "built-in" if _connector_available else None
+
+
+def _recommended_capability(source: str) -> str:
+    suffix = Path(source.split("?", 1)[0]).suffix.lower()
+    if suffix == ".pdf":
+        return "pdf"
+    if suffix in {".docx", ".pptx", ".xlsx", ".html", ".htm", ".md", ".txt", ".csv"}:
+        return "document"
+    return "watch"  # video, audio, and platform URLs all route to watch
+
+
+@app.command()
+def ingest(
+    source: str = typer.Argument(..., help="Local file or supported platform URL"),
+    mode: str = typer.Option("quick", "--mode", help="quick or forensic"),
+    timeout_seconds: Optional[float] = typer.Option(None, "--timeout-seconds"),
+    progress: bool = typer.Option(True, "--progress/--no-progress"),
+    formula_secondary: bool = typer.Option(False, "--formula-secondary", help="Run PaddleOCR PP-FormulaNet on PDF equation crops."),
+    formula_max_regions: int = typer.Option(20, "--formula-max-regions", help="Cap equation blocks for formula secondary extraction."),
+):
+    """Acquire one source through the built-in connector; no Wiki promotion occurs here."""
+    if mode not in {"quick", "forensic"}:
+        raise typer.BadParameter("--mode must be quick or forensic")
+    connector = _connector_command()
+    if connector is None:
+        console.print(Panel.fit(
+            f"[bold red]{t('connector_missing')}[/bold red]\n\n"
+            f"{t('connector_missing_hint')}",
+            title=t("action_required"),
+            border_style="red",
+        ))
+        raise typer.Exit(2)
+
+    # ── pre-flight: check capability before running the connector ──
+    needed = _recommended_capability(source)
+    if not _capability_already_installed(needed):
+        env = _extractor_env_for(needed)
+        console.print(Panel.fit(
+            f"[bold yellow]{t('capability_missing', name=needed)}[/bold yellow]\n\n"
+            f"{t('capability_missing_hint', name=needed, env=env)}",
+            title=t("install_hint"),
+            border_style="yellow",
+        ))
+        raise typer.Exit(2)
+
+    # ── formula-secondary requires both pdf and formula capabilities ──
+    if formula_secondary:
+        if needed != "pdf":
+            console.print(Panel.fit(
+                "[bold yellow]--formula-secondary 仅对 PDF 文件有效[/bold yellow]\n\n"
+                "当前来源不是 PDF 文件，已忽略 --formula-secondary 选项。",
+                title=t("install_hint"),
+                border_style="yellow",
+            ))
+        elif not _capability_already_installed("formula"):
+            env = _extractor_env_for("formula")
+            console.print(Panel.fit(
+                f"[bold yellow]{t('capability_missing', name='formula')}[/bold yellow]\n\n"
+                f"{t('capability_missing_hint', name='formula', env=env)}",
+                title=t("install_hint"),
+                border_style="yellow",
+            ))
+            raise typer.Exit(2)
+
+    cli_args = ["ingest", source, "--mode", mode]
+    if timeout_seconds is not None:
+        cli_args.extend(["--timeout-seconds", str(timeout_seconds)])
+    if progress:
+        cli_args.append("--progress")
+    if formula_secondary and needed == "pdf":
+        cli_args.append("--formula-secondary")
+        cli_args.extend(["--formula-max-regions", str(formula_max_regions)])
+    try:
+        parsed = _connector_parser().parse_args(cli_args)
+    except SystemExit as exc:
+        raise typer.Exit(exc.code)
+    try:
+        exit_code = _connector_run_ingest(parsed)
+    except Exception as exc:
+        console.print(Panel.fit(
+            f"[bold red]{exc}[/bold red]",
+            title=t("ingest_failed"),
+            border_style="red",
+        ))
+        raise typer.Exit(1)
+    if exit_code == 0:
+        print(t("ingest_done_hint"), file=sys.stderr)
+    raise typer.Exit(exit_code)
+
+
+def _extractor_env_for(capability: str) -> str:
+    return {"watch": "OKS_WATCH_PYTHON", "document": "OKS_DOCUMENT_PYTHON",
+            "pdf": "OKS_MINERU_PYTHON", "formula": "OKS_FORMULA_PYTHON"}.get(capability, "")
+
+
+def _feishu_worker_path() -> Path | None:
+    configured = __import__("os").environ.get("OKS_FEISHU_WORKER")
+    candidates = [Path(configured).expanduser()] if configured else []
+    candidates.append(Path(__file__).resolve().parent / "_assets" / "scripts" / "feishu_base_worker.py")
+    for parent in Path(__file__).resolve().parents:
+        candidates.append(parent / "scripts" / "feishu_base_worker.py")
+    return next((path.resolve() for path in candidates if path.is_file()), None)
+
+
+def _run_feishu_worker(command: str, extra: list[str]) -> None:
+    worker = _feishu_worker_path()
+    if worker is None:
+        console.print(Panel.fit(
+            "[bold red]Feishu extension worker is not installed[/bold red]\n\n"
+            "Set OKS_FEISHU_WORKER to the reviewed feishu_base_worker.py path. "
+            "This extension deliberately does not create a hidden Feishu client or bypass login.",
+            title="Action required",
+            border_style="red",
+        ))
+        raise typer.Exit(2)
+    raise typer.Exit(subprocess.run([sys.executable, str(worker), command, *extra]).returncode)
+
+
+@feishu_app.command("auth")
+def feishu_auth():
+    """Show the configured Lark CLI authentication state; login remains user-controlled."""
+    lark = shutil.which("lark-cli") or shutil.which("lark-cli.exe")
+    if lark is None:
+        console.print("[bold red]lark-cli is not installed.[/bold red] Install and authenticate it before Feishu actions.")
+        raise typer.Exit(2)
+    raise typer.Exit(subprocess.run([lark, "auth", "status"]).returncode)
+
+
+@feishu_app.command("form")
+def feishu_form(url: str = typer.Option(..., "--url", help="Feishu Base form URL to open in your browser")):
+    """Display the human submission form; authentication and submission stay in the user session."""
+    console.print(Panel.fit(f"[bold]Feishu intake form[/bold]\n{url}\n\nOpen it in your authenticated browser to submit a capture.", border_style="cyan"))
+
+
+@feishu_app.command("submit")
+def feishu_submit(
+    content: str = typer.Argument(..., help="Capture text or URL"),
+    thought: str = typer.Option("", "--thought", help="Optional user context"),
+    rating: Optional[str] = typer.Option(None, "--rating", help="Optional A/B/C rating"),
+):
+    """Submit one capture to an authenticated Feishu Base without opening the form."""
+    if rating is not None and rating not in {"A", "B", "C"}:
+        raise typer.BadParameter("--rating must be A, B, or C")
+    extra = [content, "--thought", thought]
+    if rating is not None:
+        extra.extend(["--rating", rating])
+    _run_feishu_worker("enqueue", extra)
+
+
+@feishu_app.command("run-once")
+def feishu_run_once(limit: int = typer.Option(100, "--limit")):
+    """Process one pending Feishu Base capture through Raw and review states."""
+    _run_feishu_worker("run-once", ["--limit", str(limit)])
+
+
+@feishu_app.command("publish-candidate")
+def feishu_publish_candidate(
+    record_id: str = typer.Option(..., "--record-id", help="Feishu Base record ID"),
+    candidate_file: str = typer.Option(..., "--candidate-file", help="Agent-authored candidate Markdown file"),
+):
+    """Publish a Candidate to one processed Base record for human review."""
+    _run_feishu_worker("publish-candidate", ["--record-id", record_id, "--candidate-file", candidate_file])
+
+
+@feishu_app.command("review-once")
+def feishu_review_once(limit: int = typer.Option(100, "--limit")):
+    """Apply one bounded Base review action and promote approved Candidate content."""
+    _run_feishu_worker("review-once", ["--limit", str(limit)])
+
+
+@feishu_app.command("reconcile-review")
+def feishu_reconcile_review(
+    prompt_message_id: str = typer.Option(..., "--prompt-message-id", help="Candidate review prompt message ID"),
+    reply_message_id: str = typer.Option(..., "--reply-message-id", help="Human review reply message ID"),
+):
+    """Recover one review reply that was missed by the bounded event listener."""
+    _run_feishu_worker(
+        "reconcile-review",
+        ["--prompt-message-id", prompt_message_id, "--reply-message-id", reply_message_id],
+    )
+
+
+@feishu_app.command("listen")
+def feishu_listen(max_events: int = typer.Option(1, "--max-events"), timeout: str = typer.Option("5m", "--timeout")):
+    """Consume bounded Feishu review replies; use an external scheduler for continuous service."""
+    _run_feishu_worker("listen-reviews", ["--max-events", str(max_events), "--timeout", timeout])
+
+
+@feishu_app.command("setup")
+def feishu_setup(
+    base_token: Optional[str] = typer.Option(None, "--base-token", help="已有 Base token（跳过创建）"),
+    base_name: str = typer.Option("Open Knowledge Studio", "--base-name"),
+    table_name: str = typer.Option("每日知识采集", "--table-name"),
+    show_credentials: bool = typer.Option(False, "--show-credentials", help="显示完整 Base token（仅限受控终端）"),
+):
+    """自动创建飞书 Base、采集表和表单。需要 lark-cli 已认证。"""
+    lark = shutil.which("lark-cli") or shutil.which("lark-cli.exe")
+    if lark is None:
+        console.print("[bold red]lark-cli 未安装。[/bold red]")
+        raise typer.Exit(2)
+    worker = _feishu_worker_path()
+    if worker is None:
+        console.print("[bold red]找不到 worker 脚本。[/bold red]")
+        raise typer.Exit(2)
+    setup_script = worker.parent / "feishu_setup.py"
+    if not setup_script.is_file():
+        module = importlib.util.find_spec("feishu_setup")
+        if module and module.origin:
+            setup_script = Path(module.origin)
+    if not setup_script.is_file():
+        console.print(f"[bold red]找不到: {setup_script}[/bold red]")
+        raise typer.Exit(2)
+    cmd = [sys.executable, str(setup_script)]
+    if base_token:
+        cmd.extend(["--base-token", base_token])
+    cmd.extend(["--base-name", base_name, "--table-name", table_name])
+    if show_credentials:
+        cmd.append("--show-credentials")
+    raise typer.Exit(subprocess.run(cmd).returncode)
 
 
 # ── Search / Recall ──────────────────────────────────────────────
@@ -992,10 +1374,15 @@ def init(
         console.print(f"[green]Active KB set:[/green] {root}")
 
     console.print(
-        f"\n[bold]Instance ready.[/bold] Next:\n"
-        f"  cd {root}\n"
-        f"  oks status\n"
-        f"  oks wiki create --title \"...\" --type concept --area computing"
+        f"\n[bold]{t('init_ready')}[/bold]\n"
+        f"{t('init_step_install')}\n"
+        f"{t('init_step_ingest')}\n"
+        f"{t('init_step_status')}\n"
+        f"\n[dim]{t('init_capabilities')}[/dim]\n"
+        f"  [dim]watch    - 视频/音频 (faster-whisper + yt-dlp + RapidOCR)[/dim]\n"
+        f"  [dim]document - Office/HTML/文本 (markitdown)[/dim]\n"
+        f"  [dim]pdf      - PDF (MinerU)[/dim]\n"
+        f"  [dim]formula  - 公式 OCR (PaddleOCR)[/dim]"
     )
 
 

@@ -15,15 +15,16 @@ We recommend pipx because modern Linux (Ubuntu 24.04+) and macOS Homebrew Python
 PEP 668 externally-managed, so a bare `pip install` fails. If your mirror lags behind
 PyPI, add `--pip-args="-i https://pypi.org/simple"`.
 
-Optional multimodal ingest (PDF / audio / video / formula extraction) lives in a
-separate, heavier package that you can pull in on demand:
+Optional multimodal ingest is included in the package, while its heavy
+dependencies (PDF / audio / video / formula extraction) remain opt-in:
 
 ```bash
-pipx inject open-knowledge-studio oks-connector
+oks capability install watch
+oks capability install document
+oks capability install pdf
 ```
 
-(pipx apps share one venv without a standalone pip executable — `pipx inject` is how
-you add extras. In a plain venv, use `pip install "open-knowledge-studio[connector]"`.)
+Add `--yes` to install a listed capability after reviewing its dependencies.
 
 ## What you get
 

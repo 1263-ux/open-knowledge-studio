@@ -36,6 +36,11 @@ class build_py_with_assets(build_py):
                 src = repo_root / src_name
                 if src.is_dir():
                     shutil.copytree(src, dest_root / dest_name)
+            worker = repo_root / "scripts" / "feishu_base_worker.py"
+            if worker.is_file():
+                worker_dest = dest_root / "scripts"
+                worker_dest.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(worker, worker_dest / worker.name)
         super().run()
 
 

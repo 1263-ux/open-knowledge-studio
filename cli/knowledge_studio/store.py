@@ -395,6 +395,7 @@ def write_wiki_page(
     relates_to: str | None = None,
     relationship: str | None = None,
     human_note: str | None = None,
+    slug_hint: str | None = None,
 ) -> Path:
     fp = _fingerprint(content)
     fp_index = _load_fingerprint_index()
@@ -411,7 +412,7 @@ def write_wiki_page(
     type_dir = wd / area / wiki_type
     type_dir.mkdir(parents=True, exist_ok=True)
 
-    slug = make_slug(title, fallback="untitled")
+    slug = make_slug(slug_hint or title, fallback="untitled")
     slug = f"{date_str}-{slug}"
 
     file_path = type_dir / f"{slug}.md"
@@ -551,6 +552,7 @@ def promote_draft(
     wiki_type: str | None = None,
     area: str | None = None,
     tags: list[str] | None = None,
+    slug_hint: str | None = None,
 ) -> str:
     dd = drafts_dir()
     draft_path = dd / f"{slug}.md"
@@ -563,23 +565,36 @@ def promote_draft(
     body = meta.get("body", "")
 
     final_title = title or meta.get("title", slug)
+    requested_type = wiki_type or meta.get("draft_type", "concept")
     _type_dirs = {
         "concept": "concepts", "concepts": "concepts",
         "strategy": "strategies", "strategies": "strategies",
         "anti-pattern": "anti-patterns", "anti-patterns": "anti-patterns",
     }
-    final_type = _type_dirs.get(wiki_type or meta.get("draft_type", "concept"), "concepts")
+    final_type = _type_dirs.get(requested_type)
+    if final_type is None:
+        raise ValueError(f"Unsupported Wiki type: {requested_type}")
     final_area = area or meta.get("draft_area", "computing")
     human_note = meta.get("source_note") or None
+
+    draft_tags = meta.get("tags", [])
+    if isinstance(draft_tags, str):
+        draft_tags = [item.strip() for item in draft_tags.split(",") if item.strip()]
+    if not isinstance(draft_tags, list):
+        draft_tags = []
 
     path = write_wiki_page(
         title=final_title,
         content=body,
         wiki_type=final_type,
         area=final_area,
+        source_type=meta.get("source_type", "auto"),
         importance=0.7,
-        tags=tags,
+        tags=tags if tags is not None else draft_tags,
+        traces=meta.get("traces") if isinstance(meta.get("traces"), list) else None,
+        review=meta.get("review") if isinstance(meta.get("review"), dict) else None,
         human_note=human_note,
+        slug_hint=slug_hint,
     )
 
     draft_path.unlink()

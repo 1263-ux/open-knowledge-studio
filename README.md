@@ -24,22 +24,42 @@ Open Knowledge Studio is a knowledge base system designed to work with Claude Co
 
 ### Quick Start
 
-Prerequisites: Python ≥ 3.10, git. Claude Code (or a compatible agent) is optional
-but required for the skills-driven workflow (`/ingest`, `/query`, `/promote`) — the
-CLI alone covers search/recall/wiki CRUD.
+Prerequisites: Python ≥ 3.12, git. Claude Code (or a compatible agent) is optional
+but required for the skills-driven workflow — the CLI alone covers the full loop.
 
 ```bash
-pipx install open-knowledge-studio && pipx ensurepath   # 1. install the CLI
+pipx install open-knowledge-studio && pipx ensurepath   # 1. install the CLI (core + connector)
 oks init my-knowledge-base          # 2. scaffold your instance
 cd my-knowledge-base
 oks status                          # 3. use it
 oks search "git branch"             # (empty on a fresh instance — add knowledge first)
 oks recall "git branch" --goal none --format json --explain  # reproducible, inspectable output
 oks eval recall eval/datasets/team-v1.yaml --output eval/runs/baseline.json
+
+# 按需安装能力
+oks capability install watch     # 视频/音频提取
+oks capability install document  # Office/HTML 提取
+oks capability install pdf       # PDF 提取
+
+# 采集（Agent 或用户直接调用）
+oks ingest "https://www.youtube.com/watch?v=..." --mode quick --progress
+
+# 飞书（可选组件）
+oks feishu setup                 # 自动创建 Base + 表 + 表单
+oks feishu submit "https://..."  # 提交采集
+oks feishu run-once              # 处理一条待办
+oks feishu listen                # 监听审核回复
 ```
 
-Why pipx? Recent systems ship PEP 668 "externally-managed" Pythons, so a bare
-`pip install` fails out of the box. Per-OS setup:
+`oks-connector` 已内置，不再需要 `pipx inject`。重型依赖（faster-whisper、MinerU、PaddleOCR）
+通过 `oks capability install` 按需安装，每次安装前提示用户确认。
+
+The connector is included in the package; `oks ingest` checks the required
+optional capability and prints the exact installation command when it is
+missing. Feishu Base is an optional extension: `oks feishu auth`,
+`oks feishu form --url <form-url>`, `oks feishu run-once`, and bounded
+`oks feishu listen` retain user-controlled login and review. See
+`docs/handoff-cli-feishu-loop-20260724.md` for setup and operational boundaries.
 
 | OS | Get pipx | Note |
 |----|----------|------|
@@ -84,7 +104,7 @@ Open Knowledge Studio 是一个为 Claude Code 设计的文件式知识库系统
 
 ### 快速开始
 
-前置条件：Python ≥ 3.10、git。Claude Code（或兼容 Agent）可选，但技能工作流
+前置条件：Python ≥ 3.12、git。Claude Code（或兼容 Agent）可选，但技能工作流
 （`/ingest`、`/query`、`/promote`）依赖它——纯 CLI 覆盖搜索/召回/wiki CRUD。
 
 ```bash

@@ -1,0 +1,35 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "'D:\\XiangMuLuoDi\\Clone\\1263-ux\\claude-code-knowledge-studios\\.codex\\hooks\\validate-wiki-write.sh'"
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "'D:\\XiangMuLuoDi\\Clone\\1263-ux\\claude-code-knowledge-studios\\.codex\\hooks\\pre-compact.sh'"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "'D:\\XiangMuLuoDi\\Clone\\1263-ux\\claude-code-knowledge-studios\\.codex\\hooks\\session-start.sh'"
+          }
+        ]
+      }
+    ]
+  }
+}

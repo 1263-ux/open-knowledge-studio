@@ -27,7 +27,7 @@
     "modalities": ["mp4", "mov", "avi", "mkv", "webm"],
     "raw_subdir": "videos",
     "json_protocol": true,
-    "output_contract": "raw-multimodal/v0.1"
+    "output_contract": "raw-multimodal/v0.2"
   },
   {
     "name": "oks-audio",
@@ -39,7 +39,7 @@
     "modalities": ["mp3", "wav", "m4a", "flac", "aac", "ogg"],
     "raw_subdir": "audio",
     "json_protocol": true,
-    "output_contract": "raw-multimodal/v0.1"
+    "output_contract": "raw-multimodal/v0.2"
   },
   {
     "name": "oks-image",
@@ -51,7 +51,7 @@
     "modalities": ["png", "jpg", "jpeg", "webp", "bmp"],
     "raw_subdir": "misc",
     "json_protocol": true,
-    "output_contract": "raw-multimodal/v0.1"
+    "output_contract": "raw-multimodal/v0.2"
   },
   {
     "name": "oks-document",
@@ -63,7 +63,7 @@
     "modalities": ["docx", "pptx"],
     "raw_subdir": "papers",
     "json_protocol": true,
-    "output_contract": "raw-multimodal/v0.1"
+    "output_contract": "raw-multimodal/v0.2"
   },
   {
     "name": "oks-pdf",
@@ -75,7 +75,7 @@
     "modalities": ["pdf"],
     "raw_subdir": "papers",
     "json_protocol": true,
-    "output_contract": "raw-multimodal/v0.1"
+    "output_contract": "raw-multimodal/v0.2"
   },
   {
     "name": "agent-reach",

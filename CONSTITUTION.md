@@ -5,6 +5,13 @@
 
 ## Engineering Principles
 
+### P0: Python version requirement
+
+The runtime and connector Python modules require Python >= 3.12.
+This is already stated in the project README.  The `from __future__ import
+annotations` usage, `str | None` union syntax, `pathlib.Path` features,
+and `itertools.batched` (used in tests) all depend on 3.12+ semantics.
+
 ### P1: Git IS the migration
 
 The knowledge repo is synced via `git clone/pull`. Schema changes to knowledge
@@ -41,49 +48,39 @@ not call AI APIs and does not wrap tool calls.
 External tools (Level 1/2) may use AI APIs (vision, STT) independently.
 The agent calls these tools directly via Bash; OKS is not in the runtime path.
 
-### P5: OKS provides capability, not runtime wrapping
+### P5: OKS provides capability; Agent is the orchestrator
 
-**Core invariant: OKS 只提供能力，不提供运行时包装。**
+**Core invariant: OKS 提供能力，Agent 负责编排。**
 
 OKS is a capability layer — it installs, configures, routes, and health-checks.
-It is NOT a runtime wrapper. The agent (Claude Code) IS the orchestrator:
-it reads the routing table, checks tool availability via Bash, calls tools
-directly, and writes results to `raw/`. OKS is never in the runtime path
-between the agent and the tool.
+`oks ingest` is the human-readable orchestration entry point: it routes a
+source to the correct Level-1 extractor and produces a Raw Bundle, but never
+summarizes, grades, or promotes content. Heavy extractors (watch / pdf /
+document / formula) remain independent L1 tools that the Agent can also call
+directly via Bash.
 
 **Three-level tool protocol:**
 
 | Level | Type | Example | Called by | Output |
 |-------|------|---------|-----------|--------|
 | 0 | System tool | curl, pdftotext | Agent via Bash | Raw stdout |
-| 1 | OKS protocol CLI | oks-video | Agent via Bash | Raw Bundle (`raw-multimodal/v0.1`) |
+| 1 | OKS protocol CLI | oks-connector watch | Agent or `oks ingest` | Raw Bundle |
 | 2 | Independent tool | agent-reach, yt-dlp | Agent via Bash | Tool-specific |
 
-**Level 1 output protocol — Raw Bundle (`raw-multimodal/v0.1`):**
-An L1 tool writes a **bundle directory** — `content.md` (faithful primary
-text, the recall entry) plus sidecars `raw.md`, `metadata.json` (source +
-hash), `evidence.jsonl` (atomic provenance), `quality-report.json`, and
-`assets/` — and prints a JSON envelope to stdout pointing at it:
-```json
-{"contract": "raw-multimodal/v0.1", "bundle": "raw/.../slug/", "content": "content.md", "metadata": {}}
-```
-See `docs/raw-multimodal-standard.md` for the full spec and
-`_meta/raw-evidence-schema.md` for how the core recalls it generically.
+**Capability install model:**
+Heavy dependencies (faster-whisper, MinerU, PaddleOCR) are opt-in extras.
+`oks capability install watch|document|pdf|formula` prompts the user before
+downloading. The Agent selects the lowest-cost available capability at runtime
+(API → system CLI → install on demand → remote Worker).
 
-Tools are registered in `settings/handlers.json` with `level`, `check_cmd`,
-`install_hint`, `raw_subdir` fields. The agent checks availability by
-running `check_cmd` via Bash — no CLI doctor command needed.
-
-**Do not** build a runtime wrapper — OKS must not sit between the agent
-and external tools (no `oks ingest <input>` that internally dispatches
-to handlers). The agent calls tools directly via Bash.
+**Feishu as optional component:**
+`oks feishu setup` auto-creates a Base, capture table, and form. When set up,
+the form becomes the daily intake interface with Agent-driven IM review.
+Without Feishu, `oks ingest` and the CLI loop work independently.
 
 **Do not** add AI API calls to the CLI core — `oks` handles only file
 system operations and recall scoring. External tools (L1/L2) may use AI
 APIs independently.
-
-**Do not** auto-detect modality inside OKS — modality detection is the
-agent's job, guided by the routing table in `settings/handlers.json`.
 
 ---
 
