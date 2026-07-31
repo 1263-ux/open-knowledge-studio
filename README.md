@@ -40,19 +40,18 @@ Requirements:
 * Git
 * pipx
 
-Install from source (developers/contributors):
+Install:
 
 ```bash
+# Normal users — from PyPI
+pipx install open-knowledge-studio
+
+# Developers — from local checkout
 pipx install ./cli --force
-oks --version
-```
 
-End users install the published package: `pipx install open-knowledge-studio`.
-
-Install from Git:
-
-```bash
+# From Git (anyone)
 pipx install "git+https://github.com/open-agent-power/open-knowledge-studio.git#subdirectory=cli" --force
+
 oks --version
 ```
 
@@ -76,7 +75,7 @@ After human approval:
 ```bash
 oks drafts promote <slug>
 oks search "agent memory"
-oks recall "how should agent memory be managed?"
+oks recall "how should agent memory be managed?" --goal none --format table
 oks lint
 ```
 
@@ -88,7 +87,9 @@ oks ingest
 oks drafts
 oks wiki
 oks search
-oks recall
+oks recall --goal --format --explain
+oks eval
+oks trace
 oks lint
 oks status
 oks capability
