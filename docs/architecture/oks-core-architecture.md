@@ -79,7 +79,7 @@ Claude Code Marketplace、OpenClaw Skill Hub、浏览器工具、模型 API、OC
 
 | 能力 | 当前状态 | 证据 |
 |---|---|---|
-| 轻量文本核心闭环 | `已验证但有发现` | `docs/acceptance/book-poc-report.md`、`docs/acceptance/clean-server-deployment-report.md` |
+| 轻量文本核心闭环 | `已验证但有发现` | `docs/acceptance/clean-server-deployment-report.md` |
 | 干净服务器部署提示词 | `passed_with_findings` | `docs/acceptance/clean-server-deployment-report.md` |
 | `document` 能力 | `已验证` | 远端干净服务器 document 安装与 ingest |
 | Raw 路径隔离 | `修复后已验证` | clean-server 报告、Raw location assertion |
