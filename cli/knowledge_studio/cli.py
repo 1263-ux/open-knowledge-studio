@@ -1510,8 +1510,13 @@ def _wire_userpromptsubmit(settings_path: Path, command: str) -> str:
     else:
         ups.append({"hooks": [{"type": "command", "command": command}]})
     settings_path.parent.mkdir(parents=True, exist_ok=True)
-    settings_path.write_text(
-        json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    # This file belongs to the user's editor and holds permissions, other hooks
+    # and MCP servers. Keep a backup and write atomically (CONSTITUTION P2/A5)
+    # so a torn write can never destroy configuration we do not own.
+    if settings_path.is_file():
+        shutil.copy2(settings_path, settings_path.with_suffix(".json.oks-bak"))
+    store._atomic_write(
+        settings_path, json.dumps(data, indent=2, ensure_ascii=False) + "\n"
     )
     return "wired"
 

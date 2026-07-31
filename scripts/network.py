@@ -408,6 +408,19 @@ def fetch_url(
                 raise ProbeError("CHALLENGE_REQUIRED", "challenge or CAPTCHA detected; automatic bypass is not attempted")
             raise ProbeError("UNSUPPORTED_MIME", "HTML snapshots must use the web or browser acquisition route")
         os.replace(temporary, target)
+        # Directory fsync persists the rename itself; without it a crash can
+        # leave the receipt claiming success for a file that no longer exists.
+        try:
+            dir_fd = os.open(str(target.parent), os.O_RDONLY)
+        except OSError:
+            pass
+        else:
+            try:
+                os.fsync(dir_fd)
+            except OSError:
+                pass
+            finally:
+                os.close(dir_fd)
         temporary = None
         return {
             "schema_version": FETCH_RECEIPT_VERSION,

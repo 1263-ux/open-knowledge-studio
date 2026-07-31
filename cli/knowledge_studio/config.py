@@ -44,7 +44,7 @@ def load_config() -> dict[str, Any]:
 
 
 def save_config(config: dict[str, Any]) -> None:
-    """Save config with atomic write."""
+    """Save config with a crash-safe atomic write (CONSTITUTION P2/A5)."""
     path = config_path()
     path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -54,7 +54,17 @@ def save_config(config: dict[str, Any]) -> None:
     try:
         with os.fdopen(fd, "w") as f:
             json.dump(config, f, indent=2, ensure_ascii=False)
+            f.flush()
+            os.fsync(f.fileno())
         os.replace(tmp, path)
+        # Directory fsync persists the rename itself; without it a crash can
+        # leave the file missing even though its contents reached the disk.
+        with contextlib.suppress(OSError):
+            dir_fd = os.open(str(path.parent), os.O_RDONLY)
+            try:
+                os.fsync(dir_fd)
+            finally:
+                os.close(dir_fd)
     except Exception:
         with contextlib.suppress(OSError):
             os.unlink(tmp)

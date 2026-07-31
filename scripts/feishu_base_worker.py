@@ -816,10 +816,9 @@ def complete_browser_snapshot(config: WorkerConfig, record_id: str, snapshot_dir
                 "locator": {"asset": "assets/browser-screenshot.png", "url": snapshot["url"]},
             }
         )
-        evidence_path.write_text(
+        atomic_write_text(
+            evidence_path,
             "".join(json.dumps(item, ensure_ascii=False) + "\n" for item in existing_evidence),
-            encoding="utf-8",
-            newline="\n",
         )
         quality_path = output / "quality-report.json"
         quality_report = json.loads(quality_path.read_text(encoding="utf-8"))

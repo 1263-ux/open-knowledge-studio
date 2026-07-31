@@ -8,8 +8,10 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import hashlib
 import json
+import os
 import shutil
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -50,17 +52,50 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _fsync_dir(path: Path) -> None:
+    """Persist the rename itself, per CONSTITUTION A5."""
+    try:
+        fd = os.open(str(path), os.O_RDONLY)
+    except OSError:
+        return
+    try:
+        os.fsync(fd)
+    except OSError:
+        pass
+    finally:
+        os.close(fd)
+
+
+def _atomic_write_text(path: Path, payload: str) -> None:
+    """mkstemp + fsync + os.replace + dir fsync, per CONSTITUTION P2/A5.
+
+    Raw Bundle artifacts are the only record of a long extraction run, so a
+    torn metadata.json or evidence.jsonl means redoing all of that work.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    handle, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    try:
+        with os.fdopen(handle, "w", encoding="utf-8", newline="\n") as stream:
+            stream.write(payload)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+        _fsync_dir(path.parent)
+    except BaseException:
+        Path(temporary).unlink(missing_ok=True)
+        raise
+
+
 def write_json(path: Path, value: Any) -> None:
-    path.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    _atomic_write_text(path, json.dumps(value, ensure_ascii=False, indent=2) + "\n")
 
 
 def write_jsonl(path: Path, values: Iterable[dict[str, Any]]) -> int:
-    count = 0
-    with path.open("w", encoding="utf-8", newline="\n") as handle:
-        for value in values:
-            handle.write(json.dumps(value, ensure_ascii=False) + "\n")
-            count += 1
-    return count
+    lines = []
+    for value in values:
+        lines.append(json.dumps(value, ensure_ascii=False) + "\n")
+    _atomic_write_text(path, "".join(lines))
+    return len(lines)
 
 
 def exactly_one(root: Path, pattern: str) -> Path:
