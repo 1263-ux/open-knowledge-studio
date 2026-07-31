@@ -26,9 +26,7 @@ classifiers = [
 dependencies = [
     "typer>=0.12",
     "rich>=13",
-    "python-frontmatter>=1",
     "jieba>=0.42",
-    "gitpython>=3",
     "pyyaml>=6",
 ]
 
