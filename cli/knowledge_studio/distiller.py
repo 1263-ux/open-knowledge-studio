@@ -41,10 +41,12 @@ def write_digest(
     source_count: int = 0,
     tags: list[str] | None = None,
 ) -> Path:
-    """Write a daily digest summary to raw/{YYYY}/{MM}/{DD}/.
+    """Write a daily digest summary under raw/.logs/digests/{YYYY}/{MM}/{DD}/.
 
-    Digests are episodic memory — no decay, no stability score.
-    Used by recall_episodic() for search-based retrieval.
+    A digest is an AI-written record, not human-collected material, so
+    CONSTITUTION P3 keeps it out of recall: recall_episodic() skips
+    raw/.logs/. Anything here worth keeping goes through drafts/ review
+    before it becomes a wiki page.
     """
     rd = _digests_dir()
     now = datetime.now(UTC)

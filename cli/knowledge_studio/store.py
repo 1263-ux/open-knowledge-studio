@@ -595,6 +595,11 @@ def promote_draft(
         review=meta.get("review") if isinstance(meta.get("review"), dict) else None,
         human_note=human_note,
         slug_hint=slug_hint,
+        # A4: carry the declared relationship through, otherwise the superseded
+        # page stays active and both versions get recalled side by side.
+        supersedes=meta.get("supersedes"),
+        relates_to=meta.get("relates_to"),
+        relationship=meta.get("relationship"),
     )
 
     draft_path.unlink()

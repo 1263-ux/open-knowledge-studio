@@ -384,6 +384,21 @@ def test_episodic_recall_never_leaks_other_identities(kb_root):
     assert not any("theirs.md" in path for path in scoped)
 
 
+def test_episodic_recall_excludes_ai_written_digests(kb_root):
+    """CONSTITUTION P3: an AI digest is a record, not human-collected material."""
+    from knowledge_studio.distiller import write_digest
+    from knowledge_studio.recall import recall_episodic
+
+    material = kb_root / "raw" / "2026" / "07" / "31" / "articles"
+    material.mkdir(parents=True)
+    _atomic_write(material / "quorum-notes.md", "quorum tuning notes written by a human")
+    write_digest("Quorum tuning", "quorum tuning summarized by the agent")
+
+    paths = [hit["source_path"] for hit in recall_episodic("quorum tuning", limit=10)]
+    assert any("quorum-notes.md" in path for path in paths)
+    assert not any(".logs" in path for path in paths)
+
+
 def test_record_access_promotes_provisional(kb_root, monkeypatch):
     """The explicit-use signal increments access_count and promotes at 3 uses."""
     import yaml

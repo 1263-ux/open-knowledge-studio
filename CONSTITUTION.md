@@ -33,11 +33,11 @@ Directory fsync after replace is required for crash safety.
   LLM does not write knowledge to `raw/`.
 - `wiki/` contains curated knowledge written by LLM via the Dreaming cycle,
   approved by humans through `drafts/` review.
-- `raw/executions/` holds append-only execution traces. A trace is provenance —
-  a record of what happened, not knowledge. Traces are **excluded from recall**
-  (`recall_episodic` skips `raw/executions/`) and are reached only through
-  evidence links on a wiki page, so an agent's own commentary can never be fed
-  back to it as memory.
+- `raw/executions/` holds append-only execution traces and `raw/.logs/` holds
+  tool- and AI-written digests. Both are provenance — a record of what
+  happened, not knowledge. They are **excluded from recall**
+  (`recall_episodic` skips both) and are reached only through evidence links on
+  a wiki page, so an agent's own output can never be fed back to it as memory.
 
 ### P4: CLI core is API-free, external tools may use AI APIs
 
@@ -310,3 +310,14 @@ archaeology through 20k-line diffs.
 - **2026-07-31 — traces defined as provenance** (P3/A1): `raw/executions/`
   registered in A1; traces excluded from recall and reachable only through
   wiki evidence links.
+- **2026-07-31 — A2 scope filtering enforced in code**: `recall_episodic`
+  previously walked all of `profiles/`, returning other users' and other
+  projects' profiles at the highest weight. Private profiles are now opt-in
+  via `--user` / `--project` (`OKS_USER` / `OKS_PROJECT`); unnamed identities
+  are excluded rather than leaked.
+- **2026-07-31 — P3 exclusion widened to `raw/.logs/`**: AI-written digests
+  were being recalled as if they were human-collected material. `raw/.logs/`
+  now joins `raw/executions/` outside recall.
+- **2026-07-31 — A4 relationships reachable**: `promote_draft` dropped
+  `relates_to` / `relationship`, so no production path could mark a page
+  superseded. Promotion now carries them through.

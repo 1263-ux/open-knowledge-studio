@@ -47,6 +47,12 @@ RECALL_HIT_SCHEMA = "recall-hit/v1"
 RECALL_RESPONSE_SCHEMA = "recall-response/v1"
 SEARCH_RESPONSE_SCHEMA = "search-response/v1"
 
+# Subdirectories of raw/ that hold records rather than human-collected material.
+# CONSTITUTION P3: recalling them would feed an agent its own output back as
+# memory. executions/ holds provenance traces; .logs/ holds tool and AI-written
+# digests (see distiller.write_digest).
+_NON_RECALLABLE_RAW_SUBDIRS = ("executions", ".logs")
+
 
 def _resolve_goal_context(
     goal: str | None = None,
@@ -201,13 +207,16 @@ def recall_episodic(
 
     rd = raw_dir()
     if rd.exists():
-        # Execution traces are provenance, not memory: they are reached through
-        # wiki evidence links, never recalled. Without this an agent's own
-        # comments outrank the human-collected material they were derived from.
-        executions = rd / "executions"
+        # Provenance and AI-written logs are records, not human-collected
+        # material: recalling them would feed an agent its own output back as
+        # memory, ranked above the real sources it came from.
+        excluded_roots = tuple(rd / name for name in _NON_RECALLABLE_RAW_SUBDIRS)
+
+        def _is_excluded(path: Path) -> bool:
+            return any(root_dir in path.parents for root_dir in excluded_roots)
 
         for f in rd.rglob("*.md"):
-            if executions in f.parents:
+            if _is_excluded(f):
                 continue
             try:
                 content = f.read_text(encoding="utf-8").lower()
@@ -226,7 +235,7 @@ def recall_episodic(
                 continue
 
         for f in rd.rglob("*.jsonl"):
-            if executions in f.parents:
+            if _is_excluded(f):
                 continue
             try:
                 for line in f.read_text(encoding="utf-8").splitlines():
