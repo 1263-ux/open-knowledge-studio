@@ -75,7 +75,7 @@ open-knowledge-studio/
 ├── wiki/             # ③ Curated knowledge — 22 domains × 3 types
 ├── drafts/           # ④ Dreaming candidates
 ├── settings/         # ⑤ Config layer — decay, tool registry, input sources
-├── _meta/            # ⑥ Schema layer — frontmatter/learning contracts (CI-enforced)
+├── _meta/            # ⑥ Schema layer — raw evidence shape contract
 ├── templates/        # concept, strategy, anti-pattern, draft
 ├── cli/              # Python CLI tool (oks) — API-free core
 ├── docs/             # GitHub Pages design documentation
