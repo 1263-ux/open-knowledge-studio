@@ -18,7 +18,7 @@ def test_handler_install_hints_point_at_real_channels():
     distribution exists on PyPI — agents following the routing table failed
     every install attempt.
     """
-    handlers_path = Path(__file__).parents[2] / "settings" / "handlers.json"
+    handlers_path = Path(__file__).parents[2] / "assets" / "settings" / "handlers.json"
     handlers = json.loads(handlers_path.read_text(encoding="utf-8"))
 
     text = handlers_path.read_text(encoding="utf-8")

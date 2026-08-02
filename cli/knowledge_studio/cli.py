@@ -1266,56 +1266,75 @@ raw/executions/*/.append.lock
 """
 
 
-_ASSET_MAP = [
-    ("claude", ".claude"),
-    ("codex", ".codex"),
-    ("agents", ".agents"),
-    ("templates", "templates"),
-    ("_meta", "_meta"),
-    ("settings", "settings"),
-]
+_SHARED_ASSETS = ("templates", "_meta", "settings", "profiles")
 
-# Maintainer-only skills. Kept in the repo for development, never installed into
-# a user's knowledge base. Must match setup.py / bundle_assets.py — a source
-# checkout copies from the repo root, so the build-time exclusion is not enough.
-_DEV_ONLY_ASSET_NAMES = ("review-upstream-pr", "upstream-pr-remediation")
+# How each agent ecosystem's directory is assembled from the single-source
+# components under assets/. Supporting another agent is one line here.
+_AGENT_TARGETS = {
+    ".claude": {"config": "claude", "skills": True, "hooks": True, "rules": True},
+    ".codex": {"config": "codex", "skills": False, "hooks": True, "rules": False},
+    ".agents": {"config": None, "skills": True, "hooks": False, "rules": False},
+}
 
 
-def _asset_source() -> tuple[Path | None, bool]:
-    """Locate the shareable asset layer. Returns (base, is_packaged).
+def _asset_source() -> Path | None:
+    """Locate the instance-template tree.
 
     A source checkout is authoritative during development; `_assets/` may be a
-    stale build artifact. Installed wheels have no repo root and use `_assets/`.
+    stale build artifact. Installed wheels have no repo root and use `_assets/`,
+    which is a verbatim copy of `assets/` — so both share one layout.
     """
     for parent in Path(__file__).resolve().parents:
-        if (
-            (parent / ".git").exists()
-            and (parent / ".claude").is_dir()
-            and (parent / "templates").is_dir()
-            and (parent / "_meta").is_dir()
-        ):
-            return parent, False
+        if (parent / ".git").exists() and (parent / "assets").is_dir():
+            return parent / "assets"
     packaged = Path(__file__).resolve().parent / "_assets"
     if packaged.is_dir() and any(packaged.iterdir()):
-        return packaged, True
-    return None, False
+        return packaged
+    return None
 
 
-def _materialize_assets(root: Path, base: Path, is_packaged: bool, overwrite: bool) -> list[str]:
+def _materialize_assets(root: Path, base: Path, overwrite: bool) -> list[str]:
+    """Assemble instance directories from the single-source asset tree."""
     import shutil
 
-    ignore = shutil.ignore_patterns(*_DEV_ONLY_ASSET_NAMES)
+    def copy_into(src: Path, dest: Path) -> bool:
+        """Merge per file: never clobber what the user changed unless upgrading.
+
+        A directory-level check would skip whole trees, because `init` creates
+        the bucket directories (profiles/...) before assets are materialized.
+        """
+        wrote = False
+        for item in sorted(src.rglob("*")):
+            target = dest / item.relative_to(src)
+            if item.is_dir():
+                target.mkdir(parents=True, exist_ok=True)
+                continue
+            if target.exists() and not overwrite:
+                continue
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(item, target)
+            wrote = True
+        return wrote
+
     done: list[str] = []
-    for pkg_name, dest_name in _ASSET_MAP:
-        src = base / (pkg_name if is_packaged else dest_name)
-        if not src.is_dir():
-            continue
+    for name in _SHARED_ASSETS:
+        src = base / name
+        if src.is_dir() and copy_into(src, root / name):
+            done.append(name)
+
+    for dest_name, spec in _AGENT_TARGETS.items():
         dest = root / dest_name
-        if dest.exists() and not overwrite:
-            continue
-        # Merge-copy: refresh bundled files in place, keep user-owned files.
-        shutil.copytree(src, dest, dirs_exist_ok=True, ignore=ignore)
-        done.append(dest_name)
+        wrote = False
+        if spec["config"]:
+            config_dir = base / "agent-config" / spec["config"]
+            if config_dir.is_dir():
+                wrote |= copy_into(config_dir, dest)
+        for component in ("skills", "hooks", "rules"):
+            src = base / component
+            if spec[component] and src.is_dir():
+                wrote |= copy_into(src, dest / component)
+        if wrote:
+            done.append(dest_name)
     return done
 
 
@@ -1373,7 +1392,7 @@ def init(
         p.mkdir(parents=True, exist_ok=True)
         (p / ".gitkeep").touch()
 
-    base, is_packaged = _asset_source()
+    base = _asset_source()
     if base is None:
         console.print(
             "[yellow]No bundled assets found — skills/templates not materialized.[/yellow]\n"
@@ -1381,7 +1400,7 @@ def init(
             "  or run python cli/scripts/bundle_assets.py in the repo before installing."
         )
     else:
-        copied = _materialize_assets(root, base, is_packaged, overwrite=upgrade)
+        copied = _materialize_assets(root, base, overwrite=upgrade)
         if copied:
             console.print(f"[green]Materialized assets:[/green] {', '.join(copied)}")
         else:
@@ -1458,10 +1477,10 @@ def _ensure_recall_scripts(root: Path) -> list[str]:
     hooks_dir = root / ".claude" / "hooks"
     hooks_dir.mkdir(parents=True, exist_ok=True)
 
-    base, is_packaged = _asset_source()
+    base = _asset_source()
     src_dir = None
     if base is not None:
-        src_dir = base / ("claude/hooks" if is_packaged else ".claude/hooks")
+        src_dir = base / "hooks"
 
     baked = f'"${{OKS_PYTHON:-{sys.executable}}}"'
     created: list[str] = []
