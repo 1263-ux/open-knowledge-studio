@@ -1,5 +1,8 @@
 # Engineering Rounds 2-3
 
+> **历史快照** — 本文记录特定时间点的过程与决策，不代表当前口径。
+> 现行设计以 [`CONSTITUTION.md`](../../CONSTITUTION.md) 为准；归档说明见 [归档索引](README.md)。
+
 ## Round 2 -- Reliability Hardening (Current)
 
 ### Scope

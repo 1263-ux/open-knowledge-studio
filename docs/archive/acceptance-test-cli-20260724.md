@@ -1,5 +1,8 @@
 # CLI 组合能力验收测试手册
 
+> **历史快照** — 本文记录特定时间点的过程与决策，不代表当前口径。
+> 现行设计以 [`CONSTITUTION.md`](../../CONSTITUTION.md) 为准；归档说明见 [归档索引](README.md)。
+
 日期：2026-07-24（更新 2026-07-25）。适用分支：`codex/upstream-v0.2.3-integration`。
 
 > **2026-07-25 更新**：`oks-connector` 已合并入 `open-knowledge-studio` 单仓库。不再需要 `pipx inject`。
