@@ -913,13 +913,17 @@ def wiki_create(
         )
         wiki_type = "concepts"
 
-    path = store.write_wiki_page(
-        title=title,
-        content=content,
-        wiki_type=wiki_type,
-        area=area,
-        importance=importance,
-    )
+    try:
+        path = store.write_wiki_page(
+            title=title,
+            content=content,
+            wiki_type=wiki_type,
+            area=area,
+            importance=importance,
+        )
+    except ValueError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1)
     console.print(f"[green]Created:[/green] {path}")
 
 
@@ -1001,6 +1005,9 @@ def drafts_promote(slug: str = typer.Argument(help="Draft slug to promote")):
         console.print(f"[green]Promoted:[/green] {slug} → {new_slug}")
     except FileNotFoundError:
         console.print(f"[red]Draft not found:[/red] {slug}")
+        raise typer.Exit(1)
+    except ValueError as e:
+        console.print(f"[red]{e}[/red]")
         raise typer.Exit(1)
 
 

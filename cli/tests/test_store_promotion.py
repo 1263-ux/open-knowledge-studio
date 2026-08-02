@@ -3,6 +3,94 @@ from pathlib import Path
 from knowledge_studio import store
 
 
+def test_write_wiki_page_rejects_area_path_traversal(monkeypatch, tmp_path):
+    """area becomes a directory name — an unchecked value escapes the whole KB.
+
+    Before the whitelist, area="../../outside" wrote to
+    <kb>/wiki/../../outside/concept/, i.e. outside the knowledge base entirely.
+    """
+    import pytest
+
+    monkeypatch.setenv("OKS_ROOT", str(tmp_path))
+    for area in ("../../outside", "../sibling", "a/b", "Computing", "_hidden", ""):
+        with pytest.raises(ValueError, match="Invalid area"):
+            store.write_wiki_page(
+                title="pwned", content="x" * 60, wiki_type="concepts", area=area
+            )
+
+    # Nothing may land anywhere, inside or outside the KB.
+    assert list(tmp_path.rglob("*pwned*")) == []
+    assert not (tmp_path.parent / "outside").exists()
+
+    # A legal area still works.
+    page = store.write_wiki_page(
+        title="fine", content="y" * 60, wiki_type="concepts", area="product-design"
+    )
+    assert page.is_relative_to(tmp_path / "wiki" / "product-design")
+
+
+def test_promote_draft_refuses_a_rejected_draft(monkeypatch, tmp_path):
+    """CONSTITUTION A3: once a human says no, promotion must not walk past it.
+
+    Feishu's reject writes status=rejected and keeps the draft on disk, so
+    without this gate `oks drafts promote` would resurrect rejected content.
+    """
+    import pytest
+
+    monkeypatch.setenv("OKS_ROOT", str(tmp_path))
+    draft = tmp_path / "drafts" / "was-rejected.md"
+    draft.parent.mkdir(parents=True)
+    draft.write_text(
+        '''---
+title: "Rejected by review"
+draft_type: strategy
+draft_area: computing
+status: rejected
+---
+
+A human already declined this content.
+''',
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="rejected"):
+        store.promote_draft("was-rejected")
+
+    assert draft.exists(), "the rejected draft must stay for audit"
+    wiki = tmp_path / "wiki"
+    assert not wiki.exists() or list(wiki.rglob("*.md")) == []
+
+
+def test_cli_reports_security_errors_without_traceback(monkeypatch, tmp_path):
+    """A blocked action must read as an error message, not a Python traceback."""
+    from typer.testing import CliRunner
+
+    from knowledge_studio.cli import app
+
+    monkeypatch.setenv("OKS_ROOT", str(tmp_path))
+    runner = CliRunner()
+
+    result = runner.invoke(
+        app,
+        ["wiki", "create", "--title", "pwned", "--type", "concept",
+         "--area", "../../outside", "--content", "x" * 60],
+    )
+    assert result.exit_code == 1
+    assert "Invalid area" in result.output
+    assert "Traceback" not in result.output
+
+    draft = tmp_path / "drafts" / "nope.md"
+    draft.parent.mkdir(parents=True, exist_ok=True)
+    draft.write_text(
+        "---\ntitle: No\ndraft_type: concept\ndraft_area: computing\nstatus: rejected\n---\n\nbody\n",
+        encoding="utf-8",
+    )
+    result = runner.invoke(app, ["drafts", "promote", "nope"])
+    assert result.exit_code == 1
+    assert "rejected" in result.output
+    assert "Traceback" not in result.output
+
+
 def test_promote_draft_preserves_tags_traces_and_review(monkeypatch, tmp_path):
     monkeypatch.setenv("OKS_ROOT", str(tmp_path))
     draft = tmp_path / "drafts" / "base-loop.md"

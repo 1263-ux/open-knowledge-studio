@@ -20,6 +20,10 @@ import yaml
 
 _logger = logging.getLogger(__name__)
 
+# area is used as a directory name under wiki/, so it must never contain path
+# separators or traversal segments.
+_AREA_RE = re.compile(r"[a-z][a-z0-9-]*")
+
 DECAY_LAMBDA: dict[str, float] = {
     "concept": 0.0,
     "strategy": 0.014,
@@ -397,6 +401,14 @@ def write_wiki_page(
     human_note: str | None = None,
     slug_hint: str | None = None,
 ) -> Path:
+    # area becomes a directory name under wiki/, so an unvalidated value lets
+    # `--area "../../outside"` escape the knowledge base entirely. wiki_type is
+    # already whitelisted by callers; area was the remaining hole.
+    if not _AREA_RE.fullmatch(area or ""):
+        raise ValueError(
+            f"Invalid area {area!r}: use lowercase letters, digits and hyphens "
+            "(e.g. computing, product-design)"
+        )
     fp = _fingerprint(content)
     fp_index = _load_fingerprint_index()
     existing_slug = fp_index.get(fp)
@@ -562,6 +574,13 @@ def promote_draft(
     meta = parse_wiki_file(draft_path)
     if not meta:
         meta = {}
+    # A human already said no. Feishu's reject writes status=rejected and keeps
+    # the draft on disk, so without this gate `oks drafts promote` would walk
+    # right past the A3 human-review boundary.
+    if meta.get("status") == "rejected":
+        raise ValueError(
+            f"Draft {slug} was rejected by a human review; it cannot be promoted"
+        )
     body = meta.get("body", "")
 
     final_title = title or meta.get("title", slug)
