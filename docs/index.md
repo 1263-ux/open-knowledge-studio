@@ -26,7 +26,9 @@ has_children: true
 
 ```
 raw/（人类收集的原始材料）
-  ↓ /ingest — 三级路由 → A/B/C 分级
+  ↓ /ingest — Agent-Native 证据摄入
+  ↓ Source → Provider → EvidenceFragment → EvidenceManifest
+  ↓ oks raw-commit → Raw Bundle v0.2
 drafts/（中间态草稿）
   ↓ /promote — 人工审查
 wiki/（策展知识，带衰减）
@@ -36,10 +38,17 @@ wiki/（策展知识，带衰减）
 
 ## 当前架构与进度
 
-Studio 以核心知识闭环为主线，飞书多维表格仅作为可选 Capture/状态/审核控制面。
+v0.4.0-dev（最小可分发 Beta）已完成：
+
+- **单 Wheel 包**: 仅 `knowledge_studio`，`oks_connector` 已移除
+- **16 个 Provider** + 18 个能力动作
+- **Raw Bundle v0.2** 严格验证管线（`oks raw-commit`）
+- **技能单一事实源**（`skill_templates/`，构建时+运行时剥离）
+- **426 个测试**（425 通过）
+
 架构事实源和本轮工程记录见：
 
-- **[核心架构](architecture/oks-core-architecture.md)** — 当前主事实源，区分已验证/部分验证/尚未验证
+- **[核心架构](architecture/oks-core-architecture.md)** — v0.4.0 当前主事实源
 - **[工程轮次 2-3](engineering-rounds-2-3.md)** — v0.3.0 合并后的架构加固与安全修复
 
 多模态 Raw 协议的机器事实源位于本仓库 `schemas/`；Studio 只保留生命周期和调用入口。

@@ -2,54 +2,105 @@
 
 ## v0.4.0 (Unreleased)
 
+### Breaking Changes
+
+- **`oks_connector` package permanently removed** from Wheel. Old entry points
+  (`oks-connector`, `oks-connector.extractors`, `oks-connector.feishu_worker`) are
+  gone. Two essential stdlib-only utilities (`capability_check`, `_lark_cli`) were
+  inlined into `knowledge_studio/`. Git tag `v0.4.0-legacy-final` preserves the old code.
+- **Legacy extractors deleted**: `scripts/extractors/`, `scripts/experiments/`,
+  `scripts/network.py`, `route_plan()`. Replaced by Agent-Native Provider system.
+- **Skill installation single source**: Skills live in `skill_templates/` only;
+  `_assets/{claude,agents}/skills/` are stripped at build time and runtime.
+  `_install_skills()` is the sole installation path — `oks init` and
+  `oks skills-install` produce identical output (SHA256-verified).
+
 ### Agent-Native Ingestion Architecture
 
-- **Breaking**: Legacy extractor path removed. `--legacy` flag, `OKS_ENABLE_LEGACY_PROVIDERS`
-  env var, `raw_bundle_adapter.py`, `source_router.py`, and old extractors
-  (`extractors/watch.py`, `markitdown.py`, `mineru.py`, `image.py`, `web.py`)
-  are permanently deleted. Git tag `v0.4.0-legacy-final` preserves the old code.
-- New capability system: 18 stable actions in `capabilities/actions.yaml`
-- 16 Provider directories with `provider.yaml` + `SKILL.md`
-- 7 ingestion Recipes: text, pdf, office, image, web, audio, video
-- 3 new protocols: SourceEnvelope, EvidenceFragment, EvidenceManifest
-- `oks raw-commit` validates and atomically writes evidence bundles
-- `/ingest` Skill: Agent-native orchestration (Source → Provider → Fragment → Manifest → raw-commit)
+- **Raw Bundle v0.2 pipeline** (`oks raw-commit`): 12 JSON Schema validations,
+  fail-closed strategy, atomic commit (staging → validate → `shutil.move`),
+  path-traversal prevention, SHA-256 artifact hash verification.
+  12 structured error codes for machine-readable rejection.
+- **16 Providers** under `providers/<id>/` with `provider.yaml` + `SKILL.md` +
+  optional `normalize.py`. 18 capability actions in `capabilities/actions.yaml`.
+- **7 Recipes**: text, pdf, office, image, web, audio, video
+- **3 core protocols**: SourceEnvelope v0.1, EvidenceFragment v0.1, EvidenceManifest v0.1
+- **4 supplementary protocols**: AgentObservation v0.1, CaptureEnvelope v0.2,
+  EvidencePlan v0.1, FetchReceipt v0.1
+
+### Skill System
+
+- **10 Claude Code skills + 10 Agents skills** from single `skill_templates/` source
+- **Skill installation closure**: `_assets/{claude,agents}/` no longer contain `skills/`;
+  triple stripping (build-time `_vendor_assets` + `bundle_assets` + runtime `_materialize_assets`)
+- **`__pycache__` / `*.pyc` excluded** from skill installation
+- **4 dev-only skills excluded** from Wheel (`_DEV_ONLY_ASSET_NAMES`)
+- **`/accept` skill** runs from installed package path (not `.Codex/`)
+- **`/ingest` skill** uses `importlib.resources` for schema access (not bare filesystem paths)
+- **`/media-ingest`** marked experimental/unavailable until scripts are packaged
 
 ### Packaging
 
-- Runtime assets (`schemas/`, `providers/`, `capabilities/`, `recipes/`, `security/`)
-  are now shipped inside the Wheel package
-- Resources accessed via `importlib.resources.files()` — no repo-relative path guessing
-- Wheel install verified with `pipx` outside the source directory
+- **Single package**: Wheel contains only `knowledge_studio` (was `knowledge_studio` + `oks_connector`)
+- **Single entry point**: `oks = knowledge_studio.cli:app`
+- All resources accessed via `importlib.resources.files()` — no repo-relative path guessing
+- **9 setuptools packages** declared in `pyproject.toml` with explicit `package-data`
+- Nested `egg-info` directories purged at build time
+- `twine check` PASSED
 
 ### CLI
 
-- `oks capability catalog` — user-friendly capability→provider mapping
-- `oks capability doctor` — environment diagnostic (Built-in/Local/Remote/Manual groups)
-- `--json` and `--verbose` flags on capability commands for Agent consumption
-- `oks ingest` in pure terminal outputs `Agent Required` notice — no phantom Agent invocation
-- `oks skills-install` — materialize Agent skill templates from installed package
+- **46 registered commands** across 8 Typer groups
+- `oks raw-commit` — validate and atomically write evidence bundles (12 error codes)
+- `oks capability catalog --json` — machine-readable provider discovery
+- `oks capability doctor` — 3-tier environment diagnostic
+- `oks skills-install --force` — materialize skills from installed package
+- `oks feishu setup / auth / submit / run-once / publish-candidate / review-once / listen`
+- `oks trace start / append / judge / feedback / blocker / propose / finish / validate / show`
+
+### Feishu Base Worker
+
+- Retained as script asset in `_assets/scripts/`
+- Old packaging bridges (`raw_assembler`, `evidence_plan`, `degradation`, etc.)
+  deleted — marked `NotImplementedError` for legacy paths
+- Source + Review planes operational; Acquisition/Perception/Knowledge planes
+  moved to Agent-native ingest
 
 ### Security
 
-- Unified `knowledge_studio/security/` redaction module
-- Covers: 9 HTTP header types, 24 JSON keys, 7 free-text patterns (Bearer, JWT, Basic, AWS)
-- 5/5 leak tests pass (headers, mapping, text, artifacts, E2E)
+- `knowledge_studio/security/redaction.py` — credential scrubbing for remote artifacts
+- `knowledge_studio/security/sensitive_fields.py` — recursive JSON + text pattern detection
+- SSRF protection for HTTP Provider (RFC 1918, loopback, link-local block)
+- Path traversal prevention in `raw_commit.py` and `store.py`
+- Schema validation fail-closed (raises `SCHEMA_VALIDATOR_UNAVAILABLE`)
+- Atomic file writes: `mkstemp + fsync + os.replace`
 
-### Acceptance
+### Tests
 
-- 10 real scenarios verified: Markdown, Text PDF, Scanned PDF+OCR, Static Web, JS Web,
-  Video+Subtitles+Keyframes, DOCX, PPTX, XLSX, AgentKey live API call
-- Negative tests: MISSING_ARTIFACT, ARTIFACT_HASH_MISMATCH, INCOMPLETE_LOCATOR,
-  ORPHAN_EVIDENCE, credential leak — all correctly rejected
+- **426 collected, 425 passed, 1 skipped**
+- `cli/tests/`: 137 tests (12 files)
+- `scripts/tests/`: 289 tests (11 files)
+- **9 skill closure tests** including Wheel build + install + verify integration test
+- **31 Raw Bundle protocol tests** covering artifact hashes, locator validation,
+  path traversal, content-type detection, atomic commit
+- **6 security tests**: header/mapping/text/artifact/binary/E2E credential leak
 
-### Fixed
+### Experimental / Unavailable
 
-- `oks ingest --legacy` now correctly errors with "No such option" (exit 2)
-- Test count stabilized at 92 after legacy module deletion
-- Dead `_connector_available`/`_connector_command` stubs removed from CLI
-- `capability_check` import now uses `oks_connector` package path
-- Windows encoding fixes (UTF-8 write_text, colon-free run IDs)
+| Feature | Status | Reason |
+|---------|--------|--------|
+| `http-fetch` Provider | experimental | Requires Agent runtime HTTP tools |
+| `media-ingest` Skill | experimental | Scripts not yet packaged |
+| `browser` Provider | BLOCKED | Chrome extension unavailable |
+| `remote-asr` Provider | experimental | Network-limited |
+
+### Known Limitations
+
+- Cold-start E2E deferred to Phase 3
+- Provider completeness not required for this release
+- Feishu E2E preserved but not fully verified in this cycle
+- Windows GBK encoding: `subprocess` defaults to GBK, producing Unicode warnings
+  on rich-text output (non-blocking)
 
 ---
 
