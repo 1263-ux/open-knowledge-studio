@@ -476,18 +476,42 @@ def feishu_setup(
 
 @capability_app.command("catalog")
 def capability_catalog_cmd(
-    json_output: bool = typer.Option(True, "--json/--text", help="Output as JSON"),
+    json_output: bool = typer.Option(False, "--json/--text", help="Output as JSON"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show full provider details"),
 ):
     """List available capability actions and their providers."""
     from knowledge_studio.capability_commands import capability_list
 
     result = capability_list()
-    console.print(json.dumps(result, ensure_ascii=False, indent=2))
+    if json_output:
+        console.print(json.dumps(result, ensure_ascii=False, indent=2))
+    elif verbose:
+        for p in result["providers"]:
+            console.print(f"[bold]{p['id']}[/bold] ({p['execution']})")
+            for action in p.get("actions", []):
+                console.print(f"  - {action}")
+            console.print()
+    else:
+        # User-facing summary: group by common capabilities
+        summary: dict[str, list[str]] = {}
+        for p in result["providers"]:
+            for action in p.get("actions", []):
+                if action not in summary:
+                    summary[action] = []
+                summary[action].append(p["id"])
+        table = Table(title="Capability → Provider")
+        table.add_column("Capability")
+        table.add_column("Providers")
+        for action in sorted(summary):
+            providers = ", ".join(summary[action])
+            table.add_row(action, providers)
+        console.print(table)
 
 
 @capability_app.command("doctor")
 def capability_doctor_cmd(
-    json_output: bool = typer.Option(True, "--json/--text", help="Output as JSON"),
+    json_output: bool = typer.Option(False, "--json/--text", help="Output as JSON"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show all checks and details"),
 ):
     """Diagnose local environment — commands, env vars, Python packages."""
     from knowledge_studio.capability_commands import capability_doctor
@@ -495,18 +519,65 @@ def capability_doctor_cmd(
     result = capability_doctor()
     if json_output:
         console.print(json.dumps(result, ensure_ascii=False, indent=2))
-    else:
-        for p in result["providers"]:
-            status_icon = "[green]OK[/green]" if p["healthy"] else "[red]!![/red]"
-            console.print(f"  {status_icon} {p['id']} ({p['execution']})")
-            for c in p.get("checks", []):
-                if c.get("type") == "note":
-                    console.print(f"      [dim]{c.get('message', '')}[/dim]")
-                elif c.get("available") is False:
-                    console.print(f"      [red]x[/red] {c['name']}: {c.get('suggestion', '')}")
-                elif c.get("available") is True:
-                    console.print(f"      [green]v[/green] {c['name']}")
-        console.print(f"\n[bold]Overall: {result['overall']}[/bold]")
+        return
+
+    # Group providers by category for human-friendly output
+    categories: dict[str, list[dict]] = {}
+    for p in result["providers"]:
+        exec_type = p.get("execution", "unknown")
+        cat = {"managed": "Local", "agent_native": "Built-in", "external": "Remote", "human": "Manual"}.get(exec_type, "Other")
+        categories.setdefault(cat, []).append(p)
+
+    for cat_name in ("Built-in", "Local", "Remote", "Manual", "Other"):
+        providers = categories.get(cat_name, [])
+        if not providers:
+            continue
+        console.print(f"\n[bold underline]{cat_name}[/bold underline]")
+        for p in sorted(providers, key=lambda x: x["id"]):
+            label = p.get("label", p["id"])
+            healthy = p.get("healthy", False)
+
+            # Determine readiness
+            checks = p.get("checks", [])
+            failures = [c for c in checks if c.get("available") is False and c.get("type") not in ("note",)]
+            warnings = [c for c in checks if c.get("type") == "note" and c.get("available") is False]
+            ready = not failures
+
+            if ready:
+                icon = "[green]Ready[/green]"
+            elif any(c.get("required") is not False for c in failures):
+                icon = "[red]Missing[/red]"
+            else:
+                icon = "[yellow]Partial[/yellow]"
+
+            # Summary line
+            cap_summary = ""
+            if verbose and p["id"] in {"pdf-lite", "rapidocr", "ffmpeg", "yt-dlp", "firecrawl", "agentkey"}:
+                extra_parts = []
+                for c in checks:
+                    if c.get("type") == "command" and c.get("available"):
+                        extra_parts.append(c["name"])
+                    elif c.get("type") == "env_var" and c.get("available"):
+                        extra_parts.append(c["name"] + " set")
+                if extra_parts:
+                    cap_summary = ": " + ", ".join(extra_parts)
+
+            console.print(f"  {icon} {label} ({p['id']}){cap_summary}")
+
+            if verbose:
+                for c in checks:
+                    if c.get("type") == "note":
+                        console.print(f"      [dim]i {c.get('message', '')}[/dim]")
+                    elif c.get("available") is False:
+                        req = " (optional)" if c.get("required") is False else ""
+                        console.print(f"      [red]x[/red] {c['name']}{req}: {c.get('suggestion', 'missing')}")
+                    elif c.get("available") is True:
+                        detail = c.get("path") or c.get("value") or ""
+                        console.print(f"      [green]✓[/green] {c['name']} {detail}")
+
+    # Overall
+    all_healthy = all(p.get("healthy", False) for p in result["providers"])
+    console.print(f"\n[bold]Overall: {'[green]all providers healthy[/green]' if all_healthy else '[yellow]some issues found[/yellow]'}[/bold]")
 
 
 # ── Skills Install ──────────────────────────────────────────────
