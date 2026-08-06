@@ -11,7 +11,7 @@ Exports:
     sanitize_remote_artifact() — full response artifact sanitization
 """
 
-from security.redaction import (
+from .redaction import (
     redact_headers,
     redact_mapping,
     redact_text,
