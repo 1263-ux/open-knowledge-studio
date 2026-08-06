@@ -198,7 +198,7 @@ def run_capability(capability: str, args: argparse.Namespace) -> Report:
         if capability == "formula":
             # Formula is a secondary PDF sub-capability — no standalone ingest route.
             # Acceptance verifies installation + import only.
-            from capability_check import is_capability_available, python_can_import
+            from knowledge_studio.capability_check import is_capability_available, python_can_import
             ok, python_path = is_capability_available("formula")
             report.assert_true("formula_capability_available", ok,
                                "expected formula capability to be available after install")

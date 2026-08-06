@@ -615,6 +615,8 @@ def _install_skills(target_root: Path, force: bool) -> tuple[list[str], list[str
             target_skill_dir.mkdir(parents=True, exist_ok=True)
             for item in child.rglob("*"):
                 if item.is_file():
+                    if "__pycache__" in item.parts or item.suffix == ".pyc":
+                        continue
                     rel = item.relative_to(child)
                     dest = target_skill_dir / rel
                     dest.parent.mkdir(parents=True, exist_ok=True)
@@ -1533,6 +1535,17 @@ def _materialize_assets(root: Path, base: Path, is_packaged: bool, overwrite: bo
             continue
         # Merge-copy: refresh bundled files in place, keep user-owned files.
         shutil.copytree(src, dest, dirs_exist_ok=True, ignore=ignore)
+        # ── Skills live in skill_templates/, never in the asset tree ──
+        # _install_skills() is the sole canonical skill source.  Stripping
+        # here ensures that stale repo-root skill copies don't shadow the
+        # template versions, even in dev-mode (repo-root) installs.
+        skills_dir = dest / "skills"
+        if skills_dir.is_dir():
+            import stat as _stat
+            def _rm_readonly(_fn, _p, _e):
+                Path(_p).chmod(_stat.S_IWRITE)
+                _fn(_p)
+            shutil.rmtree(skills_dir, onexc=_rm_readonly)
         done.append(dest_name)
     return done
 

@@ -1,31 +1,39 @@
 ---
-description: Prepare local oral or screen-recording videos as review bundles, then add human-approved Markdown to raw/misc/
+description: Experimental video intake adapter — currently unavailable
 ---
 
 # /media-ingest — Human-Gated Video Intake
 
+**Status**: experimental
+**Availability**: unavailable — required scripts are not yet packaged
+
 ## Purpose
 
-Convert a user-provided local video into a reviewable evidence bundle without changing the existing Raw → Draft → Wiki pipeline.
+Convert a user-provided local video into a reviewable evidence bundle.
 
-## Rules
+## Required Scripts
 
-- Support only local oral and screen-recording videos in this stage.
-- Never summarize or invent missing content during preparation.
-- Never write directly to `drafts/` or `wiki/`.
-- `prepare` writes only to `.oks/intake/`.
-- Before `approve`, ask the user to review `candidate.md` and `quality-report.md`.
-- Only run `approve --confirm-human-review` after explicit user approval.
-- Preserve the source URL, save reason, original ASR, warnings, and content hash.
+| Script | Status |
+|--------|--------|
+| `scripts/media_ingest_requirements.txt` | not yet packaged |
+| `scripts/media_ingest.py` | not yet packaged |
 
-## Workflow
+## Current State
 
-1. Confirm the local video path, source URL, title, save reason, and whether the content is oral or screen-based.
-2. Install optional dependencies from `scripts/media_ingest_requirements.txt` when needed.
-3. Run `python scripts/media_ingest.py prepare ...`.
-4. Show the user the generated candidate and quality report paths.
-5. Wait for explicit review approval.
-6. Run `python scripts/media_ingest.py approve <capture-id> --confirm-human-review --review-note "..."`.
-7. Hand the resulting `raw/misc/*.md` file to the existing `/ingest` skill.
+This skill is an experimental adapter, not the canonical multimodal pipeline.
+The required scripts (`media_ingest.py`, `media_ingest_requirements.txt`) are
+not included in the current wheel.  This skill is published as a placeholder;
+it will become available when the scripts are packaged.
 
-This local-video command is an experimental adapter, not the canonical multimodal pipeline. The canonical contract lives in this repository under `schemas/`.
+## When Available
+
+The workflow will be:
+
+1. Confirm the local video path, source URL, title, save reason.
+2. Install optional dependencies from the packaged requirements file.
+3. Run the packaged `media_ingest.py prepare ...`.
+4. Review the generated candidate and quality report.
+5. After explicit approval, run `media_ingest.py approve ...`.
+6. Hand the resulting `raw/misc/*.md` to the `/ingest` skill.
+
+The canonical multimodal contract lives under `schemas/` in the installed package.

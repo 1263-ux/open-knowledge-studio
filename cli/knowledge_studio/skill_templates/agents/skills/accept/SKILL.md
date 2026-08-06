@@ -15,7 +15,7 @@ wheel or Git package reference being tested; do not silently test a different
 installed version.
 
 ```bash
-python .Codex/skills/accept/scripts/accept.py document \
+python .agents/skills/accept/scripts/accept.py document \
   --root /opt/oks-acceptance \
   --package-spec /path/to/open_knowledge_studio-*.whl
 ```
@@ -26,7 +26,7 @@ sample into the isolated server area and provide it explicitly. This records a
 into a product pass.
 
 ```bash
-python .Codex/skills/accept/scripts/accept.py all ... \
+python .agents/skills/accept/scripts/accept.py all ... \
   --fixture document=/opt/oks-acceptance/fixtures/sample.pptx \
   --fixture pdf=/opt/oks-acceptance/fixtures/digital.pdf \
   --fixture formula=/opt/oks-acceptance/fixtures/scanned-formula.pdf \

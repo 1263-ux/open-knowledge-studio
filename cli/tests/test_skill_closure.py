@@ -284,3 +284,146 @@ def test_installed_skills_are_not_empty():
 
     finally:
         shutil.rmtree(kb, ignore_errors=True)
+
+
+# ── Gate Phase 2A Remediation tests ──────────────────────────────
+
+
+def _find_file_references(content: str) -> list[str]:
+    """Extract executable file-path references from a SKILL.md body.
+
+    Only returns ``python <script>`` invocations — the one kind of
+    reference that causes a hard runtime failure if the target is missing.
+    Backtick-quoted paths in prose are documentation/suggestions, not
+    commands that fail.
+
+    Skips template placeholders (``{slug}``) and wildcard globs (``*``).
+    """
+    import re
+
+    refs: list[str] = []
+
+    # ``python <script>`` invocations — these are executable commands
+    for m in re.finditer(r"python\s+(\S+\.py)", content):
+        ref = m.group(1)
+        if "{" not in ref and "*" not in ref:
+            refs.append(ref)
+
+    return refs
+
+
+def test_every_installed_skill_command_target_exists():
+    """Every file path referenced in an installed SKILL.md must exist on disk.
+
+    Scans for backtick-quoted paths (`` `scripts/foo.py` ``) and
+    ``python <script>`` invocations, then asserts the target exists
+    relative to the knowledge base root.  Paths that reference external
+    tools (`` `pip` ``, `` `oks` ``) are skipped — they need only an
+    executable name, not a KB file.
+    """
+    kb = Path(tempfile.mkdtemp(prefix="oks-test-closure-"))
+    try:
+        r = _run_oks("init", str(kb), "--no-git", "--no-set-default")
+        assert r.returncode == 0, f"oks init failed: {r.stderr}"
+
+        missing: list[str] = []
+        for host in (".claude", ".agents"):
+            skills_dir = kb / host / "skills"
+            if not skills_dir.is_dir():
+                continue
+            for skill_dir in sorted(skills_dir.iterdir()):
+                if not skill_dir.is_dir():
+                    continue
+                md = skill_dir / "SKILL.md"
+                if not md.is_file():
+                    continue
+                content = md.read_text(encoding="utf-8")
+                refs = _find_file_references(content)
+                for ref in refs:
+                    # Skip executable-only names
+                    if "/" not in ref and "\\" not in ref and "." not in ref:
+                        continue
+                    # Skip URLs
+                    if ref.startswith("http://") or ref.startswith("https://"):
+                        continue
+                    # Skip pure package references
+                    if ref.startswith("knowledge_studio."):
+                        continue
+                    # Resolve: paths in SKILL.md are relative to KB root
+                    # or relative to the skill dir itself
+                    candidates = [
+                        kb / ref,
+                        skill_dir / ref,
+                    ]
+                    if not any(c.exists() for c in candidates):
+                        missing.append(
+                            f"{skill_dir.relative_to(kb)}/SKILL.md "
+                            f"references '{ref}' which does not exist"
+                        )
+
+        assert not missing, (
+            f"Found {len(missing)} dangling file reference(s):\n"
+            + "\n".join(f"  - {m}" for m in missing)
+        )
+
+    finally:
+        shutil.rmtree(kb, ignore_errors=True)
+
+
+def test_accept_helper_imports_packaged_capability_check():
+    """``accept.py`` must import from ``knowledge_studio.capability_check``.
+
+    The bare ``from capability_check import ...`` was correct when
+    ``capability_check.py`` lived at the repo root, but after the
+    v0.4.0 inline the canonical location is
+    ``knowledge_studio.capability_check``.
+    """
+    kb = Path(tempfile.mkdtemp(prefix="oks-test-closure-"))
+    try:
+        r = _run_oks("init", str(kb), "--no-git", "--no-set-default")
+        assert r.returncode == 0, f"oks init failed: {r.stderr}"
+
+        for host in (".claude", ".agents"):
+            accept_py = kb / host / "skills" / "accept" / "scripts" / "accept.py"
+            if not accept_py.is_file():
+                continue  # accept not published for this host — OK
+            content = accept_py.read_text(encoding="utf-8")
+            # Must NOT contain the bare import
+            assert "from capability_check import" not in content, (
+                f"{accept_py.relative_to(kb)} still uses bare "
+                f"'from capability_check import' — must be "
+                f"'from knowledge_studio.capability_check import'"
+            )
+            # Must contain the packaged import
+            assert "from knowledge_studio.capability_check import" in content, (
+                f"{accept_py.relative_to(kb)} missing packaged import"
+            )
+
+    finally:
+        shutil.rmtree(kb, ignore_errors=True)
+
+
+def test_skill_install_excludes_pycache():
+    """``_install_skills()`` must not copy ``__pycache__/`` or ``*.pyc`` files."""
+    kb = Path(tempfile.mkdtemp(prefix="oks-test-closure-"))
+    try:
+        r = _run_oks("init", str(kb), "--no-git", "--no-set-default")
+        assert r.returncode == 0, f"oks init failed: {r.stderr}"
+
+        pycache_items: list[str] = []
+        for host in (".claude", ".agents"):
+            skills_dir = kb / host / "skills"
+            if not skills_dir.is_dir():
+                continue
+            for item in skills_dir.rglob("*"):
+                if "__pycache__" in item.parts or item.suffix == ".pyc":
+                    pycache_items.append(str(item.relative_to(kb)))
+
+        assert not pycache_items, (
+            f"Found {len(pycache_items)} __pycache__ / *.pyc item(s) "
+            f"in installed skills:\n"
+            + "\n".join(f"  - {i}" for i in pycache_items)
+        )
+
+    finally:
+        shutil.rmtree(kb, ignore_errors=True)
