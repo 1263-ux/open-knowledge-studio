@@ -1,88 +1,55 @@
 # v0.4.0 RC Acceptance Summary
 
 **Branch**: `release/v0.4.0`
-**Pre-RC Tag**: `v0.4.0-pre-rc-baseline`
-**Package Version**: `0.4.0.dev0`
+**Version**: `0.4.0.dev0` (package) / `v0.4.0-pre-rc-baseline` (tag)
 **Date**: 2026-08-06
 
-## Wheel Verification
+## RC Gate Status
 
-| Check | Result |
-|-------|--------|
-| `python -m build --wheel` | PASS |
-| `twine check` | PASS |
-| Wheel contains schemas/ | PASS — 13 .schema.json files |
-| Wheel contains capabilities/ | PASS — actions.yaml |
-| Wheel contains providers/ | PASS — 16 provider dirs with provider.yaml |
-| Wheel contains recipes/ | PASS — 7 recipe .md files |
-| Wheel contains security/ | PASS — 3 .py modules |
-| `pipx install` from wheel | PASS |
-| `oks --version` outside repo | PASS — 0.4.0.dev0 |
-| `oks capability list` outside repo | PASS |
-| `oks capability doctor` outside repo | PASS |
-| `oks raw-commit --help` outside repo | PASS |
-| `oks init` outside repo | PASS |
+```
+[x] Wheel contains schemas, capabilities, providers, recipes, security
+[x] Wheel contains skill templates (claude + agents, 10 skills each)
+[x] oks skills-install --force materializes from wheel
+[x] Wheel passes twine check
+[x] pipx install from wheel works outside repo
+[x] oks init builds correct instance
+[x] capability catalog / doctor functional
+[x] D1 static web validated
+[x] D2 JS web validated (static→empty→honest partial)
+[x] F2 PPTX validated (table extraction, chart placeholder, pptx-slide locator)
+[x] F3 XLSX validated (sheet/range locators, formulas preserved not evaluated)
+[x] Four natural language ingestions pass (Markdown, Scan PDF, Web, Video)
+[ ] Cold start with fresh Agent session — requires separate Agent session
+[x] partial user feedback clear (missing + reason + impact)
+[x] result.json written for each ingestion
+[x] 5 remote leak tests pass (headers, mapping, text, artifacts, E2E)
+[ ] README single recommended path — pending user review
+[x] CHANGELOG.md complete
+[x] Full regression: 381 passed (92 cli/tests + 289 scripts/tests)
+[x] No old-path references in runtime code
+[x] Worktree clean (only .gitignore-tracked untrackable items remain)
+[x] Per-scenario acceptance documents: 10 scenarios + security + artifacts-index
+```
 
 ## Scenario Matrix
 
-| # | Scenario | Status | Bundle ID | Evidence | Notes |
-|---|----------|--------|-----------|----------|-------|
-| A | Markdown | FULL PASS | `bundle:81a563e3` | 1 artifact | text-read Provider |
-| B | Text PDF | FULL PASS | `bundle:244b7db5` | 33 evidence | pdf-lite, 82K chars |
-| C | Scan PDF + OCR | FULL PASS | `bundle:2789f4ff` | 46 evidence | pdf-lite → RapidOCR degrade chain |
-| D1 | Static Web | FULL PASS | `bundle:c98b4887` | HTTP+Trafilatura | |
-| D2 | JS Web | FULL PASS | `run-fb4b5dee09dd` | 1 evidence, partial | Static fetch → empty DOM → honest partial |
-| E | Video + Subtitles | FULL PASS | `bundle:37e65159` | 9 artifacts | Danmaku XML (51K chars) + 7 keyframes |
-| F1 | DOCX | FULL PASS | Scenario F | markitdown | |
-| F2 | PPTX | FULL PASS | `bundle:43e46e287929819e` | 4 slides, partial | Tables extracted; chart placeholder honest |
-| F3 | XLSX | FULL PASS | Acceptance fixture | 3 sheets, partial | Formulas preserved (not evaluated) |
-| G | AgentKey Live | FULL PASS | `bundle:37c59b5a` | HTTP 200 | WeChat encrypted → honest partial |
+| # | Scenario | Bundle ID | Evidence | Status |
+|---|----------|-----------|----------|--------|
+| A | Markdown | `bundle:81a563e3` | 1 | complete |
+| B | Text PDF | `bundle:244b7db5` | 33 | complete |
+| C | Scan PDF+OCR | `bundle:2789f4ff` / `bundle:6700cc` | 46 OCR / 3 E2E | complete (OCR) / partial (E2E w/o OCR) |
+| D1 | Static Web | `bundle:ff67a9d7` | 1 | complete |
+| D2 | JS Web | fixture-based | 1 | partial (JS gap honest) |
+| E | Video | `bundle:37e65159` / `bundle:9ae09d` | 9 full / 1 E2E | complete (subs) / partial (no login) |
+| F1 | DOCX | scenario-f | 1 | complete |
+| F2 | PPTX | `bundle:43e46e28` | 4 | partial (chart) |
+| F3 | XLSX | fixture-based | 2 | partial (formulas) |
+| G | AgentKey Live | `bundle:37c59b5a` | 1 | partial (encrypted) |
 
-## Natural Language E2E
+## Non-Blocking Gaps
 
-| Instruction | Result |
-|-------------|--------|
-| "收录这个 Markdown" | Agent → text-read → Manifest → oks raw-commit → Candidate |
-| "收录这个扫描 PDF" | Agent → pdf-lite degrade → RapidOCR → 46 evidence → partial → honest |
-| "收录这个网页" | Agent → HTTP+Trafilatura → Manifest → complete |
-| "收录这个视频" | Agent → yt-dlp → danmaku+keyframes → partial → honest |
-
-## Negative Tests (All Pass)
-
-- MISSING_ARTIFACT — rejected
-- ARTIFACT_HASH_MISMATCH — rejected
-- INCOMPLETE_LOCATOR — rejected
-- ORPHAN_EVIDENCE — rejected
-- 凭据泄露 (5/5) — all caught
-
-## Security
-
-| Test | Result |
-|------|--------|
-| redact_headers | PASS |
-| redact_mapping | PASS |
-| redact_text | PASS |
-| sanitize_remote_artifact | PASS |
-| E2E no leak | PASS |
-
-## Regression
-
-```
-92 passed, 0 failed
-```
-
-## Known Limitations (Non-Blocking)
-
-- AgentKey: WeChat content encrypted (API reachable, partial honest)
-- Bilibili: Regular subtitles require login (danmaku + keyframes available)
-- Chart interpretation: Requires Agent vision capability
-- Browser Provider: Chrome Web Store blocked
-- MinerU: Heavy dependency (~300MB), optional
-
-## Uncompleted Items
-
-| Item | Blocking? |
-|------|-----------|
-| Cold start with fresh Agent session | No — requires separate Agent session |
-| `oks skills install` from wheel | No — skill_templates not yet in package |
-| Feishu real-time event delivery | No — documented as partial |
+- AgentKey WeChat content encrypted (API reachable, honest partial)
+- Bilibili regular subtitles require login (danmaku + keyframes available)
+- Fresh Agent session cold start not yet validated (needs separate session)
+- Browser Provider blocked (Chrome Web Store)
+- MinerU optional (~300MB dependency)
