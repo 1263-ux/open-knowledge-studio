@@ -28,8 +28,27 @@ _MAP = [
 ]
 
 # Test modules would collide with the repo-root copies during collection;
-# caches are build noise.
-_CONNECTOR_IGNORE = shutil.ignore_patterns("test_*.py", "tests", "__pycache__", "*.pyc")
+# caches are build noise. Also exclude legacy bridge/assembler modules that
+# were deleted in v0.4.0 — they must not reach user wheels.
+_CONNECTOR_IGNORE = shutil.ignore_patterns(
+    "test_*.py", "tests", "__pycache__", "*.pyc",
+    # Legacy bridge/assembler/planner — deleted in v0.4.0
+    "raw_assembler.py", "evidence_plan.py", "evidence_fragment.py",
+    "degradation.py", "capture_contract.py", "observation_adapter.py",
+    "agent_observation.py", "capability_check.py",
+    # Legacy network layer — imports deleted route_plan
+    "network.py",
+    # Legacy directories
+    "capture_adapters", "extractors", "experiments",
+    # Build artefacts
+    ".pytest_cache",
+    # Docs not intended for wheel
+    "PHASE6-DELETION-MANIFEST.md", "ARCHITECTURE.md",
+    # Requirements files for deleted extractors
+    "raw_extract_requirements.txt", "watch_extract_requirements.txt",
+    "mineru_extract_requirements.txt", "media_ingest_requirements.txt",
+    "formula_extract_requirements.txt",
+)
 
 # Maintainer-only skills: they drive the upstream-PR review workflow and must
 # never reach a user's knowledge base, where they would pollute skill discovery
@@ -86,13 +105,8 @@ def _vendor_assets() -> None:
                 worker_dest / worker_package.name,
                 ignore=_CONNECTOR_IGNORE,
             )
-        extractors = worker.parent / "extractors"
-        if extractors.is_dir():
-            shutil.copytree(
-                extractors,
-                worker_dest / extractors.name,
-                ignore=_CONNECTOR_IGNORE,
-            )
+        # extractors/ directory was permanently deleted in v0.4.0.
+        # Do not vendor legacy extractors into wheels.
         network = worker.parent / "network.py"
         if network.is_file():
             shutil.copy2(network, worker_dest / network.name)

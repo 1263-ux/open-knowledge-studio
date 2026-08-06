@@ -22,23 +22,21 @@ remote_processing:
   policy_required: true
 
 degradation:
-  primary:
+  - priority: 1
     capability: document.text.extract
-    providers: [markitdown, firecrawl]
-  fallback:
-    - capability: document.structure.extract
-      providers: [markitdown]
-      condition: text_extraction_partial
-    - capability: document.render
-      providers: [mineru]
-      condition: layout_complex
-    - capability: chart.interpret
-      providers: [agent-runtime]
-      condition: charts_or_graphs_present
-    - capability: human.supply
-      providers: [human]
-      condition: all_automated_failed
-
+    condition: default
+    note: "Extract text with structure. Handles DOCX, PPTX, XLSX."
+  - priority: 2
+    capability: document.structure.extract
+    condition: tables_or_lists_detected
+    note: "Structural extraction for complex layouts."
+  - priority: 3
+    capability: chart.interpret
+    condition: chart_or_diagram_content
+    note: "Chart interpretation — requires Agent vision capability."
+  - priority: 4
+    capability: human.supply
+    condition: all_automated_failed
 notes: |
   MarkItDown is the default local path (DOCX table structure preserved, PPTX
   list structure weaker than native, XLSX formulas lost).

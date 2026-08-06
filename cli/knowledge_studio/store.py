@@ -566,10 +566,18 @@ def promote_draft(
 
     meta = parse_wiki_file(draft_path)
     if not meta:
-        meta = {}
+        raise ValueError(
+            f"Draft '{slug}' has no valid YAML frontmatter. "
+            f"Drafts must start with '---' and contain title, type, and area fields."
+        )
     if meta.get("status") == "rejected":
         raise ValueError(f"Draft '{slug}' was explicitly rejected and cannot be promoted.")
     body = meta.get("body", "")
+    if not body.strip():
+        raise ValueError(
+            f"Draft '{slug}' has empty body. "
+            f"Refusing to promote a draft with no content — check Candidate generation."
+        )
 
     final_title = title or meta.get("title", slug)
     requested_type = wiki_type or meta.get("draft_type", "concept")

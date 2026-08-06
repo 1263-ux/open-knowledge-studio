@@ -16,14 +16,13 @@ remote_processing:
   policy_required: false
 
 degradation:
-  primary:
+  - priority: 1
     capability: document.text.extract
-    providers: [text-read, agent-runtime]
-  fallback:
-    - capability: human.supply
-      providers: [human]
-      condition: primary_returned_failed
-
+    condition: default
+    note: "Direct text read. Text-read Provider (agent-native) for maximum fidelity."
+  - priority: 2
+    capability: human.supply
+    condition: file_unreadable
 notes: |
   Text files are the simplest source type.  Agent reads the file directly
   (provider: text-read or agent-runtime).  No external tools needed.

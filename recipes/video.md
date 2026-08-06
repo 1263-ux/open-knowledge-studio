@@ -26,29 +26,25 @@ remote_processing:
   policy_required: true
 
 degradation:
-  primary:
+  - priority: 1
+    capability: metadata.fetch
+    condition: default
+    note: "Platform metadata — title, duration, format."
+  - priority: 2
     capability: subtitle.fetch
-    providers: [yt-dlp, agentkey]
-  fallback:
-    - capability: metadata.fetch
-      providers: [yt-dlp, agentkey]
-      condition: subtitle_unavailable
-    - capability: audio.extract
-      providers: [ffmpeg]
-      condition: local_media_available
-    - capability: speech.transcribe
-      providers: [local-asr, remote-asr]
-      condition: audio_track_available
-    - capability: video.keyframes
-      providers: [ffmpeg]
-      condition: visual_content_significant
-    - capability: image.observe
-      providers: [agent-runtime]
-      condition: keyframes_available
-    - capability: human.supply
-      providers: [human]
-      condition: all_automated_failed
-
+    condition: subtitles_available
+    note: "Extract or download subtitles. May require platform authentication."
+  - priority: 3
+    capability: video.keyframes
+    condition: media_file_available
+    note: "Extract representative frames at scene changes or intervals."
+  - priority: 4
+    capability: speech.transcribe
+    condition: audio_extractable
+    note: "ASR when no subtitles available. Local or remote Provider."
+  - priority: 5
+    capability: human.supply
+    condition: all_automated_failed
 notes: |
   Bilibili: yt-dlp with Cookie (7/10 verified). AgentKey API returns metadata
   (title, BV, aid/cid) but NO subtitle body — metadata_only, not text success.

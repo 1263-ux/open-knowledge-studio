@@ -269,7 +269,8 @@ def test_connector_packages_are_declared_for_wheel_builds():
 
     assert "oks_connector" in packages
     assert "oks_connector.feishu_worker" in packages
-    assert "oks_connector.extractors" in packages
+    # oks_connector.extractors and oks_connector.capture_adapters were
+    # removed from the wheel in v0.4.0 (legacy extractor cleanup).
 
 
 def test_wheel_never_installs_generic_top_level_names():

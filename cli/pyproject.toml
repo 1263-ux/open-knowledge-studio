@@ -78,8 +78,6 @@ packages = [
     "knowledge_studio.skill_templates.claude",
     "knowledge_studio.skill_templates.agents",
     "oks_connector",
-    "oks_connector.extractors",
-    "oks_connector.capture_adapters",
     "oks_connector.feishu_worker",
 ]
 

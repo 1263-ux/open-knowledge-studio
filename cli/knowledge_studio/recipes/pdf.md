@@ -21,25 +21,25 @@ remote_processing:
   policy_required: true
 
 degradation:
-  primary:
+  - priority: 1
     capability: document.text.extract
-    providers: [pdf-lite, mineru, firecrawl]
-  fallback:
-    - capability: document.render
-      providers: [mineru]
-      condition: text_layer_empty
-    - capability: image.ocr
-      providers: [rapidocr, firecrawl]
-      condition: rendered_pages_available
-    - capability: image.observe
-      providers: [agent-runtime]
-      condition: page_images_available
-    - capability: layout.understand
-      providers: [agent-runtime]
-      condition: table_or_chart_content_detected
-    - capability: human.supply
-      providers: [human]
-      condition: all_automated_failed
+    condition: default
+    note: "Any Provider with document.text.extract maturity ≥ validated."
+  - priority: 2
+    capability: image.ocr
+    condition: text_layer_empty
+    note: "Required when text extraction returns empty/no text layer."
+  - priority: 3
+    capability: image.observe
+    condition: page_images_available
+    note: "Agent visual observation when text extraction fails. Agent-runtime only."
+  - priority: 4
+    capability: layout.understand
+    condition: table_or_chart_content_detected
+  - priority: 5
+    capability: human.supply
+    condition: all_automated_failed
+    note: "User provides content directly — human Provider only."
 
 notes: |
   Digital PDFs with text layers → pdf-lite (33 pages / 82K chars / 6.3s verified).

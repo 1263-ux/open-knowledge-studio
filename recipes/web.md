@@ -22,23 +22,21 @@ remote_processing:
   policy_required: true
 
 degradation:
-  primary:
+  - priority: 1
     capability: web.fetch
-    providers: [http-fetch, firecrawl, agentkey]
-  fallback:
-    - capability: web.extract
-      providers: [trafilatura, firecrawl, agentkey]
-      condition: html_acquired
-    - capability: web.screenshot
-      providers: [firecrawl, browser]
-      condition: js_rendering_required
-    - capability: image.observe
-      providers: [agent-runtime]
-      condition: screenshot_available
-    - capability: human.supply
-      providers: [human]
-      condition: challenge_or_auth_required
-
+    condition: default
+    note: "HTTP fetch with SSRF protection."
+  - priority: 2
+    capability: web.extract
+    condition: html_content_available
+    note: "Extract main content from HTML. Trafilatura for static; Firecrawl for JS."
+  - priority: 3
+    capability: web.screenshot
+    condition: js_rendering_required
+    note: "Browser screenshot when JS execution needed. Requires browser capability."
+  - priority: 4
+    capability: human.supply
+    condition: all_automated_failed
 notes: |
   Public web pages: trafilatura for HTML article extraction (local, free).
   Firecrawl for JS-rendered pages and structured extraction (1 credit/call).

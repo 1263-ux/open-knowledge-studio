@@ -19,17 +19,13 @@ remote_processing:
   policy_required: true
 
 degradation:
-  primary:
+  - priority: 1
     capability: speech.transcribe
-    providers: [local-asr, remote-asr]
-  fallback:
-    - capability: media.probe
-      providers: [ffmpeg]
-      condition: metadata_needed
-    - capability: human.supply
-      providers: [human]
-      condition: asr_unavailable_or_failed
-
+    condition: default
+    note: "ASR transcription. Local (faster-whisper) or remote Provider."
+  - priority: 2
+    capability: human.supply
+    condition: transcription_failed
 notes: |
   Local ASR: faster-whisper via watch capability (verified on 12s short clip,
   longer audio blocked by network in test environment).
