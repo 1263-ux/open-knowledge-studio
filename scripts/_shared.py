@@ -195,6 +195,19 @@ def format_media_time(seconds: float) -> str:
 
 from constants import SCHEMA_VERSION
 
+
+def markdown_asset_references(markdown: str) -> list[str]:
+    """Extract asset references (images) from a Markdown string.
+
+    Returns a list of target paths found in ``![alt](target)`` and
+    ``<img src="target">`` patterns.  Pure utility — no network, no filesystem.
+    """
+    import re as _re
+    values = _re.findall(r"!\[[^\]]*\]\(([^)]+)\)", markdown)
+    values.extend(_re.findall(r'<img\s+[^>]*src=["\']([^"\']+)', markdown))
+    return [value.strip().split()[0].strip("<>") for value in values]
+
+
 def common_metadata(
     *,
     capture_id: str,

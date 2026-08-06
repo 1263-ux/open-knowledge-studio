@@ -11,6 +11,18 @@ sys.path.insert(0, str(SCRIPTS))
 import feishu_base_worker as worker
 
 
+@pytest.fixture(autouse=True)
+def isolate_feishu_setup_config(monkeypatch, tmp_path):
+    """Never let setup tests write the operator's real ~/.oks/config.json."""
+    import feishu_setup
+
+    monkeypatch.setattr(
+        feishu_setup,
+        "_oks_config_path",
+        lambda: tmp_path / "oks-config.json",
+    )
+
+
 def candidate_document(title="Base review Candidate"):
     return f'''---
 title: "{title}"
@@ -175,16 +187,22 @@ def test_attachment_download_passes_repository_relative_output(monkeypatch, tmp_
 
 def test_list_records_maps_projected_rows(monkeypatch, tmp_path):
     config = worker.WorkerConfig("base", "table", tmp_path / "lark.exe", tmp_path, tmp_path / "python.exe", tmp_path)
-    monkeypatch.setattr(
-        worker,
-        "lark_json",
-        lambda *_args: {
+    calls = []
+
+    def fake_lark(*args):
+        calls.append(args)
+        return {
             "data": {
                 "fields": ["内容", "运行状态", "重试"],
                 "data": [["https://example.com", "待处理", False]],
                 "record_id_list": ["rec_1"],
             }
-        },
+        }
+
+    monkeypatch.setattr(
+        worker,
+        "lark_json",
+        fake_lark,
     )
     assert worker.list_records(config) == [
         {
@@ -192,6 +210,34 @@ def test_list_records_maps_projected_rows(monkeypatch, tmp_path):
             "fields": {"内容": "https://example.com", "运行状态": "待处理", "重试": False},
         }
     ]
+    command = calls[0]
+    query = json.loads(command[command.index("--filter-json") + 1])
+    assert query["logic"] == "or"
+    assert ["运行状态", "empty"] in query["conditions"]
+
+
+def test_modular_list_records_includes_empty_status_rows(tmp_path):
+    from feishu_worker.base_client import list_records
+
+    config = worker.WorkerConfig("base", "table", tmp_path / "lark.exe", tmp_path)
+    calls = []
+
+    def fake_lark(_config, *args, **_kwargs):
+        calls.append(args)
+        return {"data": {"fields": ["运行状态"], "data": [[None]], "record_id_list": ["rec_new"]}}
+
+    records = list_records(
+        config,
+        root=tmp_path,
+        projection=["运行状态"],
+        _lark_fn=fake_lark,
+    )
+
+    assert records == [{"record_id": "rec_new", "fields": {"运行状态": None}}]
+    command = calls[0]
+    query = json.loads(command[command.index("--filter-json") + 1])
+    assert query["logic"] == "or"
+    assert ["运行状态", "empty"] in query["conditions"]
 
 
 def test_publish_candidate_requires_raw_and_writes_visible_review_state(monkeypatch, tmp_path):
@@ -386,12 +432,32 @@ def test_review_notification_sends_idempotent_personal_message(monkeypatch, tmp_
         review_message_identity="bot",
     )
     commands = []
-    monkeypatch.setattr(
-        worker,
-        "lark_json",
-        lambda _config, *args: commands.append(args)
-        or {"data": {"message_id": "om_1"}},
-    )
+    sent = {}
+
+    def fake_lark_json(_config, *args):
+        commands.append(args)
+        if args[1] == "+messages-send":
+            payload = json.loads(args[args.index("--content") + 1])
+            sent["content"] = payload["zh_cn"]["content"][0][0]["text"]
+            return {
+                "identity": "bot",
+                "data": {"message_id": "om_1", "chat_id": "oc_1"},
+            }
+        return {
+            "identity": "bot",
+            "data": {
+                "messages": [
+                    {
+                        "message_id": "om_1",
+                        "chat_id": "oc_1",
+                        "sender": {"sender_type": "app"},
+                        "content": sent["content"],
+                    }
+                ]
+            },
+        }
+
+    monkeypatch.setattr(worker, "lark_json", fake_lark_json)
 
     result = worker.send_candidate_review_notification(
         config,
@@ -401,17 +467,30 @@ def test_review_notification_sends_idempotent_personal_message(monkeypatch, tmp_
             "revision": 1,
             "candidate_sha256": "a" * 64,
         },
-        metadata={"title": "Candidate", "review_summary": "摘要"},
+        metadata={"title": "中文主题", "review_summary": "中文摘要"},
         body="正文" * 50,
         fields={},
     )
 
     assert result["status"] == "sent"
     assert result["message_id"] == "om_1"
+    assert result["sender_type"] == "app"
+    assert result["delivery_verified"] is True
+    assert result["content_verified"] is True
     assert commands[0][:2] == ("im", "+messages-send")
+    assert commands[1][:2] == ("im", "+messages-mget")
     assert commands[0][commands[0].index("--user-id") + 1] == "ou_user"
     assert commands[0][commands[0].index("--as") + 1] == "bot"
+    assert commands[0].index("--as") < commands[0].index("--content")
+    assert "--markdown" not in commands[0]
+    content_arg = commands[0][commands[0].index("--content") + 1]
+    assert "\n" not in content_arg
+    assert content_arg.isascii()
+    post = json.loads(content_arg)
+    assert post["zh_cn"]["content"][0][0]["tag"] == "md"
+    assert "中文主题" in post["zh_cn"]["content"][0][0]["text"]
     assert len(commands[0][commands[0].index("--idempotency-key") + 1]) == 50
+    assert commands[1][commands[1].index("--as") + 1] == "bot"
 
 
 def test_parse_review_reply_accepts_action_before_or_after_comment():
@@ -1054,6 +1133,51 @@ def test_javascript_page_waits_for_browser_snapshot(monkeypatch, tmp_path):
     assert updates[-1]["Raw Bundle"] is None
 
 
+def test_plain_text_submission_becomes_raw_without_network_probe(monkeypatch, tmp_path):
+    """The form promises text intake, so text-only rows must be a first-class route."""
+    config = worker.WorkerConfig(
+        "base", "table", tmp_path / "lark.exe", tmp_path,
+        tmp_path / "python.exe", tmp_path / "out",
+    )
+    updates = []
+    packaged = []
+    finalized = []
+
+    monkeypatch.setattr(worker, "update_record", lambda _c, _r, patch: updates.append(patch) or {})
+    monkeypatch.setattr(
+        worker,
+        "probe_source",
+        lambda *_: (_ for _ in ()).throw(AssertionError("plain text must not use the network")),
+    )
+
+    def fake_package(_config, source, output):
+        packaged.append(source)
+        assert source.read_text(encoding="utf-8") == "一条可以直接沉淀的知识。\n"
+        output.mkdir(parents=True)
+        (output / "metadata.json").write_text('{"processing_status":"complete"}', encoding="utf-8")
+        return {"processing_status": "complete", "evidence_count": 1}
+
+    monkeypatch.setattr(worker, "package_local_attachment", fake_package)
+    monkeypatch.setattr(
+        worker,
+        "finalize_raw_v2",
+        lambda *_args: finalized.append(_args) or {"valid": True},
+    )
+
+    result = worker.process_record(
+        config,
+        {"record_id": "rec_text", "fields": {"内容": "一条可以直接沉淀的知识。", "思考": "保留原意"}},
+    )
+
+    assert result["status"] == "complete"
+    assert result["job"]["capability"] == "office.markitdown"
+    assert result["modalities"]["text"]["status"] == "succeeded"
+    assert len(packaged) == 1
+    assert finalized[0][-1] == packaged[0]
+    assert updates[-1]["运行状态"] == "Raw就绪"
+    assert updates[-1]["采集模式"] == "直接文本"
+
+
 def test_platform_route_uses_watch_and_reference_snapshot(monkeypatch, tmp_path):
     config = worker.WorkerConfig("base", "table", tmp_path / "lark.exe", tmp_path, tmp_path / "python.exe", tmp_path / "out")
     updates = []
@@ -1448,6 +1572,7 @@ def test_setup_select_options_cover_every_worker_written_value():
     from feishu_setup import WORKER_FIELDS
     from feishu_worker.states import (
         CAPTURE_MODE_OPTIONS,
+        CAPTURE_STATUS_OPTIONS,
         QUALITY_STATUS_OPTIONS,
         RUN_STATUS_OPTIONS,
         WIKI_STATUS_OPTIONS,
@@ -1460,6 +1585,7 @@ def test_setup_select_options_cover_every_worker_written_value():
     }
     assert declared["运行状态"] == set(RUN_STATUS_OPTIONS)
     assert declared["采集模式"] == set(CAPTURE_MODE_OPTIONS)
+    assert declared["状态"] == set(CAPTURE_STATUS_OPTIONS)
     assert declared["质量状态"] == set(QUALITY_STATUS_OPTIONS)
     assert declared["Wiki状态"] == set(WIKI_STATUS_OPTIONS)
 
@@ -1694,6 +1820,235 @@ def test_setup_shows_fixture_token_only_with_show_credentials(monkeypatch):
     assert "--show-credentials" not in output, (
         "Output must not hint about --show-credentials when already shown"
     )
+
+
+def test_setup_reuses_form_and_removes_worker_questions(monkeypatch):
+    """Repeated setup must keep one clean capture form, not expose internals."""
+    import io
+
+    from feishu_setup import USER_FIELDS, WORKER_FIELDS, build_parser, setup
+
+    token = "B4s3T0k3nV4lu3Fr0mF3ishu"
+    table_id = "tblABC123"
+    calls = []
+
+    monkeypatch.setattr("feishu_setup._get_lark_cli", lambda: "/fake/lark-cli")
+
+    def _mock_lark(args, *, timeout=60.0, redact_token=None):
+        sub = args[1] if len(args) > 1 else ""
+        calls.append(args)
+        if sub == "+base-get":
+            return {"name": "OKS Base"}
+        if sub == "+table-list":
+            return [{"name": "每日知识采集", "id": table_id}]
+        if sub == "+field-list":
+            return [{"name": field["name"]} for field in USER_FIELDS + WORKER_FIELDS]
+        if sub == "+form-list":
+            return {"data": {"forms": [{"id": "frm-existing", "name": "每日知识采集"}]}}
+        if sub == "+form-questions-list":
+            return {"data": {"questions": [
+                {"id": "q-content", "title": "内容", "required": False},
+                {
+                    "id": "q-focus",
+                    "title": "重点问题（可选）",
+                    "required": False,
+                    "description": USER_FIELDS[3]["description"],
+                },
+                {"id": "q-worker", "title": "运行状态", "required": False},
+            ]}}
+        if sub in {"+form-questions-delete", "+form-questions-update"}:
+            return {"ok": True}
+        return {}
+
+    monkeypatch.setattr("feishu_setup._lark", _mock_lark)
+    stdout = io.StringIO()
+    monkeypatch.setattr("sys.stdout", stdout)
+
+    assert setup(build_parser().parse_args(["--base-token", token])) == 0
+    assert not any(args[1] == "+form-create" for args in calls)
+    delete_call = next(args for args in calls if args[1] == "+form-questions-delete")
+    deleted = json.loads(delete_call[delete_call.index("--question-ids") + 1])
+    assert deleted == ["q-worker"]
+    update_call = next(args for args in calls if args[1] == "+form-questions-update")
+    updates = json.loads(update_call[update_call.index("--questions") + 1])
+    assert updates == [{"id": "q-content", "required": True, "description": USER_FIELDS[0]["description"]}]
+    assert "frm-existing" in stdout.getvalue()
+
+
+def test_setup_creates_missing_user_form_questions(monkeypatch):
+    """An existing form must regain user fields omitted by an earlier setup."""
+    from feishu_setup import USER_FIELDS, _ensure_capture_form
+
+    calls = []
+
+    def _mock_lark(args, *, timeout=60.0, redact_token=None):
+        calls.append(args)
+        if args[1] == "+form-list":
+            return {"data": {"forms": [{"id": "frm-existing", "name": "每日知识采集"}]}}
+        if args[1] == "+form-questions-list":
+            return {"data": {"questions": [{"id": "q-content", "title": "内容"}]}}
+        return {"ok": True}
+
+    monkeypatch.setattr("feishu_setup._lark", _mock_lark)
+
+    assert _ensure_capture_form("base-token", "tbl-token", "每日知识采集") == "frm-existing"
+    create_call = next(args for args in calls if args[1] == "+form-questions-create")
+    created = json.loads(create_call[create_call.index("--questions") + 1])
+    assert [question["title"] for question in created] == [
+        field.get("form_title", field["name"]) for field in USER_FIELDS[1:]
+    ]
+    assert created[0]["type"] == USER_FIELDS[1]["type"]
+    assert created[-1]["options"] == USER_FIELDS[-1]["options"]
+
+
+def test_capture_view_uses_compact_daily_learning_columns():
+    """The daily grid should show capture and summary fields, not internals."""
+    from feishu_setup import VIEW_VISIBLE_FIELDS
+
+    assert VIEW_VISIBLE_FIELDS == [
+        "内容", "附件", "思考", "状态", "评级", "知识域", "总结",
+    ]
+
+
+def test_setup_separates_form_labels_from_base_field_payload():
+    """Form UX metadata must never leak into Base field creation payloads."""
+    from feishu_setup import USER_FIELDS, _base_field, _form_question_create
+
+    focus = next(field for field in USER_FIELDS if field["name"] == "希望解决的问题")
+    assert focus["form_title"] == "重点问题（可选）"
+    assert _form_question_create(focus)["title"] == "重点问题（可选）"
+
+    for field in USER_FIELDS:
+        payload = _base_field(field)
+        assert payload["name"] == field["name"]
+        assert "required" not in payload
+        assert "option_display_mode" not in payload
+        assert "form_title" not in payload
+
+
+def test_field_diff_detects_extra_empty_select_option():
+    from feishu_setup import USER_FIELDS, _base_field, _field_diff
+
+    expected = _base_field(next(field for field in USER_FIELDS if field["name"] == "知识域"))
+    current = dict(expected)
+    current["id"] = "fld-domain"
+    current["options"] = [*expected["options"], {"name": ""}]
+
+    assert _field_diff(expected, current) == ["options"]
+
+
+def test_persist_feishu_config_is_atomic_and_idempotent(tmp_path, monkeypatch):
+    import feishu_setup
+
+    path = tmp_path / "config.json"
+    monkeypatch.setattr(feishu_setup, "_oks_config_path", lambda: path)
+    path.write_text(
+        json.dumps({"knowledge_base_path": "D:/kb", "custom": {"keep": True}}),
+        encoding="utf-8",
+    )
+
+    assert feishu_setup._persist_feishu_config(
+        base_token="base-token",
+        table_id="tbl-1",
+        table_name="每日知识采集",
+        form_id="frm-1",
+        view_id="vew-1",
+    ) is True
+    first = json.loads(path.read_text(encoding="utf-8"))
+    assert first["knowledge_base_path"] == "D:/kb"
+    assert first["custom"] == {"keep": True}
+    assert first["feishu"]["schema_version"] == feishu_setup.FEISHU_CONFIG_SCHEMA
+
+    assert feishu_setup._persist_feishu_config(
+        base_token="base-token",
+        table_id="tbl-1",
+        table_name="每日知识采集",
+        form_id="frm-1",
+        view_id="vew-1",
+    ) is False
+
+
+def test_worker_config_reuses_persisted_feishu_coordinates(monkeypatch, tmp_path):
+    import argparse
+    from feishu_worker import config as worker_config
+
+    monkeypatch.setattr(
+        worker_config,
+        "_saved_feishu_config",
+        lambda: {"base_token": "saved-base", "table_id": "saved-table"},
+    )
+    monkeypatch.setattr(worker_config, "resolve_lark_cli", lambda: tmp_path / "lark-cli")
+    args = argparse.Namespace(
+        base_token=None,
+        table_id=None,
+        knowledge_root=None,
+        output_root=None,
+        lease_seconds=3600,
+        review_recipient_user_id=None,
+        review_message_identity=None,
+    )
+
+    loaded = worker_config.load_config(args, root=tmp_path)
+
+    assert loaded.base_token == "saved-base"
+    assert loaded.table_id == "saved-table"
+
+
+def test_repair_schema_requires_explicit_confirmation(monkeypatch):
+    from feishu_setup import USER_FIELDS, _reconcile_fields
+
+    expected = next(field for field in USER_FIELDS if field["name"] == "知识域")
+    current = _base = {
+        "id": "fld-domain",
+        "name": "知识域",
+        "type": "select",
+        "multiple": True,
+        "options": [*expected["options"], {"name": ""}],
+    }
+
+    monkeypatch.setattr(
+        "feishu_setup._lark",
+        lambda args, **kwargs: {"data": {"fields": [current]}}
+        if args[1] == "+field-list"
+        else {},
+    )
+
+    with pytest.raises(RuntimeError, match="--repair-schema --yes"):
+        _reconcile_fields(
+            base_token="base",
+            table_id="tbl",
+            all_fields=[expected],
+            repair_schema=True,
+            confirm_writes=False,
+        )
+
+
+def test_setup_deletes_stale_form_questions_in_supported_batches(monkeypatch):
+    """The current Feishu API accepts at most ten question IDs per delete."""
+    from feishu_setup import _ensure_capture_form
+
+    calls = []
+
+    def _mock_lark(args, *, timeout=60.0, redact_token=None):
+        calls.append(args)
+        if args[1] == "+form-list":
+            return {"data": {"forms": [{"id": "frm-existing", "name": "每日知识采集"}]}}
+        if args[1] == "+form-questions-list":
+            return {"data": {"questions": [
+                {"id": f"q-worker-{index}", "title": f"内部字段 {index}"}
+                for index in range(23)
+            ]}}
+        return {"ok": True}
+
+    monkeypatch.setattr("feishu_setup._lark", _mock_lark)
+
+    assert _ensure_capture_form("base-token", "tbl-token", "每日知识采集") == "frm-existing"
+    delete_calls = [args for args in calls if args[1] == "+form-questions-delete"]
+    deleted_batches = [
+        json.loads(args[args.index("--question-ids") + 1])
+        for args in delete_calls
+    ]
+    assert [len(batch) for batch in deleted_batches] == [10, 10, 3]
 
 
 def test_setup_redacts_token_in_mocked_lark_failure(monkeypatch):
@@ -3656,197 +4011,8 @@ def test_all_leaf_modules_importable_without_base_worker_round3():
         import _lark_cli  # noqa: F811
 
 
-# ── Round 3: source_router module extraction ──────────────────────────────
 
+# -- Round 3: source_router deleted in Phase 6 --
+# The source_router module has been removed along with extractors and bridge adapters.
+# The deleted code is preserved in Git tag v0.4.0-legacy-final.
 
-def test_source_router_module_importable_independently():
-    """feishu_worker.source_router imports without feishu_base_worker loaded."""
-    import importlib
-    import sys
-
-    stale = {k for k in sys.modules if k.startswith("feishu_base_worker")}
-    stale.update(k for k in sys.modules if k.startswith("feishu_worker"))
-    stale.update(k for k in sys.modules if k.startswith("_lark_cli"))
-    for key in stale:
-        del sys.modules[key]
-
-    try:
-        sr = importlib.import_module("feishu_worker.source_router")
-        for name in (
-            "_connector_binary",
-            "_run_or_validate",
-            "package_local_attachment",
-            "package_routed_source",
-            "package_public_web",
-        ):
-            assert hasattr(sr, name), (
-                f"feishu_worker.source_router must expose {name}"
-            )
-        # Must NOT expose orchestrator-level names.
-        for name in ("ROOT", "process_record", "main", "load_config"):
-            assert not hasattr(sr, name), (
-                f"feishu_worker.source_router must NOT expose {name}"
-            )
-        assert "feishu_base_worker" not in sys.modules, (
-            "source_router import must not load feishu_base_worker"
-        )
-    finally:
-        import feishu_base_worker  # noqa: F811
-        import feishu_worker.source_router  # noqa: F811
-        import feishu_worker.config  # noqa: F811
-        import feishu_worker.io_utils  # noqa: F811
-        import feishu_worker.base_client  # noqa: F811
-        import _lark_cli  # noqa: F811
-
-
-def test_all_six_leaf_modules_importable_without_base_worker():
-    """All six leaf modules import cleanly without feishu_base_worker loaded."""
-    import importlib
-    import sys
-
-    stale = {k for k in sys.modules if k.startswith("feishu_base_worker")}
-    stale.update(k for k in sys.modules if k.startswith("feishu_worker"))
-    stale.update(k for k in sys.modules if k.startswith("_lark_cli"))
-    for key in stale:
-        del sys.modules[key]
-
-    try:
-        for mod_name in (
-            "feishu_worker.config",
-            "feishu_worker.io_utils",
-            "feishu_worker.base_client",
-            "feishu_worker.claim",
-            "feishu_worker.capture",
-            "feishu_worker.source_router",
-        ):
-            mod = importlib.import_module(mod_name)
-            assert mod is not None, f"Failed to import {mod_name}"
-        assert "feishu_base_worker" not in sys.modules, (
-            "Leaf module imports must not load feishu_base_worker"
-        )
-    finally:
-        import feishu_base_worker  # noqa: F811
-        import feishu_worker.source_router  # noqa: F811
-        import feishu_worker.config  # noqa: F811
-        import feishu_worker.io_utils  # noqa: F811
-        import feishu_worker.base_client  # noqa: F811
-        import feishu_worker.claim  # noqa: F811
-        import feishu_worker.capture  # noqa: F811
-        import _lark_cli  # noqa: F811
-
-
-def test_package_local_attachment_uses_shared_run_or_validate():
-    """package_local_attachment delegates to _run_or_validate."""
-    import inspect
-    from feishu_worker import source_router as sr
-
-    source = inspect.getsource(sr.package_local_attachment)
-    assert "_run_or_validate" in source, (
-        f"package_local_attachment must call _run_or_validate:\n{source}"
-    )
-
-
-def test_package_routed_source_uses_shared_run_or_validate():
-    """package_routed_source delegates to _run_or_validate."""
-    import inspect
-    from feishu_worker import source_router as sr
-
-    source = inspect.getsource(sr.package_routed_source)
-    assert "_run_or_validate" in source, (
-        f"package_routed_source must call _run_or_validate:\n{source}"
-    )
-
-
-def test_source_router_package_public_web_uses_extractors_web():
-    """source_router.package_public_web imports from extractors.web, not experiments/."""
-    import inspect
-    from feishu_worker import source_router as sr
-
-    source = inspect.getsource(sr.package_public_web)
-    assert "extractors.web" in source, (
-        f"package_public_web must import from extractors.web:\n{source}"
-    )
-    assert "experiments" not in source, (
-        f"package_public_web must not reference experiments/:\n{source}"
-    )
-
-
-def test_source_router_module_has_no_experiment_import():
-    """source_router module has zero imports from experiments/."""
-    import ast
-    from feishu_worker import source_router as sr
-
-    source = Path(sr.__file__).read_text(encoding="utf-8")
-    tree = ast.parse(source)
-    for node in ast.walk(tree):
-        if isinstance(node, (ast.Import, ast.ImportFrom)):
-            module = getattr(node, "module", "") or ""
-            if "experiments" in module:
-                raise AssertionError(
-                    f"source_router must not import from experiments: {ast.dump(node)}"
-                )
-
-
-def test_source_router_re_exports_in_base_worker():
-    """All source_router public names are importable from feishu_base_worker."""
-    names = [
-        "package_local_attachment",
-        "package_routed_source",
-        "package_public_web",
-    ]
-    for name in names:
-        assert hasattr(worker, name), (
-            f"feishu_base_worker must expose {name}"
-        )
-        assert callable(getattr(worker, name)), (
-            f"worker.{name} must be callable"
-        )
-
-
-def test_connector_binary_still_accessible_from_worker():
-    """_connector_binary is still accessible as a feishu_base_worker attribute."""
-    assert hasattr(worker, "_connector_binary")
-    assert callable(worker._connector_binary)
-
-
-def test_connector_binary_dev_fallback_runs_through_interpreter(tmp_path, monkeypatch):
-    """A bare .py path as argv[0] fails on Windows (WinError 193)."""
-    from feishu_worker.source_router import _connector_binary
-
-    script = tmp_path / "scripts" / "raw_bundle_adapter.py"
-    script.parent.mkdir(parents=True)
-    script.write_text("# stub", encoding="utf-8")
-    # Force the dev fallback: no entry point next to the interpreter.
-    monkeypatch.setattr(Path, "is_file", lambda self: self == script)
-
-    argv = _connector_binary(tmp_path)
-    assert argv == [sys.executable, str(script)]
-    assert not argv[0].endswith(".py")
-
-
-def test_source_router_fresh_subprocess_import():
-    """source_router imports in a fresh subprocess without the base worker."""
-    import subprocess
-    import sys
-
-    proc = subprocess.run(
-        [
-            sys.executable,
-            "-c",
-            "import sys; sys.path.insert(0, 'scripts'); "
-            "from feishu_worker.source_router import "
-            "_connector_binary, _run_or_validate, "
-            "package_local_attachment, package_routed_source, package_public_web; "
-            "print('source_router imported OK')",
-        ],
-        cwd=str(SCRIPTS.parent),
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        capture_output=True,
-        check=False,
-    )
-    assert proc.returncode == 0, (
-        f"source_router subprocess import failed:\n{proc.stderr}"
-    )
-    assert "source_router imported OK" in proc.stdout

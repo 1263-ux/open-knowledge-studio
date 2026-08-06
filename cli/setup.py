@@ -11,6 +11,7 @@ both trees are already present — skip silently.
 from __future__ import annotations
 
 import shutil
+import stat
 from pathlib import Path
 
 from setuptools import setup
@@ -34,7 +35,15 @@ _CONNECTOR_IGNORE = shutil.ignore_patterns("test_*.py", "tests", "__pycache__", 
 # never reach a user's knowledge base, where they would pollute skill discovery
 # and could be auto-matched by an agent. Kept in the repo for development.
 _DEV_ONLY_ASSET_NAMES = ("review-upstream-pr", "upstream-pr-remediation")
-_DEV_ONLY_IGNORE = shutil.ignore_patterns(*_DEV_ONLY_ASSET_NAMES)
+_DEV_ONLY_IGNORE = shutil.ignore_patterns(
+    ".git", ".hg", ".svn", "__pycache__", "*.pyc", *_DEV_ONLY_ASSET_NAMES
+)
+
+
+def _remove_readonly(func, path, _exc_info):
+    """Allow build cleanup to remove read-only files copied from skills."""
+    Path(path).chmod(stat.S_IWRITE)
+    func(path)
 
 
 def _repo_root() -> Path:
@@ -48,7 +57,7 @@ def _vendor_connector() -> None:
         return
     dest = Path(__file__).resolve().parent / "oks_connector"
     if dest.exists():
-        shutil.rmtree(dest)
+        shutil.rmtree(dest, onerror=_remove_readonly)
     shutil.copytree(source, dest, ignore=_CONNECTOR_IGNORE)
 
 
@@ -56,7 +65,7 @@ def _vendor_assets() -> None:
     repo_root = _repo_root()
     dest_root = Path(__file__).resolve().parent / "knowledge_studio" / "_assets"
     if dest_root.exists():
-        shutil.rmtree(dest_root)
+        shutil.rmtree(dest_root, onerror=_remove_readonly)
     dest_root.mkdir(parents=True)
     for src_name, dest_name in _MAP:
         src = repo_root / src_name
@@ -67,6 +76,26 @@ def _vendor_assets() -> None:
         worker_dest = dest_root / "scripts"
         worker_dest.mkdir(parents=True, exist_ok=True)
         shutil.copy2(worker, worker_dest / worker.name)
+        resolver = worker.parent / "_lark_cli.py"
+        if resolver.is_file():
+            shutil.copy2(resolver, worker_dest / resolver.name)
+        worker_package = worker.parent / "feishu_worker"
+        if worker_package.is_dir():
+            shutil.copytree(
+                worker_package,
+                worker_dest / worker_package.name,
+                ignore=_CONNECTOR_IGNORE,
+            )
+        extractors = worker.parent / "extractors"
+        if extractors.is_dir():
+            shutil.copytree(
+                extractors,
+                worker_dest / extractors.name,
+                ignore=_CONNECTOR_IGNORE,
+            )
+        network = worker.parent / "network.py"
+        if network.is_file():
+            shutil.copy2(network, worker_dest / network.name)
 
 
 def _purge_stale_build_copies(*relative: str) -> None:

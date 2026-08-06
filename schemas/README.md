@@ -21,7 +21,9 @@ Consult these schemas when:
 | Schema | Purpose |
 |---|---|
 | `capture-envelope.schema.json` | Per-run capture identity and metadata |
+| `capture-result-v0.1.schema.json` | Provider-neutral result returned by new Capture Adapters |
 | `capability-manifest.schema.json` | Extractor capability declaration shape |
 | `fetch-receipt.schema.json` | Network fetch provenance record |
 | `processing-run.schema.json` | Run-level processing journal entry |
 | `raw-bundle-v0.2.schema.json` | Raw Bundle v0.2 manifest and provenance graph |
+| `agent-observation-v0.1.schema.json` | Agent 对 Evidence Bundle 的派生观察，必须引用 artifact 和 locator |

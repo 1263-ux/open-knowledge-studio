@@ -19,6 +19,7 @@ _MODULES: dict[str, str] = {
     "watch": "watch_skill",
     "rapidocr": "rapidocr",
     "document": "markitdown",
+    "pdf-lite": "pymupdf4llm",
     "pdf": "mineru",
     "formula": "paddleocr",
 }
@@ -27,6 +28,7 @@ _ENV_VARS: dict[str, str] = {
     "watch": "OKS_WATCH_PYTHON",
     "rapidocr": "OKS_WATCH_PYTHON",
     "document": "OKS_DOCUMENT_PYTHON",
+    "pdf-lite": "OKS_PDF_LITE_PYTHON",
     "pdf": "OKS_MINERU_PYTHON",
     "formula": "OKS_FORMULA_PYTHON",
 }
@@ -38,7 +40,8 @@ def is_capability_available(name: str) -> tuple[bool, Path | None]:
     Priority:
     1. Module is importable in the current interpreter → (True, sys.executable)
     2. Environment variable points to a valid Python → (True, env_path)
-    3. Not available → (False, None)
+    3. Managed capability environment can import the module → (True, path)
+    4. Not available → (False, None)
     """
     module = _MODULES.get(name)
     if module and importlib.util.find_spec(module) is not None:
@@ -51,6 +54,16 @@ def is_capability_available(name: str) -> tuple[bool, Path | None]:
             candidate = Path(configured).expanduser().resolve()
             if candidate.is_file() and module and python_can_import(candidate, module):
                 return True, candidate
+
+    relative = Path("Scripts/python.exe") if os.name == "nt" else Path("bin/python")
+    configured_root = os.environ.get("OKS_CAPABILITY_ROOT")
+    managed_root = (
+        Path(configured_root).expanduser()
+        if configured_root else Path.home() / ".oks" / "capabilities"
+    )
+    managed = managed_root / name / "venv" / relative
+    if managed.is_file() and module and python_can_import(managed, module):
+        return True, managed
 
     return False, None
 

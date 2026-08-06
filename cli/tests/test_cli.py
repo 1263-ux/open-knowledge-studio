@@ -38,7 +38,7 @@ def test_configure_utf8_stdio_on_windows(monkeypatch):
         ("notes.md", "document"),
         ("notes.txt", "document"),
         ("video.mp4", "watch"),
-        ("paper.pdf", "pdf"),
+        ("paper.pdf", "pdf-lite"),
     ],
 )
 def test_recommended_capability_routes_supported_local_files(source, capability):

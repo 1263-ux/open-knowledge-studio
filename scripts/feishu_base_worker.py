@@ -78,12 +78,9 @@ from feishu_worker.capture import (
     envelope_content_hash,
     capture_envelope,
 )
-from feishu_worker.source_router import (
-    _connector_binary as _source_router__connector_binary,
-    package_local_attachment as _source_router_package_local_attachment,
-    package_routed_source as _source_router_package_routed_source,
-    package_public_web as _source_router_package_public_web,
-)
+# source_router.py was deleted in Phase 6 — legacy packaging functions removed.
+# Feishu Worker now only handles Source + Review planes (see ARCHITECTURE.md).
+
 from feishu_worker.pipeline import process_record as _pipeline_process_record
 from feishu_worker.candidate import (
     parse_candidate_document as _candidate_parse_candidate_document,
@@ -127,7 +124,10 @@ def configured_knowledge_root(config: WorkerConfig) -> Path:
     return _config_configured_knowledge_root(config, root=ROOT)
 
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(
+    os.environ.get("OKS_KNOWLEDGE_ROOT")
+    or Path(__file__).resolve().parents[1]
+).expanduser().resolve()
 CANDIDATE_FIELDS = [
     "运行状态",
     "运行ID",
@@ -221,13 +221,18 @@ def list_records(config: WorkerConfig, limit: int = 100) -> list[dict[str, Any]]
     ]
     for field in CAPTURE_FIELDS:
         command.extend(["--field-id", field])
-    # Fetch every claimable status: is_candidate() also accepts retry-flagged
-    # records and 已领取 records with an expired lease. Filtering to 待处理 here
-    # would make retries and crash recovery unreachable.
+    # Fresh form rows have an empty status. Include them alongside explicit
+    # retry/lease-recovery states; is_candidate() performs the final check.
     command.extend([
         "--filter-json",
         json.dumps(
-            {"logic": "and", "conditions": [["运行状态", "intersects", list(CLAIMABLE_STATUSES)]]},
+            {
+                "logic": "or",
+                "conditions": [
+                    ["运行状态", "empty"],
+                    ["运行状态", "intersects", list(CLAIMABLE_STATUSES)],
+                ],
+            },
             ensure_ascii=False,
         ),
     ])
@@ -299,8 +304,12 @@ def list_review_records(config: WorkerConfig, limit: int = 100) -> list[dict[str
 
 
 def _connector_binary() -> list[str]:
-    """Return the oks-connector CLI path (delegates to feishu_worker.source_router)."""
-    return _source_router__connector_binary(ROOT)
+    """The oks-connector CLI was removed in Phase 6 (v0.4.0)."""
+    raise NotImplementedError(
+        "oks-connector and source_router were deleted in OKS 0.4.0. "
+        "Use Agent-native ingest with oks raw-commit instead. "
+        "See Git tag v0.4.0-legacy-final for the old pipeline."
+    )
 
 
 # ── Claim-layer re-exports ──────────────────────────────────────────────────
@@ -634,13 +643,19 @@ def download_attachments(config: WorkerConfig, record_id: str, output: Path) -> 
 
 
 def package_local_attachment(config: WorkerConfig, source: Path, output: Path) -> dict[str, Any]:
-    """Package a local attachment file into a Raw bundle (delegates to feishu_worker.source_router)."""
-    return _source_router_package_local_attachment(config, source, output, root=ROOT)
+    """Removed: source_router was deleted in Phase 6 (v0.4.0). Use Agent-native ingest."""
+    raise NotImplementedError(
+        "source_router and oks-connector were deleted in OKS 0.4.0. "
+        "Use Agent-native ingest with oks raw-commit instead."
+    )
 
 
 def package_routed_source(config: WorkerConfig, source: str, output: Path) -> dict[str, Any]:
-    """Package a platform-routed source into a Raw bundle (delegates to feishu_worker.source_router)."""
-    return _source_router_package_routed_source(config, source, output, root=ROOT)
+    """Removed: source_router was deleted in Phase 6 (v0.4.0). Use Agent-native ingest."""
+    raise NotImplementedError(
+        "source_router and oks-connector were deleted in OKS 0.4.0. "
+        "Use Agent-native ingest with oks raw-commit instead."
+    )
 
 
 def package_public_web(
@@ -649,8 +664,11 @@ def package_public_web(
     output: Path,
     human_context: str,
 ) -> dict[str, Any]:
-    """Package a public web page into a Raw bundle (delegates to feishu_worker.source_router)."""
-    return _source_router_package_public_web(config, url, output, human_context, root=ROOT)
+    """Removed: source_router was deleted in Phase 6 (v0.4.0). Use Agent-native ingest."""
+    raise NotImplementedError(
+        "source_router and oks-connector were deleted in OKS 0.4.0. "
+        "Use Agent-native ingest with oks raw-commit instead."
+    )
 
 
 def finalize_raw_v2(
