@@ -427,3 +427,85 @@ def test_skill_install_excludes_pycache():
 
     finally:
         shutil.rmtree(kb, ignore_errors=True)
+
+
+def test_wheel_installed_skill_command_targets_exist():
+    """Every ``python <script>`` in installed SKILL.md must resolve from a Wheel install.
+
+    This is an integration-level gate: it builds a Wheel, installs it into a
+    fresh venv, runs ``oks init``, and then checks that every file path
+    referenced as ``python <script>`` actually exists.  Source-tree tests
+    can pass because the templates live on disk; this test catches packaging
+    gaps (e.g. missing ``package-data`` entries) that evaporate files from
+    the Wheel.
+    """
+    import re, subprocess as sp, tempfile as tmpfile
+
+    repo = Path(__file__).resolve().parent.parent.parent
+
+    # 1. Build the Wheel from the current checkout
+    r = sp.run(
+        [sys.executable, "-m", "build", "--wheel", str(repo / "cli")],
+        capture_output=True, text=True, cwd=str(repo),
+        timeout=300,
+    )
+    if r.returncode != 0:
+        pytest.skip(f"Wheel build failed (infra, not product): {r.stderr[-500:]}")
+    wheels = sorted((repo / "cli" / "dist").glob("open_knowledge_studio-*.whl"))
+    if not wheels:
+        pytest.skip("No wheel produced by build")
+    wheel = wheels[-1]
+
+    # 2. Create a temp venv and install the wheel
+    venv_dir = Path(tmpfile.mkdtemp(prefix="oks-wheel-test-"))
+    kb = venv_dir / "test-kb"
+    try:
+        sp.run(
+            [sys.executable, "-m", "venv", str(venv_dir)],
+            check=True, capture_output=True, timeout=60,
+        )
+        pip = str(venv_dir / ("Scripts" if os.name == "nt" else "bin") / "pip")
+        oks_exe = str(venv_dir / ("Scripts" if os.name == "nt" else "bin") / "oks")
+        sp.run(
+            [pip, "install", str(wheel)],
+            check=True, capture_output=True, timeout=120,
+        )
+        env = os.environ.copy()
+        r = sp.run(
+            [oks_exe, "init", str(kb), "--no-git", "--no-set-default"],
+            capture_output=True, text=True, env=env, timeout=60,
+        )
+        assert r.returncode == 0, f"oks init from wheel failed: {r.stderr}"
+
+        # 3. Scan every SKILL.md for python <script> and verify existence
+        missing: list[str] = []
+        for host in (".claude", ".agents"):
+            skills_dir = kb / host / "skills"
+            if not skills_dir.is_dir():
+                continue
+            for skill_dir in sorted(skills_dir.iterdir()):
+                if not skill_dir.is_dir():
+                    continue
+                md = skill_dir / "SKILL.md"
+                if not md.is_file():
+                    continue
+                content = md.read_text(encoding="utf-8")
+                for m in re.finditer(r"python\s+(\S+\.py)", content):
+                    ref = m.group(1)
+                    if "{" in ref or "*" in ref:
+                        continue
+                    candidates = [kb / ref, skill_dir / ref]
+                    if not any(c.exists() for c in candidates):
+                        missing.append(
+                            f"{skill_dir.relative_to(kb)}/SKILL.md "
+                            f"references 'python {ref}' — file does not exist"
+                        )
+
+        assert not missing, (
+            f"Found {len(missing)} dangling 'python <script>' reference(s) "
+            f"in wheel-installed skills:\n"
+            + "\n".join(f"  - {m}" for m in missing)
+        )
+
+    finally:
+        shutil.rmtree(venv_dir, ignore_errors=True)
