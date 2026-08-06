@@ -20,32 +20,37 @@ Source is a file path, URL, or plain text.  If a path, read the file.
 
 ## Step 2: Judge Modality
 
-From `scripts/route.py:describe_source()`:
+Run `oks capability catalog --json` to see available capabilities.
 - `.md/.txt` -> text, `.pdf` -> pdf, `.docx/.pptx/.xlsx` -> office
 - `.png/.jpg` -> image, `.mp4/.mkv` -> video, `.mp3/.wav` -> audio
 - URL -> web (or video if bilibili/youtube/douyin)
 
 ## Step 3: Select Providers
 
-Read `providers/*/provider.yaml`.  For the detected modality, find
+Run `oks capability catalog --json`.  For the detected modality, find
 providers whose `provides:` includes the relevant capability.
 Prefer lowest-cost, local, stable providers first.
-Use `oks capability catalog` to see available capability matrix.
+Recipe (`recipes/{modality}.md` in installed package) says WHAT is needed;
+the catalog says WHO provides each capability.
 
 ## Step 4: Execute Providers
 
 For each chosen provider:
 1. Call the tool (Bash / MCP / API / Agent vision)
 2. Save raw output to `.oks/runs/{run_id}/work/{provider}/`
-3. Construct EvidenceFragment following `schemas/evidence-fragment-v0.1.schema.json`
+3. **For external providers: sanitize with `knowledge_studio.security.redaction.sanitize_remote_artifact()`** before saving.
+4. Construct EvidenceFragment using schema from installed package:
+   `importlib.resources.files("knowledge_studio.schemas").joinpath("evidence-fragment-v0.1.schema.json")`
 
 Agent's own multimodal observation is also a fragment
 (`producer: agent-runtime`, `agent_judgment: agent_observed`).
 
 ## Step 5: Merge into EvidenceManifest
 
-Collect all fragments.  Create EvidenceManifest following
-`schemas/evidence-manifest-v0.1.schema.json`.  Judge overall status:
+Collect all fragments.  Create EvidenceManifest — load schema from
+installed package, do NOT reference `schemas/` as a filesystem path:
+`importlib.resources.files("knowledge_studio.schemas").joinpath("evidence-manifest-v0.1.schema.json")`
+Judge overall status:
 - `complete` — all required evidence obtained
 - `partial` — some missing, must declare `failure_disposition` and `warnings`
 - If ALL fragments failed — do NOT submit; report failure to user
@@ -71,12 +76,21 @@ On success: bundle_id returned.  On rejection: read error_code, do NOT retry bli
 ## Step 7: AgentObservation -> Candidate
 
 1. Read the Raw Bundle's `evidence.jsonl`
-2. Create AgentObservation (following `schemas/agent-observation-v0.1.schema.json`)
-   - Each claim references `artifact_id + locator` from evidence
-   - `supported` claims -> have direct evidence
-   - `uncertain` claims -> Agent inference, need human verification
-3. Call `observation_to_candidate()` from `scripts/observation_adapter.py`
-4. Write `drafts/{slug}.md`
+2. Create AgentObservation — each claim references `artifact_id + locator`
+   from evidence.  `supported` claims have direct evidence; `uncertain` are
+   Agent inference needing human verification.
+3. Write Candidate to `drafts/{slug}.md` with valid YAML frontmatter:
+   ```yaml
+   title: "Human-readable title"
+   type: concept
+   area: computing
+   importance: 0.7
+   confidence: 0.5
+   created: "YYYY-MM-DD"
+   tags: "comma, separated"
+   status: provisional
+   source_type: agent-ingest
+   ```
 
 ## Step 8: Write result.json
 
