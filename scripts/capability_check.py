@@ -1,8 +1,8 @@
 """Single source of truth for extractor capability availability.
 
-Used by both the CLI layer (``cli.py``) and the connector layer
-(``raw_bundle_adapter.py``) so that ``oks capability install`` and
-``oks ingest`` always agree on whether a capability is ready.
+Used by both the CLI layer (``cli.py``) and the agent ingest skill so that
+``oks capability install`` and ``oks ingest`` always agree on whether a
+capability is ready.
 """
 
 from __future__ import annotations

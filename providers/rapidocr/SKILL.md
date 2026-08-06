@@ -9,5 +9,7 @@ RapidOCR (mechanical, bbox) + Agent Vision (agent_observed, 页面语义) = 混�
 ## 调用
 
 ```bash
-python scripts/raw_bundle_adapter.py image --source screenshot.png --output /tmp/bundle
+# Historical: raw_bundle_adapter.py was removed in v0.4.0.
+# Use /ingest skill in Agent Host (Claude Code / Codex) or:
+# oks raw-commit .oks/runs/{run_id}/manifest/
 ```

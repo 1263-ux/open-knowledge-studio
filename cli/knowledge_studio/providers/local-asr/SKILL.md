@@ -6,7 +6,9 @@
 
 通过 watch capability 调用：
 ```bash
-python scripts/raw_bundle_adapter.py watch --source audio.mp3 --transcript-only
+# Historical: raw_bundle_adapter.py was removed in v0.4.0.
+# Use /ingest skill in Agent Host (Claude Code / Codex) or:
+# oks raw-commit .oks/runs/{run_id}/manifest/
 ```
 
 ## 限制

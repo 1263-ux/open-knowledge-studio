@@ -12,7 +12,9 @@ oks capability install pdf --yes
 
 Agent 通过 Bash 调用：
 ```bash
-python scripts/raw_bundle_adapter.py mineru --source document.pdf --output /tmp/bundle
+# Historical: raw_bundle_adapter.py was removed in v0.4.0.
+# Use /ingest skill in Agent Host (Claude Code / Codex) or:
+# oks raw-commit .oks/runs/{run_id}/manifest/
 ```
 
 ## 限制

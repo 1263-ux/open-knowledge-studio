@@ -1,6 +1,7 @@
-"""Shared utilities used by raw_bundle_adapter and extractor modules.
+"""Shared utilities — hashing, atomic writes, Rich-safe rendering.
 
-These are pure functions with no side-effects on the extraction pipeline.
+Historical / Removed in v0.4.0: raw_bundle_adapter and extractor modules
+were permanently deleted. See Git tag v0.4.0-legacy-final.
 """
 
 from __future__ import annotations

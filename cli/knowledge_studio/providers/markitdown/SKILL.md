@@ -5,7 +5,9 @@ Office 文档→Markdown 转换。DOCX/PPTX/XLSX 已验证。
 ## 调用
 
 ```bash
-python scripts/raw_bundle_adapter.py markitdown --source document.docx --output /tmp/bundle
+# Historical: raw_bundle_adapter.py was removed in v0.4.0.
+# Use /ingest skill in Agent Host (Claude Code / Codex) or:
+# oks raw-commit .oks/runs/{run_id}/manifest/
 ```
 
 ## 输出
