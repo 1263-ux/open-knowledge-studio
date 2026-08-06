@@ -105,11 +105,9 @@ def _vendor_assets() -> None:
                 worker_dest / worker_package.name,
                 ignore=_CONNECTOR_IGNORE,
             )
-        # extractors/ directory was permanently deleted in v0.4.0.
-        # Do not vendor legacy extractors into wheels.
-        network = worker.parent / "network.py"
-        if network.is_file():
-            shutil.copy2(network, worker_dest / network.name)
+            # extractors/ was permanently deleted in v0.4.0.
+            # network.py was permanently deleted — do not vendor.
+
 
 
 def _purge_stale_build_copies(*relative: str) -> None:
