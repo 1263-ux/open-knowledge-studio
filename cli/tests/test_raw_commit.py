@@ -371,3 +371,172 @@ def test_artifact_kind_maps_to_derived_kind(art_kind, expected):
     assert actual == expected, (
         f"Artifact kind '{art_kind}' mapped to derived '{actual}', expected '{expected}'"
     )
+
+
+# ── 9. Gate RC-PROTOCOL-01A regression tests ─────────────────────────
+
+def test_locator_missing_kind_reports_kind():
+    """Legacy locator ``{"page": 1}`` must ONLY report missing 'kind',
+    not spurious secondary required fields (bbox, start_ms, etc.).
+
+    This guards against the Locator Schema ``if`` condition bug where
+    ``allOf/if`` blocks without ``required: ["kind"]`` would all
+    trigger simultaneously when ``kind`` was absent.
+    """
+    base = Path(tempfile.mkdtemp(prefix="t-loc-kind-"))
+    art = base / "artifacts"
+    art.mkdir()
+    m, _ = _make_manifest(
+        art,
+        "x.txt",
+        "data",
+        [{"evidence_id": "e-legacy", "artifact_id": "x.txt", "kind": "text",
+          "method": "read", "locator": {"page": 1}}],
+    )
+    r = _run_commit(m, base / "out")
+    assert r.returncode != 0, "Legacy locator must be rejected"
+    result = json.loads(r.stdout)
+    # The error must mention 'kind' as the root cause
+    msg = json.dumps(result).lower()
+    assert "kind" in msg, (
+        f"Error must report missing 'kind': {json.dumps(result)[:300]}"
+    )
+    # Spurious fields that must NOT appear when kind is simply missing
+    spurious = ["bbox", "start_ms", "end_ms", "xpath_fragment", "custom_label"]
+    for field in spurious:
+        assert field not in msg, (
+            f"Spurious field '{field}' in error for locator missing kind: "
+            f"{json.dumps(result)[:300]}"
+        )
+
+
+def test_schema_validator_unavailable_rejected(monkeypatch):
+    """When ``jsonschema`` cannot be imported, the commit must fail
+    with ``SCHEMA_VALIDATOR_UNAVAILABLE`` — fail-closed, not silently
+    skipping schema enforcement."""
+    import knowledge_studio.raw_commit as rc
+
+    # Reset the cached validator check
+    rc._VALIDATOR_AVAILABLE = None
+
+    # Make jsonschema unimportable
+    import builtins
+    _orig_import = builtins.__import__
+
+    def _block_jsonschema(name, *args, **kwargs):
+        if name == "jsonschema" or name.startswith("jsonschema."):
+            raise ImportError(f"No module named '{name}' (blocked for test)")
+        return _orig_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", _block_jsonschema)
+
+    try:
+        rc._require_validator()
+        pytest.fail("_require_validator() should have raised CommitError")
+    except rc.CommitError as e:
+        assert e.code == "SCHEMA_VALIDATOR_UNAVAILABLE", (
+            f"Expected SCHEMA_VALIDATOR_UNAVAILABLE, got {e.code}: {e.message}"
+        )
+        assert "jsonschema" in e.message.lower(), (
+            f"Error should mention jsonschema: {e.message}"
+        )
+
+
+def test_failed_bundle_validation_leaves_no_output():
+    """When bundle assembly fails (e.g. invalid locator), the output
+    directory must NOT exist — staging is cleaned up atomically."""
+    base = Path(tempfile.mkdtemp(prefix="t-atomic-"))
+    art = base / "artifacts"
+    art.mkdir()
+    # Use an invalid locator that will trigger schema rejection
+    m, _ = _make_manifest(
+        art,
+        "data.txt",
+        "content",
+        [{"evidence_id": "e1", "artifact_id": "data.txt", "kind": "text",
+          "method": "read", "locator": {"kind": "bbox"}}],
+        # ^ kind=bbox without required 'bbox' field → INVALID_MANIFEST
+    )
+    output_dir = base / "out"
+    r = _run_commit(m, output_dir)
+    assert r.returncode != 0, "Commit with invalid locator must fail"
+    # The output directory must not exist
+    assert not output_dir.exists(), (
+        f"Output directory {output_dir} must not exist after failed commit. "
+        f"Contents: {list(output_dir.rglob('*')) if output_dir.exists() else 'N/A'}"
+    )
+    # Also verify no staging directories leaked
+    staging_dirs = list(base.glob(".out.*"))
+    assert len(staging_dirs) == 0, (
+        f"Staging directories leaked: {[str(d) for d in staging_dirs]}"
+    )
+
+
+def test_primary_text_without_media_type_preserves_content():
+    """``primary_text`` artifact without ``media_type`` must still render
+    text content into ``content.md`` — not produce a 'Binary artifact'
+    placeholder when the file has a known text extension (.md, .txt, etc.)."""
+    base = Path(tempfile.mkdtemp(prefix="t-text-"))
+    art = base / "artifacts"
+    art.mkdir()
+    markdown_body = "# Test Document\n\nReal content here.\n"
+    m, _ = _make_manifest(
+        art,
+        "page.md",
+        markdown_body,
+        [{"evidence_id": "e1", "artifact_id": "page.md", "kind": "text",
+          "method": "read", "locator": {"kind": "document"}}],
+    )
+    # NOTE: _make_manifest does NOT set media_type on primary_artifact,
+    # which reproduces the exact bug scenario.
+    r = _run_commit(m, base / "out")
+    assert r.returncode == 0, f"Commit failed: {r.stdout[:200]}"
+    content_md = (base / "out" / "content.md").read_text(encoding="utf-8")
+    assert "Test Document" in content_md, (
+        f"content.md must contain the actual Markdown body. "
+        f"Got: {content_md[:200]}"
+    )
+    assert "Binary artifact" not in content_md, (
+        f"content.md must NOT contain 'Binary artifact' placeholder. "
+        f"Got: {content_md[:200]}"
+    )
+
+
+def test_schema_mirrors_identical():
+    """Every schema in ``schemas/`` must have a SHA256-identical copy in
+    ``cli/knowledge_studio/schemas/`` — no double fact-source drift."""
+    import hashlib
+    repo_schemas = Path(__file__).parent.parent.parent / "schemas"
+    pkg_schemas = (
+        Path(__file__).parent.parent / "knowledge_studio" / "schemas"
+    )
+
+    repo_files = sorted(
+        f.name for f in repo_schemas.iterdir() if f.suffix == ".json"
+    )
+    pkg_files = sorted(
+        f.name for f in pkg_schemas.iterdir() if f.suffix == ".json"
+    )
+
+    # Same set of files
+    assert repo_files == pkg_files, (
+        f"Schema file sets differ:\n"
+        f"  repo only: {set(repo_files) - set(pkg_files)}\n"
+        f"  pkg only: {set(pkg_files) - set(repo_files)}"
+    )
+
+    mismatches = []
+    for name in repo_files:
+        repo_hash = hashlib.sha256(
+            (repo_schemas / name).read_bytes()
+        ).hexdigest()
+        pkg_hash = hashlib.sha256(
+            (pkg_schemas / name).read_bytes()
+        ).hexdigest()
+        if repo_hash != pkg_hash:
+            mismatches.append((name, repo_hash[:16], pkg_hash[:16]))
+
+    assert len(mismatches) == 0, (
+        f"Schema mirror mismatch — {len(mismatches)} file(s) differ:\n"
+        + "\n".join(f"  {n}: repo={r}... pkg={p}..." for n, r, p in mismatches)
+    )

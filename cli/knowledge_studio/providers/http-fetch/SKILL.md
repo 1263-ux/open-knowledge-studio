@@ -1,20 +1,51 @@
 # HTTP Fetch Provider
 
-安全公网 HTTP GET。SSRF 保护，redirect 跟踪。用于获取原始资源（HTML、PDF、Office 文件等）。
+**Status**: experimental
+**Availability**: unavailable unless a declared HTTP provider is active
 
-## 调用
+## Capability
 
-```bash
-python -c "
-from network import fetch_url
-content, receipt = fetch_url('https://example.com/article')
-"
-```
+Safe public-network HTTP GET with SSRF protection and redirect following.
+Retrieves raw web resources (HTML, PDF, Office files, etc.).
 
-## 输出
+## Required Capabilities
 
-原始 bytes + fetch receipt（final_url, content_type, content_sha256, status_code）。
+| Capability | Required | Notes |
+|---|---|---|
+| `http.fetch` | yes | Provided by the agent runtime or an installed provider |
+| `document.html.extract` | no | Needed to extract article text from raw HTML |
 
-## 限制
+## Input
 
-不执行 JS，不处理登录态，中文平台可能被反爬。获取的 HTML 需 trafilatura 或 firecrawl 进一步提取正文。
+- **url**: A publicly accessible HTTP/HTTPS URL
+- **expected_content_type** (optional): Hint for downstream processing
+
+## Output
+
+- Raw response bytes
+- Fetch receipt containing `final_url`, `content_type`, `content_length`, `status_code`
+
+## Success Conditions
+
+- HTTP 200 response
+- Content-Type matches or is compatible with downstream extraction
+- No redirect loop or SSRF redirect to internal host
+
+## Partial Conditions
+
+- Non-200 status codes may still yield useful content (redirects, auth gates)
+- JS-rendered pages: content will be the raw HTML, not the rendered DOM
+- Anti-bot platforms: may receive a challenge page instead of real content
+
+## Security
+
+- Block redirects to internal IP ranges (RFC 1918, loopback, link-local)
+- Never forward credentials, cookies, or auth tokens
+- Respect `robots.txt` and rate-limit responses
+
+## Legacy Note
+
+The `network.py` module (from which `fetch_url` was previously imported)
+was a legacy connector that shipped with `oks_connector`.  It has been
+permanently removed from the wheel in v0.4.0.  Use your agent runtime's
+built-in HTTP tools instead.

@@ -32,9 +32,11 @@ from knowledge_studio.recall import (
     recall_knowledge,
 )
 
-# ── The legacy connector (oks_connector.raw_bundle_adapter) was permanently
-# deleted in v0.4.0.  Agent-native ingest via /ingest skill is the only path.
+# ── The legacy connector (oks_connector) was permanently removed in v0.4.0.
+# Agent-native ingest via /ingest skill is the only path.
 # Git tag v0.4.0-legacy-final preserves the old pipeline.
+# Two essential stdlib-only utilities (capability_check, _lark_cli) were
+# inlined into knowledge_studio/ — they are the sole survivors.
 
 
 def _configure_utf8_stdio() -> None:
@@ -171,7 +173,7 @@ def capability_list():
 def _capability_already_installed(name: str) -> bool:
     """Check whether a capability is available (delegates to shared module)."""
     try:
-        from oks_connector.capability_check import is_capability_available
+        from knowledge_studio.capability_check import is_capability_available
     except ImportError:
         return False
     ok, _ = is_capability_available(name)
@@ -348,7 +350,7 @@ def _run_feishu_worker(command: str, extra: list[str]) -> None:
 def _resolve_lark_cli() -> str | None:
     """Reuse the connector's shared resolver (LARK_CLI_EXE, Windows .cmd, npm)."""
     try:
-        from oks_connector._lark_cli import resolve_lark_cli
+        from knowledge_studio._lark_cli import resolve_lark_cli
     except ImportError:
         try:
             from _lark_cli import resolve_lark_cli
@@ -582,30 +584,26 @@ def capability_doctor_cmd(
 
 # ── Skills Install ──────────────────────────────────────────────
 
-@app.command()
-def skills_install(
-    force: bool = typer.Option(False, "--force", help="Overwrite user-modified skills"),
-):
-    """Install OKS Agent skills into the user workspace.
+def _install_skills(target_root: Path, force: bool) -> tuple[list[str], list[str]]:
+    """Install OKS skills from the canonical ``skill_templates/`` source.
 
-    Copies skill templates from the installed package to
-    ``<OKS_ROOT>/.claude/skills/`` and ``<OKS_ROOT>/.agents/skills/``.
-    Safe to run repeatedly (idempotent).  Use ``--force`` to overwrite
-    local modifications.
+    Reads from ``importlib.resources("knowledge_studio.skill_templates")``
+    — the single published skill source — and copies into
+    ``<target_root>/.claude/skills/`` and ``<target_root>/.agents/skills/``.
+
+    Returns ``(installed, skipped)`` lists of human-readable labels.
     """
     from importlib.resources import files
 
-    kb_root = Path(get_kb_root())
     templates_root = files("knowledge_studio.skill_templates")
-
-    installed = []
-    skipped = []
+    installed: list[str] = []
+    skipped: list[str] = []
 
     for host in ("claude", "agents"):
         template_dir = templates_root / host / "skills"
         if not template_dir.is_dir():
             continue
-        target_dir = kb_root / f".{host}" / "skills"
+        target_dir = target_root / f".{host}" / "skills"
         for child in sorted(template_dir.iterdir()):
             if not child.is_dir():
                 continue
@@ -622,6 +620,23 @@ def skills_install(
                     dest.parent.mkdir(parents=True, exist_ok=True)
                     dest.write_bytes(item.read_bytes())
             installed.append(f".{host}/skills/{skill_name}")
+
+    return installed, skipped
+
+
+@app.command()
+def skills_install(
+    force: bool = typer.Option(False, "--force", help="Overwrite user-modified skills"),
+):
+    """Install OKS Agent skills into the user workspace.
+
+    Copies skill templates from the installed package to
+    ``<OKS_ROOT>/.claude/skills/`` and ``<OKS_ROOT>/.agents/skills/``.
+    Safe to run repeatedly (idempotent).  Use ``--force`` to overwrite
+    local modifications.
+    """
+    kb_root = Path(get_kb_root())
+    installed, skipped = _install_skills(kb_root, force)
 
     if installed:
         console.print("[green]Installed skills:[/green]")
@@ -1474,10 +1489,14 @@ _ASSET_MAP = [
     ("settings", "settings"),
 ]
 
-# Maintainer-only skills. Kept in the repo for development, never installed into
-# a user's knowledge base. Must match setup.py / bundle_assets.py — a source
-# checkout copies from the repo root, so the build-time exclusion is not enough.
-_DEV_ONLY_ASSET_NAMES = ("review-upstream-pr", "upstream-pr-remediation")
+# Maintainer-only and dev-only skills. Kept in the repo for development, never
+# installed into a user's knowledge base. Must stay in sync with setup.py.
+_DEV_ONLY_ASSET_NAMES = (
+    "review-upstream-pr",
+    "upstream-pr-remediation",
+    "triad-engineering-closure",
+    "claude-code-vision-skill",
+)
 
 
 def _asset_source() -> tuple[Path | None, bool]:
@@ -1585,6 +1604,15 @@ def init(
             console.print(f"[green]Materialized assets:[/green] {', '.join(copied)}")
         else:
             console.print("[dim]Assets already present (use --upgrade to refresh).[/dim]")
+
+    # Always install skills from the canonical skill_templates/ source.
+    # This ensures init and skills-install produce identical skill sets
+    # regardless of whether the build used the repo root or the wheel.
+    skill_installed, skill_skipped = _install_skills(root, force=upgrade)
+    if skill_installed:
+        console.print(f"[green]Installed skills:[/green] {', '.join(skill_installed)}")
+    if skill_skipped:
+        console.print("[dim]Skills already present (use --upgrade to refresh).[/dim]")
 
     gitignore = root / ".gitignore"
     if gitignore.exists():

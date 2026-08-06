@@ -73,23 +73,38 @@
   },
   "allOf": [
     {
-      "if": {"properties": {"kind": {"const": "page"}}},
+      "if": {
+        "required": ["kind"],
+        "properties": {"kind": {"const": "page"}}
+      },
       "then": {"required": ["page"]}
     },
     {
-      "if": {"properties": {"kind": {"const": "bbox"}}},
+      "if": {
+        "required": ["kind"],
+        "properties": {"kind": {"const": "bbox"}}
+      },
       "then": {"required": ["bbox"]}
     },
     {
-      "if": {"properties": {"kind": {"const": "timestamp"}}},
+      "if": {
+        "required": ["kind"],
+        "properties": {"kind": {"const": "timestamp"}}
+      },
       "then": {"required": ["start_ms", "end_ms"]}
     },
     {
-      "if": {"properties": {"kind": {"const": "dom"}}},
+      "if": {
+        "required": ["kind"],
+        "properties": {"kind": {"const": "dom"}}
+      },
       "then": {"required": ["xpath_fragment"]}
     },
     {
-      "if": {"properties": {"kind": {"const": "custom"}}},
+      "if": {
+        "required": ["kind"],
+        "properties": {"kind": {"const": "custom"}}
+      },
       "then": {"required": ["custom_label"]}
     }
   ]

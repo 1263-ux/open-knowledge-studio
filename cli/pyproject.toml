@@ -77,8 +77,6 @@ packages = [
     "knowledge_studio.skill_templates",
     "knowledge_studio.skill_templates.claude",
     "knowledge_studio.skill_templates.agents",
-    "oks_connector",
-    "oks_connector.feishu_worker",
 ]
 
 [tool.setuptools.package-dir]
@@ -91,7 +89,6 @@ packages = [
 "knowledge_studio.skill_templates" = "knowledge_studio/skill_templates"
 "knowledge_studio.skill_templates.claude" = "knowledge_studio/skill_templates/claude"
 "knowledge_studio.skill_templates.agents" = "knowledge_studio/skill_templates/agents"
-"oks_connector" = "oks_connector"
 
 [tool.setuptools.package-data]
 knowledge_studio = [

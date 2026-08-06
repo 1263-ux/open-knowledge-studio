@@ -1,12 +1,14 @@
-"""Build hook: vendor the shareable asset layer and the connector package.
+"""Build hook: vendor the shareable asset layer.
 
-The repo root is the single source of truth for `.claude/`, `templates/`,
-`_meta/`, `settings/` and `scripts/`. Building from a git checkout copies them
-into `knowledge_studio/_assets/` and `oks_connector/` before the build runs, so
-source installs, sdists and PyPI wheels are identical. A `package-dir` pointing
-at `../scripts` cannot reach into an sdist, which is why the connector is
-vendored here instead. When building from an sdist the repo root is absent and
-both trees are already present — skip silently.
+The repo root is the single source of truth for ``.claude/``, ``templates/``,
+``_meta/``, ``settings/`` and ``scripts/``. Building from a git checkout copies
+them into ``knowledge_studio/_assets/`` before the build runs, so
+source installs, sdists and PyPI wheels are identical. When building from an
+sdist the repo root is absent and the tree is already present — skip silently.
+
+The legacy ``oks_connector`` package was permanently removed in v0.4.0;
+two essential stdlib-only utilities (``capability_check``, ``_lark_cli``)
+were inlined into ``knowledge_studio/``.
 """
 from __future__ import annotations
 
@@ -50,10 +52,15 @@ _CONNECTOR_IGNORE = shutil.ignore_patterns(
     "formula_extract_requirements.txt",
 )
 
-# Maintainer-only skills: they drive the upstream-PR review workflow and must
+# Maintainer-only and dev-only skills: they drive development workflows and must
 # never reach a user's knowledge base, where they would pollute skill discovery
 # and could be auto-matched by an agent. Kept in the repo for development.
-_DEV_ONLY_ASSET_NAMES = ("review-upstream-pr", "upstream-pr-remediation")
+_DEV_ONLY_ASSET_NAMES = (
+    "review-upstream-pr",
+    "upstream-pr-remediation",
+    "triad-engineering-closure",
+    "claude-code-vision-skill",
+)
 _DEV_ONLY_IGNORE = shutil.ignore_patterns(
     ".git", ".hg", ".svn", "__pycache__", "*.pyc", *_DEV_ONLY_ASSET_NAMES
 )
@@ -67,17 +74,6 @@ def _remove_readonly(func, path, _exc_info):
 
 def _repo_root() -> Path:
     return Path(__file__).resolve().parent.parent
-
-
-def _vendor_connector() -> None:
-    """Copy ../scripts into cli/oks_connector/ so it reaches sdists and wheels."""
-    source = _repo_root() / "scripts"
-    if not source.is_dir():
-        return
-    dest = Path(__file__).resolve().parent / "oks_connector"
-    if dest.exists():
-        shutil.rmtree(dest, onerror=_remove_readonly)
-    shutil.copytree(source, dest, ignore=_CONNECTOR_IGNORE)
 
 
 def _vendor_assets() -> None:
@@ -124,12 +120,28 @@ def _purge_stale_build_copies(*relative: str) -> None:
             shutil.rmtree(stale, ignore_errors=True)
 
 
+def _purge_stale_egg_infos() -> None:
+    """Remove stale nested egg-info directories from old builds.
+
+    ``scripts/open_knowledge_studio.egg-info/`` is a leftover from when
+    ``scripts/`` was its own package.  ``cli/oks_connector/`` (the whole
+    directory) is removed below.  Both pollute discovery tooling with dead
+    entry points (e.g. ``oks-connector = raw_bundle_adapter:main``).
+    """
+    for candidate in (
+        _repo_root() / "scripts" / "open_knowledge_studio.egg-info",
+        Path(__file__).resolve().parent / "oks_connector",
+    ):
+        if candidate.exists():
+            shutil.rmtree(candidate, ignore_errors=True)
+
+
 def _sync_from_checkout() -> None:
     repo_root = _repo_root()
     if (repo_root / ".claude").is_dir() and (repo_root / "templates").is_dir():
-        _purge_stale_build_copies("knowledge_studio/_assets", "oks_connector")
+        _purge_stale_build_copies("knowledge_studio/_assets")
+        _purge_stale_egg_infos()
         _vendor_assets()
-        _vendor_connector()
 
 
 class build_py_with_assets(build_py):

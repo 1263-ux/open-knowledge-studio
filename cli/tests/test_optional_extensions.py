@@ -263,14 +263,17 @@ def test_no_direct_url_dependencies_block_pypi_upload():
 
 
 def test_connector_packages_are_declared_for_wheel_builds():
+    """oks_connector was removed in v0.4.0; the two essential stdlib-only
+    utilities (capability_check, _lark_cli) were inlined into knowledge_studio."""
     pyproject = Path(__file__).parents[1] / "pyproject.toml"
     config = tomllib.loads(pyproject.read_text(encoding="utf-8"))
     packages = config["tool"]["setuptools"]["packages"]
 
-    assert "oks_connector" in packages
-    assert "oks_connector.feishu_worker" in packages
-    # oks_connector.extractors and oks_connector.capture_adapters were
-    # removed from the wheel in v0.4.0 (legacy extractor cleanup).
+    # oks_connector must NOT be shipped
+    assert "oks_connector" not in packages
+    assert "oks_connector.feishu_worker" not in packages
+    # The inlined modules are in knowledge_studio (not separate packages)
+    assert "knowledge_studio" in packages
 
 
 def test_wheel_never_installs_generic_top_level_names():
@@ -283,7 +286,7 @@ def test_wheel_never_installs_generic_top_level_names():
     installed_tops |= {
         name.split(".")[0] for name in setuptools_config.get("py-modules", [])
     }
-    assert installed_tops == {"knowledge_studio", "oks_connector"}
+    assert installed_tops == {"knowledge_studio"}
     for reserved in ("i18n", "constants", "digest", "network", "route", "validator"):
         assert reserved not in installed_tops
 

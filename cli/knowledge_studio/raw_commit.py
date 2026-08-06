@@ -90,6 +90,38 @@ class CommitError(Exception):
 
 _SCHEMA_CACHE: dict[str, dict[str, Any]] = {}
 _REGISTRY_CACHE: dict[str, Any] = {}
+_VALIDATOR_AVAILABLE: bool | None = None  # tri-state: None=unchecked, True/False=checked
+
+
+def _require_validator() -> None:
+    """Ensure ``jsonschema`` and ``referencing`` are importable.
+
+    Called at the entry point of ``raw_commit()`` so that *every* validation
+    site is fail-closed: if the validator is unavailable, the commit is
+    rejected rather than silently skipping schema enforcement.
+    """
+    global _VALIDATOR_AVAILABLE
+    if _VALIDATOR_AVAILABLE is True:
+        return
+    missing: list[str] = []
+    try:
+        import jsonschema  # noqa: F401
+    except ImportError:
+        missing.append("jsonschema")
+    try:
+        import referencing  # noqa: F401
+    except ImportError:
+        missing.append("referencing")
+    if missing:
+        _VALIDATOR_AVAILABLE = False
+        raise CommitError(
+            "SCHEMA_VALIDATOR_UNAVAILABLE",
+            f"Schema validation requires {', '.join(missing)}. "
+            f"Install with: pip install {' '.join(missing)}. "
+            f"Raw Bundle commit is rejected when the formal Schema "
+            f"validator cannot be loaded — fail-closed by design.",
+        )
+    _VALIDATOR_AVAILABLE = True
 
 def _load_schema(name: str) -> dict[str, Any]:
     """Load a JSON Schema from the packaged schemas directory."""
@@ -149,25 +181,21 @@ def _read_json(path: Path) -> dict[str, Any]:
 
 def _validate_envelope(envelope: dict[str, Any]) -> None:
     """Validate source-envelope.json against the formal JSON Schema."""
+    from jsonschema import validate, ValidationError as JsValidationError
+
+    schema = _load_schema("source-envelope-v0.1.schema.json")
+    registry = _build_registry()
+    kwargs: dict[str, Any] = {}
+    if registry is not None:
+        kwargs["registry"] = registry
     try:
-        from jsonschema import validate, ValidationError as JsValidationError
-    except ImportError:
-        # Graceful degradation: skip schema validation if jsonschema not installed
-        pass
-    else:
-        schema = _load_schema("source-envelope-v0.1.schema.json")
-        registry = _build_registry()
-        kwargs: dict[str, Any] = {}
-        if registry is not None:
-            kwargs["registry"] = registry
-        try:
-            validate(envelope, schema, **kwargs)
-        except JsValidationError as exc:
-            raise CommitError(
-                "INVALID_ENVELOPE",
-                f"source-envelope.json: {exc.message}",
-                {"json_path": exc.json_path, "schema_path": list(exc.relative_schema_path)},
-            ) from exc
+        validate(envelope, schema, **kwargs)
+    except JsValidationError as exc:
+        raise CommitError(
+            "INVALID_ENVELOPE",
+            f"source-envelope.json: {exc.message}",
+            {"json_path": exc.json_path, "schema_path": list(exc.relative_schema_path)},
+        ) from exc
 
     # Semantic checks beyond what JSON Schema can express
     ch = envelope.get("content_hash", "")
@@ -180,24 +208,21 @@ def _validate_envelope(envelope: dict[str, Any]) -> None:
 
 def _validate_manifest(manifest: dict[str, Any]) -> None:
     """Validate evidence-manifest.json against the formal JSON Schema."""
+    from jsonschema import validate, ValidationError as JsValidationError
+
+    schema = _load_schema("evidence-manifest-v0.1.schema.json")
+    registry = _build_registry()
+    kwargs: dict[str, Any] = {}
+    if registry is not None:
+        kwargs["registry"] = registry
     try:
-        from jsonschema import validate, ValidationError as JsValidationError
-    except ImportError:
-        pass
-    else:
-        schema = _load_schema("evidence-manifest-v0.1.schema.json")
-        registry = _build_registry()
-        kwargs: dict[str, Any] = {}
-        if registry is not None:
-            kwargs["registry"] = registry
-        try:
-            validate(manifest, schema, **kwargs)
-        except JsValidationError as exc:
-            raise CommitError(
-                "INVALID_MANIFEST",
-                f"evidence-manifest.json: {exc.message}",
-                {"json_path": exc.json_path, "schema_path": list(exc.relative_schema_path)},
-            ) from exc
+        validate(manifest, schema, **kwargs)
+    except JsValidationError as exc:
+        raise CommitError(
+            "INVALID_MANIFEST",
+            f"evidence-manifest.json: {exc.message}",
+            {"json_path": exc.json_path, "schema_path": list(exc.relative_schema_path)},
+        ) from exc
 
     # Semantic check: partial must not use 'none' disposition
     if manifest.get("status") == "partial":
@@ -304,28 +329,7 @@ def _check_locators(manifest: dict[str, Any]) -> list[str]:
     explicitly per ``locator-v0.1.schema.json``.
     """
     locator_schema = _load_schema("locator-v0.1.schema.json")
-    try:
-        from jsonschema import validate, ValidationError as JsValidationError
-    except ImportError:
-        # Graceful degradation: basic structural guards when
-        # jsonschema is not available.
-        for rec in manifest["evidence_records"]:
-            loc = rec.get("locator", {})
-            if not isinstance(loc, dict) or not loc:
-                raise CommitError(
-                    "INVALID_LOCATOR",
-                    f"evidence {rec.get('evidence_id', '?')!r}: "
-                    f"locator must be a non-empty object",
-                )
-            if "kind" not in loc:
-                raise CommitError(
-                    "INVALID_LOCATOR",
-                    f"evidence {rec.get('evidence_id', '?')!r}: "
-                    f"locator must declare 'kind' (Locator Schema v0.1). "
-                    f"Legacy locators without 'kind' are no longer accepted.",
-                    {"evidence_id": rec.get("evidence_id")},
-                )
-        return []
+    from jsonschema import validate, ValidationError as JsValidationError
 
     for rec in manifest["evidence_records"]:
         loc = rec.get("locator", {})
@@ -378,7 +382,7 @@ def _assemble_bundle(
     artifacts_dir = manifest_dir / "artifacts"
     fragments_dir = manifest_dir / "fragments"
 
-    output = output.expanduser().resolve()
+    final_output = output.expanduser().resolve()
 
     # ── Atomic write helper ──
     def _atomic_write(path: Path, payload: str) -> None:
@@ -400,149 +404,174 @@ def _assemble_bundle(
             Path(tmp).unlink(missing_ok=True)
             raise
 
-    output.mkdir(parents=True)
-    (output / "source").mkdir()
-    (output / "assets").mkdir()
-    (output / "derived").mkdir()
-    (output / "derived" / "fragments").mkdir()
+    # ── Stage in a temp directory for atomic commit ──
+    # Write everything to staging first; only promote to final_output
+    # after bundle.json passes schema validation AND all declared
+    # paths physically exist.  On any error the staging directory is
+    # removed — no partial bundle is left behind.
+    staging = Path(_tempfile.mkdtemp(
+        prefix=f".{final_output.name}.", dir=final_output.parent))
+    output = staging  # shadow — all writes below go to staging
 
-    # ── Generate stable identifiers ──
-    source_hash = envelope["content_hash"]
-    source_id = envelope["source_id"]
-    bundle_id = f"bundle:{source_hash[:16]}"
-    generated_at = datetime.now(timezone.utc).isoformat()
-    # Preserve the Agent's run_id from the manifest directory path
-    run_id = manifest_dir.parent.name if manifest_dir.parent.name.startswith("run-") else f"run-{uuid.uuid4().hex[:12]}"
-
-    primary = manifest["primary_artifact"]
-    primary_src = artifacts_dir / primary["path"]
-
-    # ── Copy primary source file to source/ ──
-    source_dest = output / "source" / primary["path"]
-    source_dest.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(primary_src, source_dest)
-
-    # ── content.md — text rendering ──
-    media_type = primary.get("media_type", "")
-    if media_type.startswith("text/") or media_type in ("application/json",):
-        content_text = primary_src.read_text(encoding="utf-8")
-        _atomic_write(output / "content.md", content_text.rstrip() + "\n")
-    else:
-        _atomic_write(
-            output / "content.md",
-            f"Binary artifact: {primary['path']} ({media_type}, {primary.get('byte_size', 0)} bytes)\n"
-            f"See source/{primary['path']} for the original file.\n",
-        )
-
-    # ── evidence.jsonl ──
-    evidence_lines = []
-    for rec in manifest["evidence_records"]:
-        evidence_lines.append(json.dumps(rec, ensure_ascii=False) + "\n")
-    _atomic_write(output / "evidence.jsonl", "".join(evidence_lines))
-
-    # ── Supplementary artifacts → derived/ ──
-    all_arts = [manifest["primary_artifact"]] + manifest.get("supplementary_artifacts", [])
-    for art in all_arts:
-        src = artifacts_dir / art["path"]
-        if art is primary:
-            continue
-        dest = output / "derived" / art["path"]
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(src, dest)
-
-    # ── Fragment snapshots → derived/fragments/ ──
-    if fragments_dir.is_dir():
-        for fp in fragments_dir.iterdir():
-            if fp.is_file():
-                shutil.copy2(fp, output / "derived" / "fragments" / fp.name)
-
-    # ── bundle.json (Raw Bundle v0.2 manifest) ──
-    sources_list: list[dict[str, Any]] = [
-        {
-            "entity_id": primary["artifact_id"],
-            "path": f"source/{primary['path']}",
-            "sha256": primary.get("sha256", source_hash),
-            "media_type": media_type or None,
-            "snapshot_kind": "content",
-            "content_hash_status": "verified",
-            "primary_source": True,
-        }
-    ]
-    # Supplementary artifacts are *derived* content (screenshots, OCR, etc.)
-    # — they belong in derived/, not sources/.  Only the primary artifact
-    # represents the original captured material.
-    derived_list: list[dict[str, Any]] = []
-    derived_entities: list[str] = []
-    for art in manifest.get("supplementary_artifacts", []):
-        art_kind = art.get("kind", "other")
-        derived_kind = _ARTIFACT_KIND_TO_DERIVED.get(art_kind, "other")
-        entity_id = f"derived-{art['artifact_id']}"
-        derived_list.append({
-            "entity_id": entity_id,
-            "kind": derived_kind,
-            "path": f"derived/{art['path']}",
-            "generated_by": "agent-ingest",
-            "derived_from": [primary["artifact_id"]],
-            "review_status": "not_applicable",
-        })
-        derived_entities.append(entity_id)
-
-    provenance = {
-        "entities": [
-            {"id": eid, "type": "file"}
-            for eid in [primary["artifact_id"]]
-            + [a["artifact_id"] for a in manifest.get("supplementary_artifacts", [])]
-            + derived_entities
-        ],
-        "activities": [
-            {
-                "id": f"ingest-{run_id}",
-                "type": "agent-ingest",
-                "started_at": envelope.get("captured_at", generated_at),
-                "finished_at": generated_at,
-            }
-        ],
-        "agents": [
-            {
-                "id": envelope.get("captured_by", {}).get("runtime", "oks-agent"),
-                "type": "agent-runtime",
-            }
-        ],
-        "relations": [
-            {"type": "wasGeneratedBy", "subject": primary["artifact_id"], "object": f"ingest-{run_id}"},
-        ],
-    }
-
-    bundle_json = {
-        "schema_version": "raw-multimodal/v0.2",
-        "bundle_id": bundle_id,
-        "capture_id": source_id,
-        "content_hash": source_hash,
-        "recipe_version": "oks-agent-native-ingest/v0.1",
-        "processing_status": manifest["status"],
-        "files": {
-            "manifest": "bundle.json",
-            "content": "content.md",
-            "evidence": "evidence.jsonl",
-            "quality_report": "quality-report.json",
-            "processing_runs": "processing-runs.jsonl",
-            "source_dir": "source/",
-            "assets_dir": "assets/",
-            "derived_dir": "derived/",
-        },
-        "sources": sources_list,
-        "derived": derived_list,
-        "provenance": provenance,
-        "warnings": list(manifest.get("warnings", [])),
-    }
-
-    # ── Validate bundle_json against the formal Raw Bundle v0.2 Schema
-    #     BEFORE persisting — catch structural errors at assembly time.
     try:
+        # staging directory already created by mkdtemp above
+        (output / "source").mkdir()
+        (output / "assets").mkdir()
+        (output / "derived").mkdir()
+        (output / "derived" / "fragments").mkdir()
+
+        # ── Generate stable identifiers ──
+        source_hash = envelope["content_hash"]
+        source_id = envelope["source_id"]
+        bundle_id = f"bundle:{source_hash[:16]}"
+        generated_at = datetime.now(timezone.utc).isoformat()
+        # Preserve the Agent's run_id from the manifest directory path
+        run_id = manifest_dir.parent.name if manifest_dir.parent.name.startswith("run-") else f"run-{uuid.uuid4().hex[:12]}"
+
+        primary = manifest["primary_artifact"]
+        primary_src = artifacts_dir / primary["path"]
+
+        # ── Copy primary source file to source/ ──
+        source_dest = output / "source" / primary["path"]
+        source_dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(primary_src, source_dest)
+
+        # ── content.md — text rendering ──
+        # Resolve text-vs-binary by checking, in order:
+        #   1. media_type (explicit)
+        #   2. artifact kind  (primary_text → text)
+        #   3. file extension  (common text formats)
+        media_type = primary.get("media_type", "")
+        art_kind = primary.get("kind", "")
+        ext = primary["path"].rsplit(".", 1)[-1].lower() if "." in primary["path"] else ""
+        _TEXT_EXTENSIONS: frozenset[str] = frozenset({
+            "md", "txt", "json", "csv", "yaml", "yml", "xml", "html", "htm",
+            "py", "js", "ts", "css", "sh", "bat", "ini", "cfg", "toml",
+            "rst", "log", "text",
+        })
+        text_like = (
+            media_type.startswith("text/")
+            or media_type in ("application/json", "application/xml")
+            or (not media_type and art_kind == "primary_text")
+            or (not media_type and ext in _TEXT_EXTENSIONS)
+        )
+        if text_like:
+            content_text = primary_src.read_text(encoding="utf-8")
+            _atomic_write(output / "content.md", content_text.rstrip() + "\n")
+        else:
+            byte_size = primary.get("byte_size", primary_src.stat().st_size)
+            _atomic_write(
+                output / "content.md",
+                f"Binary artifact: {primary['path']} ({media_type}, {byte_size} bytes)\n"
+                f"See source/{primary['path']} for the original file.\n",
+            )
+
+        # ── evidence.jsonl ──
+        evidence_lines = []
+        for rec in manifest["evidence_records"]:
+            evidence_lines.append(json.dumps(rec, ensure_ascii=False) + "\n")
+        _atomic_write(output / "evidence.jsonl", "".join(evidence_lines))
+
+        # ── Supplementary artifacts → derived/ ──
+        all_arts = [manifest["primary_artifact"]] + manifest.get("supplementary_artifacts", [])
+        for art in all_arts:
+            src = artifacts_dir / art["path"]
+            if art is primary:
+                continue
+            dest = output / "derived" / art["path"]
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src, dest)
+
+        # ── Fragment snapshots → derived/fragments/ ──
+        if fragments_dir.is_dir():
+            for fp in fragments_dir.iterdir():
+                if fp.is_file():
+                    shutil.copy2(fp, output / "derived" / "fragments" / fp.name)
+
+        # ── bundle.json (Raw Bundle v0.2 manifest) ──
+        sources_list: list[dict[str, Any]] = [
+            {
+                "entity_id": primary["artifact_id"],
+                "path": f"source/{primary['path']}",
+                "sha256": primary.get("sha256", source_hash),
+                "media_type": media_type or None,
+                "snapshot_kind": "content",
+                "content_hash_status": "verified",
+                "primary_source": True,
+            }
+        ]
+        # Supplementary artifacts are *derived* content (screenshots, OCR, etc.)
+        # — they belong in derived/, not sources/.  Only the primary artifact
+        # represents the original captured material.
+        derived_list: list[dict[str, Any]] = []
+        derived_entities: list[str] = []
+        for art in manifest.get("supplementary_artifacts", []):
+            art_kind = art.get("kind", "other")
+            derived_kind = _ARTIFACT_KIND_TO_DERIVED.get(art_kind, "other")
+            entity_id = f"derived-{art['artifact_id']}"
+            derived_list.append({
+                "entity_id": entity_id,
+                "kind": derived_kind,
+                "path": f"derived/{art['path']}",
+                "generated_by": "agent-ingest",
+                "derived_from": [primary["artifact_id"]],
+                "review_status": "not_applicable",
+            })
+            derived_entities.append(entity_id)
+
+        provenance = {
+            "entities": [
+                {"id": eid, "type": "file"}
+                for eid in [primary["artifact_id"]]
+                + [a["artifact_id"] for a in manifest.get("supplementary_artifacts", [])]
+                + derived_entities
+            ],
+            "activities": [
+                {
+                    "id": f"ingest-{run_id}",
+                    "type": "agent-ingest",
+                    "started_at": envelope.get("captured_at", generated_at),
+                    "finished_at": generated_at,
+                }
+            ],
+            "agents": [
+                {
+                    "id": envelope.get("captured_by", {}).get("runtime", "oks-agent"),
+                    "type": "agent-runtime",
+                }
+            ],
+            "relations": [
+                {"type": "wasGeneratedBy", "subject": primary["artifact_id"], "object": f"ingest-{run_id}"},
+            ],
+        }
+
+        bundle_json = {
+            "schema_version": "raw-multimodal/v0.2",
+            "bundle_id": bundle_id,
+            "capture_id": source_id,
+            "content_hash": source_hash,
+            "recipe_version": "oks-agent-native-ingest/v0.1",
+            "processing_status": manifest["status"],
+            "files": {
+                "manifest": "bundle.json",
+                "content": "content.md",
+                "evidence": "evidence.jsonl",
+                "quality_report": "quality-report.json",
+                "processing_runs": "processing-runs.jsonl",
+                "source_dir": "source/",
+                "assets_dir": "assets/",
+                "derived_dir": "derived/",
+            },
+            "sources": sources_list,
+            "derived": derived_list,
+            "provenance": provenance,
+            "warnings": list(manifest.get("warnings", [])),
+        }
+
+        # ── Validate bundle_json against the formal Raw Bundle v0.2 Schema
+        #     BEFORE persisting — catch structural errors at assembly time.
         from jsonschema import validate, ValidationError as JsValidationError
-    except ImportError:
-        pass
-    else:
+
         bundle_schema = _load_schema("raw-bundle-v0.2.schema.json")
         registry = _build_registry()
         kwargs_b: dict[str, Any] = {}
@@ -558,88 +587,115 @@ def _assemble_bundle(
                  "validator": exc.validator},
             ) from exc
 
-    _atomic_write(
-        output / "bundle.json",
-        json.dumps(bundle_json, ensure_ascii=False, indent=2) + "\n",
-    )
+        _atomic_write(
+            output / "bundle.json",
+            json.dumps(bundle_json, ensure_ascii=False, indent=2) + "\n",
+        )
 
-    # ── source-envelope.json + evidence-manifest.json snapshots ──
-    _atomic_write(
-        output / "source-envelope.json",
-        json.dumps(envelope, ensure_ascii=False, indent=2) + "\n",
-    )
-    _atomic_write(
-        output / "evidence-manifest.json",
-        json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
-    )
+        # ── source-envelope.json + evidence-manifest.json snapshots ──
+        _atomic_write(
+            output / "source-envelope.json",
+            json.dumps(envelope, ensure_ascii=False, indent=2) + "\n",
+        )
+        _atomic_write(
+            output / "evidence-manifest.json",
+            json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
+        )
 
-    # ── quality-report.json ──
-    coverage: dict[str, dict[str, Any]] = {}
-    for name, mod in manifest.get("modalities", {}).items():
-        ec = mod.get("evidence_count", 0)
-        coverage[name] = {
-            "expected": 1,
-            "observed": 1 if ec > 0 else 0,
-            "status": "passed" if ec > 0 else "partial",
+        # ── quality-report.json ──
+        coverage: dict[str, dict[str, Any]] = {}
+        for name, mod in manifest.get("modalities", {}).items():
+            ec = mod.get("evidence_count", 0)
+            coverage[name] = {
+                "expected": 1,
+                "observed": 1 if ec > 0 else 0,
+                "status": "passed" if ec > 0 else "partial",
+            }
+        quality = {
+            "schema_version": "raw-multimodal/v0.1",
+            "processing_status": manifest["status"],
+            "review_status": "pending",
+            "evidence_count": len(manifest["evidence_records"]),
+            "asset_count": max(0, len(all_arts) - 1),
+            "coverage_status": manifest["status"],
+            "coverage_checks": coverage,
+            "warnings": list(manifest.get("warnings", [])),
+            "errors": [],
+            "human_fallback": (
+                "Agent-native ingest.  Review the evidence manifest before "
+                "creating a Candidate."
+            ),
         }
-    quality = {
-        "schema_version": "raw-multimodal/v0.1",
-        "processing_status": manifest["status"],
-        "review_status": "pending",
-        "evidence_count": len(manifest["evidence_records"]),
-        "asset_count": max(0, len(all_arts) - 1),
-        "coverage_status": manifest["status"],
-        "coverage_checks": coverage,
-        "warnings": list(manifest.get("warnings", [])),
-        "errors": [],
-        "human_fallback": (
-            "Agent-native ingest.  Review the evidence manifest before "
-            "creating a Candidate."
-        ),
-    }
-    _atomic_write(
-        output / "quality-report.json",
-        json.dumps(quality, ensure_ascii=False, indent=2) + "\n",
-    )
+        _atomic_write(
+            output / "quality-report.json",
+            json.dumps(quality, ensure_ascii=False, indent=2) + "\n",
+        )
 
-    # ── raw.md (entry point) ──
-    warnings_text = (
-        "\n".join(f"- {w}" for w in manifest.get("warnings", [])) or "- 无\n"
-    )
-    raw_md = (
-        f"---\nschema_version: raw-multimodal/v0.2\n"
-        f"capture_id: {source_id}\n"
-        f"processing_status: {manifest['status']}\n"
-        f"review_status: pending\n"
-        f"execution_protocol: {manifest['schema_version']}\n"
-        f"---\n\n"
-        f"# {envelope.get('title') or 'Agent-captured source'}\n\n"
-        f"## 来源\n\n- URI：`{envelope.get('source_uri', '')}`\n"
-        f"- Agent：`{envelope.get('captured_by', {}).get('runtime', '?')}`\n\n"
-        f"## Raw 提取物\n\n- [Bundle Manifest](bundle.json)\n"
-        f"- [正文](content.md)\n"
-        f"- [原子证据](evidence.jsonl)：{len(manifest['evidence_records'])} 条\n"
-        f"- [Source Envelope](source-envelope.json)\n"
-        f"- [Evidence Manifest](evidence-manifest.json)\n\n"
-        f"## 已知限制\n\n{warnings_text}"
-    )
-    _atomic_write(output / "raw.md", raw_md)
+        # ── raw.md (entry point) ──
+        warnings_text = (
+            "\n".join(f"- {w}" for w in manifest.get("warnings", [])) or "- 无\n"
+        )
+        raw_md = (
+            f"---\nschema_version: raw-multimodal/v0.2\n"
+            f"capture_id: {source_id}\n"
+            f"processing_status: {manifest['status']}\n"
+            f"review_status: pending\n"
+            f"execution_protocol: {manifest['schema_version']}\n"
+            f"---\n\n"
+            f"# {envelope.get('title') or 'Agent-captured source'}\n\n"
+            f"## 来源\n\n- URI：`{envelope.get('source_uri', '')}`\n"
+            f"- Agent：`{envelope.get('captured_by', {}).get('runtime', '?')}`\n\n"
+            f"## Raw 提取物\n\n- [Bundle Manifest](bundle.json)\n"
+            f"- [正文](content.md)\n"
+            f"- [原子证据](evidence.jsonl)：{len(manifest['evidence_records'])} 条\n"
+            f"- [Source Envelope](source-envelope.json)\n"
+            f"- [Evidence Manifest](evidence-manifest.json)\n\n"
+            f"## 已知限制\n\n{warnings_text}"
+        )
+        _atomic_write(output / "raw.md", raw_md)
 
-    # ── processing-runs.jsonl (preserves Agent run_id) ──
-    run_entry = {
-        "run_id": run_id,
-        "capture_id": source_id,
-        "status": manifest["status"],
-        "recipe_version": "oks-agent-native-ingest/v0.1",
-        "started_at": envelope.get("captured_at", generated_at),
-        "finished_at": generated_at,
-    }
-    _atomic_write(
-        output / "processing-runs.jsonl",
-        json.dumps(run_entry, ensure_ascii=False) + "\n",
-    )
+        # ── processing-runs.jsonl (preserves Agent run_id) ──
+        run_entry = {
+            "run_id": run_id,
+            "capture_id": source_id,
+            "status": manifest["status"],
+            "recipe_version": "oks-agent-native-ingest/v0.1",
+            "started_at": envelope.get("captured_at", generated_at),
+            "finished_at": generated_at,
+        }
+        _atomic_write(
+            output / "processing-runs.jsonl",
+            json.dumps(run_entry, ensure_ascii=False) + "\n",
+        )
 
-    return output
+        # ── Validate all declared paths exist on disk ──
+        for s in sources_list:
+            fp = output / s["path"]
+            if not fp.is_file():
+                raise CommitError(
+                    "MISSING_BUNDLE_FILE",
+                    f"declared source path not found in bundle: {s['path']}",
+                    {"entity_id": s["entity_id"], "path": s["path"]},
+                )
+        for d in derived_list:
+            fp = output / d["path"]
+            if not fp.is_file():
+                raise CommitError(
+                    "MISSING_BUNDLE_FILE",
+                    f"declared derived path not found in bundle: {d['path']}",
+                    {"entity_id": d["entity_id"], "path": d["path"]},
+                )
+
+        # ── Atomic commit: promote staging → final output ──
+        if final_output.exists():
+            shutil.rmtree(final_output)
+        shutil.move(str(output), str(final_output))
+        return final_output
+
+    except BaseException:
+        # Clean up staging on ANY error — no partial bundle left behind
+        shutil.rmtree(staging, ignore_errors=True)
+        raise
 
 
 # ── Main entry point ──────────────────────────────────────────────
@@ -671,6 +727,9 @@ def raw_commit(
             "MANIFEST_DIR_NOT_FOUND",
             f"manifest directory does not exist: {md}",
         )
+
+    # ── Fail-closed guard: schema validator MUST be available ──
+    _require_validator()
 
     envelope_path = md / "source-envelope.json"
     manifest_path = md / "evidence-manifest.json"

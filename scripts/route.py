@@ -1,12 +1,12 @@
-"""Source-type detection and extractor routing.
+"""Source-type detection.
 
 Protocol v0.1: ``describe_source(source) -> SourceDescriptor`` is the canonical
 entry point.  It describes *what* the source is without deciding *how* to
-capture it — that decision belongs to ``evidence_plan``.
+capture it.
 
-Legacy ``route_plan()`` is kept for backward compatibility with existing
-extractors (watch, mineru, markitdown, rapidocr).  New providers MUST use
-describe_source → evidence_plan → CaptureAdapter pattern.
+Legacy ``route_plan()`` was removed in v0.4.0 along with ``network.py``,
+``scripts/extractors/``, and ``scripts/experiments/``.
+New providers MUST use describe_source → EvidenceFragment → EvidenceManifest.
 """
 
 from __future__ import annotations
@@ -167,85 +167,6 @@ def _classify_modality(suffix: str, platform: str, is_local: bool) -> str:
     return "unknown"
 
 
-# ── Legacy route_plan — kept for backward compat with existing extractors ──
+# ── Legacy route_plan — removed in v0.4.0 (network.py was its only consumer). ──
+# describe_source() and SourceDescriptor above are the canonical entry points.
 
-def route_plan(source: str, *, pdf_engine: str = "pdf-lite") -> dict[str, Any]:
-    parsed = urlparse(source)
-    suffix = Path(parsed.path if is_url(source) else source).suffix.lower()
-    platform = platform_for(source)
-    video_suffixes = {".mp4", ".mkv", ".mov", ".webm", ".avi", ".m4v"}
-    audio_suffixes = {".mp3", ".wav", ".m4a", ".flac", ".aac", ".ogg"}
-    office_suffixes = {".pptx", ".docx", ".xlsx", ".html", ".htm", ".txt", ".csv", ".md"}
-    image_suffixes = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tiff"}
-    if is_url(source) and platform in {"bilibili", "douyin", "youtube"}:
-        return {
-            "source_type": "video", "platform": platform,
-            "modalities": ["speech", "video", "on_screen_text"],
-            "extractor": "watch",
-            "route": ["platform_caption", "media_acquire", "asr", "keyframe", "ocr"],
-        }
-    if suffix in video_suffixes:
-        return {
-            "source_type": "video", "platform": platform,
-            "modalities": ["speech", "video", "on_screen_text"],
-            "extractor": "watch",
-            "route": ["embedded_caption", "asr", "keyframe", "ocr"],
-        }
-    if suffix in audio_suffixes:
-        return {
-            "source_type": "audio", "platform": platform,
-            "modalities": ["speech"], "extractor": "watch",
-            "route": ["embedded_transcript", "asr"],
-        }
-    if suffix == ".pdf":
-        if pdf_engine not in {"pdf-lite", "mineru"}:
-            raise ValueError(f"unsupported PDF engine: {pdf_engine}")
-        if pdf_engine == "mineru":
-            return {
-                "source_type": "document", "platform": platform,
-                "modalities": ["text", "layout", "image", "formula"],
-                "extractor": "mineru",
-                "route": ["text_layer", "layout", "ocr", "formula", "asset_copy"],
-            }
-        return {
-            "source_type": "document", "platform": platform,
-            "modalities": ["text"],
-            "extractor": "pdf-lite",
-            "route": ["text_layer", "remote_ocr_fallback"],
-        }
-    if suffix in office_suffixes:
-        return {
-            "source_type": "document", "platform": platform,
-            "modalities": ["text", "layout", "image"],
-            "extractor": "markitdown",
-            "route": ["native_structure", "markdown", "embedded_media"],
-        }
-    if suffix in image_suffixes:
-        return {
-            "source_type": "image", "platform": platform,
-            "modalities": ["image", "on_screen_text"],
-            "extractor": "rapidocr",
-            "route": ["ocr", "bbox", "original_asset"],
-        }
-    return {
-        "source_type": "unknown", "platform": platform,
-        "modalities": [], "extractor": None,
-        "route": ["human_fallback"], "implementation_status": "unsupported",
-        "diagnostics": {
-            "detected_extension": suffix or None,
-            "detected_source": source,
-            "is_url": is_url(source),
-            "url_platform": platform if is_url(source) else None,
-            "supported_extensions": {
-                "视频": sorted(video_suffixes), "音频": sorted(audio_suffixes),
-                "文档": sorted(office_suffixes) + [".pdf"], "图片": sorted(image_suffixes),
-            },
-            "suggestion": (
-                "请输入平台视频链接 (YouTube/Bilibili/抖音)，或本地文件。支持的本地文件："
-                + str(sorted(video_suffixes | audio_suffixes | office_suffixes | {".pdf"} | image_suffixes))
-                if not is_url(source) else
-                "仅支持 YouTube、Bilibili、抖音平台的视频链接。"
-                " 普通网页请先用浏览器采集工具下载为本地文件再导入。"
-            ),
-        },
-    }
