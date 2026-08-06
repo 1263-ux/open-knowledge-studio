@@ -28,77 +28,47 @@ def test_capability_registry_entries_are_valid():
             )
 
 
-def test_ingest_missing_connector_shows_explicit_action(monkeypatch):
-    monkeypatch.setattr(cli, "_connector_command", lambda: None)
+def test_ingest_shows_agent_native_guidance(monkeypatch):
+    """`oks ingest` shows Agent-Native ingest panel with Agent Required notice."""
+    result = runner.invoke(cli.app, ["ingest", "README.md"])
 
+    assert result.exit_code == 0, result.output
+    assert "Agent-Native" in result.output
+    assert "Agent Required" in result.output
+
+
+def test_ingest_legacy_flag_removed():
+    """`oks ingest --legacy` is no longer recognized — legacy path fully removed in v0.4.0."""
+    result = runner.invoke(cli.app, ["ingest", "paper.pdf", "--legacy"])
+
+    # Typer returns exit 2 for unrecognized options since --legacy was removed
+    assert result.exit_code == 2
+    assert "No such option" in result.output or "Error" in result.output
+
+
+def test_connector_command_reports_none_after_legacy_deletion():
+    """Legacy connector was permanently deleted in v0.4.0 — _connector_command returns None."""
+    assert cli._connector_command() is None
+
+
+def test_ingest_agent_native_output_describes_source(monkeypatch):
+    """Agent-native ingest panel shows the source and run workspace."""
+    result = runner.invoke(cli.app, ["ingest", "README.md"])
+
+    assert result.exit_code == 0, result.output
+    assert "Source:" in result.output
+    assert "README.md" in result.output
+    assert "Run ID:" in result.output
+    assert "Workspace:" in result.output
+
+
+def test_ingest_agent_native_output_references_skill():
+    """Agent-native ingest panel references the /ingest skill."""
     result = runner.invoke(cli.app, ["ingest", "https://example.com/video"])
 
-    assert result.exit_code == 2
-    assert "Connector" in result.output  # appears in both zh/en
-
-
-def test_ingest_recommends_capability_install(monkeypatch):
-    """Pre-flight check suggests capability install when extractor is missing."""
-    monkeypatch.setattr(cli, "_connector_command", lambda: "built-in")
-    monkeypatch.setattr(cli, "_capability_already_installed", lambda _name: False)
-
-    result = runner.invoke(cli.app, ["ingest", "paper.pdf"])
-
-    assert result.exit_code == 2
-    assert "capability install" in result.output  # appears in both zh/en
-
-
-def test_connector_command_reports_builtin_when_module_available(monkeypatch):
-    """After repo merge, _connector_command returns 'built-in' when the module is importable."""
-    monkeypatch.setattr(cli, "_connector_available", True)
-
-    assert cli._connector_command() == "built-in"
-
-
-def test_ingest_forwards_mode_timeout_and_progress(monkeypatch):
-    received = {}
-
-    def fake_run_ingest(parsed):
-        received["mode"] = parsed.mode
-        received["timeout"] = getattr(parsed, "timeout_seconds", None)
-        received["progress"] = getattr(parsed, "progress", False)
-        received["source"] = parsed.source
-        return 0
-
-    monkeypatch.setattr(cli, "_connector_command", lambda: "built-in")
-    monkeypatch.setattr(cli, "_capability_already_installed", lambda _name: True)
-    monkeypatch.setattr(cli, "_connector_run_ingest", fake_run_ingest)
-
-    result = runner.invoke(
-        cli.app,
-        ["ingest", "https://example.com/video", "--mode", "forensic", "--timeout-seconds", "30"],
-    )
-
     assert result.exit_code == 0, result.output
-    assert received["mode"] == "forensic"
-    assert received["timeout"] == 30.0
-    assert received["progress"] is True
+    assert "ingest" in result.output.lower()
 
-
-def test_ingest_forwards_formula_secondary_for_pdf(monkeypatch):
-    received = {}
-
-    def fake_run_ingest(parsed):
-        received["formula_secondary"] = parsed.formula_secondary
-        received["formula_max_regions"] = parsed.formula_max_regions
-        return 0
-
-    monkeypatch.setattr(cli, "_connector_command", lambda: "built-in")
-    monkeypatch.setattr(cli, "_capability_already_installed", lambda _name: True)
-    monkeypatch.setattr(cli, "_connector_run_ingest", fake_run_ingest)
-
-    result = runner.invoke(
-        cli.app,
-        ["ingest", "paper.pdf", "--formula-secondary", "--formula-max-regions", "7"],
-    )
-
-    assert result.exit_code == 0, result.output
-    assert received == {"formula_secondary": True, "formula_max_regions": 7}
 
 
 def test_capability_install_is_explicit_by_default():
@@ -109,18 +79,44 @@ def test_capability_install_is_explicit_by_default():
     assert "--yes" in result.output
 
 
-def test_capability_install_document_runs_pip_and_reports_success(monkeypatch):
-    received = {}
+def test_capability_install_document_uses_isolated_venv(monkeypatch, tmp_path):
+    received = []
+    capability_python = tmp_path / "document-venv" / ("Scripts/python.exe" if cli.os.name == "nt" else "bin/python")
+
     def fake_run(command):
-        received["command"] = command
+        received.append(command)
+        if command[:3] == [cli.sys.executable, "-m", "venv"]:
+            capability_python.parent.mkdir(parents=True)
+            capability_python.write_text("")
         return subprocess.CompletedProcess(command, 0)
+
     monkeypatch.setattr(cli, "_capability_already_installed", lambda _name: False)
+    monkeypatch.setattr(cli, "_managed_capability_python", lambda _name: capability_python)
     monkeypatch.setattr(cli.subprocess, "run", fake_run)
 
     result = runner.invoke(cli.app, ["capability", "install", "document", "--yes"])
 
     assert result.exit_code == 0, result.output
-    assert "markitdown" in " ".join(received["command"])
+    pip_commands = [command for command in received if "pip" in command]
+    assert len(pip_commands) == 1
+    assert pip_commands[0][0] == str(capability_python)
+    assert pip_commands[0][0] != cli.sys.executable
+    assert "markitdown" in " ".join(pip_commands[0])
+
+
+def test_pdf_lite_capability_is_pinned_and_isolated():
+    assert cli._CAPABILITIES["pdf-lite"]["deps"] == [
+        "pymupdf4llm==0.0.27",
+        "pymupdf==1.28.0",
+    ]
+
+
+def test_managed_capability_root_can_be_isolated(monkeypatch, tmp_path):
+    monkeypatch.setenv("OKS_CAPABILITY_ROOT", str(tmp_path))
+
+    path = cli._managed_capability_python("pdf-lite")
+
+    assert path.is_relative_to(tmp_path)
 
 
 def test_capability_install_skips_when_already_installed(monkeypatch):
@@ -144,6 +140,29 @@ def test_feishu_missing_worker_is_actionable(monkeypatch):
 
     assert result.exit_code == 2
     assert "OKS_FEISHU_WORKER" in result.output
+
+
+def test_feishu_worker_receives_current_knowledge_root(monkeypatch, tmp_path):
+    worker = tmp_path / "feishu_base_worker.py"
+    worker.write_text("# worker")
+    received = {}
+
+    def fake_run(command, *, env):
+        received["command"] = command
+        received["env"] = env
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(cli, "_feishu_worker_path", lambda: worker)
+    monkeypatch.setattr(cli, "get_kb_root", lambda: tmp_path)
+    monkeypatch.setattr(cli.subprocess, "run", fake_run)
+
+    result = runner.invoke(cli.app, ["feishu", "run-once", "--limit", "1"])
+
+    assert result.exit_code == 0, result.output
+    assert received["command"][2:] == [
+        "--knowledge-root", str(tmp_path), "run-once", "--limit", "1",
+    ]
+    assert received["env"]["OKS_KNOWLEDGE_ROOT"] == str(tmp_path)
 
 
 def test_feishu_form_is_human_visible():

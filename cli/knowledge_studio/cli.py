@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -20,6 +21,7 @@ from rich.markdown import Markdown
 from rich.markup import escape
 
 from knowledge_studio import store
+from knowledge_studio.config import get_kb_root
 from knowledge_studio.i18n import t
 from knowledge_studio.recall import (
     RECALL_RESPONSE_SCHEMA,
@@ -30,27 +32,9 @@ from knowledge_studio.recall import (
     recall_knowledge,
 )
 
-# ── ingest: connector lives in the oks_connector package once installed,
-# or under ../scripts in a source checkout ───────────────────────────
-_connector_available = False
-try:
-    from oks_connector.raw_bundle_adapter import (
-        build_parser as _connector_parser,
-        run_ingest as _connector_run_ingest,
-    )
-    _connector_available = True
-except ImportError:
-    _SCRIPTS = Path(__file__).resolve().parent.parent.parent / "scripts"
-    if str(_SCRIPTS) not in sys.path:
-        sys.path.insert(0, str(_SCRIPTS))
-    try:
-        from raw_bundle_adapter import (
-            build_parser as _connector_parser,
-            run_ingest as _connector_run_ingest,
-        )
-        _connector_available = True
-    except ImportError:
-        pass
+# ── The legacy connector (oks_connector.raw_bundle_adapter) was permanently
+# deleted in v0.4.0.  Agent-native ingest via /ingest skill is the only path.
+# Git tag v0.4.0-legacy-final preserves the old pipeline.
 
 
 def _configure_utf8_stdio() -> None:
@@ -145,6 +129,10 @@ _CAPABILITIES = {
         "purpose": "Office, HTML, and text extraction",
         "deps": ["markitdown[docx,pptx]==0.1.6"],
     },
+    "pdf-lite": {
+        "purpose": "Lightweight text-layer PDF extraction",
+        "deps": ["pymupdf4llm==0.0.27", "pymupdf==1.28.0"],
+    },
     "pdf": {
         "purpose": "MinerU PDF layout and asset evidence",
         "deps": ["mineru[pipeline]==3.4.4", "six==1.17.0"],
@@ -182,9 +170,19 @@ def capability_list():
 
 def _capability_already_installed(name: str) -> bool:
     """Check whether a capability is available (delegates to shared module)."""
-    from capability_check import is_capability_available
+    try:
+        from oks_connector.capability_check import is_capability_available
+    except ImportError:
+        return False
     ok, _ = is_capability_available(name)
     return ok
+
+
+def _managed_capability_python(name: str) -> Path:
+    relative = Path("Scripts/python.exe") if os.name == "nt" else Path("bin/python")
+    configured = os.environ.get("OKS_CAPABILITY_ROOT")
+    root = Path(configured).expanduser() if configured else Path.home() / ".oks" / "capabilities"
+    return root / name / "venv" / relative
 
 
 @capability_app.command("install")
@@ -225,17 +223,27 @@ def capability_install(
         return
 
     deps = info["deps"]
-    cmd = [sys.executable, "-m", "pip", "install"] + deps
+    capability_python = _managed_capability_python(name)
+    environment = capability_python.parent.parent
+    create_cmd = [sys.executable, "-m", "venv", str(environment)]
+    cmd = [str(capability_python), "-m", "pip", "install"] + deps
 
     if not yes:
         console.print(Panel.fit(
             f"[bold]{name}[/bold]: {purpose}\n\n"
+            f"Managed environment: {environment}\n"
+            f"Create: {' '.join(create_cmd)}\n"
             f"{t('capability_install_prompt', n=len(deps), cmd=' '.join(cmd))}",
             title=t("optional_install"), border_style="yellow",
         ))
         return
 
     console.print(f"[yellow]{t('capability_installing', name=name)}[/yellow]")
+    if not capability_python.is_file():
+        created = subprocess.run(create_cmd)
+        if created.returncode != 0:
+            console.print(f"[bold red]{t('capability_failed', name=name, code=created.returncode)}[/bold red]")
+            raise typer.Exit(created.returncode)
     result = subprocess.run(cmd)
     if result.returncode != 0:
         console.print(f"[bold red]{t('capability_failed', name=name, code=result.returncode)}[/bold red]")
@@ -244,18 +252,18 @@ def capability_install(
 
 
 def _connector_install_hint() -> str:
-    return ""  # no-op: connector is built into the monorepo
+    return "Agent-native ingest is the default path — use /ingest skill in Claude Code"
 
 
 def _connector_command() -> str | None:
-    """Connector is bundled as ``scripts/raw_bundle_adapter`` — no separate binary needed."""
-    return "built-in" if _connector_available else None
+    """Legacy connector was permanently deleted in v0.4.0."""
+    return None
 
 
-def _recommended_capability(source: str) -> str:
+def _recommended_capability(source: str, *, pdf_engine: str = "pdf-lite") -> str:
     suffix = Path(source.split("?", 1)[0]).suffix.lower()
     if suffix == ".pdf":
-        return "pdf"
+        return "pdf" if pdf_engine == "mineru" else "pdf-lite"
     if suffix in {".docx", ".pptx", ".xlsx", ".html", ".htm", ".md", ".txt", ".csv"}:
         return "document"
     return "watch"  # video, audio, and platform URLs all route to watch
@@ -269,80 +277,39 @@ def ingest(
     progress: bool = typer.Option(True, "--progress/--no-progress"),
     formula_secondary: bool = typer.Option(False, "--formula-secondary", help="Run PaddleOCR PP-FormulaNet on PDF equation crops."),
     formula_max_regions: int = typer.Option(20, "--formula-max-regions", help="Cap equation blocks for formula secondary extraction."),
+    pdf_engine: str = typer.Option("pdf-lite", "--pdf-engine", help="pdf-lite (default) or mineru"),
 ):
-    """Acquire one source through the built-in connector; no Wiki promotion occurs here."""
-    if mode not in {"quick", "forensic"}:
-        raise typer.BadParameter("--mode must be quick or forensic")
-    connector = _connector_command()
-    if connector is None:
-        console.print(Panel.fit(
-            f"[bold red]{t('connector_missing')}[/bold red]\n\n"
-            f"{t('connector_missing_hint')}",
-            title=t("action_required"),
-            border_style="red",
-        ))
-        raise typer.Exit(2)
+    """Acquire one source — Agent-native ingest is the default path.
 
-    # ── pre-flight: check capability before running the connector ──
-    needed = _recommended_capability(source)
-    if not _capability_already_installed(needed):
-        env = _extractor_env_for(needed)
-        console.print(Panel.fit(
-            f"[bold yellow]{t('capability_missing', name=needed)}[/bold yellow]\n\n"
-            f"{t('capability_missing_hint', name=needed, env=env)}",
-            title=t("install_hint"),
-            border_style="yellow",
-        ))
-        raise typer.Exit(2)
+    When run inside a Claude Code / Codex session, the Agent should use
+    the ``/ingest`` skill instead of this CLI command.  The skill reads
+    Source → reads Recipe → selects Providers → produces EvidenceFragment
+    → merges into EvidenceManifest → calls ``oks raw-commit``.
 
-    # ── formula-secondary requires both pdf and formula capabilities ──
-    if formula_secondary:
-        if needed != "pdf":
-            console.print(Panel.fit(
-                "[bold yellow]--formula-secondary 仅对 PDF 文件有效[/bold yellow]\n\n"
-                "当前来源不是 PDF 文件，已忽略 --formula-secondary 选项。",
-                title=t("install_hint"),
-                border_style="yellow",
-            ))
-        elif not _capability_already_installed("formula"):
-            env = _extractor_env_for("formula")
-            console.print(Panel.fit(
-                f"[bold yellow]{t('capability_missing', name='formula')}[/bold yellow]\n\n"
-                f"{t('capability_missing_hint', name='formula', env=env)}",
-                title=t("install_hint"),
-                border_style="yellow",
-            ))
-            raise typer.Exit(2)
+    The legacy extractor path was removed in OKS 0.4.0.  Legacy code is
+    preserved in Git tag ``v0.4.0-legacy-final``.
 
-    cli_args = ["ingest", source, "--mode", mode]
-    if timeout_seconds is not None:
-        cli_args.extend(["--timeout-seconds", str(timeout_seconds)])
-    if progress:
-        cli_args.append("--progress")
-    if formula_secondary and needed == "pdf":
-        cli_args.append("--formula-secondary")
-        cli_args.extend(["--formula-max-regions", str(formula_max_regions)])
-    try:
-        parsed = _connector_parser().parse_args(cli_args)
-    except SystemExit as exc:
-        raise typer.Exit(exc.code)
-    try:
-        exit_code = _connector_run_ingest(parsed)
-    except Exception as exc:
-        console.print(Panel.fit(
-            f"[bold red]{exc}[/bold red]",
-            title=t("ingest_failed"),
-            border_style="red",
-        ))
-        raise typer.Exit(1)
-    if exit_code == 0:
-        print(t("ingest_done_hint"), file=sys.stderr)
-    raise typer.Exit(exit_code)
+    In a pure terminal (no Agent host), this command identifies the source,
+    creates a Run Workspace, and outputs instructions for Agent continuation.
+    """
+    from knowledge_studio.raw_commit import create_run_workspace
 
+    run = create_run_workspace(source)
+    run_id = run["run_id"]
+    workspace = run["workspace"]
 
-def _extractor_env_for(capability: str) -> str:
-    return {"watch": "OKS_WATCH_PYTHON", "document": "OKS_DOCUMENT_PYTHON",
-            "pdf": "OKS_MINERU_PYTHON", "formula": "OKS_FORMULA_PYTHON"}.get(capability, "")
+    card_content = (
+        f"[bold]Source:[/bold] {source}\n"
+        f"[bold]Run ID:[/bold] {run_id}\n"
+        f"[bold]Workspace:[/bold] {workspace}\n\n"
+        f"[bold yellow]Agent Required[/bold yellow]\n\n"
+        f"This terminal cannot invoke the OKS ingest skill on its own.\n"
+        f"Continue in a supported Agent Host (Claude Code, Codex, etc.)\n"
+        f"with the /ingest skill, or open the workspace above.\n\n"
+        f"Instructions: [bold].claude/skills/ingest/SKILL.md[/bold]"
+    )
+    console.print(Panel.fit(card_content, title="Agent-Native Ingest"))
+    return
 
 
 def _feishu_worker_path() -> Path | None:
@@ -365,7 +332,17 @@ def _run_feishu_worker(command: str, extra: list[str]) -> None:
             border_style="red",
         ))
         raise typer.Exit(2)
-    raise typer.Exit(subprocess.run([sys.executable, str(worker), command, *extra]).returncode)
+    worker_command = [
+        sys.executable,
+        str(worker),
+        "--knowledge-root",
+        str(get_kb_root()),
+        command,
+        *extra,
+    ]
+    worker_env = os.environ.copy()
+    worker_env["OKS_KNOWLEDGE_ROOT"] = str(get_kb_root())
+    raise typer.Exit(subprocess.run(worker_command, env=worker_env).returncode)
 
 
 def _resolve_lark_cli() -> str | None:
@@ -456,8 +433,11 @@ def feishu_listen(max_events: int = typer.Option(1, "--max-events"), timeout: st
 @feishu_app.command("setup")
 def feishu_setup(
     base_token: Optional[str] = typer.Option(None, "--base-token", help="已有 Base token（跳过创建）"),
+    table_id: Optional[str] = typer.Option(None, "--table-id", help="指定已有采集表 ID"),
     base_name: str = typer.Option("Open Knowledge Studio", "--base-name"),
-    table_name: str = typer.Option("每日知识采集", "--table-name"),
+    table_name: Optional[str] = typer.Option(None, "--table-name", help="采集表名称"),
+    repair_schema: bool = typer.Option(False, "--repair-schema", help="修复安全的字段 schema drift"),
+    yes: bool = typer.Option(False, "--yes", help="确认 schema 高风险字段写入"),
     show_credentials: bool = typer.Option(False, "--show-credentials", help="显示完整 Base token（仅限受控终端）"),
 ):
     """自动创建飞书 Base、采集表和表单。需要 lark-cli 已认证。"""
@@ -480,10 +460,155 @@ def feishu_setup(
     cmd = [sys.executable, str(setup_script)]
     if base_token:
         cmd.extend(["--base-token", base_token])
-    cmd.extend(["--base-name", base_name, "--table-name", table_name])
+    if table_id:
+        cmd.extend(["--table-id", table_id])
+    cmd.extend(["--base-name", base_name])
+    if table_name:
+        cmd.extend(["--table-name", table_name])
+    if repair_schema:
+        cmd.append("--repair-schema")
+    if yes:
+        cmd.append("--yes")
     if show_credentials:
         cmd.append("--show-credentials")
     raise typer.Exit(subprocess.run(cmd).returncode)
+
+
+@capability_app.command("catalog")
+def capability_catalog_cmd(
+    json_output: bool = typer.Option(True, "--json/--text", help="Output as JSON"),
+):
+    """List available capability actions and their providers."""
+    from knowledge_studio.capability_commands import capability_list
+
+    result = capability_list()
+    console.print(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+@capability_app.command("doctor")
+def capability_doctor_cmd(
+    json_output: bool = typer.Option(True, "--json/--text", help="Output as JSON"),
+):
+    """Diagnose local environment — commands, env vars, Python packages."""
+    from knowledge_studio.capability_commands import capability_doctor
+
+    result = capability_doctor()
+    if json_output:
+        console.print(json.dumps(result, ensure_ascii=False, indent=2))
+    else:
+        for p in result["providers"]:
+            status_icon = "[green]OK[/green]" if p["healthy"] else "[red]!![/red]"
+            console.print(f"  {status_icon} {p['id']} ({p['execution']})")
+            for c in p.get("checks", []):
+                if c.get("type") == "note":
+                    console.print(f"      [dim]{c.get('message', '')}[/dim]")
+                elif c.get("available") is False:
+                    console.print(f"      [red]x[/red] {c['name']}: {c.get('suggestion', '')}")
+                elif c.get("available") is True:
+                    console.print(f"      [green]v[/green] {c['name']}")
+        console.print(f"\n[bold]Overall: {result['overall']}[/bold]")
+
+
+# ── Skills Install ──────────────────────────────────────────────
+
+@app.command()
+def skills_install(
+    force: bool = typer.Option(False, "--force", help="Overwrite user-modified skills"),
+):
+    """Install OKS Agent skills into the user workspace.
+
+    Copies skill templates from the installed package to
+    ``<OKS_ROOT>/.claude/skills/`` and ``<OKS_ROOT>/.agents/skills/``.
+    Safe to run repeatedly (idempotent).  Use ``--force`` to overwrite
+    local modifications.
+    """
+    from importlib.resources import files
+
+    kb_root = Path(get_kb_root())
+    templates_root = files("knowledge_studio.skill_templates")
+
+    installed = []
+    skipped = []
+
+    for host in ("claude", "agents"):
+        template_dir = templates_root / host / "skills"
+        if not template_dir.is_dir():
+            continue
+        target_dir = kb_root / f".{host}" / "skills"
+        for child in sorted(template_dir.iterdir()):
+            if not child.is_dir():
+                continue
+            skill_name = child.name
+            target_skill_dir = target_dir / skill_name
+            if target_skill_dir.is_dir() and not force:
+                skipped.append(f".{host}/skills/{skill_name}")
+                continue
+            target_skill_dir.mkdir(parents=True, exist_ok=True)
+            for item in child.rglob("*"):
+                if item.is_file():
+                    rel = item.relative_to(child)
+                    dest = target_skill_dir / rel
+                    dest.parent.mkdir(parents=True, exist_ok=True)
+                    dest.write_bytes(item.read_bytes())
+            installed.append(f".{host}/skills/{skill_name}")
+
+    if installed:
+        console.print("[green]Installed skills:[/green]")
+        for s in installed:
+            console.print(f"  + {s}")
+    if skipped:
+        console.print("[yellow]Skipped (use --force to overwrite):[/yellow]")
+        for s in skipped:
+            console.print(f"  ~ {s}")
+    if not installed and not skipped:
+        console.print("[dim]No skill templates found in package.[/dim]")
+
+
+# ── Raw Commit ───────────────────────────────────────────────────
+
+@app.command(name="raw-commit")
+def raw_commit(
+    manifest_dir: str = typer.Argument(..., help="Path to manifest directory containing source-envelope.json, evidence-manifest.json, and artifacts/"),
+    output: Optional[str] = typer.Option(None, "--output", "-o", help="Target Raw Bundle directory (default: auto-generated under raw/)"),
+    overwrite: bool = typer.Option(False, "--overwrite", help="Replace existing bundle directory"),
+    json_output: bool = typer.Option(True, "--json/--text", help="Output as JSON"),
+):
+    """Commit an Agent-submitted evidence bundle to OKS.
+
+    The Agent submits a directory containing source-envelope.json,
+    evidence-manifest.json, fragments/ (optional), and artifacts/ (all
+    evidence files).  ``oks raw-commit`` validates structural integrity,
+    artifact existence + hash matching, and evidence locator legality,
+    then assembles a Raw Bundle v0.2.
+
+    Returns structured JSON on success or a CommitError on failure.
+    """
+    from knowledge_studio.raw_commit import raw_commit as _commit, CommitError
+
+    try:
+        result = _commit(manifest_dir, output=output, overwrite=overwrite)
+        if json_output:
+            import json as _json
+            console.print(_json.dumps(result, ensure_ascii=False, indent=2))
+        else:
+            console.print(f"[green]Committed:[/green] {result['bundle_path']}")
+            console.print(f"  bundle_id: {result['bundle_id']}")
+            console.print(f"  evidence: {result['evidence_count']} records")
+            console.print(f"  artifacts: {result['artifact_count']}")
+    except CommitError as exc:
+        if json_output:
+            import json as _json
+            error_out = {
+                "status": "rejected",
+                "error_code": exc.code,
+                "message": exc.message,
+            }
+            if exc.details:
+                error_out["details"] = exc.details
+            console.print(_json.dumps(error_out, ensure_ascii=False, indent=2))
+        else:
+            console.print(f"[red]Rejected ({exc.code}):[/red] {exc.message}")
+        raise typer.Exit(1)
 
 
 # ── Search / Recall ──────────────────────────────────────────────
