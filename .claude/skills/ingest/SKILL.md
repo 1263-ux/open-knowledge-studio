@@ -1,139 +1,189 @@
 ---
-description: Multi-modal intake — route → ingest → digest → Candidate → review → Wiki
+description: Agent-native ingest — Source → Provider → EvidenceFragment → Manifest → oks raw commit → Candidate
 ---
 
-# /ingest — Multi-Modal Intake
+# /ingest — Agent-Native Evidence Ingestion
 
-## 核心流程
+Agent is the orchestrator.  OKS provides capability; Agent decides what to do.
+
+## Flow
 
 ```
-oks ingest <source>  →  Raw Bundle (content.md + evidence.jsonl + digest.md)
-Agent 读 raw/index.json  →  找未处理条目
-Agent 读 digest.md       →  快速了解内容
-Agent 读 content.md      →  需要深入时
-Agent 读 evidence.jsonl  →  需要引用事实时
-Agent 写 draft           →  Candidate
-用户审核                  →  accept/edit/reject/defer
-oks drafts promote       →  Wiki
-oks recall / oks search  →  知识可用
+Source → Judge modality → Read Recipe → Select Providers → Execute
+→ EvidenceFragment x N → Merge → EvidenceManifest → oks raw commit
+→ AgentObservation → CandidateDraft → drafts/{slug}.md → Report
 ```
 
-## Phase 1: 采集
+## Step 1: Accept Source
 
-### 直接采集
+Source is a file path, URL, or plain text.  If a path, read the file.
 
-```bash
-oks ingest "https://www.youtube.com/watch?v=..." --mode quick
-oks ingest "https://www.youtube.com/watch?v=..." --mode forensic
-oks ingest /path/to/file.pdf --mode quick
-oks ingest /path/to/file.pptx --mode quick
+## Step 2: Judge Modality
+
+From `scripts/route.py:describe_source()`:
+- `.md/.txt` -> text, `.pdf` -> pdf, `.docx/.pptx/.xlsx` -> office
+- `.png/.jpg` -> image, `.mp4/.mkv` -> video, `.mp3/.wav` -> audio
+- URL -> web (or video if bilibili/youtube/douyin)
+
+## Step 3: Select Providers
+
+Read `providers/*/provider.yaml`.  For the detected modality, find
+providers whose `provides:` includes the relevant capability.
+Prefer lowest-cost, local, stable providers first.
+Use `oks capability catalog` to see available capability matrix.
+
+## Step 4: Execute Providers
+
+For each chosen provider:
+1. Call the tool (Bash / MCP / API / Agent vision)
+2. Save raw output to `.oks/runs/{run_id}/work/{provider}/`
+3. Construct EvidenceFragment following `schemas/evidence-fragment-v0.1.schema.json`
+
+Agent's own multimodal observation is also a fragment
+(`producer: agent-runtime`, `agent_judgment: agent_observed`).
+
+## Step 5: Merge into EvidenceManifest
+
+Collect all fragments.  Create EvidenceManifest following
+`schemas/evidence-manifest-v0.1.schema.json`.  Judge overall status:
+- `complete` — all required evidence obtained
+- `partial` — some missing, must declare `failure_disposition` and `warnings`
+- If ALL fragments failed — do NOT submit; report failure to user
+
+Record every step in `manifest.steps[]` including provider name,
+capability, status, and reason for any fallback.
+
+## Step 6: oks raw commit
+
+Create the manifest directory:
+```
+.oks/runs/{run_id}/manifest/
+  source-envelope.json
+  evidence-manifest.json
+  fragments/          (all EvidenceFragment snapshots)
+  artifacts/          (all evidence files)
 ```
 
-- 输出到 `raw/<timestamp>-<slug>/`
-- 自动生成 `raw/index.json`（全局索引）和 `<bundle>/digest.md`（摘要）
+Run: `oks raw-commit .oks/runs/{run_id}/manifest/ --output raw/{date}/{source}/{slug}/`
 
-### 飞书采集（可选组件）
+On success: bundle_id returned.  On rejection: read error_code, do NOT retry blindly.
 
-```bash
-oks feishu submit "https://..." --thought "为什么保存"
-oks feishu run-once
+## Step 7: AgentObservation -> Candidate
+
+1. Read the Raw Bundle's `evidence.jsonl`
+2. Create AgentObservation (following `schemas/agent-observation-v0.1.schema.json`)
+   - Each claim references `artifact_id + locator` from evidence
+   - `supported` claims -> have direct evidence
+   - `uncertain` claims -> Agent inference, need human verification
+3. Call `observation_to_candidate()` from `scripts/observation_adapter.py`
+4. Write `drafts/{slug}.md`
+
+## Step 8: Write result.json
+
+Save `.oks/runs/{run_id}/result.json`:
+
+```json
+{
+  "status": "complete|partial",
+  "source": "<source uri>",
+  "providers_used": ["pdf-lite", "rapidocr"],
+  "capabilities_used": ["document.text.extract", "image.ocr"],
+  "evidence_summary": {
+    "page_count": 3,
+    "text_chars": 696,
+    "bbox_regions": 43
+  },
+  "missing": [],
+  "reasons": [],
+  "impact": [],
+  "remote_processing": false,
+  "cost": 0,
+  "latency_ms": 6200,
+  "bundle_id": "bundle:2789f4ff",
+  "candidate_path": "drafts/controlled-chinese-scan.md",
+  "review_status": "pending"
+}
 ```
 
-### 能力安装（按需）
+## Step 9: Report to User
 
-```bash
-oks capability install watch --yes     # 视频/音频
-oks capability install document --yes  # Office/HTML
-oks capability install pdf --yes       # PDF
-oks capability install formula --yes   # 公式OCR
+Use `result.json` to generate the user-facing summary.
+
+### Complete scenario
+
+```
+已完成摄入
+
+来源：controlled-chinese-scan.pdf
+状态：完整
+
+使用方式：
+- pdf-lite 检测文本层
+- RapidOCR 提取 43 个文字区域
+- Agent 校验页面结构
+
+证据：
+- 3 个页面级定位
+- 43 个 bbox 定位
+- 共 696 字正文
+
+远程处理：未使用
+成本：0
+耗时：6.2 秒
+
+结果：
+- Raw Bundle: bundle:2789f4ff
+- Candidate: drafts/controlled-chinese-scan.md
+- 当前状态：等待人工审核
 ```
 
-## Phase 2: 阅读 Raw
+### Partial scenario
 
-### 第一步：扫索引
+```
+状态：部分完成
 
-```bash
-cat raw/index.json
+已获得：
+- 视频元数据
+- 弹幕文本
+- 7 张关键帧
+
+缺失：
+- 常规字幕正文
+
+原因：
+- Bilibili 需要登录权限
+
+影响：
+- 可以检索视频主题和弹幕
+- 对完整口播内容的覆盖不足
+
+当前状态：
+- Raw 已保存
+- Candidate 等待审核
 ```
 
-了解有哪些采集、状态、证据量、警告数。挑出待处理的条目。
+### Failed scenario
 
-### 第二步：读摘要
+```
+状态：未能完成
 
-```bash
-cat raw/<bundle>/digest.md
+来源：<source>
+
+原因：所有 Provider 均失败
+- pdf-lite: 文本层为空
+- RapidOCR: 未安装
+- Agent 视觉: 当前会话不支持
+
+建议：
+- 运行 oks capability install watch --yes
+- 或在支持多模态的 Agent Host 中重试
 ```
 
-~500 字，包含：标题、来源、模态、证据统计、警告、人工核验建议。
+## Constraints
 
-### 第三步：深入（需要时）
-
-- `content.md` — 提取正文（合段去重后的可读文本）
-- `evidence.jsonl` — 原子证据（时间戳、bbox、置信度），引用编号即可
-- `quality-report.json` — 覆盖检查、逐模态状态
-
-## Phase 3: 生成 Candidate
-
-从 Raw 到 Candidate 的原则：
-
-1. **读 digest.md 判断是否值得处理**。如果状态是 `failed` 且无法恢复，跳过。
-2. **读 content.md 理解内容**。不要逐条看 evidence。
-3. **需要引用事实时**才查 evidence.jsonl。引用编号如 `watch-speech-000042`。
-4. Candidate 写入 `drafts/{slug}.md`：
-
-```markdown
----
-title: 主题标题
-type: concept
-area: computing
-source: https://...
-source_bundle: raw/20260725-.../
-status: draft
----
-
-# 我的理解
-
-...（Agent 用自己的话总结，不是复制 content.md）
-
-# 需要你判断
-
-1. ...（1-3 个关键问题）
-```
-
-5. **绝不能**复制 Raw 内容到 Wiki。Candidate 是 Agent 的**理解和提炼**。
-
-## Phase 4: 审核与晋升
-
-### 飞书审核（已配置飞书时）
-
-Agent 通过飞书消息发送 Candidate，用户自然语言回复 accept/edit/reject/defer。
-
-### CLI 审核
-
-Agent 汇报 Candidate，用户确认后：
-
-```bash
-oks drafts promote <slug>
-oks wiki use <slug>        # 记录使用
-```
-
-## 状态处理
-
-| Raw 状态 | 含义 | Agent 该怎么做 |
-|---|---|---|
-| `partial` | 提取完成但有警告（最常见） | 正常使用，注意 warnings |
-| `failed` | 提取失败 | 跳过或要求重试 |
-| `skipped` | 该模态未执行 | 不影响其他模态 |
-| `EXTRACTION_TIMEOUT` | 超时 | 可重试，加大 --timeout-seconds |
-
-## 能力路由速查
-
-| 输入 | 提取器 | 安装命令 |
-|---|---|---|
-| YouTube/Bilibili/抖音 | watch | `oks capability install watch --yes` |
-| .mp4 .mp3 .wav | watch | 同上 |
-| .pdf | mineru | `oks capability install pdf --yes` |
-| .pptx .docx .html .txt | markitdown | `oks capability install document --yes` |
-| .png .jpg .webp | rapidocr | 同上（包含在 watch 中） |
-
-未安装能力时，`oks ingest` 会自动提示正确的安装命令。
+- NEVER write to wiki/ directly — only drafts/
+- NEVER upgrade partial to complete
+- NEVER present agent inference as source text
+- NEVER expose API keys, cookies, or tokens
+- ALWAYS record failure reasons honestly
+- ALWAYS preserve original tool output unmodified
