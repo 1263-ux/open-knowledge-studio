@@ -116,6 +116,25 @@
       "description": "Optional reference to an AgentObservation that accompanies this manifest.",
       "type": ["string", "null"]
     },
+    "steps": {
+      "description": "Execution trace recording every Provider attempt and outcome, including degradation decisions.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["capability", "provider", "status"],
+        "properties": {
+          "capability": {"type": "string", "minLength": 1},
+          "provider": {"type": "string", "minLength": 1},
+          "status": {"enum": ["succeeded", "partial", "degraded", "failed", "skipped"]},
+          "reason": {"type": ["string", "null"]}
+        }
+      }
+    },
+    "notes": {
+      "description": "Optional metadata about the evidence collection: counts, hashes, format flags.",
+      "type": "object"
+    },
     "provenance": {
       "type": "object",
       "additionalProperties": false,

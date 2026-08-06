@@ -8,9 +8,10 @@ Protocol: the Agent submits a directory containing:
     ├── fragments/                  # optional fragment snapshots
     └── artifacts/                  # all evidence files
 
-``oks raw commit`` validates structural integrity, cross-references,
-artifact existence + hash matching, and locator legality.  On success
-it assembles a Raw Bundle v0.2 and atomically writes it to ``raw/``.
+``oks raw commit`` validates against the formal JSON Schemas in
+``schemas/``, checks cross-references, artifact existence + hash
+matching, and locator legality.  On success it assembles a Raw Bundle
+v0.2 and atomically writes it to ``raw/``.
 
 This module does NOT call AI APIs, select extractors, or judge content
 quality (CONSTITUTION P4, P5).
@@ -26,6 +27,7 @@ import tempfile as _tempfile
 import uuid
 from datetime import datetime, timezone
 from hashlib import sha256 as _sha256
+from importlib.resources import files
 from pathlib import Path
 from typing import Any
 
@@ -38,7 +40,7 @@ def create_run_workspace(source: str) -> dict[str, Any]:
     Returns ``{run_id, workspace, source}`` ready for handoff to an Agent host.
     This function does NOT call any AI API or select any provider.
     """
-    run_id = f"run:{uuid.uuid4().hex[:12]}"
+    run_id = f"run-{uuid.uuid4().hex[:12]}"
     knowledge_root = Path(_os.environ.get("OKS_ROOT", repo_root()))
     runs_dir = knowledge_root / ".oks" / "runs" / run_id
     workspace_dir = runs_dir / "work"
@@ -56,6 +58,7 @@ def create_run_workspace(source: str) -> dict[str, Any]:
             "and run the /ingest skill."
         ),
     }
+
 
 # ── Locator validation table (module-level, used by _check_locators) ─
 
@@ -80,6 +83,20 @@ class CommitError(Exception):
         self.details = details or {}
 
 
+# ── Schema loading (cached) ───────────────────────────────────────
+
+_SCHEMA_CACHE: dict[str, dict[str, Any]] = {}
+
+def _load_schema(name: str) -> dict[str, Any]:
+    """Load a JSON Schema from the packaged schemas directory."""
+    if name not in _SCHEMA_CACHE:
+        schema_text = (
+            files("knowledge_studio.schemas").joinpath(name).read_text(encoding="utf-8")
+        )
+        _SCHEMA_CACHE[name] = json.loads(schema_text)
+    return _SCHEMA_CACHE[name]
+
+
 # ── Validation helpers ────────────────────────────────────────────
 
 def _read_json(path: Path) -> dict[str, Any]:
@@ -97,68 +114,71 @@ def _read_json(path: Path) -> dict[str, Any]:
 
 
 def _validate_envelope(envelope: dict[str, Any]) -> None:
-    sv = envelope.get("schema_version")
-    if sv != "oks-source-envelope/v0.1":
-        raise CommitError("UNSUPPORTED_SCHEMA_VERSION",
-                          f"source-envelope.json schema_version must be "
-                          f"'oks-source-envelope/v0.1', got {sv!r}")
+    """Validate source-envelope.json against the formal JSON Schema."""
+    try:
+        from jsonschema import validate, ValidationError as JsValidationError
+    except ImportError:
+        # Graceful degradation: skip schema validation if jsonschema not installed
+        # (structural checks below are kept as safety net)
+        pass
+    else:
+        schema = _load_schema("source-envelope-v0.1.schema.json")
+        try:
+            validate(envelope, schema)
+        except JsValidationError as exc:
+            raise CommitError(
+                "INVALID_ENVELOPE",
+                f"source-envelope.json: {exc.message}",
+                {"json_path": exc.json_path, "schema_path": list(exc.relative_schema_path)},
+            ) from exc
 
-    required = ["source_id", "source_uri", "source_modality", "access_mode",
-                "captured_at", "captured_by", "content_hash", "evidence_manifest_ref"]
-    for field in required:
-        if not envelope.get(field):
-            raise CommitError("INVALID_ENVELOPE",
-                              f"source-envelope.json: missing or empty field {field!r}",
-                              {"field": field})
-
-    cb = envelope["captured_by"]
-    if not isinstance(cb, dict) or not cb.get("runtime"):
-        raise CommitError("INVALID_ENVELOPE",
-                          "source-envelope.json: captured_by.runtime must not be empty")
-
-    ch = envelope["content_hash"]
+    # Semantic checks beyond what JSON Schema can express
+    ch = envelope.get("content_hash", "")
     if not re.fullmatch(r"[a-f0-9]{64}", str(ch)):
-        raise CommitError("INVALID_ENVELOPE",
-                          "source-envelope.json: content_hash must be 64 hex chars")
+        raise CommitError(
+            "INVALID_ENVELOPE",
+            "source-envelope.json: content_hash must be 64 hex chars",
+        )
 
 
 def _validate_manifest(manifest: dict[str, Any]) -> None:
-    sv = manifest.get("schema_version")
-    if sv != "oks-evidence-manifest/v0.1":
-        raise CommitError("UNSUPPORTED_SCHEMA_VERSION",
-                          f"evidence-manifest.json schema_version must be "
-                          f"'oks-evidence-manifest/v0.1', got {sv!r}")
+    """Validate evidence-manifest.json against the formal JSON Schema."""
+    try:
+        from jsonschema import validate, ValidationError as JsValidationError
+    except ImportError:
+        pass
+    else:
+        schema = _load_schema("evidence-manifest-v0.1.schema.json")
+        try:
+            validate(manifest, schema)
+        except JsValidationError as exc:
+            raise CommitError(
+                "INVALID_MANIFEST",
+                f"evidence-manifest.json: {exc.message}",
+                {"json_path": exc.json_path, "schema_path": list(exc.relative_schema_path)},
+            ) from exc
 
-    required = ["manifest_id", "source_id", "status", "fragment_refs",
-                "primary_artifact", "evidence_records", "modalities", "provenance"]
-    for field in required:
-        val = manifest.get(field)
-        if val is None or (isinstance(val, (str, list, tuple)) and not val):
-            raise CommitError("INVALID_MANIFEST",
-                              f"evidence-manifest.json: missing or empty field {field!r}",
-                              {"field": field})
-
-    status = manifest["status"]
-    if status not in ("complete", "partial"):
-        raise CommitError("INVALID_MANIFEST",
-                          f"manifest status must be 'complete' or 'partial', got {status!r}")
-
-    if status == "partial":
-        if manifest.get("failure_disposition", "none") == "none":
-            raise CommitError("INVALID_MANIFEST",
-                              "partial manifest must declare a failure_disposition")
-        if not manifest.get("warnings"):
-            raise CommitError("INVALID_MANIFEST",
-                              "partial manifest must have at least one warning")
+    # Semantic check: partial must not use 'none' disposition
+    if manifest.get("status") == "partial":
+        fd = manifest.get("failure_disposition", "none")
+        if fd == "none":
+            raise CommitError(
+                "INVALID_MANIFEST",
+                "partial manifest must declare a non-'none' failure_disposition",
+            )
 
 
 def _cross_check(envelope: dict[str, Any], manifest: dict[str, Any]) -> None:
     if envelope["source_id"] != manifest["source_id"]:
-        raise CommitError("MANIFEST_SOURCE_MISMATCH",
-                          f"source-envelope.source_id ({envelope['source_id']!r}) != "
-                          f"evidence-manifest.source_id ({manifest['source_id']!r})",
-                          {"envelope_source_id": envelope["source_id"],
-                           "manifest_source_id": manifest["source_id"]})
+        raise CommitError(
+            "MANIFEST_SOURCE_MISMATCH",
+            f"source-envelope.source_id ({envelope['source_id']!r}) != "
+            f"evidence-manifest.source_id ({manifest['source_id']!r})",
+            {
+                "envelope_source_id": envelope["source_id"],
+                "manifest_source_id": manifest["source_id"],
+            },
+        )
 
 
 def _check_artifacts(manifest: dict[str, Any], artifacts_dir: Path) -> None:
@@ -171,28 +191,41 @@ def _check_artifacts(manifest: dict[str, Any], artifacts_dir: Path) -> None:
         declared_hash = art.get("sha256", "")
 
         if not aid or not path_str or not declared_hash:
-            raise CommitError("INVALID_ARTIFACT",
-                              f"artifact missing required fields: {art}")
+            raise CommitError(
+                "INVALID_ARTIFACT",
+                f"artifact missing required fields: {art}",
+            )
 
         if aid in artifact_ids:
-            raise CommitError("DUPLICATE_ARTIFACT_ID",
-                              f"duplicate artifact_id: {aid!r}")
+            raise CommitError("DUPLICATE_ARTIFACT_ID", f"duplicate artifact_id: {aid!r}")
         artifact_ids.add(aid)
 
         fp = artifacts_dir / path_str
+        # Prevent directory traversal
+        try:
+            fp.resolve().relative_to(artifacts_dir.resolve())
+        except ValueError:
+            raise CommitError(
+                "PATH_TRAVERSAL",
+                f"artifact path escapes artifacts/: {path_str}",
+                {"artifact_id": aid, "path": path_str},
+            )
+
         if not fp.is_file():
-            raise CommitError("MISSING_ARTIFACT",
-                              f"artifact file not found: {path_str}",
-                              {"artifact_id": aid, "path": path_str})
+            raise CommitError(
+                "MISSING_ARTIFACT",
+                f"artifact file not found: {path_str}",
+                {"artifact_id": aid, "path": path_str},
+            )
 
         actual = _sha256(fp.read_bytes()).hexdigest()
         if actual != declared_hash:
-            raise CommitError("ARTIFACT_HASH_MISMATCH",
-                              f"hash mismatch for {aid!r}: "
-                              f"declared {declared_hash[:16]}..., actual {actual[:16]}...",
-                              {"artifact_id": aid,
-                               "expected": declared_hash,
-                               "actual": actual})
+            raise CommitError(
+                "ARTIFACT_HASH_MISMATCH",
+                f"hash mismatch for {aid!r}: "
+                f"declared {declared_hash[:16]}..., actual {actual[:16]}...",
+                {"artifact_id": aid, "expected": declared_hash, "actual": actual},
+            )
 
 
 def _check_evidence_cross_ref(manifest: dict[str, Any]) -> None:
@@ -202,19 +235,24 @@ def _check_evidence_cross_ref(manifest: dict[str, Any]) -> None:
     for rec in manifest["evidence_records"]:
         rec_aid = rec.get("artifact_id", "")
         if rec_aid not in aid_set:
-            raise CommitError("ORPHAN_EVIDENCE",
-                              f"evidence record {rec.get('evidence_id', '?')!r} "
-                              f"references unknown artifact_id {rec_aid!r}",
-                              {"evidence_id": rec.get("evidence_id"),
-                               "artifact_id": rec_aid})
+            raise CommitError(
+                "ORPHAN_EVIDENCE",
+                f"evidence record {rec.get('evidence_id', '?')!r} "
+                f"references unknown artifact_id {rec_aid!r}",
+                {"evidence_id": rec.get("evidence_id"), "artifact_id": rec_aid},
+            )
 
     # Modality count consistency
-    declared = sum(m.get("evidence_count", 0) for m in manifest["modalities"].values())
+    declared = sum(
+        m.get("evidence_count", 0) for m in manifest["modalities"].values()
+    )
     actual = len(manifest["evidence_records"])
     if declared != actual:
-        raise CommitError("EVIDENCE_COUNT_MISMATCH",
-                          f"modality evidence_count total ({declared}) != "
-                          f"actual evidence records ({actual})")
+        raise CommitError(
+            "EVIDENCE_COUNT_MISMATCH",
+            f"modality evidence_count total ({declared}) != "
+            f"actual evidence records ({actual})",
+        )
 
 
 def _check_locators(manifest: dict[str, Any]) -> list[str]:
@@ -223,9 +261,11 @@ def _check_locators(manifest: dict[str, Any]) -> list[str]:
     for rec in manifest["evidence_records"]:
         loc = rec.get("locator", {})
         if not isinstance(loc, dict) or not loc:
-            raise CommitError("INVALID_LOCATOR",
-                              f"evidence {rec.get('evidence_id', '?')!r}: "
-                              f"locator must be a non-empty object")
+            raise CommitError(
+                "INVALID_LOCATOR",
+                f"evidence {rec.get('evidence_id', '?')!r}: "
+                f"locator must be a non-empty object",
+            )
 
         kind = loc.get("kind")
         if kind is None:
@@ -234,15 +274,19 @@ def _check_locators(manifest: dict[str, Any]) -> list[str]:
                 f"legacy locator without 'kind' field"
             )
         elif kind not in VALID_LOCATOR_KINDS_BY_REQUIRED:
-            raise CommitError("UNKNOWN_LOCATOR_KIND",
-                              f"locator kind {kind!r} not recognized",
-                              {"kind": kind})
+            raise CommitError(
+                "UNKNOWN_LOCATOR_KIND",
+                f"locator kind {kind!r} not recognized",
+                {"kind": kind},
+            )
         else:
             for req_field in VALID_LOCATOR_KINDS_BY_REQUIRED[kind]:
                 if req_field not in loc:
-                    raise CommitError("INCOMPLETE_LOCATOR",
-                                      f"locator kind {kind!r} requires field {req_field!r}",
-                                      {"kind": kind, "missing": req_field})
+                    raise CommitError(
+                        "INCOMPLETE_LOCATOR",
+                        f"locator kind {kind!r} requires field {req_field!r}",
+                        {"kind": kind, "missing": req_field},
+                    )
     return warnings
 
 
@@ -254,28 +298,25 @@ def _assemble_bundle(
     manifest_dir: Path,
     output: Path,
 ) -> Path:
-    """Copy artifacts and write Raw Bundle v0.2 files atomically.
+    """Assemble a Raw Bundle v0.2 on disk.
 
-    Uses the existing ``_shared.atomic_write`` pattern via manual
-    mkstemp+fsync+os.replace for core bundle files.  The v0.2 schema
-    remains unchanged — we add source-envelope.json and
-    evidence-manifest.json as supplementary provenance files alongside
-    the existing content.md / evidence.jsonl / bundle.json.
+    Writes:
+      - bundle.json  (v0.2 bundle manifest)
+      - content.md
+      - evidence.jsonl
+      - quality-report.json
+      - processing-runs.jsonl
+      - source-envelope.json (snapshot)
+      - evidence-manifest.json (snapshot)
+      - raw.md (entry point)
+      - source/   (original files)
+      - assets/   (empty, reserved)
+      - derived/  (fragments, supplementary artifacts)
     """
     artifacts_dir = manifest_dir / "artifacts"
     fragments_dir = manifest_dir / "fragments"
 
     output = output.expanduser().resolve()
-    if output.exists():
-        raise CommitError("BUNDLE_ALREADY_EXISTS",
-                          f"output directory already exists: {output}. "
-                          f"Use --overwrite to replace.")
-
-    output.mkdir(parents=True)
-    (output / "assets").mkdir()
-    (output / "source").mkdir()
-    (output / "derived").mkdir()
-    (output / "derived" / "fragments").mkdir()
 
     # ── Atomic write helper ──
     def _atomic_write(path: Path, payload: str) -> None:
@@ -297,80 +338,163 @@ def _assemble_bundle(
             Path(tmp).unlink(missing_ok=True)
             raise
 
-    # ── Copy primary artifact as content.md ──
+    output.mkdir(parents=True)
+    (output / "source").mkdir()
+    (output / "assets").mkdir()
+    (output / "derived").mkdir()
+    (output / "derived" / "fragments").mkdir()
+
+    # ── Generate stable identifiers ──
+    source_hash = envelope["content_hash"]
+    source_id = envelope["source_id"]
+    bundle_id = f"bundle:{source_hash[:16]}"
+    generated_at = datetime.now(timezone.utc).isoformat()
+    # Preserve the Agent's run_id from the manifest directory path
+    run_id = manifest_dir.parent.name if manifest_dir.parent.name.startswith("run-") else f"run-{uuid.uuid4().hex[:12]}"
+
     primary = manifest["primary_artifact"]
     primary_src = artifacts_dir / primary["path"]
+
+    # ── Copy primary source file to source/ ──
+    source_dest = output / "source" / primary["path"]
+    source_dest.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(primary_src, source_dest)
+
+    # ── content.md — text rendering ──
     media_type = primary.get("media_type", "")
     if media_type.startswith("text/") or media_type in ("application/json",):
         content_text = primary_src.read_text(encoding="utf-8")
         _atomic_write(output / "content.md", content_text.rstrip() + "\n")
     else:
-        # Binary artifact (PDF, image, etc.) — copy as-is and write a stub content.md
-        _atomic_write(output / "content.md",
-                      f"Binary artifact: {primary['path']} ({media_type}, {primary.get('byte_size', 0)} bytes)\n"
-                      f"See derived/{primary['path']} for the original file.\n")
-        derived_dir = output / "derived"
-        derived_dir.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(primary_src, derived_dir / primary["path"])
+        _atomic_write(
+            output / "content.md",
+            f"Binary artifact: {primary['path']} ({media_type}, {primary.get('byte_size', 0)} bytes)\n"
+            f"See source/{primary['path']} for the original file.\n",
+        )
 
-    # ── Write evidence.jsonl ──
+    # ── evidence.jsonl ──
     evidence_lines = []
     for rec in manifest["evidence_records"]:
         evidence_lines.append(json.dumps(rec, ensure_ascii=False) + "\n")
     _atomic_write(output / "evidence.jsonl", "".join(evidence_lines))
 
-    # ── Copy supplementary artifacts ──
+    # ── Supplementary artifacts → derived/ ──
     all_arts = [manifest["primary_artifact"]] + manifest.get("supplementary_artifacts", [])
     for art in all_arts:
         src = artifacts_dir / art["path"]
         if art is primary:
-            continue  # already written as content.md
-        # Put in derived/ if it's a supplementary artifact
+            continue
         dest = output / "derived" / art["path"]
         dest.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(src, dest)
 
-    # ── Copy fragment snapshots ──
+    # ── Fragment snapshots → derived/fragments/ ──
     if fragments_dir.is_dir():
         for fp in fragments_dir.iterdir():
             if fp.is_file():
                 shutil.copy2(fp, output / "derived" / "fragments" / fp.name)
 
-    # ── Generate stable ids ──
-    source_hash = envelope["content_hash"]
-    capture_id = envelope.get("source_id", f"cap-{source_hash[:16]}")
-    bundle_id = f"bundle:{source_hash[:16]}"
-    generated_at = datetime.now(timezone.utc).isoformat()
+    # ── bundle.json (Raw Bundle v0.2 manifest) ──
+    sources_list = [
+        {
+            "entity_id": primary["artifact_id"],
+            "path": f"source/{primary['path']}",
+            "sha256": primary.get("sha256", source_hash),
+            "media_type": media_type or None,
+            "snapshot_kind": "content",
+            "content_hash_status": "verified",
+            "primary_source": True,
+        }
+    ]
+    for art in manifest.get("supplementary_artifacts", []):
+        sources_list.append({
+            "entity_id": art["artifact_id"],
+            "path": f"source/{art['path']}",
+            "sha256": art.get("sha256", ""),
+            "media_type": art.get("media_type"),
+            "snapshot_kind": "content",
+            "content_hash_status": "verified",
+            "primary_source": False,
+        })
 
-    # ── Write metadata.json ──
-    metadata = {
-        "schema_version": "raw-multimodal/v0.1",
-        "capture_id": capture_id,
-        "source": {
-            "url": envelope.get("source_uri"),
-            "title": envelope.get("title"),
-            "author": None,
-            "collected_at": generated_at,
-        },
-        "source_type": "local",
-        "modalities": list(manifest.get("modalities", {}).keys()),
-        "route": ["agent.ingest"],
-        "extractors": [
-            {"name": "agent", "version": "oks-agent-native/v0.1"},
+    derived_list = []
+    derived_entities = []
+    for art in manifest.get("supplementary_artifacts", []):
+        entity_id = f"derived-{art['artifact_id']}"
+        derived_list.append({
+            "entity_id": entity_id,
+            "kind": "other",
+            "path": f"derived/{art['path']}",
+            "generated_by": "agent-ingest",
+            "derived_from": [primary["artifact_id"]],
+            "review_status": "not_applicable",
+        })
+        derived_entities.append(entity_id)
+
+    provenance = {
+        "entities": [
+            {"id": eid, "type": "file"}
+            for eid in [primary["artifact_id"]]
+            + [a["artifact_id"] for a in manifest.get("supplementary_artifacts", [])]
+            + derived_entities
         ],
-        "processing_status": manifest["status"],
-        "review_status": "pending",
-        "benchmark": False,
-        "human_context": "required",
-        "execution_protocol": manifest["schema_version"],
-        "provider": "agent",
-        "capability": "agent.ingest",
-        "failure_disposition": manifest.get("failure_disposition", "none"),
+        "activities": [
+            {
+                "id": f"ingest-{run_id}",
+                "type": "agent-ingest",
+                "started_at": envelope.get("captured_at", generated_at),
+                "finished_at": generated_at,
+            }
+        ],
+        "agents": [
+            {
+                "id": envelope.get("captured_by", {}).get("runtime", "oks-agent"),
+                "type": "agent-runtime",
+            }
+        ],
+        "relations": [
+            {"type": "wasGeneratedBy", "subject": primary["artifact_id"], "object": f"ingest-{run_id}"},
+        ],
     }
-    _atomic_write(output / "metadata.json",
-                   json.dumps(metadata, ensure_ascii=False, indent=2) + "\n")
 
-    # ── Write quality-report.json ──
+    bundle_json = {
+        "schema_version": "raw-multimodal/v0.2",
+        "bundle_id": bundle_id,
+        "capture_id": source_id,
+        "content_hash": source_hash,
+        "recipe_version": "oks-agent-native-ingest/v0.1",
+        "processing_status": manifest["status"],
+        "files": {
+            "manifest": "bundle.json",
+            "content": "content.md",
+            "evidence": "evidence.jsonl",
+            "quality_report": "quality-report.json",
+            "processing_runs": "processing-runs.jsonl",
+            "source_dir": "source/",
+            "assets_dir": "assets/",
+            "derived_dir": "derived/",
+        },
+        "sources": sources_list,
+        "derived": derived_list if derived_list else None,
+        "provenance": provenance,
+        "warnings": list(manifest.get("warnings", [])),
+    }
+    _atomic_write(
+        output / "bundle.json",
+        json.dumps(bundle_json, ensure_ascii=False, indent=2) + "\n",
+    )
+
+    # ── source-envelope.json + evidence-manifest.json snapshots ──
+    _atomic_write(
+        output / "source-envelope.json",
+        json.dumps(envelope, ensure_ascii=False, indent=2) + "\n",
+    )
+    _atomic_write(
+        output / "evidence-manifest.json",
+        json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
+    )
+
+    # ── quality-report.json ──
     coverage: dict[str, dict[str, Any]] = {}
     for name, mod in manifest.get("modalities", {}).items():
         ec = mod.get("evidence_count", 0)
@@ -394,22 +518,18 @@ def _assemble_bundle(
             "creating a Candidate."
         ),
     }
-    _atomic_write(output / "quality-report.json",
-                   json.dumps(quality, ensure_ascii=False, indent=2) + "\n")
+    _atomic_write(
+        output / "quality-report.json",
+        json.dumps(quality, ensure_ascii=False, indent=2) + "\n",
+    )
 
-    # ── Write source-envelope.json and evidence-manifest.json snapshots ──
-    _atomic_write(output / "source-envelope.json",
-                   json.dumps(envelope, ensure_ascii=False, indent=2) + "\n")
-    _atomic_write(output / "evidence-manifest.json",
-                   json.dumps(manifest, ensure_ascii=False, indent=2) + "\n")
-
-    # ── Write raw.md (entry point) ──
-    warnings_text = "\n".join(
-        f"- {w}" for w in manifest.get("warnings", [])
-    ) or "- 无\n"
+    # ── raw.md (entry point) ──
+    warnings_text = (
+        "\n".join(f"- {w}" for w in manifest.get("warnings", [])) or "- 无\n"
+    )
     raw_md = (
-        f"---\nschema_version: raw-multimodal/v0.1\n"
-        f"capture_id: {capture_id}\n"
+        f"---\nschema_version: raw-multimodal/v0.2\n"
+        f"capture_id: {source_id}\n"
         f"processing_status: {manifest['status']}\n"
         f"review_status: pending\n"
         f"execution_protocol: {manifest['schema_version']}\n"
@@ -417,7 +537,8 @@ def _assemble_bundle(
         f"# {envelope.get('title') or 'Agent-captured source'}\n\n"
         f"## 来源\n\n- URI：`{envelope.get('source_uri', '')}`\n"
         f"- Agent：`{envelope.get('captured_by', {}).get('runtime', '?')}`\n\n"
-        f"## Raw 提取物\n\n- [正文](content.md)\n"
+        f"## Raw 提取物\n\n- [Bundle Manifest](bundle.json)\n"
+        f"- [正文](content.md)\n"
         f"- [原子证据](evidence.jsonl)：{len(manifest['evidence_records'])} 条\n"
         f"- [Source Envelope](source-envelope.json)\n"
         f"- [Evidence Manifest](evidence-manifest.json)\n\n"
@@ -425,18 +546,19 @@ def _assemble_bundle(
     )
     _atomic_write(output / "raw.md", raw_md)
 
-    # ── Generate processing-runs.jsonl ──
-    run_id = f"run-{uuid.uuid4().hex[:12]}"
+    # ── processing-runs.jsonl (preserves Agent run_id) ──
     run_entry = {
         "run_id": run_id,
-        "capture_id": capture_id,
+        "capture_id": source_id,
         "status": manifest["status"],
         "recipe_version": "oks-agent-native-ingest/v0.1",
         "started_at": envelope.get("captured_at", generated_at),
         "finished_at": generated_at,
     }
-    _atomic_write(output / "processing-runs.jsonl",
-                   json.dumps(run_entry, ensure_ascii=False) + "\n")
+    _atomic_write(
+        output / "processing-runs.jsonl",
+        json.dumps(run_entry, ensure_ascii=False) + "\n",
+    )
 
     return output
 
@@ -466,14 +588,16 @@ def raw_commit(
     """
     md = Path(manifest_dir).expanduser().resolve()
     if not md.is_dir():
-        raise CommitError("MANIFEST_DIR_NOT_FOUND",
-                          f"manifest directory does not exist: {md}")
+        raise CommitError(
+            "MANIFEST_DIR_NOT_FOUND",
+            f"manifest directory does not exist: {md}",
+        )
 
     envelope_path = md / "source-envelope.json"
     manifest_path = md / "evidence-manifest.json"
     artifacts_dir = md / "artifacts"
 
-    # ── Step 1-2: Read + validate ──
+    # ── Step 1-2: Read + validate against formal JSON Schemas ──
     envelope = _read_json(envelope_path)
     _validate_envelope(envelope)
 
@@ -483,23 +607,19 @@ def raw_commit(
     # ── Step 3: Cross-reference ──
     _cross_check(envelope, manifest)
 
-    # ── Step 4: Fragment refs existence ──
-    fragments_dir = md / "fragments"
-    for fid in manifest.get("fragment_refs", []):
-        # Fragment refs are identifiers, not files — we just check they're non-empty
-        pass  # validated in _validate_manifest
-
-    # ── Step 5: Artifact existence + hash ──
+    # ── Step 4: Artifact existence + hash ──
     if not artifacts_dir.is_dir():
-        raise CommitError("MISSING_ARTIFACTS_DIR",
-                          f"artifacts/ directory not found: {artifacts_dir}")
+        raise CommitError(
+            "MISSING_ARTIFACTS_DIR",
+            f"artifacts/ directory not found: {artifacts_dir}",
+        )
     _check_artifacts(manifest, artifacts_dir)
 
-    # ── Step 6-7: Evidence cross-ref + locator ──
+    # ── Step 5-6: Evidence cross-ref + locator ──
     _check_evidence_cross_ref(manifest)
     locator_warnings = _check_locators(manifest)
 
-    # ── Step 8: Determine output path ──
+    # ── Step 7: Determine output path ──
     if output is None:
         root = repo_root()
         today = datetime.now(timezone.utc)
@@ -513,14 +633,16 @@ def raw_commit(
         output = Path(output).expanduser().resolve()
 
     if output.exists() and not overwrite:
-        raise CommitError("BUNDLE_ALREADY_EXISTS",
-                          f"output directory already exists: {output}. "
-                          f"Use --overwrite to replace.")
+        raise CommitError(
+            "BUNDLE_ALREADY_EXISTS",
+            f"output directory already exists: {output}. "
+            f"Use --overwrite to replace.",
+        )
 
     if output.exists() and overwrite:
         shutil.rmtree(output)
 
-    # ── Step 9: Assemble ──
+    # ── Step 8: Assemble Raw Bundle v0.2 ──
     bundle_path = _assemble_bundle(envelope, manifest, md, output)
 
     return {

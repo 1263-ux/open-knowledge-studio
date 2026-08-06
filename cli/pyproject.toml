@@ -30,6 +30,7 @@ dependencies = [
     "jieba>=0.42",
     "gitpython>=3",
     "pyyaml>=6",
+    "jsonschema>=4.20",
 ]
 
 [project.optional-dependencies]

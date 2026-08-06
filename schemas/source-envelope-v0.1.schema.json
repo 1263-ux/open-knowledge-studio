@@ -79,6 +79,21 @@
       "description": "Reference to the accompanying EvidenceManifest (manifest_id or file hash).",
       "type": "string",
       "minLength": 1
+    },
+    "policy": {
+      "description": "Processing policy set by user or Agent for this source.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "remote_processing": {
+          "description": "Whether remote API/Provider calls are permitted for this source.",
+          "enum": ["allow", "deny", "ask"]
+        },
+        "sensitivity": {
+          "description": "Content sensitivity classification.",
+          "enum": ["public", "internal", "private"]
+        }
+      }
     }
   }
 }
