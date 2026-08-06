@@ -82,7 +82,10 @@
           "artifact_id": {"type": "string", "minLength": 1},
           "kind": {"type": "string", "minLength": 1},
           "method": {"type": "string", "minLength": 1},
-          "locator": {"type": "object", "minProperties": 1},
+          "locator": {
+            "$ref": "https://open-knowledge-studio.local/schemas/locator-v0.1.json",
+            "description": "Formal evidence locator. Must conform to OKS Locator Schema v0.1."
+          },
           "text": {"type": ["string", "null"]},
           "confidence": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
           "agent_judgment": {"enum": ["mechanical", "agent_observed", "human_supplied"]}

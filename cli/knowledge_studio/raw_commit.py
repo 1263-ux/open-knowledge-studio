@@ -60,15 +60,18 @@ def create_run_workspace(source: str) -> dict[str, Any]:
     }
 
 
-# ── Locator validation table (module-level, used by _check_locators) ─
+# ── Artifact kind → derived kind mapping (v0.2) ─
 
-VALID_LOCATOR_KINDS_BY_REQUIRED: dict[str, tuple[str, ...]] = {
-    "page": ("page",),
-    "bbox": ("bbox",),
-    "timestamp": ("start_ms", "end_ms"),
-    "dom": ("xpath_fragment",),
-    "document": (),
-    "custom": ("custom_label",),
+_ARTIFACT_KIND_TO_DERIVED: dict[str, str] = {
+    "primary_text": "other",
+    "page_image": "visual_observation",
+    "ocr_result": "ocr",
+    "subtitle": "other",
+    "screenshot": "visual_observation",
+    "dom_snapshot": "layout",
+    "api_response": "other",
+    "rendered_page": "visual_observation",
+    "other": "other",
 }
 
 
@@ -86,6 +89,7 @@ class CommitError(Exception):
 # ── Schema loading (cached) ───────────────────────────────────────
 
 _SCHEMA_CACHE: dict[str, dict[str, Any]] = {}
+_REGISTRY_CACHE: dict[str, Any] = {}
 
 def _load_schema(name: str) -> dict[str, Any]:
     """Load a JSON Schema from the packaged schemas directory."""
@@ -95,6 +99,36 @@ def _load_schema(name: str) -> dict[str, Any]:
         )
         _SCHEMA_CACHE[name] = json.loads(schema_text)
     return _SCHEMA_CACHE[name]
+
+
+def _build_registry() -> Any | None:
+    """Build a :mod:`referencing` Registry for ``$ref`` resolution.
+
+    Returns ``None`` when ``referencing`` is not installed.
+    The registry is cached; schemas are loaded on first call.
+    """
+    if "registry" in _REGISTRY_CACHE:
+        return _REGISTRY_CACHE["registry"]
+    try:
+        from referencing import Registry, Resource as RefResource
+    except ImportError:
+        _REGISTRY_CACHE["registry"] = None
+        return None
+
+    schema_ids = [
+        "source-envelope-v0.1.schema.json",
+        "evidence-manifest-v0.1.schema.json",
+        "evidence-fragment-v0.1.schema.json",
+        "locator-v0.1.schema.json",
+        "raw-bundle-v0.2.schema.json",
+    ]
+    resources: list[tuple[str, Any]] = []
+    for name in schema_ids:
+        s = _load_schema(name)
+        resources.append((s["$id"], RefResource.from_contents(s)))
+
+    _REGISTRY_CACHE["registry"] = Registry().with_resources(resources)
+    return _REGISTRY_CACHE["registry"]
 
 
 # ── Validation helpers ────────────────────────────────────────────
@@ -119,12 +153,15 @@ def _validate_envelope(envelope: dict[str, Any]) -> None:
         from jsonschema import validate, ValidationError as JsValidationError
     except ImportError:
         # Graceful degradation: skip schema validation if jsonschema not installed
-        # (structural checks below are kept as safety net)
         pass
     else:
         schema = _load_schema("source-envelope-v0.1.schema.json")
+        registry = _build_registry()
+        kwargs: dict[str, Any] = {}
+        if registry is not None:
+            kwargs["registry"] = registry
         try:
-            validate(envelope, schema)
+            validate(envelope, schema, **kwargs)
         except JsValidationError as exc:
             raise CommitError(
                 "INVALID_ENVELOPE",
@@ -149,8 +186,12 @@ def _validate_manifest(manifest: dict[str, Any]) -> None:
         pass
     else:
         schema = _load_schema("evidence-manifest-v0.1.schema.json")
+        registry = _build_registry()
+        kwargs: dict[str, Any] = {}
+        if registry is not None:
+            kwargs["registry"] = registry
         try:
-            validate(manifest, schema)
+            validate(manifest, schema, **kwargs)
         except JsValidationError as exc:
             raise CommitError(
                 "INVALID_MANIFEST",
@@ -256,8 +297,36 @@ def _check_evidence_cross_ref(manifest: dict[str, Any]) -> None:
 
 
 def _check_locators(manifest: dict[str, Any]) -> list[str]:
-    """Validate each evidence locator; return warnings for legacy locators."""
-    warnings: list[str] = []
+    """Validate each evidence locator against the formal Locator Schema v0.1.
+
+    Legacy locators (missing ``kind``) are **rejected** — they are no
+    longer silently accepted.  Agents MUST declare locator structure
+    explicitly per ``locator-v0.1.schema.json``.
+    """
+    locator_schema = _load_schema("locator-v0.1.schema.json")
+    try:
+        from jsonschema import validate, ValidationError as JsValidationError
+    except ImportError:
+        # Graceful degradation: basic structural guards when
+        # jsonschema is not available.
+        for rec in manifest["evidence_records"]:
+            loc = rec.get("locator", {})
+            if not isinstance(loc, dict) or not loc:
+                raise CommitError(
+                    "INVALID_LOCATOR",
+                    f"evidence {rec.get('evidence_id', '?')!r}: "
+                    f"locator must be a non-empty object",
+                )
+            if "kind" not in loc:
+                raise CommitError(
+                    "INVALID_LOCATOR",
+                    f"evidence {rec.get('evidence_id', '?')!r}: "
+                    f"locator must declare 'kind' (Locator Schema v0.1). "
+                    f"Legacy locators without 'kind' are no longer accepted.",
+                    {"evidence_id": rec.get("evidence_id")},
+                )
+        return []
+
     for rec in manifest["evidence_records"]:
         loc = rec.get("locator", {})
         if not isinstance(loc, dict) or not loc:
@@ -266,28 +335,21 @@ def _check_locators(manifest: dict[str, Any]) -> list[str]:
                 f"evidence {rec.get('evidence_id', '?')!r}: "
                 f"locator must be a non-empty object",
             )
-
-        kind = loc.get("kind")
-        if kind is None:
-            warnings.append(
-                f"evidence {rec.get('evidence_id', '?')!r}: "
-                f"legacy locator without 'kind' field"
-            )
-        elif kind not in VALID_LOCATOR_KINDS_BY_REQUIRED:
+        try:
+            validate(loc, locator_schema)
+        except JsValidationError as exc:
             raise CommitError(
-                "UNKNOWN_LOCATOR_KIND",
-                f"locator kind {kind!r} not recognized",
-                {"kind": kind},
-            )
-        else:
-            for req_field in VALID_LOCATOR_KINDS_BY_REQUIRED[kind]:
-                if req_field not in loc:
-                    raise CommitError(
-                        "INCOMPLETE_LOCATOR",
-                        f"locator kind {kind!r} requires field {req_field!r}",
-                        {"kind": kind, "missing": req_field},
-                    )
-    return warnings
+                "INVALID_LOCATOR",
+                f"evidence {rec.get('evidence_id', '?')!r}: "
+                f"locator validation failed — {exc.message}",
+                {
+                    "evidence_id": rec.get("evidence_id"),
+                    "json_path": list(exc.json_path) if exc.json_path else [],
+                    "validator": exc.validator,
+                },
+            ) from exc
+
+    return []
 
 
 # ── Assembly ──────────────────────────────────────────────────────
@@ -395,7 +457,7 @@ def _assemble_bundle(
                 shutil.copy2(fp, output / "derived" / "fragments" / fp.name)
 
     # ── bundle.json (Raw Bundle v0.2 manifest) ──
-    sources_list = [
+    sources_list: list[dict[str, Any]] = [
         {
             "entity_id": primary["artifact_id"],
             "path": f"source/{primary['path']}",
@@ -406,24 +468,18 @@ def _assemble_bundle(
             "primary_source": True,
         }
     ]
+    # Supplementary artifacts are *derived* content (screenshots, OCR, etc.)
+    # — they belong in derived/, not sources/.  Only the primary artifact
+    # represents the original captured material.
+    derived_list: list[dict[str, Any]] = []
+    derived_entities: list[str] = []
     for art in manifest.get("supplementary_artifacts", []):
-        sources_list.append({
-            "entity_id": art["artifact_id"],
-            "path": f"source/{art['path']}",
-            "sha256": art.get("sha256", ""),
-            "media_type": art.get("media_type"),
-            "snapshot_kind": "content",
-            "content_hash_status": "verified",
-            "primary_source": False,
-        })
-
-    derived_list = []
-    derived_entities = []
-    for art in manifest.get("supplementary_artifacts", []):
+        art_kind = art.get("kind", "other")
+        derived_kind = _ARTIFACT_KIND_TO_DERIVED.get(art_kind, "other")
         entity_id = f"derived-{art['artifact_id']}"
         derived_list.append({
             "entity_id": entity_id,
-            "kind": "other",
+            "kind": derived_kind,
             "path": f"derived/{art['path']}",
             "generated_by": "agent-ingest",
             "derived_from": [primary["artifact_id"]],
@@ -475,10 +531,33 @@ def _assemble_bundle(
             "derived_dir": "derived/",
         },
         "sources": sources_list,
-        "derived": derived_list if derived_list else None,
+        "derived": derived_list,
         "provenance": provenance,
         "warnings": list(manifest.get("warnings", [])),
     }
+
+    # ── Validate bundle_json against the formal Raw Bundle v0.2 Schema
+    #     BEFORE persisting — catch structural errors at assembly time.
+    try:
+        from jsonschema import validate, ValidationError as JsValidationError
+    except ImportError:
+        pass
+    else:
+        bundle_schema = _load_schema("raw-bundle-v0.2.schema.json")
+        registry = _build_registry()
+        kwargs_b: dict[str, Any] = {}
+        if registry is not None:
+            kwargs_b["registry"] = registry
+        try:
+            validate(bundle_json, bundle_schema, **kwargs_b)
+        except JsValidationError as exc:
+            raise CommitError(
+                "INVALID_BUNDLE",
+                f"assembled bundle.json fails schema validation: {exc.message}",
+                {"json_path": list(exc.json_path) if exc.json_path else [],
+                 "validator": exc.validator},
+            ) from exc
+
     _atomic_write(
         output / "bundle.json",
         json.dumps(bundle_json, ensure_ascii=False, indent=2) + "\n",
