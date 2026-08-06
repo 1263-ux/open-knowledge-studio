@@ -300,8 +300,18 @@ def _assemble_bundle(
     # ── Copy primary artifact as content.md ──
     primary = manifest["primary_artifact"]
     primary_src = artifacts_dir / primary["path"]
-    content_text = primary_src.read_text(encoding="utf-8")
-    _atomic_write(output / "content.md", content_text.rstrip() + "\n")
+    media_type = primary.get("media_type", "")
+    if media_type.startswith("text/") or media_type in ("application/json",):
+        content_text = primary_src.read_text(encoding="utf-8")
+        _atomic_write(output / "content.md", content_text.rstrip() + "\n")
+    else:
+        # Binary artifact (PDF, image, etc.) — copy as-is and write a stub content.md
+        _atomic_write(output / "content.md",
+                      f"Binary artifact: {primary['path']} ({media_type}, {primary.get('byte_size', 0)} bytes)\n"
+                      f"See derived/{primary['path']} for the original file.\n")
+        derived_dir = output / "derived"
+        derived_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(primary_src, derived_dir / primary["path"])
 
     # ── Write evidence.jsonl ──
     evidence_lines = []

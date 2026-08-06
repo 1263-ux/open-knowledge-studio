@@ -484,7 +484,7 @@ def capability_catalog_cmd(
 
     result = capability_list()
     if json_output:
-        console.print(json.dumps(result, ensure_ascii=False, indent=2))
+        print(json.dumps(result, ensure_ascii=False, indent=2))
     elif verbose:
         for p in result["providers"]:
             console.print(f"[bold]{p['id']}[/bold] ({p['execution']})")
@@ -518,7 +518,7 @@ def capability_doctor_cmd(
 
     result = capability_doctor()
     if json_output:
-        console.print(json.dumps(result, ensure_ascii=False, indent=2))
+        print(json.dumps(result, ensure_ascii=False, indent=2))
         return
 
     # Group providers by category for human-friendly output
@@ -660,7 +660,7 @@ def raw_commit(
         result = _commit(manifest_dir, output=output, overwrite=overwrite)
         if json_output:
             import json as _json
-            console.print(_json.dumps(result, ensure_ascii=False, indent=2))
+            print(_json.dumps(result, ensure_ascii=False, indent=2))
         else:
             console.print(f"[green]Committed:[/green] {result['bundle_path']}")
             console.print(f"  bundle_id: {result['bundle_id']}")
@@ -676,7 +676,7 @@ def raw_commit(
             }
             if exc.details:
                 error_out["details"] = exc.details
-            console.print(_json.dumps(error_out, ensure_ascii=False, indent=2))
+            print(_json.dumps(error_out, ensure_ascii=False, indent=2))
         else:
             console.print(f"[red]Rejected ({exc.code}):[/red] {exc.message}")
         raise typer.Exit(1)
