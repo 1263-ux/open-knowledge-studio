@@ -61,6 +61,15 @@ def main() -> None:
         shutil.copytree(src, dest_root / dest_name, ignore=_DEV_ONLY_IGNORE)
         copied.append(dest_name)
 
+    # ── Skills live in skill_templates/, not _assets/ ──
+    # _install_skills() reads from skill_templates/ via importlib.resources;
+    # duplicating skills under _assets/ creates a second, diverging source.
+    for host in ("claude", "agents"):
+        skills_dir = dest_root / host / "skills"
+        if skills_dir.is_dir():
+            shutil.rmtree(skills_dir)
+            print(f"  stripped skills from _assets/{host}/")
+
     scripts_dest = dest_root / "scripts"
     scripts_dest.mkdir()
     for name in _SCRIPT_ASSETS:

@@ -184,9 +184,11 @@ def run_capability(capability: str, args: argparse.Namespace) -> Report:
     try:
         runner.run(args.pipx, "install", "--python", args.python, args.package_spec, timeout=args.install_timeout)
         report.artifacts["isolated_environment_bytes_after_base_install"] = str(directory_size(env_dir))
-        oks, connector = str(bin_dir / "oks"), str(bin_dir / "oks-connector")
+        oks = str(bin_dir / "oks")
         runner.run(oks, "--version")
-        runner.run(connector, "--help")
+        # oks-connector was removed in v0.4.0 — replaced by oks raw-commit
+        runner.run(oks, "capability", "catalog")
+        runner.run(oks, "capability", "doctor")
         runner.run(oks, "init", str(kb), "--no-git", "--no-set-default")
         report.assert_true("isolated_kb", is_child(kb, run_dir), str(kb))
         required_capabilities = [capability] if capability != "formula" else ["pdf", "formula"]

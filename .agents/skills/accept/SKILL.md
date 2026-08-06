@@ -42,7 +42,7 @@ The helper creates one isolated pipx environment and one empty KB per ingest
 capability. Formula acceptance verifies capability installation and paddleocr
 import only — it is a secondary PDF sub-capability with no standalone ingest
 route. Feishu preflight creates no cloud data.
-It verifies install, `oks`, `oks-connector`, capability installation, Raw Bundle
+It verifies install, `oks`, capability installation, Raw Bundle
 artifacts, Candidate promotion, search, recall, and lint. It writes
 `report.json` and `report.md`, then removes only that run's pipx and KB unless
 `--keep-environment` is supplied. `all` additionally writes `matrix.json` and

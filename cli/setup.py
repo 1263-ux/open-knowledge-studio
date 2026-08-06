@@ -86,6 +86,14 @@ def _vendor_assets() -> None:
         src = repo_root / src_name
         if src.is_dir():
             shutil.copytree(src, dest_root / dest_name, ignore=_DEV_ONLY_IGNORE)
+    # ── Skills live in skill_templates/, not _assets/ ──
+    # _install_skills() reads from skill_templates/ via importlib.resources;
+    # duplicating skills under _assets/ creates a second, diverging source
+    # that shadows the canonical one during oks init (via _materialize_assets).
+    for host in ("claude", "agents"):
+        skills_dir = dest_root / host / "skills"
+        if skills_dir.is_dir():
+            shutil.rmtree(skills_dir, onerror=_remove_readonly)
     worker = repo_root / "scripts" / "feishu_base_worker.py"
     if worker.is_file():
         worker_dest = dest_root / "scripts"
