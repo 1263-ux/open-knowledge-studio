@@ -84,16 +84,22 @@ single source of truth.
 ### 3c. Select Minimum Sufficient Provider Set
 
 For each required capability, find available providers from the status output.
-**Prefer the lightest reliable evidence path:**
+Follow the formal **L0→L4 Degradation Ladder** (§Graceful Degradation below):
 
-1. **Agent Runtime** — for public pages, images, layout understanding, charts.  Zero setup, always available.
-2. **Local managed providers** (pdf-lite, trafilatura, rapidocr) — for text extraction, OCR.  Fast, free, private.
-3. **External providers** (Firecrawl, AgentKey) — for JS-heavy pages, anti-bot sites, platform APIs.  Costs credits or requires API keys.
-4. **MediaCrawler** — for Chinese social platform content (小红书, 抖音, B站).  User must install separately.
-5. **partial + needs-human** — all automated paths failed.
+| Level | Trigger | Action |
+|-------|---------|--------|
+| **L0 Preferred** | Best capability available | Use it directly |
+| **L1 Automatic Fallback** | Best unavailable, alternative exists | Auto-switch, user unaware |
+| **L2 Honest Partial** | Only partial evidence obtainable | Continue with what we have, record gaps honestly |
+| **L3 Guided Assistance** | Critical evidence missing | Aggregate gaps → one user message → recommend |
+| **L4 Cannot Extract** | No reliable path exists | Stop, do not fabricate |
 
 **The goal is the MINIMUM set of providers that covers all required
 capabilities — not one provider per capability.**
+
+**Stop escalating after required Evidence is reliably satisfied.**
+Do not pursue optional capabilities at higher degradation levels —
+optional means optional.
 
 A single provider often satisfies multiple demands at once.  For example:
 - **Firecrawl** one execution → `web.fetch` + `web.extract` + `metadata.fetch` (3 capabilities, 1 call)
@@ -157,9 +163,20 @@ status, and reason for any fallback.
 
 When a required capability cannot be satisfied:
 
-1. Query `oks capability status --json` to see if any unconfigured provider could help
-2. If an auto-fallback is possible (e.g., trafilatura → Firecrawl) → execute it directly, don't ask
-3. If the only path forward needs user action (install, auth, cost) → explain in user language:
+1. Complete ALL automatic fallbacks first — exhaust L1 before reaching L3
+2. Query `oks capability status --json` to see if any unconfigured provider could help
+3. If an auto-fallback is possible → execute it directly, don't ask
+4. **Aggregate ALL remaining gaps** into a single user-facing message — never report gaps one at a time
+5. If the only path forward needs user action → explain in user language with a recommendation
+
+**Gap aggregation format:**
+- 已获得什么
+- 仍缺什么
+- 影响什么
+- 当前是否仍值得继续
+- 推荐用户做什么
+
+Example of aggregated gap report:
 
 ```
 这份 PDF 的正文已完整提取（12 页，15,000 字），但其中 3 页是扫描图片，
@@ -385,6 +402,73 @@ When presenting options, always recommend one. Don't dump a list of choices.
 - **Level 1 (user asks "why this way?")**: "因为页面是动态渲染的，直接获取拿不到正文，所以使用了远程抓取。"
 - **Level 2 (user runs `oks capability doctor --verbose`)**: Full technical matrix — provider IDs, availability, checks
 
+## Graceful Degradation
+
+Capability Registry and external Providers are **enhancements**, never
+single-point-of-failure dependencies on OKS core availability.
+
+### Degradation Ladder (L0→L4)
+
+| Level | Name | Trigger | Agent Action | User Perception |
+|-------|------|---------|-------------|-----------------|
+| **L0** | Preferred | Best capability available | Use it directly, complete processing | None (transparent) |
+| **L1** | Automatic Fallback | Best unavailable, alternative exists | Auto-switch to alternative, continue silently | None (transparent) — required Evidence is satisfied |
+| **L2** | Honest Partial | Only partial reliable Evidence obtainable | Process what we have, record gaps + impact honestly. Continue to Candidate with partial marker. | Sees partial result with honest gap description |
+| **L3** | Guided Assistance | Critical Evidence cannot be obtained automatically | Aggregate ALL gaps → single user message → explain impact → give actionable options → recommend one | Sees aggregated gap report with concrete choices and a recommendation |
+| **L4** | Cannot Reliably Extract | No reliable path exists for this Evidence | Stop generating this Evidence. Do not speculate, guess, or fabricate. Record `failed` in manifest. | Sees failure + alternative suggestions (e.g., paste content manually) |
+
+### Core Rules
+
+1. **Missing best capability → first seek alternative paths from what IS available.**
+   Never skip straight to L3 because the preferred provider is absent.
+
+2. **Alternative path satisfies required Evidence → auto-continue (L1), don't ask user.**
+   User doesn't need to know we used trafilatura instead of Firecrawl if both produce valid text.
+
+3. **Alternative path satisfies only partial Evidence → keep what's reliable, enter L2.**
+   Preserve all obtained Evidence with honest provenance. Record what's missing and why.
+
+4. **Only interrupt user when missing content genuinely affects their goal (L3).**
+   Don't ask about missing optional image_context on a text-centric page.
+
+5. **Missing optional capability → NEVER block the task.**
+   Optional means optional. Record the gap, continue.
+
+6. **Provider unavailable → NEVER fabricate Evidence.**
+   `producer: agent-runtime, method: agent_observed` is valid (L2).
+   Making up source text is never valid (L4 violation).
+
+7. **All degraded results → preserve provenance, state actual Evidence source.**
+   Every fragment records exactly which provider, method, and degradation level produced it.
+
+8. **Multiple capability gaps → aggregate → ONE user message.**
+   Complete all auto-fallbacks first. Then batch every remaining gap into a single L3 report.
+   Never: "Missing A. (user replies) Also missing B. (user replies) Also missing C."
+
+9. **Agent MUST recommend — never delegate implementation choices to user.**
+   "推荐选项 3：正文已经足够" — not "请选择一个选项。"
+
+10. **Required Evidence reliably satisfied → STOP escalating.**
+    Do not pursue optional capabilities at higher degradation levels.
+    Do not suggest capability upgrades when the core job is done.
+
+### Text-Only Orchestrator
+
+The Orchestrator (Agent model) may be a text-only model without native
+multimodal perception (image, audio, video understanding).
+
+When the current model lacks a modality:
+
+1. **Use registered Providers** for that modality — pdf-lite, rapidocr,
+   Firecrawl, ffmpeg, yt-dlp, local-asr, etc. This is the normal path.
+2. **If a Provider exists** for the needed modality → execute it (L0/L1).
+3. **If no Provider exists** for the needed modality:
+   - required Evidence: enter L3 (Guided Assistance) or L4 (Cannot Extract)
+   - optional Evidence: enter L2 (Honest Partial), note the gap
+4. **NEVER hallucinate multimodal content.** Do not describe an image you
+   cannot see. Do not transcribe audio you cannot hear. Do not invent
+   source text you cannot read.
+
 ## Constraints
 
 - NEVER write to wiki/ directly — only drafts/
@@ -404,3 +488,13 @@ When presenting options, always recommend one. Don't dump a list of choices.
 - MUST use Chinese natural language for all user-facing text
 - MUST run `oks capability status --json` (not catalog + doctor separately) for capability decisions
 - MUST treat one provider execution as a cluster that can satisfy multiple demands simultaneously
+- MUST follow L0→L1→L2→L3→L4 degradation order — never skip levels silently
+- MUST attempt auto-fallback (L1) before asking user (L3)
+- MUST NOT block on missing optional capability — optional means optional
+- MUST NOT fabricate evidence when no Provider is available (L4)
+- MUST aggregate all gaps into a single user-facing message (L3)
+- MUST preserve provenance for all degraded evidence — every fragment records true source
+- MUST stop capability escalation after required Evidence is reliably satisfied
+- MUST provide a recommendation, not delegate implementation choices to user
+- MUST explain each gap in terms of user impact, not technical failure
+- MUST label all Agent-observed evidence as agent_observed, never as source text

@@ -1251,3 +1251,103 @@ def test_capability_status_one_call_sufficiency():
         assert len(p["capabilities"]) > 0, (
             f"provider {p['id']} has zero capabilities"
         )
+
+
+# ══════════════════════════════════════════════════════════════════════
+# Phase 3A-M 增量：优雅降级 (Graceful Degradation)
+# ══════════════════════════════════════════════════════════════════════
+
+
+def test_degradation_ladder_in_skill():
+    """L0-L4 degradation levels must be documented in ingest SKILL.md."""
+    for host in ("claude", "agents"):
+        text = _read_skill_text(host)
+        assert "L0" in text and "Preferred" in text, (
+            f"{host}/ingest/SKILL.md missing L0 Preferred"
+        )
+        assert "L1" in text and "Automatic Fallback" in text, (
+            f"{host}/ingest/SKILL.md missing L1 Automatic Fallback"
+        )
+        assert "L2" in text and "Honest Partial" in text, (
+            f"{host}/ingest/SKILL.md missing L2 Honest Partial"
+        )
+        assert "L3" in text and "Guided Assistance" in text, (
+            f"{host}/ingest/SKILL.md missing L3 Guided Assistance"
+        )
+        assert "L4" in text and "Cannot" in text, (
+            f"{host}/ingest/SKILL.md missing L4 Cannot Reliably Extract"
+        )
+
+
+def test_graceful_degradation_principles_in_skill():
+    """All 10 core degradation principles must appear as MUST constraints."""
+    for host in ("claude", "agents"):
+        text = _read_skill_text(host)
+        principles = [
+            "MUST follow L0",
+            "MUST attempt auto-fallback",
+            "MUST NOT block on missing optional capability",
+            "MUST NOT fabricate evidence",
+            "MUST aggregate all gaps",
+            "MUST preserve provenance",
+            "MUST stop capability escalation",
+            "MUST provide a recommendation",
+            "MUST explain each gap in terms of user impact",
+            "MUST label all Agent-observed evidence as agent_observed",
+        ]
+        for p in principles:
+            assert p in text, f"{host}/ingest/SKILL.md missing principle: {p}"
+
+
+def test_optional_capability_does_not_block():
+    """Missing optional capability must NEVER block the task."""
+    for host in ("claude", "agents"):
+        text = _read_skill_text(host)
+        assert "optional means optional" in text, (
+            f"{host}/ingest/SKILL.md must state 'optional means optional'"
+        )
+        assert "MUST NOT block on missing optional capability" in text, (
+            f"{host}/ingest/SKILL.md missing optional-no-block constraint"
+        )
+
+
+def test_gap_aggregation_rule():
+    """Multiple capability gaps must be aggregated into ONE user message."""
+    for host in ("claude", "agents"):
+        text = _read_skill_text(host)
+        assert "MUST aggregate all gaps" in text, (
+            f"{host}/ingest/SKILL.md missing gap aggregation MUST"
+        )
+        # Must mention aggregation format fields
+        assert "已获得" in text, f"{host}/ingest/SKILL.md missing 已获得 in gap format"
+        assert "仍缺" in text, f"{host}/ingest/SKILL.md missing 仍缺 in gap format"
+        assert "影响" in text, f"{host}/ingest/SKILL.md missing 影响 in gap format"
+        assert "推荐" in text, f"{host}/ingest/SKILL.md missing 推荐 in gap format"
+
+
+def test_text_only_orchestrator_rule():
+    """Text-only orchestrator must use Providers, never hallucinate multimodal."""
+    for host in ("claude", "agents"):
+        text = _read_skill_text(host)
+        assert "Text-Only Orchestrator" in text or "text-only" in text.lower(), (
+            f"{host}/ingest/SKILL.md missing text-only orchestrator guidance"
+        )
+        assert "NEVER hallucinate" in text, (
+            f"{host}/ingest/SKILL.md missing NEVER hallucinate constraint"
+        )
+        # Must reference using registered Providers for missing modalities
+        assert "Provider" in text, (
+            f"{host}/ingest/SKILL.md must reference Providers for missing modalities"
+        )
+
+
+def test_degradation_stops_after_required():
+    """Agent must stop escalating after required Evidence is satisfied."""
+    for host in ("claude", "agents"):
+        text = _read_skill_text(host)
+        assert "MUST stop capability escalation" in text, (
+            f"{host}/ingest/SKILL.md missing stop-escalation constraint"
+        )
+        assert "Stop escalating after required" in text, (
+            f"{host}/ingest/SKILL.md missing stop-after-required rule"
+        )
