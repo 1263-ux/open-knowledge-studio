@@ -461,6 +461,8 @@ def _remote_setup_hint(provider_id: str) -> str:
         return t("firecrawl_setup_hint")
     if provider_id == "agentkey":
         return t("agentkey_setup_hint")
+    if provider_id == "mediacrawler":
+        return t("mediacrawler_setup_hint")
     return ""
 
 
@@ -515,89 +517,133 @@ def _build_capability_summary(
     return empty
 
 
+# ── User-facing capability descriptions ──────────────────────────────
+
+# Maps provider IDs to user-facing capability names shown during init.
+# Internal provider IDs are hidden from default user view.
+# Each entry: (user_facing_label, category)
+# Categories: "document" | "web" | "media" | "social" | "platform"
+_USER_CAPABILITY_LABELS: dict[str, tuple[str, str]] = {
+    "pdf-lite": ("PDF 文本提取", "document"),
+    "markitdown": ("Office 文档提取", "document"),
+    "rapidocr": ("图片文字识别（OCR）", "document"),
+    "mineru": ("PDF 深度提取（含排版还原）", "document"),
+    "trafilatura": ("网页正文提取（静态页面）", "web"),
+    "http-fetch": ("网页原始获取", "web"),
+    "firecrawl": ("动态网页内容抓取", "web"),
+    "browser": ("浏览器登录态页面", "web"),
+    "yt-dlp": ("视频/音频下载", "media"),
+    "ffmpeg": ("媒体格式转换", "media"),
+    "local-asr": ("本地语音转写", "media"),
+    "remote-asr": ("远程语音转写", "media"),
+    "mediacrawler": ("社交平台公开内容采集", "social"),
+    "agentkey": ("受限平台内容获取（知乎/微信/B站）", "platform"),
+}
+
+
+def _describe_ready_capabilities(
+    summary: dict[str, list[dict[str, Any]]],
+) -> tuple[list[str], list[str]]:
+    """Derive user-facing capability lists from provider status.
+
+    Returns (can_do_now, can_enable_later) — each is a list of
+    human-readable Chinese capability descriptions.
+    """
+    can_do: list[str] = []
+    can_enable: list[str] = []
+
+    def _label(pid: str) -> str:
+        return _USER_CAPABILITY_LABELS.get(pid, (pid, "other"))[0]
+
+    # Local ready
+    for p in summary.get("local_ready", []):
+        can_do.append(_label(p["id"]))
+    # Remote ready
+    for p in summary.get("remote_ready", []):
+        can_do.append(_label(p["id"]))
+    # Remote runtime_only (available via Agent at runtime)
+    for p in summary.get("remote_runtime_only", []):
+        can_do.append(_label(p["id"]))
+
+    # Local missing (installable)
+    for p in summary.get("local_missing", []):
+        hint = ""
+        pid = p["id"]
+        if pid == "pdf-lite":
+            hint = " — oks capability install pdf-lite"
+        elif pid == "rapidocr":
+            hint = " — pip install rapidocr"
+        elif pid == "markitdown":
+            hint = " — pip install markitdown"
+        can_enable.append(_label(pid) + hint)
+
+    # Remote not configured
+    for p in summary.get("remote_not_configured", []):
+        hint = _remote_setup_hint(p["id"])
+        entry = _label(p["id"])
+        if hint:
+            entry += f" — {hint}"
+        can_enable.append(entry)
+
+    # Blocked/experimental — shown as unavailable
+    for p in summary.get("blocked_experimental", []):
+        can_enable.append(f"{_label(p['id'])}（当前不可用）")
+
+    return can_do, can_enable
+
+
+def _derive_first_prompts(
+    can_do: list[str],
+) -> list[str]:
+    """Generate first-use prompt suggestions based on available capabilities."""
+    prompts: list[str] = []
+    has_doc = any("PDF" in c or "Office" in c or "Markdown" in c for c in can_do)
+    has_web = any("网页" in c for c in can_do)
+
+    prompts.append(t("init_prompt_local_only"))
+    if has_doc:
+        prompts.append(t("init_prompt_with_pdf"))
+    if has_web:
+        prompts.append(t("init_prompt_with_web"))
+    return prompts
+
+
 def print_capability_summary(
     console: Console,
     doctor_result: dict[str, Any] | None,
 ) -> None:
     """Print a user-facing capability summary after ``oks init``.
 
-    Called from ``init()`` — does the grouping, Rich output, and
-    first-use prompt generation so the CLI command stays thin.
+    Called from ``init()`` — capability-oriented output that tells users
+    WHAT they can do, not WHICH providers implement it. Internal provider
+    IDs are hidden from the default view; developer details are available
+    via ``oks capability doctor --verbose``.
     """
     summary = _build_capability_summary(doctor_result)
-    has_local = bool(summary["local_ready"] or summary["local_missing"])
-    has_remote = bool(
-        summary["remote_ready"]
-        or summary["remote_not_configured"]
-        or summary["remote_runtime_only"]
-    )
+    can_do, can_enable = _describe_ready_capabilities(summary)
 
     console.print(f"\n[bold]{t('init_ready')}[/bold]")
 
-    # ── Local capabilities ──
-    if has_local or summary["local_missing"]:
-        console.print(f"\n[bold]{t('init_local_capabilities')}[/bold]")
-        for p in summary["local_ready"]:
-            console.print(f"  [green]✓[/green] {p['label']} ({p['id']})")
-        for p in summary["local_missing"]:
-            status = p.get("status", "")
-            if status == "not_configured":
-                label_text = t("status_not_configured")
-            else:
-                label_text = t("status_not_installed")
-            console.print(
-                f"  [yellow]✗[/yellow] {p['label']} ({p['id']}) — {label_text}"
-            )
+    # ── Always-available capabilities ──
+    console.print(f"\n[bold green]{t('init_always_available')}[/bold green]")
+    console.print(f"  [green]✓[/green] {t('cap_markdown_text')}")
+    console.print(f"  [green]✓[/green] {t('cap_agent_multimodal')}")
 
-    # ── Remote capabilities ──
-    if has_remote:
-        console.print(f"\n[bold]{t('init_remote_capabilities')}[/bold]")
-        for p in summary["remote_ready"]:
-            console.print(
-                f"  [green]✓[/green] {p['label']} ({p['id']}) — {t('status_configured')}"
-            )
-        for p in summary["remote_not_configured"]:
-            hint = _remote_setup_hint(p["id"])
-            console.print(
-                f"  [yellow]✗[/yellow] {p['label']} ({p['id']}) — {t('status_not_configured')}"
-            )
-            if hint:
-                console.print(f"    [dim]{hint}[/dim]")
-        for p in summary["remote_runtime_only"]:
-            hint = _remote_setup_hint(p["id"])
-            console.print(
-                f"  [dim]?[/dim] {p['label']} ({p['id']}) — {t('status_runtime_only')}"
-            )
-            if hint:
-                console.print(f"    [dim]{hint}[/dim]")
-        for p in summary["blocked_experimental"]:
-            st = p.get("status", "")
-            label_text = (
-                t(f"status_{st}") if st in ("blocked", "experimental") else st
-            )
-            console.print(f"  [dim]—[/dim] {p['label']} ({p['id']}) — {label_text}")
+    # ── Currently available ──
+    if can_do:
+        console.print(f"\n[bold cyan]{t('init_can_do_now')}[/bold cyan]")
+        for c in sorted(can_do):
+            console.print(f"  [green]✓[/green] {c}")
 
-    # ── Remote config note ──
-    has_firecrawl = any(
-        p["id"] == "firecrawl" for p in summary["remote_ready"]
-    )
-    has_agentkey = any(
-        p["id"] == "agentkey" for p in summary["remote_runtime_only"]
-    )
-    if not has_firecrawl and not has_agentkey:
-        console.print(f"\n[dim]{t('init_no_remote')}[/dim]")
-    elif summary["remote_not_configured"] or summary["remote_runtime_only"]:
-        console.print(f"\n[dim]{t('init_remote_note')}[/dim]")
+    # ── Can enable later ──
+    if can_enable:
+        console.print(f"\n[bold yellow]{t('init_can_enable')}[/bold yellow]")
+        for c in sorted(can_enable):
+            console.print(f"  [dim]○[/dim] {c}")
 
     # ── First-use prompts ──
-    console.print(f"\n[bold]{t('init_first_prompt')}[/bold]")
-    # Always show the local document prompt — text-read is always available
-    console.print(f'  [cyan]"{t("init_prompt_local_only")}"[/cyan]')
-    has_pdf_like = any(
-        p["id"] in ("pdf-lite", "markitdown") for p in summary["local_ready"]
-    )
-    has_web_like = bool(summary["remote_ready"] or summary["remote_runtime_only"])
-    if has_pdf_like:
-        console.print(f'  [cyan]"{t("init_prompt_with_pdf")}"[/cyan]')
-    if has_web_like:
-        console.print(f'  [cyan]"{t("init_prompt_with_web")}"[/cyan]')
+    prompts = _derive_first_prompts(can_do)
+    if prompts:
+        console.print(f"\n[bold]{t('init_first_prompt')}[/bold]")
+        for prompt in prompts:
+            console.print(f'  [cyan]"{prompt}"[/cyan]')

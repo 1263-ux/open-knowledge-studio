@@ -11,8 +11,8 @@ import os
 
 _TEXTS: dict[str, dict[str, str]] = {
     "init_ready": {
-        "zh": "OKS 已初始化。",
-        "en": "OKS initialized.",
+        "zh": "OKS 已准备完成。",
+        "en": "OKS is ready.",
     },
     "init_first_prompt": {
         "zh": "现在可对 Agent 说：",
@@ -57,6 +57,10 @@ _TEXTS: dict[str, dict[str, str]] = {
     "agentkey_setup_hint": {
         "zh": "在 Claude Code 中配置 AgentKey MCP 服务器。本地无法验证 AgentKey 可用性。",
         "en": "Configure AgentKey MCP server in Claude Code. Local verification not available.",
+    },
+    "mediacrawler_setup_hint": {
+        "zh": "需自行安装 MediaCrawler。不捆绑进 OKS。",
+        "en": "Install MediaCrawler separately. Not bundled with OKS.",
     },
     "init_remote_note": {
         "zh": "Firecrawl 用于普通网页；AgentKey 用于受限平台。两者独立配置，都不影响本地文件摄入。",
@@ -165,6 +169,26 @@ _TEXTS: dict[str, dict[str, str]] = {
     "pipx_missing": {
         "zh": "pipx 未安装",
         "en": "pipx is not installed",
+    },
+    "init_always_available": {
+        "zh": "始终可用：",
+        "en": "Always available:",
+    },
+    "cap_markdown_text": {
+        "zh": "收录 Markdown / 文本",
+        "en": "Ingest Markdown / text",
+    },
+    "cap_agent_multimodal": {
+        "zh": "使用 Agent 理解图片和网页内容",
+        "en": "Agent multimodal understanding (images and web pages)",
+    },
+    "init_can_do_now": {
+        "zh": "现在可以直接：",
+        "en": "Available now:",
+    },
+    "init_can_enable": {
+        "zh": "按需可以启用：",
+        "en": "Available on demand:",
     },
 }
 
