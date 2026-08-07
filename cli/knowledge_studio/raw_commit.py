@@ -409,6 +409,7 @@ def _assemble_bundle(
     # after bundle.json passes schema validation AND all declared
     # paths physically exist.  On any error the staging directory is
     # removed — no partial bundle is left behind.
+    final_output.parent.mkdir(parents=True, exist_ok=True)
     staging = Path(_tempfile.mkdtemp(
         prefix=f".{final_output.name}.", dir=final_output.parent))
     output = staging  # shadow — all writes below go to staging
@@ -752,6 +753,13 @@ def raw_commit(
         gather.append(exc)
 
     # ── Schema validation: use iter_errors() for ALL violations ──
+    # Independent error-count gates: a schema failure on one document
+    # must NOT block semantic checks on the other, and semantic checks
+    # that depend on specific fields must be skipped when their parent
+    # schema validation failed (avoids KeyError on missing keys).
+
+    # ── Envelope schema validation ──
+    _eg_pre = len(gather)
     if envelope is not None:
         from jsonschema import Draft202012Validator
         try:
@@ -774,7 +782,10 @@ def raw_commit(
                     "INVALID_ENVELOPE",
                     "source-envelope.json: content_hash must be 64 hex chars",
                 ))
+    envelope_schema_ok = (envelope is not None and len(gather) == _eg_pre)
 
+    # ── Manifest schema validation ──
+    _mg_pre = len(gather)
     if manifest is not None:
         from jsonschema import Draft202012Validator
         try:
@@ -804,16 +815,17 @@ def raw_commit(
                         "INVALID_MANIFEST",
                         "partial manifest must declare a non-'none' failure_disposition",
                     ))
+    manifest_schema_ok = (manifest is not None and len(gather) == _mg_pre)
 
-    # ── Step 3: Cross-reference (only if both parsed) ──
-    if envelope is not None and manifest is not None:
+    # ── Step 3: Cross-reference (only if BOTH schemas passed) ──
+    if envelope_schema_ok and manifest_schema_ok:
         try:
             _cross_check(envelope, manifest)
         except CommitError as exc:
             gather.append(exc)
 
-    # ── Step 4: Artifact existence + hash (only if manifest parsed) ──
-    if manifest is not None:
+    # ── Step 4-6: Artifact, evidence cross-ref, locator (only if manifest schema passed) ──
+    if manifest_schema_ok:
         if not artifacts_dir.is_dir():
             gather.append(CommitError(
                 "MISSING_ARTIFACTS_DIR",
@@ -825,12 +837,18 @@ def raw_commit(
             except CommitError as exc:
                 gather.append(exc)
 
-        # ── Step 5-6: Evidence cross-ref + locator ──
         try:
             _check_evidence_cross_ref(manifest)
         except CommitError as exc:
             gather.append(exc)
-        locator_warnings = _check_locators(manifest)
+
+        try:
+            locator_warnings = _check_locators(manifest)
+        except CommitError as exc:
+            gather.append(exc)
+            locator_warnings = []
+    else:
+        locator_warnings = []
 
     # ── Raise all errors at once ──
     if gather:

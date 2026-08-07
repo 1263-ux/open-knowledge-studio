@@ -67,14 +67,16 @@ def test_ingest_prepare_json_output(monkeypatch, tmp_path):
         assert key in data, f"Missing key: {key}"
 
 
-def test_ingest_prepare_rejects_bad_source():
-    """`oks ingest prepare` exits non-zero for non-existent file."""
+def test_ingest_prepare_rejects_bad_source(tmp_path):
+    """`oks ingest prepare` for non-existent file: succeeds but text_ready=False."""
     result = runner.invoke(cli.app, [
         "ingest", "prepare", "/nonexistent/file.xyz",
+        "--kb-root", str(tmp_path),
     ])
-    # prepare_ingest still succeeds (it treats missing files as generic source)
-    # but won't have text_ready
     assert result.exit_code == 0
+    data = json.loads(result.stdout)
+    assert data["text_ready"] is False
+    assert data["access_mode"] == "manual"
 
 
 

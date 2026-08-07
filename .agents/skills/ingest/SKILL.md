@@ -28,6 +28,22 @@ DO NOT manually construct SourceEnvelope, EvidenceManifest, or
 EvidenceFragment JSON.  Use `oks schema show <name>` to inspect
 schema requirements when filling evidence records.
 
+## Step 1: Check text_ready
+
+`oks ingest prepare` outputs a `text_ready` field in its JSON response.
+
+**IF `text_ready` is `true`:**
+- The source is a local Markdown (`.md`) or plain text (`.txt`) file.
+- SourceEnvelope, EvidenceManifest, EvidenceFragment, and artifact are all pre-filled.
+- All evidence is mechanically complete — no Provider execution is needed.
+- **Skip Steps 2-5.** Go directly to Step 6 (`oks raw-commit`).
+- Then proceed to Step 7 (Candidate), Step 8 (result.json), and Step 9 (Report).
+- In result.json, set `providers_used: ["text-read"]` and
+  `provider_selection.chosen: "text-read"`.
+
+**IF `text_ready` is `false`:**
+- Continue to Step 2 (Judge Modality) for full Provider orchestration.
+
 ## Step 2: Judge Modality
 
 Run `oks capability catalog --json` to see available capabilities.

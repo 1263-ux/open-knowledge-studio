@@ -18,46 +18,18 @@ from pathlib import Path
 
 
 # ── _provider_status() ──────────────────────────────────────────────
+# Test the REAL production function — no inlined copy.
 
-def _provider_status(checks, provider_id="", execution=""):
-    """Inlined copy of capability_commands._provider_status for unit testing.
-
-    The real function lives in ``knowledge_studio.capability_commands``.
-    This copy allows the test to remain deterministic even if the module
-    isn't importable (e.g. ``jsonschema`` missing in CI).
-    """
-    if provider_id in ("browser",):
-        return "blocked"
-    if provider_id in ("http-fetch", "remote-asr", "media-ingest"):
-        return "experimental"
-    if provider_id in ("agentkey",):
-        return "runtime_only"
-
-    required_failures = [
-        c for c in checks
-        if c.get("available") is False
-        and c.get("type") not in ("note", "env_var")
-        and c.get("required") is not False
-    ]
-    env_failures = [
-        c for c in checks
-        if c.get("type") == "env_var" and c.get("available") is False
-    ]
-
-    if not required_failures and not env_failures:
-        return "ready"
-    if env_failures and not required_failures:
-        return "not_configured"
-    return "unavailable"
+from knowledge_studio.capability_commands import _provider_status
 
 
 def test_provider_status_ready():
     """All checks pass → ready."""
-    assert _provider_status([]) == "ready"
+    assert _provider_status([], "", "") == "ready"
     assert _provider_status([
         {"type": "command", "name": "python", "available": True},
         {"type": "env_var", "name": "FIRECRAWL_API_KEY", "available": True},
-    ]) == "ready"
+    ], "", "") == "ready"
 
 
 def test_provider_status_not_configured():
@@ -65,85 +37,46 @@ def test_provider_status_not_configured():
     assert _provider_status([
         {"type": "command", "name": "python", "available": True},
         {"type": "env_var", "name": "FIRECRAWL_API_KEY", "available": False},
-    ]) == "not_configured"
+    ], "", "") == "not_configured"
 
 
 def test_provider_status_unavailable():
     """Required command missing → unavailable."""
     assert _provider_status([
         {"type": "command", "name": "ffmpeg", "available": False},
-    ]) == "unavailable"
+    ], "", "") == "unavailable"
 
 
 def test_provider_status_runtime_only():
     """AgentKey maps to runtime_only regardless of checks."""
-    assert _provider_status([], "agentkey") == "runtime_only"
+    assert _provider_status([], "agentkey", "") == "runtime_only"
     assert _provider_status([
         {"type": "env_var", "name": "AGENTKEY_API_KEY", "available": True},
-    ], "agentkey") == "runtime_only"
+    ], "agentkey", "") == "runtime_only"
 
 
 def test_provider_status_blocked():
     """Browser is blocked."""
-    assert _provider_status([], "browser") == "blocked"
+    assert _provider_status([], "browser", "") == "blocked"
 
 
 def test_provider_status_experimental():
     """HTTP-fetch, remote-asr, media-ingest are experimental."""
     for pid in ("http-fetch", "remote-asr", "media-ingest"):
-        assert _provider_status([], pid) == "experimental", f"{pid} should be experimental"
+        assert _provider_status([], pid, "") == "experimental", f"{pid} should be experimental"
 
 
 def test_provider_status_optional_failure():
     """Optional command missing with required=False doesn't downgrade to unavailable."""
     assert _provider_status([
         {"type": "command", "name": "optional-tool", "available": False, "required": False},
-    ]) == "ready"
+    ], "", "") == "ready"
 
 
 # ── _build_capability_summary() ─────────────────────────────────────
+# Test the REAL production function — no inlined copy.
 
-def _build_capability_summary(doctor_result):
-    """Inlined copy of cli._build_capability_summary for unit testing."""
-    _ALWAYS_AVAILABLE = frozenset({"agent-runtime", "human", "text-read"})
-
-    empty = {
-        "local_ready": [],
-        "local_missing": [],
-        "remote_ready": [],
-        "remote_not_configured": [],
-        "remote_runtime_only": [],
-        "blocked_experimental": [],
-    }
-    if doctor_result is None:
-        return empty
-
-    for p in doctor_result.get("providers", []):
-        pid = p.get("id", "")
-        if pid in _ALWAYS_AVAILABLE:
-            continue
-        status = p.get("status", "unavailable")
-        execution = p.get("execution", "")
-
-        if status in ("blocked", "experimental"):
-            empty["blocked_experimental"].append(p)
-        elif execution == "external":
-            if status == "ready":
-                empty["remote_ready"].append(p)
-            elif status == "not_configured":
-                empty["remote_not_configured"].append(p)
-            elif status == "runtime_only":
-                empty["remote_runtime_only"].append(p)
-            else:
-                empty["remote_not_configured"].append(p)
-        else:
-            if status == "ready":
-                empty["local_ready"].append(p)
-            else:
-                empty["local_missing"].append(p)
-
-    return empty
-
+from knowledge_studio.capability_commands import _build_capability_summary
 
 _EMPTY_DOCTOR = {"overall": "issues_found", "providers": []}
 
@@ -444,3 +377,181 @@ def test_security_sanitize_preserves_binary(tmp_path):
     content = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR"
     result = sanitize_remote_artifact(content, content_type="image/png")
     assert result == content
+
+
+# ── Integration: prepare → raw_commit ────────────────────────────────
+
+def test_prepare_text_then_raw_commit_default_output(tmp_path):
+    """Integration: clean KB → prepare Markdown → raw-commit → bundle at default path."""
+    import json
+    import shutil
+    import stat as _stat
+
+    from knowledge_studio.ingest_prepare import prepare_ingest
+    from knowledge_studio.raw_commit import raw_commit, CommitError
+    from knowledge_studio.store import repo_root
+
+    # 1. Create test markdown
+    f = tmp_path / "test.md"
+    f.write_text("# Integration Test\n\nContent for raw-commit.", encoding="utf-8")
+
+    # 2. prepare_ingest() with tmp_path as kb_root so raw/ lands here
+    result = prepare_ingest(str(f), kb_root=tmp_path)
+    assert result["text_ready"] is True
+    manifest_dir = result["manifest_dir"]
+    run_id = result["run_id"]
+
+    # 3. raw_commit with explicit output under tmp_path
+    # (default output uses repo_root() which points to the project dir;
+    #  for a clean isolated test we target tmp_path directly.)
+    bundle_dir = tmp_path / "raw" / "test-bundle"
+    commit_result = raw_commit(manifest_dir, output=bundle_dir)
+    assert commit_result["status"] == "committed"
+    assert commit_result["source_id"].startswith("src-")
+    bundle_path = Path(commit_result["bundle_path"])
+    assert bundle_path.is_dir()
+
+    # 4. Verify bundle contents
+    bundle_json_path = bundle_path / "bundle.json"
+    assert bundle_json_path.is_file()
+    bundle = json.loads(bundle_json_path.read_text(encoding="utf-8"))
+    assert bundle["schema_version"] == "raw-multimodal/v0.2"
+
+    content_md = bundle_path / "content.md"
+    assert content_md.is_file()
+    assert "Integration Test" in content_md.read_text(encoding="utf-8")
+
+    # 5. Clean up
+    def _rm(p, f, e):
+        Path(p).chmod(_stat.S_IWRITE)
+        f(p)
+    shutil.rmtree(tmp_path / ".oks", onexc=_rm)
+    shutil.rmtree(tmp_path / "raw", onexc=_rm)
+
+
+# ── raw_commit error collection ──────────────────────────────────────
+
+def test_raw_commit_reports_all_schema_errors(tmp_path):
+    """raw_commit with bad envelope AND bad manifest reports ALL errors, not just first."""
+    import json
+    from knowledge_studio.raw_commit import raw_commit, CommitError
+
+    manifest_dir = tmp_path / "manifest"
+    artifacts_dir = manifest_dir / "artifacts"
+    artifacts_dir.mkdir(parents=True)
+
+    # Bad envelope: missing required fields (no source_id, no content_hash, no schema_version)
+    (manifest_dir / "source-envelope.json").write_text(json.dumps({
+        "schema_version": "wrong-version",
+    }), encoding="utf-8")
+
+    # Bad manifest: missing required fields (no source_id, no primary_artifact)
+    (manifest_dir / "evidence-manifest.json").write_text(json.dumps({
+        "schema_version": "also-wrong",
+    }), encoding="utf-8")
+
+    try:
+        raw_commit(manifest_dir)
+        assert False, "Should have raised CommitError"
+    except CommitError as exc:
+        assert exc.code == "VALIDATION_FAILED"
+        errors = exc.details.get("errors", [])
+        # At least 2 errors: one from envelope, one from manifest
+        assert len(errors) >= 2, (
+            f"Expected >=2 errors, got {len(errors)}: {errors}"
+        )
+        codes = {e["code"] for e in errors}
+        assert "INVALID_ENVELOPE" in codes, f"No envelope error in: {codes}"
+        assert "INVALID_MANIFEST" in codes, f"No manifest error in: {codes}"
+
+
+def test_raw_commit_schema_error_blocks_semantic_checks(tmp_path):
+    """When envelope lacks source_id, cross_check is SKIPPED — no KeyError crash."""
+    import json
+    from knowledge_studio.raw_commit import raw_commit, CommitError
+
+    manifest_dir = tmp_path / "manifest"
+    artifacts_dir = manifest_dir / "artifacts"
+    artifacts_dir.mkdir(parents=True)
+
+    # Envelope without source_id — schema will reject it
+    (manifest_dir / "source-envelope.json").write_text(json.dumps({
+        "schema_version": "oks-source-envelope/v0.1",
+        "source_uri": "file:///nonexistent",
+        "source_modality": "text",
+        "access_mode": "local_file",
+        "captured_at": "2026-01-01T00:00:00Z",
+        "captured_by": {"runtime": "test"},
+        "content_hash": "a" * 64,
+    }), encoding="utf-8")
+
+    # Manifest without source_id — schema will reject it too
+    (manifest_dir / "evidence-manifest.json").write_text(json.dumps({
+        "schema_version": "oks-evidence-manifest/v0.1",
+        "manifest_id": "man-test",
+    }), encoding="utf-8")
+
+    try:
+        raw_commit(manifest_dir)
+        assert False, "Should have raised CommitError"
+    except CommitError as exc:
+        assert exc.code == "VALIDATION_FAILED"
+        errors = exc.details.get("errors", [])
+        codes = {e["code"] for e in errors}
+        # Critical: must NOT contain MANIFEST_SOURCE_MISMATCH or other
+        # semantic error codes — _cross_check was never reached.
+        assert "MANIFEST_SOURCE_MISMATCH" not in codes, (
+            f"_cross_check should be skipped when schemas fail. Got: {codes}"
+        )
+        # Only schema-level errors
+        for code in codes:
+            assert code in ("INVALID_ENVELOPE", "INVALID_MANIFEST"), (
+                f"Unexpected error code: {code}"
+            )
+
+
+def test_raw_commit_missing_primary_artifact(tmp_path):
+    """When manifest lacks primary_artifact, _check_artifacts skipped — no KeyError."""
+    import json
+    from knowledge_studio.raw_commit import raw_commit, CommitError
+
+    manifest_dir = tmp_path / "manifest"
+    artifacts_dir = manifest_dir / "artifacts"
+    artifacts_dir.mkdir(parents=True)
+
+    # Valid envelope
+    (manifest_dir / "source-envelope.json").write_text(json.dumps({
+        "schema_version": "oks-source-envelope/v0.1",
+        "source_id": "src-test",
+        "source_uri": "file:///test.md",
+        "source_modality": "text",
+        "access_mode": "local_file",
+        "captured_at": "2026-01-01T00:00:00Z",
+        "captured_by": {"runtime": "test"},
+        "content_hash": "a" * 64,
+    }), encoding="utf-8")
+
+    # Manifest without primary_artifact — schema will reject it
+    (manifest_dir / "evidence-manifest.json").write_text(json.dumps({
+        "schema_version": "oks-evidence-manifest/v0.1",
+        "manifest_id": "man-test",
+        "source_id": "src-test",
+        "status": "complete",
+        "evidence_records": [],
+        "modalities": {},
+    }), encoding="utf-8")
+
+    try:
+        raw_commit(manifest_dir)
+        assert False, "Should have raised CommitError"
+    except CommitError as exc:
+        assert exc.code == "VALIDATION_FAILED"
+        errors = exc.details.get("errors", [])
+        codes = {e["code"] for e in errors}
+        # Must NOT contain MISSING_ARTIFACT or ORPHAN_EVIDENCE —
+        # semantic checks were skipped.
+        for banned in ("MISSING_ARTIFACT", "ORPHAN_EVIDENCE", "EVIDENCE_COUNT_MISMATCH"):
+            assert banned not in codes, (
+                f"Semantic check {banned} should be skipped when manifest schema fails"
+            )
+        assert "INVALID_MANIFEST" in codes
