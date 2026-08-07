@@ -89,6 +89,22 @@ actions:
     label: 证据交叉验证
     description: Compare evidence from multiple providers to identify conflicts, confirmations, or gaps.
 
+  social.content.fetch:
+    label: 社交平台内容获取
+    description: 从社交平台（小红书、抖音、B站、知乎等）获取公开帖子、文章或视频的正文内容。
+
+  social.search:
+    label: 社交平台搜索
+    description: 在社交平台内按关键词搜索公开内容。
+
+  social.comments.fetch:
+    label: 社交平台评论获取
+    description: 获取社交平台帖子的评论和回复。
+
+  social.creator.fetch:
+    label: 创作者信息获取
+    description: 获取创作者公开资料、粉丝数、作品列表等元数据。
+
   human.supply:
     label: 人工补充证据
     description: Accept evidence manually supplied by a human — pasted text, uploaded screenshots, annotations.

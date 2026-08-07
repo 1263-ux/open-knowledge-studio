@@ -65,7 +65,11 @@ def _parse_yaml_lines(lines: list[str]) -> dict[str, Any]:
                     break  # dedented — end of section
                 sub_lines.append(nxt)
                 j += 1
-            result[key] = _parse_yaml_lines(sub_lines)
+            # Detect YAML block-list: all items start with "- "
+            if sub_lines and all(s.strip().startswith("- ") for s in sub_lines):
+                result[key] = [s.strip()[2:].strip().strip('"').strip("'") for s in sub_lines]
+            else:
+                result[key] = _parse_yaml_lines(sub_lines)
             i = j
         else:
             # Scalar value
@@ -222,6 +226,10 @@ def _provider_status(checks: list[dict[str, Any]], provider_id: str, execution: 
     if provider_id in ("agentkey",):
         return "runtime_only"
 
+    # ── external optional (user must install separately, not bundled) ──
+    if provider_id in ("mediacrawler",):
+        return "unavailable"
+
     # ── separate mandatory vs optional checks ──
     required_failures = [
         c for c in checks
@@ -345,6 +353,100 @@ def capability_doctor(root: Path | None = None) -> dict[str, Any]:
     return {
         "overall": "healthy" if all_healthy else "issues_found",
         "providers": results,
+    }
+
+
+# ── capability status (combined catalog + doctor) ──────────────────
+
+
+def _load_actions_metadata() -> dict[str, dict[str, str]]:
+    """Load action labels and descriptions from actions.yaml."""
+    from importlib.resources import files
+
+    actions_yaml = files("knowledge_studio.capabilities").joinpath("actions.yaml")
+    if not actions_yaml.is_file():
+        return {}
+    lines = actions_yaml.read_text(encoding="utf-8").splitlines()
+    parsed = _parse_yaml_lines(lines)
+    actions = parsed.get("actions", {})
+    if not isinstance(actions, dict):
+        return {}
+    return {
+        name: {"label": info.get("label", name), "description": info.get("description", "")}
+        for name, info in actions.items()
+        if isinstance(info, dict)
+    }
+
+
+def capability_status(root: Path | None = None) -> dict[str, Any]:
+    """Return a combined capability + availability view for Agent consumption.
+
+    Merges ``capability_list()`` (what actions exist, who provides them)
+    with ``capability_doctor()`` (what's available right now).
+
+    Returns a single dict the Agent can use to make Provider selection
+    decisions without calling multiple commands:
+    ``{actions, providers, by_action, overall}``
+
+    Each action entry includes its Chinese label and description from
+    actions.yaml.  Each provider entry includes availability status,
+    health, known limits, and platform metadata.
+    """
+    root = root or _providers_root()
+    catalog = capability_list(root)
+    doctor = capability_doctor(root)
+    actions_meta = _load_actions_metadata()
+
+    # Index providers by id from doctor result
+    provider_status: dict[str, dict[str, Any]] = {}
+    for p in doctor.get("providers", []):
+        provider_status[p["id"]] = p
+
+    # Enrich each action with metadata
+    enriched_actions: dict[str, dict[str, Any]] = {}
+    for action_name in catalog["actions"]:
+        meta = actions_meta.get(action_name, {})
+        enriched_actions[action_name] = {
+            "id": action_name,
+            "label": meta.get("label", action_name),
+            "description": meta.get("description", ""),
+        }
+
+    # Enrich each provider with availability and raw metadata
+    enriched_providers: list[dict[str, Any]] = []
+    for raw_p in _scan_providers(root):
+        pid = raw_p.get("id", raw_p.get("_dir", "unknown"))
+        status = provider_status.get(pid, {})
+        caps: list[str] = []
+        provides = raw_p.get("provides", {})
+        if isinstance(provides, dict):
+            caps = list(provides.keys())
+
+        entry: dict[str, Any] = {
+            "id": pid,
+            "label": raw_p.get("label", pid),
+            "execution": raw_p.get("execution", "unknown"),
+            "description": raw_p.get("description", ""),
+            "status": status.get("status", "unavailable"),
+            "healthy": status.get("healthy", False),
+            "capabilities": caps,
+            "known_limits": raw_p.get("known_limits", []),
+        }
+        # Carry platform metadata for providers that declare it
+        platforms = raw_p.get("platforms")
+        if platforms and isinstance(platforms, list):
+            entry["platforms"] = platforms
+        # Include per-platform maturity if declared
+        maturity_by_action = raw_p.get("maturity_by_action")
+        if maturity_by_action and isinstance(maturity_by_action, dict):
+            entry["maturity_by_action"] = maturity_by_action
+        enriched_providers.append(entry)
+
+    return {
+        "actions": enriched_actions,
+        "providers": enriched_providers,
+        "by_action": catalog["by_action"],
+        "overall": doctor.get("overall", "unknown"),
     }
 
 

@@ -523,6 +523,39 @@ def capability_catalog_cmd(
         console.print(table)
 
 
+@capability_app.command("status")
+def capability_status_cmd(
+    json_output: bool = typer.Option(True, "--json/--text", help="Output as JSON"),
+):
+    """Combined capability catalog + availability for Agent decision-making.
+
+    Returns what actions exist, which providers supply them, AND whether
+    each provider is currently available.  The Agent calls this once to
+    get a complete environmental facts picture before selecting providers.
+    """
+    from knowledge_studio.capability_commands import capability_status
+
+    result = capability_status()
+    if json_output:
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+    else:
+        # Text output: group by capability for human scanning
+        console.print(f"[bold]Overall:[/bold] {result['overall']}\n")
+        for action_name, action_info in sorted(result["actions"].items()):
+            providers = result["by_action"].get(action_name, [])
+            provider_strs = []
+            for pid in providers:
+                p = next((pp for pp in result["providers"] if pp["id"] == pid), None)
+                if p is None:
+                    continue
+                icon = {"ready": "✓", "not_configured": "○", "unavailable": "✗",
+                        "runtime_only": "?", "blocked": "—"}.get(p["status"], "?")
+                provider_strs.append(f"{icon} {p['label']}")
+            console.print(f"[cyan]{action_info['label']}[/cyan] ({action_name})")
+            console.print(f"  {', '.join(provider_strs) if provider_strs else '[dim]no provider[/dim]'}")
+        console.print(f"\n[dim]Use --json for machine-readable output.[/dim]")
+
+
 @capability_app.command("doctor")
 def capability_doctor_cmd(
     json_output: bool = typer.Option(False, "--json/--text", help="Output as JSON"),

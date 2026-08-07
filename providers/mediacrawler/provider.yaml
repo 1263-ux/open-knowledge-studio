@@ -1,0 +1,40 @@
+id: mediacrawler
+execution: external
+label: MediaCrawler
+description: 社交平台公开内容采集。支持小红书、抖音、B站、快手、微博、贴吧、知乎等平台的公开帖子、搜索和评论获取。需要用户自行安装 MediaCrawler。
+
+provides:
+  social.content.fetch:
+    maturity: validated
+  social.search:
+    maturity: validated
+  social.comments.fetch:
+    maturity: experimental
+  social.creator.fetch:
+    maturity: experimental
+  metadata.fetch:
+    maturity: validated
+  media.download:
+    maturity: experimental
+
+requirements: {}
+
+platforms:
+  - 小红书
+  - 抖音
+  - B站
+  - 快手
+  - 微博
+  - 贴吧
+  - 知乎
+
+cost:
+  estimated_per_call: 0
+
+known_limits:
+  - 需要用户自行安装 MediaCrawler（不捆绑进 OKS）
+  - 仅支持公开内容，无法绕过登录墙
+  - 各平台成熟度不同，小红书和抖音已验证，其他平台 experimental
+  - 评论和创作者信息为 experimental 状态
+
+last_validated: null
