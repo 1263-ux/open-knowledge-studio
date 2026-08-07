@@ -126,20 +126,26 @@ def prepare_ingest(source: str, kb_root: Path | None = None) -> dict[str, Any]:
     # ── Read and hash (local files only) ──
     source_bytes = b""
     content_hash = ""
+    _artifact_hash = ""
     _sensitive_redacted = False
     _redaction_count = 0
     _missing_assets: list[str] = []
     if is_text:
         try:
-            source_bytes = Path(source).read_bytes()
+            raw_bytes = Path(source).read_bytes()
+            # ── Source provenance hash (original file, before sanitization) ──
+            content_hash = _sha256(raw_bytes).hexdigest()
             # ── Deterministic sanitization (never modifies source file) ──
-            _text = source_bytes.decode("utf-8", errors="replace")
+            _text = raw_bytes.decode("utf-8", errors="replace")
             _sanitized = redact_text(_text)
             _redaction_count = _sanitized.count(REDACTED)
             if _redaction_count > 0:
-                source_bytes = _sanitized.encode("utf-8")
                 _sensitive_redacted = True
-            content_hash = _sha256(source_bytes).hexdigest()
+                source_bytes = _sanitized.encode("utf-8")
+            else:
+                source_bytes = raw_bytes
+            # ── Artifact integrity hash (after sanitization, for _check_artifacts) ──
+            _artifact_hash = _sha256(source_bytes).hexdigest()
         except OSError:
             source_bytes = b""
             content_hash = ""
@@ -187,7 +193,7 @@ def prepare_ingest(source: str, kb_root: Path | None = None) -> dict[str, Any]:
             "kind": "primary_text",
             "path": artifact_path,
             "media_type": _media_type(source),
-            "sha256": content_hash,
+            "sha256": _artifact_hash or content_hash,
             "locator_kind": "document",
         },
         "evidence_records": [],
@@ -285,7 +291,7 @@ def prepare_ingest(source: str, kb_root: Path | None = None) -> dict[str, Any]:
                 "artifact_id": artifact_id,
                 "kind": "primary_text",
                 "path": artifact_path,
-                "sha256": content_hash,
+                "sha256": _artifact_hash or content_hash,
             }
         ],
         "evidence": manifest["evidence_records"],
