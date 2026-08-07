@@ -117,6 +117,11 @@ On success: bundle_id returned.  On rejection: read error_code, do NOT retry bli
    source_type: agent-ingest
    ```
 
+   **Important:** Candidate is a draft Markdown document written to `drafts/{slug}.md`.
+   Candidate is NOT an OKS protocol schema object.
+   Do NOT call `oks schema show candidate` — it does not exist as a schema.
+   Use `oks drafts list` to see existing candidates.
+
 ## Step 8: Write result.json
 
 MUST write `.oks/runs/{run_id}/result.json` before reporting to user.

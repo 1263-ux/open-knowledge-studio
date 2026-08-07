@@ -17,6 +17,8 @@ from pathlib import Path
 from typing import Any
 
 from knowledge_studio.store import repo_root
+from knowledge_studio.security.redaction import redact_text
+from knowledge_studio.security.sensitive_fields import REDACTED
 
 # ── Source modality detection ──────────────────────────────────────
 
@@ -124,9 +126,19 @@ def prepare_ingest(source: str, kb_root: Path | None = None) -> dict[str, Any]:
     # ── Read and hash (local files only) ──
     source_bytes = b""
     content_hash = ""
+    _sensitive_redacted = False
+    _redaction_count = 0
+    _missing_assets: list[str] = []
     if is_text:
         try:
             source_bytes = Path(source).read_bytes()
+            # ── Deterministic sanitization (never modifies source file) ──
+            _text = source_bytes.decode("utf-8", errors="replace")
+            _sanitized = redact_text(_text)
+            _redaction_count = _sanitized.count(REDACTED)
+            if _redaction_count > 0:
+                source_bytes = _sanitized.encode("utf-8")
+                _sensitive_redacted = True
             content_hash = _sha256(source_bytes).hexdigest()
         except OSError:
             source_bytes = b""
@@ -230,6 +242,33 @@ def prepare_ingest(source: str, kb_root: Path | None = None) -> dict[str, Any]:
         ]
         text_ready = True
 
+        # ── Record sanitization metadata (never the secret itself) ──
+        if _sensitive_redacted:
+            manifest["notes"]["sensitive_content_redacted"] = True
+            manifest["notes"]["redaction_count"] = _redaction_count
+
+        # ── Scan Markdown for missing local image references ──
+        _md_image_refs: list[str] = []
+        _missing_assets: list[str] = []
+        _md_image_re = __import__("re").compile(r'!\[[^\]]*\]\(([^)]+)\)')
+        _md_image_refs = _md_image_re.findall(text_content)
+        for _ref in _md_image_refs:
+            # Skip URL and data-URI references (not locally checkable)
+            if _ref.startswith(("http://", "https://", "data:")):
+                continue
+            _img_path = Path(source).parent / _ref if not Path(_ref).is_absolute() else Path(_ref)
+            if not _img_path.exists():
+                _missing_assets.append(_ref)
+
+        if _missing_assets:
+            manifest["status"] = "partial"
+            manifest["failure_disposition"] = "needs_user_action"
+            manifest["notes"]["missing_assets"] = _missing_assets
+            manifest["notes"]["missing_assets_count"] = len(_missing_assets)
+            manifest["notes"]["missing_assets_note"] = (
+                f"文本已完整摄入，但 {len(_missing_assets)} 个本地图片资源不可访问。"
+            )
+
     # ── Build evidence fragment skeleton ──
     fragment = {
         "schema_version": "oks-evidence-fragment/v0.1",
@@ -240,7 +279,7 @@ def prepare_ingest(source: str, kb_root: Path | None = None) -> dict[str, Any]:
             "provider": "text-read" if is_text else "ok-ingest-prepare",
             "tool": "agent-runtime" if is_text else "ingest-prepare",
         },
-        "status": "succeeded" if is_text else "pending",
+        "status": "succeeded" if (is_text and not _missing_assets) else ("partial" if (is_text and _missing_assets) else "pending"),
         "artifacts": [
             {
                 "artifact_id": artifact_id,
@@ -280,6 +319,10 @@ def prepare_ingest(source: str, kb_root: Path | None = None) -> dict[str, Any]:
         "content_hash": content_hash,
         "files_generated": files_generated,
         "text_ready": text_ready,
+        "sensitive_content_redacted": _sensitive_redacted,
+        "redaction_count": _redaction_count,
+        "status": manifest.get("status", "complete"),
+        "missing_assets": _missing_assets,
         "next_step": next_step,
     }
 

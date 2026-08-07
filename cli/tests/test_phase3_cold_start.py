@@ -572,3 +572,240 @@ def test_raw_commit_missing_primary_artifact(tmp_path):
                 f"Semantic check {banned} should be skipped when manifest schema fails"
             )
         assert "INVALID_MANIFEST" in codes
+
+
+# ── Phase 3A-S: Secret sanitization ──────────────────────────────────
+
+def test_text_ready_sanitizes_api_key(tmp_path):
+    """Source with Bearer token + api_key=value: evidence and artifacts MUST NOT contain secrets."""
+    from knowledge_studio.ingest_prepare import prepare_ingest
+    import json
+
+    f = tmp_path / "secrets.md"
+    f.write_text(
+        "# Doc\n\n"
+        "Authorization: Bearer sk-test-1234567890abcdef\n\n"
+        "api_key: sk-test-token-value-here\n\n"
+        "Normal content.\n",
+        encoding="utf-8",
+    )
+
+    result = prepare_ingest(str(f), kb_root=tmp_path)
+    assert result["text_ready"] is True
+    assert result["sensitive_content_redacted"] is True
+    assert result["redaction_count"] > 0
+
+    # Check artifact — must NOT contain the secret
+    art_path = tmp_path / ".oks" / "runs" / result["run_id"] / "manifest" / "artifacts" / "content.md"
+    art_content = art_path.read_text(encoding="utf-8")
+    assert "sk-test-1234567890abcdef" not in art_content
+    assert "sk-test-token-value-here" not in art_content
+    assert "***REDACTED***" in art_content
+
+    # Check evidence-manifest.json — must NOT contain the secret
+    man_path = tmp_path / ".oks" / "runs" / result["run_id"] / "manifest" / "evidence-manifest.json"
+    manifest = json.loads(man_path.read_text(encoding="utf-8"))
+    assert manifest["notes"].get("sensitive_content_redacted") is True
+    assert manifest["notes"].get("redaction_count", 0) > 0
+    for rec in manifest["evidence_records"]:
+        if "text" in rec:
+            assert "sk-test-1234567890abcdef" not in rec["text"]
+            assert "sk-test-token-value-here" not in rec["text"]
+
+    import shutil, stat
+    def rm(p, fn, ex): Path(p).chmod(stat.S_IWRITE); fn(p)
+    shutil.rmtree(tmp_path / ".oks", onexc=rm)
+
+
+def test_text_ready_preserves_source_file(tmp_path):
+    """Original source file is NEVER modified by sanitization."""
+    from knowledge_studio.ingest_prepare import prepare_ingest
+
+    f = tmp_path / "secret-src.md"
+    original = "# Secret doc\n\nBearer sk-test-abcdef1234567890\n"
+    f.write_text(original, encoding="utf-8")
+
+    prepare_ingest(str(f), kb_root=tmp_path)
+
+    # Source file must be byte-identical to what we wrote
+    assert f.read_text(encoding="utf-8") == original
+
+    import shutil, stat
+    def rm(p, fn, ex): Path(p).chmod(stat.S_IWRITE); fn(p)
+    shutil.rmtree(tmp_path / ".oks", onexc=rm)
+
+
+def test_text_ready_no_secrets_passes_through(tmp_path):
+    """Plain text with no secrets: sensitive_content_redacted=False, content unchanged."""
+    from knowledge_studio.ingest_prepare import prepare_ingest
+
+    f = tmp_path / "clean.md"
+    original = "# Clean doc\n\nNothing sensitive here.\n"
+    f.write_text(original, encoding="utf-8")
+
+    result = prepare_ingest(str(f), kb_root=tmp_path)
+    assert result["text_ready"] is True
+    assert result["sensitive_content_redacted"] is False
+    assert result["redaction_count"] == 0
+
+    # Content should be unchanged (no "***REDACTED***")
+    art_path = tmp_path / ".oks" / "runs" / result["run_id"] / "manifest" / "artifacts" / "content.md"
+    art_content = art_path.read_text(encoding="utf-8")
+    assert "Nothing sensitive here" in art_content
+    assert "***REDACTED***" not in art_content
+
+    import shutil, stat
+    def rm(p, fn, ex): Path(p).chmod(stat.S_IWRITE); fn(p)
+    shutil.rmtree(tmp_path / ".oks", onexc=rm)
+
+
+# ── Phase 3A-S: Markdown image detection ─────────────────────────────
+
+def test_text_ready_no_images_is_complete(tmp_path):
+    """Plain text with no image references: status stays complete."""
+    from knowledge_studio.ingest_prepare import prepare_ingest
+
+    f = tmp_path / "plain.md"
+    f.write_text("# No images here\n\nJust plain text.", encoding="utf-8")
+
+    result = prepare_ingest(str(f), kb_root=tmp_path)
+    assert result["status"] == "complete"
+    assert result["missing_assets"] == []
+
+    import shutil, stat
+    def rm(p, fn, ex): Path(p).chmod(stat.S_IWRITE); fn(p)
+    shutil.rmtree(tmp_path / ".oks", onexc=rm)
+
+
+def test_text_ready_missing_local_images_is_partial(tmp_path):
+    """Markdown with ![](nonexistent.png): status=partial, missing_assets populated."""
+    from knowledge_studio.ingest_prepare import prepare_ingest
+    import json
+
+    f = tmp_path / "with-images.md"
+    f.write_text("# Doc with images\n\n![](missing1.png)\n\nSome text.\n\n![](also-gone.jpg)\n", encoding="utf-8")
+
+    result = prepare_ingest(str(f), kb_root=tmp_path)
+    assert result["status"] == "partial"
+    assert len(result["missing_assets"]) == 2
+    assert "missing1.png" in result["missing_assets"]
+    assert "also-gone.jpg" in result["missing_assets"]
+
+    # Verify manifest has failure_disposition set (required for raw_commit)
+    man_path = tmp_path / ".oks" / "runs" / result["run_id"] / "manifest" / "evidence-manifest.json"
+    manifest = json.loads(man_path.read_text(encoding="utf-8"))
+    assert manifest["status"] == "partial"
+    assert manifest["failure_disposition"] == "needs_user_action"
+    assert "missing_assets" in manifest["notes"]
+    assert "missing_assets_note" in manifest["notes"]
+    # Text content still preserved
+    assert "Some text" in manifest["evidence_records"][0]["text"]
+
+    import shutil, stat
+    def rm(p, fn, ex): Path(p).chmod(stat.S_IWRITE); fn(p)
+    shutil.rmtree(tmp_path / ".oks", onexc=rm)
+
+
+def test_text_ready_url_images_stays_complete(tmp_path):
+    """Markdown with URL-based images: status stays complete (no remote check)."""
+    from knowledge_studio.ingest_prepare import prepare_ingest
+
+    f = tmp_path / "url-images.md"
+    f.write_text("# Remote images\n\n![](https://example.com/img.png)\n\n![](http://cdn.io/photo.jpg)\n", encoding="utf-8")
+
+    result = prepare_ingest(str(f), kb_root=tmp_path)
+    assert result["status"] == "complete"
+    assert result["missing_assets"] == []
+
+    import shutil, stat
+    def rm(p, fn, ex): Path(p).chmod(stat.S_IWRITE); fn(p)
+    shutil.rmtree(tmp_path / ".oks", onexc=rm)
+
+
+# ── Phase 3A-S: SKILL.md integrity ───────────────────────────────────
+
+def test_promote_skill_has_no_invalid_params():
+    """Installed promote SKILL.md must NOT reference --title, --type, or --area."""
+    from importlib.resources import files
+
+    for host in ("claude", "agents"):
+        text = (
+            files("knowledge_studio.skill_templates")
+            .joinpath(host, "skills", "promote", "SKILL.md")
+            .read_text(encoding="utf-8")
+        )
+        assert "--title" not in text, f"{host}/promote/SKILL.md references --title"
+        assert "--type" not in text, f"{host}/promote/SKILL.md references --type"
+        assert "--area" not in text, f"{host}/promote/SKILL.md references --area"
+        # The actual command should be present
+        assert "oks drafts promote" in text, f"{host}/promote/SKILL.md missing oks drafts promote"
+
+
+def test_ingest_skill_candidate_not_schema():
+    """Ingest SKILL.md must explicitly state Candidate is NOT a schema."""
+    from importlib.resources import files
+
+    for host in ("claude", "agents"):
+        text = (
+            files("knowledge_studio.skill_templates")
+            .joinpath(host, "skills", "ingest", "SKILL.md")
+            .read_text(encoding="utf-8")
+        )
+        assert "Candidate is NOT an OKS protocol schema" in text, (
+            f"{host}/ingest/SKILL.md missing Candidate-is-not-schema statement"
+        )
+        # Must also explicitly forbid oks schema show candidate
+        assert "Do NOT call" in text, (
+            f"{host}/ingest/SKILL.md missing Do NOT call warning"
+        )
+
+
+# ── Phase 3A-S: Integration (prepare → raw_commit) ──────────────────
+
+def test_full_sanitize_integration(monkeypatch, tmp_path):
+    """Full pipeline: prepare → raw_commit, verify bundle is clean of secrets."""
+    import json, shutil, stat as _stat
+    from knowledge_studio.ingest_prepare import prepare_ingest
+    from knowledge_studio.raw_commit import raw_commit
+
+    monkeypatch.setenv("OKS_ROOT", str(tmp_path))
+
+    f = tmp_path / "secret-doc.md"
+    f.write_text(
+        "# Doc\n\n"
+        "Authorization: Bearer sk-test-sensitive-12345\n\n"
+        "Token: Bearer eyJhbGciOiJIUzI1NiJ9.e30.ZrRHA1JJJW8opsbCGfG_HACGp2UMN1mNRpXjQ\n\n"
+        "Normal content.\n",
+        encoding="utf-8",
+    )
+
+    result = prepare_ingest(str(f), kb_root=tmp_path)
+    assert result["text_ready"] is True
+    assert result["sensitive_content_redacted"] is True
+
+    commit_result = raw_commit(result["manifest_dir"])
+    assert commit_result["status"] == "committed"
+
+    bundle_path = Path(commit_result["bundle_path"])
+
+    # content.md must be clean
+    content_md = (bundle_path / "content.md").read_text(encoding="utf-8")
+    assert "sk-test-sensitive-12345" not in content_md
+    assert "eyJhbGciOiJIUzI1NiJ9" not in content_md
+
+    # evidence.jsonl must be clean
+    evidence = (bundle_path / "evidence.jsonl").read_text(encoding="utf-8")
+    assert "sk-test-sensitive-12345" not in evidence
+    assert "eyJhbGciOiJIUzI1NiJ9" not in evidence
+
+    # source-envelope snapshot must also be clean
+    env_path = bundle_path / "source-envelope.json"
+    env = json.loads(env_path.read_text(encoding="utf-8"))
+    assert "sk-test-sensitive" not in json.dumps(env)
+
+    # Cleanup
+    def _rm(p, fn, ex):
+        Path(p).chmod(_stat.S_IWRITE)
+        fn(p)
+    shutil.rmtree(tmp_path / ".oks", onexc=_rm)
+    shutil.rmtree(tmp_path / "raw", onexc=_rm)
