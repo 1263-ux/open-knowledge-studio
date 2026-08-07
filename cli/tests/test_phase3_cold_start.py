@@ -381,37 +381,54 @@ def test_security_sanitize_preserves_binary(tmp_path):
 
 # ── Integration: prepare → raw_commit ────────────────────────────────
 
-def test_prepare_text_then_raw_commit_default_output(tmp_path):
-    """Integration: clean KB → prepare Markdown → raw-commit → bundle at default path."""
+def test_prepare_text_then_raw_commit_default_output(monkeypatch, tmp_path):
+    """Integration: clean KB → prepare Markdown → raw-commit (no explicit output).
+
+    Uses OKS_ROOT to redirect repo_root() into tmp_path so the *real*
+    default-output codepath is exercised — including the P0-1 fix that
+    creates the date-based parent directory before mkdtemp.
+    """
     import json
+    import os
     import shutil
     import stat as _stat
 
     from knowledge_studio.ingest_prepare import prepare_ingest
     from knowledge_studio.raw_commit import raw_commit, CommitError
-    from knowledge_studio.store import repo_root
 
-    # 1. Create test markdown
+    # 1. Redirect OKS_ROOT so default output lands under tmp_path
+    monkeypatch.setenv("OKS_ROOT", str(tmp_path))
+
+    # 2. Create test markdown
     f = tmp_path / "test.md"
     f.write_text("# Integration Test\n\nContent for raw-commit.", encoding="utf-8")
 
-    # 2. prepare_ingest() with tmp_path as kb_root so raw/ lands here
+    # 3. prepare_ingest()
     result = prepare_ingest(str(f), kb_root=tmp_path)
     assert result["text_ready"] is True
     manifest_dir = result["manifest_dir"]
-    run_id = result["run_id"]
+    content_hash = result["content_hash"]
 
-    # 3. raw_commit with explicit output under tmp_path
-    # (default output uses repo_root() which points to the project dir;
-    #  for a clean isolated test we target tmp_path directly.)
-    bundle_dir = tmp_path / "raw" / "test-bundle"
-    commit_result = raw_commit(manifest_dir, output=bundle_dir)
+    # 4. raw_commit with NO output= argument — exercises default path
+    commit_result = raw_commit(manifest_dir)
     assert commit_result["status"] == "committed"
-    assert commit_result["source_id"].startswith("src-")
+
+    # 5. Verify default path: raw/YYYY/MM/DD/agent-capture/bundle-{hash[:16]}
     bundle_path = Path(commit_result["bundle_path"])
     assert bundle_path.is_dir()
+    assert bundle_path.is_relative_to(tmp_path), (
+        f"Bundle should be under tmp_path (OKS_ROOT), got {bundle_path}"
+    )
+    expected_prefix = f"bundle-{content_hash[:16]}"
+    assert bundle_path.name == expected_prefix, (
+        f"Expected bundle dir name {expected_prefix}, got {bundle_path.name}"
+    )
+    date_parents = bundle_path.relative_to(tmp_path)
+    # raw/YYYY/MM/DD/agent-capture/bundle-xxx
+    assert date_parents.parts[0] == "raw"
+    assert date_parents.parts[-2] == "agent-capture"
 
-    # 4. Verify bundle contents
+    # 6. Verify bundle contents
     bundle_json_path = bundle_path / "bundle.json"
     assert bundle_json_path.is_file()
     bundle = json.loads(bundle_json_path.read_text(encoding="utf-8"))
@@ -421,7 +438,7 @@ def test_prepare_text_then_raw_commit_default_output(tmp_path):
     assert content_md.is_file()
     assert "Integration Test" in content_md.read_text(encoding="utf-8")
 
-    # 5. Clean up
+    # 7. Clean up
     def _rm(p, f, e):
         Path(p).chmod(_stat.S_IWRITE)
         f(p)
