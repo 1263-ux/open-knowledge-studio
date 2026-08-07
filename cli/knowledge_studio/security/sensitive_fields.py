@@ -63,10 +63,12 @@ SENSITIVE_PATTERNS: tuple[re.Pattern, ...] = tuple(
         r'\bBearer\s+[A-Za-z0-9\-._~+/]+=*\b',
         # Basic auth
         r'\bBasic\s+[A-Za-z0-9+/]+=*\b',
-        # API keys in key=value form
-        r'\b(?:api[_-]?key|apikey|access[_-]?token|secret)\s*[:=]\s*\S+',
+        # API keys in key=value form (also matches "api key" with space)
+        r'\b(?:api[ _-]?key|apikey|access[ _-]?token|secret)\s*[:=]\s*\S+',
         # JWT tokens (header.payload.signature)
         r'\beyJ[A-Za-z0-9\-_]+\.eyJ[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+',
+        # OpenAI / DashScope / LLM provider API keys (sk- prefix)
+        r'\bsk-[A-Za-z0-9_-]{20,}\b',
         # AWS-style access keys
         r'\bAKIA[0-9A-Z]{16}\b',
         # Generic hex-encoded secrets (32+ hex chars after key=)

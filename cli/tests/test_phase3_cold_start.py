@@ -659,6 +659,59 @@ def test_text_ready_no_secrets_passes_through(tmp_path):
     shutil.rmtree(tmp_path / ".oks", onexc=rm)
 
 
+def test_text_ready_sanitizes_dashscope_key(tmp_path):
+    """Source with bare DashScope sk- key (no Bearer prefix): MUST be caught."""
+    from knowledge_studio.ingest_prepare import prepare_ingest
+    import json
+
+    f = tmp_path / "dashscope.md"
+    f.write_text(
+        "# API 配置\n\n"
+        "阿里云百炼 API Key：sk-c0b1f0123456789abcdef0123456789abcd\n\n"
+        "配置方式见下文。\n",
+        encoding="utf-8",
+    )
+
+    result = prepare_ingest(str(f), kb_root=tmp_path)
+    assert result["sensitive_content_redacted"] is True, (
+        f"sk- DashScope key should be caught, got redacted={result['sensitive_content_redacted']}"
+    )
+    assert result["redaction_count"] > 0
+
+    # Artifact must NOT contain the secret
+    art_path = tmp_path / ".oks" / "runs" / result["run_id"] / "manifest" / "artifacts" / "content.md"
+    art_content = art_path.read_text(encoding="utf-8")
+    assert "sk-c0b1f0123456789abcdef0123456789abcd" not in art_content
+    assert "***REDACTED***" in art_content
+
+    # Source file must be unmodified
+    assert "sk-c0b1f0123456789abcdef0123456789abcd" in f.read_text(encoding="utf-8")
+
+    import shutil, stat
+    def rm(p, fn, ex): Path(p).chmod(stat.S_IWRITE); fn(p)
+    shutil.rmtree(tmp_path / ".oks", onexc=rm)
+
+
+def test_redact_text_catches_bare_sk_key():
+    """redact_text must catch a bare sk- prefix key without any label prefix."""
+    from knowledge_studio.security.redaction import redact_text
+
+    text = "我的密钥是 sk-proj-abc123xyz789def456ghi012jkl345mno"
+    result = redact_text(text)
+    assert "sk-proj-abc123xyz789def456ghi012jkl345mno" not in result
+    assert "***REDACTED***" in result
+
+
+def test_redact_text_catches_api_key_with_space():
+    """'API Key: value' (with space between API and Key) must be caught."""
+    from knowledge_studio.security.redaction import redact_text
+
+    text = "API Key: sk-secret-value-12345"
+    result = redact_text(text)
+    assert "sk-secret-value-12345" not in result
+    assert "***REDACTED***" in result
+
+
 # ── Phase 3A-S: Markdown image detection ─────────────────────────────
 
 def test_text_ready_no_images_is_complete(tmp_path):
