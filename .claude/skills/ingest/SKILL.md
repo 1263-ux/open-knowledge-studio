@@ -94,7 +94,7 @@ On success: bundle_id returned.  On rejection: read error_code, do NOT retry bli
 
 ## Step 8: Write result.json
 
-Save `.oks/runs/{run_id}/result.json`:
+MUST write `.oks/runs/{run_id}/result.json` before reporting to user.
 
 ```json
 {
@@ -115,82 +115,71 @@ Save `.oks/runs/{run_id}/result.json`:
   "latency_ms": 6200,
   "bundle_id": "bundle:2789f4ff",
   "candidate_path": "drafts/controlled-chinese-scan.md",
-  "review_status": "pending"
+  "review_status": "pending",
+  "provider_selection": {
+    "chosen": "pdf-lite",
+    "candidates_considered": ["pdf-lite", "rapidocr", "agent-runtime"],
+    "rationale": "pdf-lite selected as primary text extraction; rapidocr for OCR supplement; agent-runtime as fallback",
+    "fallback_activated": false,
+    "degradation_path": []
+  }
 }
 ```
 
+### provider_selection fields
+
+- **chosen** (required): the provider ultimately used
+- **candidates_considered** (required): all providers evaluated, in preference order
+- **rationale** (required): WHY the chosen provider was selected over alternatives
+- **fallback_activated** (required): true if the first-choice provider failed
+- **degradation_path** (required when fallback activated): ordered list of `{provider, status, reason}` for every attempt
+
+### Degradation path status values
+
+- `success` — provider succeeded
+- `failed` — provider returned no useful output
+- `blocked` — anti-bot, paywall, or access restriction
+- `unavailable` — provider not configured or not installed
+- `skipped` — provider was considered but not attempted (cost, maturity, etc.)
+
 ## Step 9: Report to User
 
-Use `result.json` to generate the user-facing summary.
-
-### Complete scenario
+MUST output the unified result card as the final user-facing message.
 
 ```
-已完成摄入
+摄入完成：{complete|partial|failed}
 
-来源：controlled-chinese-scan.pdf
-状态：完整
-
-使用方式：
-- pdf-lite 检测文本层
-- RapidOCR 提取 43 个文字区域
-- Agent 校验页面结构
-
-证据：
-- 3 个页面级定位
-- 43 个 bbox 定位
-- 共 696 字正文
-
-远程处理：未使用
-成本：0
-耗时：6.2 秒
-
-结果：
-- Raw Bundle: bundle:2789f4ff
-- Candidate: drafts/controlled-chinese-scan.md
-- 当前状态：等待人工审核
-```
-
-### Partial scenario
-
-```
-状态：部分完成
+来源：{source_uri}
+使用路径：{provider_chain}
 
 已获得：
-- 视频元数据
-- 弹幕文本
-- 7 张关键帧
+- {item}
+- {item}
 
 缺失：
-- 常规字幕正文
+- {item} — {原因}
 
-原因：
-- Bilibili 需要登录权限
+Raw Bundle：{bundle_id}
+Candidate：{candidate_path}
 
-影响：
-- 可以检索视频主题和弹幕
-- 对完整口播内容的覆盖不足
-
-当前状态：
-- Raw 已保存
-- Candidate 等待审核
+下一步：
+使用 /promote 审核、编辑或拒绝该 Candidate。
 ```
 
-### Failed scenario
+### Card field descriptions
+
+- **摄入完成**: `complete` (all evidence obtained), `partial` (some evidence missing, usable), `failed` (no usable evidence)
+- **使用路径**: `provider1 → provider2` for degradation; single provider name for direct path
+- **已获得**: bullet list of acquired evidence items in plain language
+- **缺失**: bullet list of missing items with reasons — MUST be honest, never claim completeness when partial
+- **下一步**: always points to `/promote` for human review
+
+### Provider chain format
 
 ```
-状态：未能完成
-
-来源：<source>
-
-原因：所有 Provider 均失败
-- pdf-lite: 文本层为空
-- RapidOCR: 未安装
-- Agent 视觉: 当前会话不支持
-
-建议：
-- 运行 oks capability install watch --yes
-- 或在支持多模态的 Agent Host 中重试
+firecrawl                          (single provider, no fallback)
+firecrawl → trafilatura            (first failed, second succeeded)
+firecrawl → trafilatura → 人工     (all automated failed, human supply)
 ```
 
 ## Constraints
@@ -201,3 +190,8 @@ Use `result.json` to generate the user-facing summary.
 - NEVER expose API keys, cookies, or tokens
 - ALWAYS record failure reasons honestly
 - ALWAYS preserve original tool output unmodified
+- MUST write result.json to `.oks/runs/{run_id}/result.json` before reporting to user
+- MUST include `provider_selection` in result.json with chosen, candidates_considered, and rationale
+- MUST include `degradation_path` in provider_selection when fallback was activated
+- MUST output the unified result card as the final user-facing message (Step 9 format)
+- MUST record every attempted provider in degradation_path even if it failed

@@ -8,6 +8,10 @@ what's missing, and how to fix it.
 Per CONSTITUTION P4, doctor performs only LOCAL checks — no MCP handshake,
 no HTTP requests, no API authentication tests.  Remote capability
 availability is verified by each Provider's own ``probe.py``.
+
+Also exposes ``_provider_status``, ``_build_capability_summary``, and
+``print_capability_summary`` so ``oks init`` can show a user-facing
+capability overview without duplicating grouping logic.
 """
 
 from __future__ import annotations
@@ -18,6 +22,10 @@ import sys
 from importlib.resources import files
 from pathlib import Path
 from typing import Any
+
+from rich.console import Console
+
+from knowledge_studio.i18n import t
 
 
 def _providers_root() -> Path:
@@ -192,6 +200,47 @@ def _check_python_import(module_name: str, package_name: str | None = None) -> d
         }
 
 
+def _provider_status(checks: list[dict[str, Any]], provider_id: str, execution: str) -> str:
+    """Derive a provider's readiness status from its health checks.
+
+    Pure function — does no I/O.  Returns one of:
+
+    * ``ready`` — all checks passed
+    * ``not_configured`` — env var / API key missing (commands available)
+    * ``unavailable`` — required command or package absent
+    * ``runtime_only`` — can only be verified at Agent runtime (MCP, etc.)
+    * ``blocked`` — known blockers prevent use
+    * ``experimental`` — flagged as experimental, not for production
+    """
+    # ── blocked providers ──
+    if provider_id in ("browser",):
+        return "blocked"
+    if provider_id in ("http-fetch", "remote-asr", "media-ingest"):
+        return "experimental"
+
+    # ── runtime-only (MCP / Agent-dependent) ──
+    if provider_id in ("agentkey",):
+        return "runtime_only"
+
+    # ── separate mandatory vs optional checks ──
+    required_failures = [
+        c for c in checks
+        if c.get("available") is False
+        and c.get("type") not in ("note", "env_var")
+        and c.get("required") is not False
+    ]
+    env_failures = [
+        c for c in checks
+        if c.get("type") == "env_var" and c.get("available") is False
+    ]
+
+    if not required_failures and not env_failures:
+        return "ready"
+    if env_failures and not required_failures:
+        return "not_configured"
+    return "unavailable"
+
+
 def _check_provider_health(provider: dict[str, Any]) -> list[dict[str, Any]]:
     """Run local health checks for one provider.  NO network calls."""
     checks: list[dict[str, Any]] = []
@@ -264,7 +313,8 @@ def _check_provider_health(provider: dict[str, Any]) -> list[dict[str, Any]]:
 def capability_doctor(root: Path | None = None) -> dict[str, Any]:
     """Diagnose local environment and report provider health.
 
-    Returns ``{overall, providers: [{id, healthy, checks}]}``.
+    Returns ``{overall, providers: [{id, label, execution, healthy, status, checks}]}``.
+    ``status`` is one of: ready, not_configured, unavailable, runtime_only, blocked, experimental.
     PER CONSTITUTION P4: local checks only, no network calls.
     """
     root = root or _providers_root()
@@ -288,6 +338,7 @@ def capability_doctor(root: Path | None = None) -> dict[str, Any]:
             "label": p.get("label", pid),
             "execution": p.get("execution", "unknown"),
             "healthy": not has_failure,
+            "status": _provider_status(checks, pid, p.get("execution", "unknown")),
             "checks": checks,
         })
 
@@ -295,3 +346,156 @@ def capability_doctor(root: Path | None = None) -> dict[str, Any]:
         "overall": "healthy" if all_healthy else "issues_found",
         "providers": results,
     }
+
+
+# ── Init-time capability summary ────────────────────────────────────
+
+_ALWAYS_AVAILABLE = frozenset({"agent-runtime", "human", "text-read"})
+
+
+def _remote_setup_hint(provider_id: str) -> str:
+    """Return a one-line configuration hint for a remote provider."""
+    if provider_id == "firecrawl":
+        return t("firecrawl_setup_hint")
+    if provider_id == "agentkey":
+        return t("agentkey_setup_hint")
+    return ""
+
+
+def _build_capability_summary(
+    doctor_result: dict[str, Any] | None,
+) -> dict[str, list[dict[str, Any]]]:
+    """Group provider statuses for human-readable init output.
+
+    Pure function — receives a ``capability_doctor()`` result, returns
+    grouped lists keyed by ``local_ready``, ``local_missing``,
+    ``remote_ready``, ``remote_not_configured``, ``remote_runtime_only``,
+    ``blocked_experimental``.
+
+    Providers that are always available (agent-runtime, human, text-read)
+    are excluded — they would only add noise for a first-time user.
+    """
+    empty: dict[str, list[dict[str, Any]]] = {
+        "local_ready": [],
+        "local_missing": [],
+        "remote_ready": [],
+        "remote_not_configured": [],
+        "remote_runtime_only": [],
+        "blocked_experimental": [],
+    }
+    if doctor_result is None:
+        return empty
+
+    for p in doctor_result.get("providers", []):
+        pid = p.get("id", "")
+        if pid in _ALWAYS_AVAILABLE:
+            continue
+        status = p.get("status", "unavailable")
+        execution = p.get("execution", "")
+
+        if status in ("blocked", "experimental"):
+            empty["blocked_experimental"].append(p)
+        elif execution == "external":
+            if status == "ready":
+                empty["remote_ready"].append(p)
+            elif status == "not_configured":
+                empty["remote_not_configured"].append(p)
+            elif status == "runtime_only":
+                empty["remote_runtime_only"].append(p)
+            else:
+                empty["remote_not_configured"].append(p)
+        else:
+            if status == "ready":
+                empty["local_ready"].append(p)
+            else:
+                empty["local_missing"].append(p)
+
+    return empty
+
+
+def print_capability_summary(
+    console: Console,
+    doctor_result: dict[str, Any] | None,
+) -> None:
+    """Print a user-facing capability summary after ``oks init``.
+
+    Called from ``init()`` — does the grouping, Rich output, and
+    first-use prompt generation so the CLI command stays thin.
+    """
+    summary = _build_capability_summary(doctor_result)
+    has_local = bool(summary["local_ready"] or summary["local_missing"])
+    has_remote = bool(
+        summary["remote_ready"]
+        or summary["remote_not_configured"]
+        or summary["remote_runtime_only"]
+    )
+
+    console.print(f"\n[bold]{t('init_ready')}[/bold]")
+
+    # ── Local capabilities ──
+    if has_local or summary["local_missing"]:
+        console.print(f"\n[bold]{t('init_local_capabilities')}[/bold]")
+        for p in summary["local_ready"]:
+            console.print(f"  [green]✓[/green] {p['label']} ({p['id']})")
+        for p in summary["local_missing"]:
+            status = p.get("status", "")
+            if status == "not_configured":
+                label_text = t("status_not_configured")
+            else:
+                label_text = t("status_not_installed")
+            console.print(
+                f"  [yellow]✗[/yellow] {p['label']} ({p['id']}) — {label_text}"
+            )
+
+    # ── Remote capabilities ──
+    if has_remote:
+        console.print(f"\n[bold]{t('init_remote_capabilities')}[/bold]")
+        for p in summary["remote_ready"]:
+            console.print(
+                f"  [green]✓[/green] {p['label']} ({p['id']}) — {t('status_configured')}"
+            )
+        for p in summary["remote_not_configured"]:
+            hint = _remote_setup_hint(p["id"])
+            console.print(
+                f"  [yellow]✗[/yellow] {p['label']} ({p['id']}) — {t('status_not_configured')}"
+            )
+            if hint:
+                console.print(f"    [dim]{hint}[/dim]")
+        for p in summary["remote_runtime_only"]:
+            hint = _remote_setup_hint(p["id"])
+            console.print(
+                f"  [dim]?[/dim] {p['label']} ({p['id']}) — {t('status_runtime_only')}"
+            )
+            if hint:
+                console.print(f"    [dim]{hint}[/dim]")
+        for p in summary["blocked_experimental"]:
+            st = p.get("status", "")
+            label_text = (
+                t(f"status_{st}") if st in ("blocked", "experimental") else st
+            )
+            console.print(f"  [dim]—[/dim] {p['label']} ({p['id']}) — {label_text}")
+
+    # ── Remote config note ──
+    has_firecrawl = any(
+        p["id"] == "firecrawl" for p in summary["remote_ready"]
+    )
+    has_agentkey = any(
+        p["id"] == "agentkey" for p in summary["remote_runtime_only"]
+    )
+    if not has_firecrawl and not has_agentkey:
+        console.print(f"\n[dim]{t('init_no_remote')}[/dim]")
+    elif summary["remote_not_configured"] or summary["remote_runtime_only"]:
+        console.print(f"\n[dim]{t('init_remote_note')}[/dim]")
+
+    # ── First-use prompts ──
+    console.print(f"\n[bold]{t('init_first_prompt')}[/bold]")
+    # Always show the local document prompt — text-read is always available
+    console.print(f'  [cyan]"{t("init_prompt_local_only")}"[/cyan]')
+    has_pdf_like = any(
+        p["id"] in ("pdf-lite", "markitdown") for p in summary["local_ready"]
+    )
+    has_web_like = bool(summary["remote_ready"] or summary["remote_runtime_only"])
+    if has_pdf_like:
+        console.print(f'  [cyan]"{t("init_prompt_with_pdf")}"[/cyan]')
+    if has_web_like:
+        console.print(f'  [cyan]"{t("init_prompt_with_web")}"[/cyan]')

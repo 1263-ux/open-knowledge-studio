@@ -11,8 +11,72 @@ import os
 
 _TEXTS: dict[str, dict[str, str]] = {
     "init_ready": {
-        "zh": "知识库就绪。下一步：",
-        "en": "Instance ready. Next steps:",
+        "zh": "OKS 已初始化。",
+        "en": "OKS initialized.",
+    },
+    "init_first_prompt": {
+        "zh": "现在可对 Agent 说：",
+        "en": "Now you can say to your Agent:",
+    },
+    "init_local_capabilities": {
+        "zh": "本地能力：",
+        "en": "Local capabilities:",
+    },
+    "init_remote_capabilities": {
+        "zh": "远程能力：",
+        "en": "Remote capabilities:",
+    },
+    "status_configured": {
+        "zh": "已配置",
+        "en": "Configured",
+    },
+    "status_not_configured": {
+        "zh": "未配置",
+        "en": "Not configured",
+    },
+    "status_not_installed": {
+        "zh": "未安装",
+        "en": "Not installed",
+    },
+    "status_runtime_only": {
+        "zh": "需要 Agent 运行时验证",
+        "en": "Requires Agent runtime verification",
+    },
+    "status_blocked": {
+        "zh": "当前不可用",
+        "en": "Currently unavailable",
+    },
+    "status_experimental": {
+        "zh": "实验性",
+        "en": "Experimental",
+    },
+    "firecrawl_setup_hint": {
+        "zh": "设置环境变量 FIRECRAWL_API_KEY=<你的密钥>",
+        "en": "Set FIRECRAWL_API_KEY=<your key> as environment variable",
+    },
+    "agentkey_setup_hint": {
+        "zh": "在 Claude Code 中配置 AgentKey MCP 服务器。本地无法验证 AgentKey 可用性。",
+        "en": "Configure AgentKey MCP server in Claude Code. Local verification not available.",
+    },
+    "init_remote_note": {
+        "zh": "Firecrawl 用于普通网页；AgentKey 用于受限平台。两者独立配置，都不影响本地文件摄入。",
+        "en": "Firecrawl for public web; AgentKey for restricted platforms. Both are optional — local file ingest always works.",
+    },
+    "init_no_remote": {
+        "zh": "当前仅本地文本能力可用。配置 Firecrawl 后可摄入网页。AgentKey 用于受限平台（独立配置）。",
+        "en": "Only local text capability available. Configure Firecrawl for web content. AgentKey for restricted platforms (separate config).",
+    },
+    "init_prompt_local_only": {
+        "zh": "把这份文档收录进 OKS。",
+        "en": "Ingest this document into OKS.",
+    },
+    "init_prompt_with_pdf": {
+        "zh": "把这个 PDF 收录进 OKS，并生成待审核知识。",
+        "en": "Ingest this PDF into OKS and generate a reviewable candidate.",
+    },
+    "init_prompt_with_web": {
+        "zh": "把这个网页收录进 OKS。",
+        "en": "Ingest this web page into OKS.",
     },
     "init_step_install": {
         "zh": "  oks capability install watch --yes     # 安装视频/音频提取能力",

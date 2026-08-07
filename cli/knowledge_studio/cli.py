@@ -1650,17 +1650,16 @@ def init(
         init_config(str(root))
         console.print(f"[green]Active KB set:[/green] {root}")
 
-    console.print(
-        f"\n[bold]{t('init_ready')}[/bold]\n"
-        f"{t('init_step_install')}\n"
-        f"{t('init_step_ingest')}\n"
-        f"{t('init_step_status')}\n"
-        f"\n[dim]{t('init_capabilities')}[/dim]\n"
-        f"  [dim]watch    - 视频/音频 (faster-whisper + yt-dlp + RapidOCR)[/dim]\n"
-        f"  [dim]document - Office/HTML/文本 (markitdown)[/dim]\n"
-        f"  [dim]pdf      - PDF (MinerU)[/dim]\n"
-        f"  [dim]formula  - 公式 OCR (PaddleOCR)[/dim]"
+    # ── Dynamic capability check ──
+    from knowledge_studio.capability_commands import (
+        capability_doctor,
+        print_capability_summary,
     )
+    try:
+        doctor_result = capability_doctor()
+    except Exception:
+        doctor_result = None
+    print_capability_summary(console, doctor_result)
 
 
 # ── Optional editor hooks (opt-in auto-recall) ───────────────────
