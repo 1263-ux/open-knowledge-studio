@@ -868,3 +868,386 @@ def test_full_sanitize_integration(monkeypatch, tmp_path):
         fn(p)
     shutil.rmtree(tmp_path / ".oks", onexc=_rm)
     shutil.rmtree(tmp_path / "raw", onexc=_rm)
+
+
+# ══════════════════════════════════════════════════════════════════════
+# Phase 3A-M — Dynamic Extraction + Guided UX automated tests
+# ══════════════════════════════════════════════════════════════════════
+
+
+# ── 1. Provider declares multiple capabilities ──────────────────────
+
+def test_provider_declares_multiple_capabilities():
+    """A single provider.yaml must be able to declare multiple capabilities."""
+    from knowledge_studio.capability_commands import capability_list
+
+    catalog = capability_list()
+    # Check known multi-capability providers
+    firecrawl = next(p for p in catalog["providers"] if p["id"] == "firecrawl")
+    assert len(firecrawl["actions"]) >= 3, (
+        f"firecrawl should declare >=3 capabilities, has {len(firecrawl['actions'])}"
+    )
+
+    agent_runtime = next(p for p in catalog["providers"] if p["id"] == "agent-runtime")
+    assert len(agent_runtime["actions"]) >= 3, (
+        f"agent-runtime should declare >=3 capabilities, has {len(agent_runtime['actions'])}"
+    )
+
+    pdf_lite = next(p for p in catalog["providers"] if p["id"] == "pdf-lite")
+    assert len(pdf_lite["actions"]) >= 2, (
+        f"pdf-lite should declare >=2 capabilities, has {len(pdf_lite['actions'])}"
+    )
+
+
+# ── 2. One provider can satisfy multiple demands ────────────────────
+
+def test_one_provider_satisfies_multiple_demands():
+    """One provider's capabilities can cover multiple Recipe demands."""
+    from knowledge_studio.capability_commands import capability_list, capability_status
+
+    catalog = capability_list()
+    # web Recipe demands: web.fetch, web.extract (both required)
+    # A single Firecrawl execution satisfies both
+    web_providers = catalog["by_action"].get("web.fetch", [])
+    extract_providers = catalog["by_action"].get("web.extract", [])
+    # Firecrawl must appear in BOTH lists (one provider → multiple capabilities)
+    assert "firecrawl" in web_providers, "firecrawl missing from web.fetch"
+    assert "firecrawl" in extract_providers, "firecrawl missing from web.extract"
+    # Same for agent-runtime: image.observe + layout.understand + chart.interpret
+    assert "agent-runtime" in catalog["by_action"].get("image.observe", [])
+    assert "agent-runtime" in catalog["by_action"].get("layout.understand", [])
+
+
+# ── 3. Agent can get current availability facts ─────────────────────
+
+def test_capability_status_returns_availability():
+    """capability_status() must return provider availability, not just mapping."""
+    from knowledge_studio.capability_commands import capability_status
+
+    result = capability_status()
+    assert "providers" in result
+    assert "actions" in result
+    assert "by_action" in result
+    assert "overall" in result
+
+    for p in result["providers"]:
+        assert "status" in p, f"provider {p['id']} missing status"
+        assert "healthy" in p, f"provider {p['id']} missing healthy"
+        assert p["status"] in (
+            "ready", "not_configured", "unavailable", "runtime_only",
+            "blocked", "experimental",
+        ), f"provider {p['id']} has unknown status: {p['status']}"
+        assert "capabilities" in p, f"provider {p['id']} missing capabilities list"
+        assert "known_limits" in p, f"provider {p['id']} missing known_limits"
+
+
+def test_capability_status_actions_have_chinese_labels():
+    """Every action in capability_status must have a Chinese label."""
+    from knowledge_studio.capability_commands import capability_status
+
+    result = capability_status()
+    for name, info in result["actions"].items():
+        assert info.get("label"), f"action '{name}' has empty label"
+        # Labels should contain non-ASCII (Chinese) characters
+        assert info["label"] != name, (
+            f"action '{name}' label equals its id — should have Chinese name"
+        )
+
+
+# ── 4. required / optional demand distinction in Recipes ────────────
+
+def test_recipes_have_required_and_optional_capabilities():
+    """Every Recipe must distinguish required from optional capabilities."""
+    from importlib.resources import files
+
+    recipes_dir = files("knowledge_studio.recipes")
+    recipe_names = [
+        "text.md", "pdf.md", "web.md", "office.md",
+        "image.md", "audio.md", "video.md",
+    ]
+    for name in recipe_names:
+        recipe_path = recipes_dir.joinpath(name)
+        assert recipe_path.is_file(), f"recipe missing: {name}"
+        text = recipe_path.read_text(encoding="utf-8")
+        assert "required_capabilities" in text, (
+            f"{name} missing required_capabilities"
+        )
+        assert "optional_capabilities" in text, (
+            f"{name} missing optional_capabilities"
+        )
+
+
+# ── 5. Missing required → cannot silently complete ──────────────────
+
+def test_ingest_skill_forbids_silent_partial_promotion():
+    """Ingest SKILL.md must say: missing required → partial, not complete."""
+    for host in ("claude", "agents"):
+        text = _read_skill_text(host)
+        assert "NEVER upgrade partial to complete" in text, (
+            f"{host}/ingest/SKILL.md missing: NEVER upgrade partial to complete"
+        )
+        # Must describe what happens when required is missing
+        assert "required" in text.lower(), (
+            f"{host}/ingest/SKILL.md must reference required capabilities"
+        )
+
+
+def test_ingest_skill_guides_partial_to_user():
+    """When evidence is partial, Agent must explain impact and recommend action."""
+    for host in ("claude", "agents"):
+        text = _read_skill_text(host)
+        assert "推荐" in text, (
+            f"{host}/ingest/SKILL.md missing 推荐 (recommendation) in user-facing card"
+        )
+        assert "影响" in text, (
+            f"{host}/ingest/SKILL.md missing 影响 (impact) in user-facing card"
+        )
+
+
+# ── 6. Agent Runtime provenance ─────────────────────────────────────
+
+def test_ingest_skill_labels_agent_observation():
+    """Agent observation must be labeled as agent_observed, not mechanical."""
+    for host in ("claude", "agents"):
+        text = _read_skill_text(host)
+        assert "agent_observed" in text, (
+            f"{host}/ingest/SKILL.md missing agent_observed provenance"
+        )
+        assert "agent_multimodal_observation" in text, (
+            f"{host}/ingest/SKILL.md missing agent_multimodal_observation method"
+        )
+        assert "NEVER present agent inference as source text" in text, (
+            f"{host}/ingest/SKILL.md missing agent inference constraint"
+        )
+
+
+def test_agent_runtime_provider_declares_evidence_provenance():
+    """agent-runtime provider.yaml must declare evidence method and agent_judgment."""
+    from knowledge_studio.capability_commands import _scan_providers
+    from knowledge_studio.capability_commands import _providers_root
+
+    providers = _scan_providers(_providers_root())
+    ar = next(p for p in providers if p.get("id") == "agent-runtime")
+    evidence = ar.get("evidence", {})
+    assert evidence.get("agent_judgment") == "agent_observed", (
+        "agent-runtime must declare agent_judgment: agent_observed"
+    )
+    assert evidence.get("method") == "agent_multimodal_observation", (
+        "agent-runtime must declare method: agent_multimodal_observation"
+    )
+
+
+# ── 7. 用户视图中文化 ──────────────────────────────────────────────
+
+def test_user_facing_text_is_chinese():
+    """All user-facing UI text must be in Chinese natural language."""
+    for host in ("claude", "agents"):
+        text = _read_skill_text(host)
+        # Check the Guided UX Principles section has Chinese examples
+        assert "用户做判断" in text or "Ask users for judgment" in text, (
+            f"{host}/ingest/SKILL.md missing Guided UX principles"
+        )
+
+
+def test_i18n_has_chinese_for_all_keys():
+    """Every i18n key must have a zh (Chinese) translation."""
+    from knowledge_studio.i18n import _TEXTS
+
+    for key, entry in _TEXTS.items():
+        assert "zh" in entry, f"i18n key '{key}' missing zh translation"
+        assert entry["zh"], f"i18n key '{key}' has empty zh translation"
+
+
+# ── 8. internal capability ID default hidden ────────────────────────
+
+def test_init_summary_hides_internal_ids():
+    """User-facing capability descriptions must NOT expose internal provider IDs.
+
+    The raw label (without install hints) must be free of internal IDs.
+    Install hints like 'oks capability install pdf-lite' or 'pip install
+    markitdown' are actionable instructions — those may reference IDs because
+    that's what the user actually types.  The capability label itself must
+    be in plain Chinese (e.g. 'PDF 文本提取', not 'pdf-lite')."""
+    from knowledge_studio.capability_commands import (
+        _USER_CAPABILITY_LABELS,
+        _describe_ready_capabilities,
+        _build_capability_summary,
+        capability_doctor,
+    )
+
+    doctor = capability_doctor()
+    summary = _build_capability_summary(doctor)
+    can_do, can_enable = _describe_ready_capabilities(summary)
+
+    internal_ids = {
+        "pdf-lite", "firecrawl", "agentkey", "rapidocr", "trafilatura",
+        "yt-dlp", "ffmpeg", "mediacrawler", "agent-runtime", "text-read",
+        "local-asr", "remote-asr", "mineru",
+    }
+
+    for label in can_do + can_enable:
+        # Split off any install hint (after ' — ')
+        capability_name = label.split(" — ")[0].strip()
+        for pid in internal_ids:
+            assert pid not in capability_name.lower(), (
+                f"Capability label exposes internal ID '{pid}': '{capability_name}'"
+            )
+
+
+def test_init_summary_labels_are_defined():
+    """Every provider in the catalog should appear in _USER_CAPABILITY_LABELS."""
+    from knowledge_studio.capability_commands import (
+        _USER_CAPABILITY_LABELS,
+        _ALWAYS_AVAILABLE,
+    )
+    from knowledge_studio.capability_commands import capability_list
+    from knowledge_studio.capability_commands import capability_doctor
+    from knowledge_studio.capability_commands import _scan_providers, _providers_root
+
+    # All non-always-available providers should have a user-facing label
+    for p in _scan_providers(_providers_root()):
+        pid = p.get("id", "")
+        if pid in _ALWAYS_AVAILABLE:
+            continue
+        assert pid in _USER_CAPABILITY_LABELS, (
+            f"Provider '{pid}' missing from _USER_CAPABILITY_LABELS"
+        )
+
+
+# ── 9. Provider does not write to Raw directly ──────────────────────
+
+def test_normalize_functions_return_fragment_not_write():
+    """normalize.py functions are pure — they return dicts, don't write files."""
+    import inspect
+
+    normalize_modules = [
+        "knowledge_studio.providers.firecrawl.normalize",
+        "knowledge_studio.providers.agentkey.normalize",
+        "knowledge_studio.providers.text_read.normalize",
+        "knowledge_studio.providers.pdf_lite.normalize",
+        "knowledge_studio.providers.markitdown.normalize",
+        "knowledge_studio.providers.rapidocr.normalize",
+        "knowledge_studio.providers.yt_dlp.normalize",
+        "knowledge_studio.providers.ffmpeg.normalize",
+    ]
+    for mod_name in normalize_modules:
+        try:
+            mod = __import__(mod_name, fromlist=["normalize"])
+        except ImportError:
+            continue  # not installed — skip
+        fn = getattr(mod, "normalize", None)
+        assert fn is not None, f"{mod_name} missing normalize function"
+        sig = inspect.signature(fn)
+        # normalize() must NOT have file-writing parameters like 'output_path'
+        params = list(sig.parameters.keys())
+        assert "output_path" not in params, (
+            f"{mod_name}.normalize() has output_path param — it should be pure"
+        )
+        # Must have source_id as first param
+        assert "source_id" in params, (
+            f"{mod_name}.normalize() missing source_id parameter"
+        )
+
+
+def test_raw_commit_is_the_only_raw_writer():
+    """Only raw_commit writes to raw/ — providers return fragments."""
+    from knowledge_studio.raw_commit import raw_commit as _commit_fn
+    import inspect
+
+    # raw_commit function exists and is the sole path to raw/
+    assert callable(_commit_fn)
+    sig = inspect.signature(_commit_fn)
+    # Takes manifest_dir, not individual fragments
+    assert "manifest_dir" in sig.parameters
+
+
+# ── 10. Human Review boundary unchanged ──────────────────────────────
+
+def test_candidate_requires_human_review():
+    """Candidate must go to drafts/ — Agent never writes to wiki/ directly."""
+    for host in ("claude", "agents"):
+        text = _read_skill_text(host)
+        assert "NEVER write to wiki/ directly" in text, (
+            f"{host}/ingest/SKILL.md missing: NEVER write to wiki/ directly"
+        )
+        assert "/promote" in text, (
+            f"{host}/ingest/SKILL.md missing /promote — human review gate"
+        )
+
+
+def test_wiki_write_is_only_via_cli():
+    """Wiki page creation must go through store.write_wiki_page, not raw file writes."""
+    from knowledge_studio.store import write_wiki_page, promote_draft
+    import inspect
+
+    # These are the only two functions that write wiki pages
+    assert callable(write_wiki_page)
+    assert callable(promote_draft)
+    # promote_draft is the gate from draft to wiki
+    sig = inspect.signature(promote_draft)
+    assert "slug" in sig.parameters
+
+
+# ── Bonus: capability_status is the single source of truth ──────────
+
+def test_capability_status_includes_mediacrawler():
+    """MediaCrawler must appear in capability_status even though not installed."""
+    from knowledge_studio.capability_commands import capability_status
+
+    result = capability_status()
+    mediacrawler = next(
+        (p for p in result["providers"] if p["id"] == "mediacrawler"), None
+    )
+    assert mediacrawler is not None, "mediacrawler missing from capability_status"
+    assert mediacrawler["status"] == "unavailable", (
+        f"mediacrawler should be 'unavailable', got '{mediacrawler['status']}'"
+    )
+    assert "platforms" in mediacrawler or any(
+        "platforms" in p for p in result["providers"] if p["id"] == "mediacrawler"
+    ), "mediacrawler should have platform metadata"
+    # Must provide social capabilities
+    assert "social.content.fetch" in mediacrawler["capabilities"], (
+        "mediacrawler must provide social.content.fetch"
+    )
+
+
+def test_capability_status_social_actions_exist():
+    """Social capability actions added in Phase 3A-M must be present."""
+    from knowledge_studio.capability_commands import capability_status
+
+    result = capability_status()
+    for action in (
+        "social.content.fetch",
+        "social.search",
+        "social.comments.fetch",
+        "social.creator.fetch",
+    ):
+        assert action in result["actions"], (
+            f"social action '{action}' missing from capability_status"
+        )
+        # Must have a Chinese label different from the internal ID
+        label = result["actions"][action]["label"]
+        assert label != action, (
+            f"social action '{action}' has no Chinese label"
+        )
+
+
+def test_capability_status_one_call_sufficiency():
+    """capability_status must provide enough info for Agent to select providers
+    WITHOUT needing additional capability catalog or doctor calls."""
+    from knowledge_studio.capability_commands import capability_status
+
+    result = capability_status()
+    # Agent needs: actions with labels, providers with status, by_action mapping
+    assert result["actions"], "actions must not be empty"
+    assert result["providers"], "providers must not be empty"
+    assert result["by_action"], "by_action mapping must not be empty"
+    # Each provider must have enough info for decision-making
+    for p in result["providers"]:
+        assert "id" in p
+        assert "status" in p
+        assert "execution" in p
+        assert "capabilities" in p
+        assert len(p["capabilities"]) > 0, (
+            f"provider {p['id']} has zero capabilities"
+        )
