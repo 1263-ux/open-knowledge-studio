@@ -628,6 +628,34 @@ def capability_doctor_cmd(
     console.print(f"\n[bold]Overall: {'[green]all providers healthy[/green]' if all_healthy else '[yellow]some issues found[/yellow]'}[/bold]")
 
 
+@capability_app.command("guide")
+def capability_guide(
+    provider: str = typer.Argument(..., help="Provider id (e.g. pdf-lite, firecrawl, yt-dlp)"),
+):
+    """Return the canonical Provider execution guide (SKILL.md) for an Agent.
+
+    Reads from the installed package resource — no local providers/
+    directory needed.  The Agent calls this after selecting a Provider
+    to get Provider-specific execution instructions (tool invocation,
+    evidence construction, normalization).
+
+    Only for Agent use; not part of the default user happy path.
+    """
+    from importlib.resources import files
+
+    skill_path = files("knowledge_studio.providers").joinpath(provider, "SKILL.md")
+    if not skill_path.is_file():
+        console.print(f"[red]No guide found for provider: {provider}[/red]")
+        known = []
+        for entry in sorted(files("knowledge_studio.providers").iterdir()):
+            if entry.is_dir() and (entry / "SKILL.md").is_file():
+                known.append(entry.name)
+        if known:
+            console.print(f"[dim]Available: {', '.join(known)}[/dim]")
+        raise typer.Exit(1)
+    print(skill_path.read_text(encoding="utf-8"))
+
+
 # ── Schema ─────────────────────────────────────────────────────────
 
 def _resolve_schema_name(name: str) -> tuple[str, Path] | None:

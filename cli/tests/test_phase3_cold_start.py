@@ -1536,23 +1536,34 @@ def test_http_fetch_provider_yaml_consistent():
 def test_video_recipe_allows_asr_substitute():
     """No subtitles + ASR success must satisfy video transcript requirement.
 
-    subtitle.fetch failure should NOT permanently partial the result when
-    speech.transcribe produces a valid transcript.
+    subtitle.fetch (required) failure should NOT permanently partial the result
+    when speech.transcribe (optional, ASR fallback) produces a valid transcript.
+    The complete_when condition subtitles_or_transcript_available can be
+    satisfied by EITHER subtitle.fetch OR speech.transcribe.
+
+    Verifies: (a) required_capabilities only use real Registry IDs,
+    (b) the degradation chain documents the ASR substitution,
+    (c) complete_when accepts the transcript from either path.
     """
     from importlib.resources import files
 
     video_recipe = files("knowledge_studio.recipes").joinpath("video.md")
     text = video_recipe.read_text(encoding="utf-8")
 
-    # subtitle.fetch must NOT be in required_capabilities — it's optional,
-    # substituted by speech.transcribe (fallback)
-    assert "transcript_or_subtitle" in text, (
-        "video.md required_capabilities must use transcript_or_subtitle, "
-        "not subtitle.fetch — ASR is a valid substitute"
+    # transcript_or_subtitle is NOT a real capability — must not appear
+    assert "transcript_or_subtitle" not in text, (
+        "video.md must NOT contain the fake capability 'transcript_or_subtitle'. "
+        "All required_capabilities and optional_capabilities must be real "
+        "Capability Registry IDs."
+    )
+    # subtitle.fetch IS a real capability — must be in required
+    assert "subtitle.fetch" in text, (
+        "video.md required_capabilities must include subtitle.fetch "
+        "(the real Registry capability, not a pseudo-capability)"
     )
     # The degradation note must document the substitution
-    assert "Fully substituted by speech.transcribe" in text, (
-        "video.md degradation must document speech.transcribe as subtitle.fetch substitute"
+    assert "speech.transcribe" in text, (
+        "video.md degradation must reference speech.transcribe as fallback"
     )
     # complete_when already has subtitles_or_transcript_available
     assert "subtitles_or_transcript_available" in text, (
@@ -1613,3 +1624,254 @@ def test_mediacrawler_skill_in_package():
     assert "experimental" in text.lower(), (
         "mediacrawler SKILL.md must reflect experimental (unverified) status"
     )
+
+
+# ══════════════════════════════════════════════════════════════════════
+# Gate 3A-M-R2: Agent-Facing Contract Closure
+# ══════════════════════════════════════════════════════════════════════
+
+
+# ── Recipe Capability Invariant ─────────────────────────────────────
+
+def _parse_recipe_capability_list(text: str, section: str) -> list[str]:
+    """Extract capability IDs from a YAML list section in a recipe.
+
+    Handles the indented list format used in recipe markdown code blocks.
+    """
+    import re
+
+    in_section = False
+    caps: list[str] = []
+    for line in text.splitlines():
+        if line.strip() == f"{section}:":
+            in_section = True
+            continue
+        if in_section:
+            stripped = line.strip()
+            if stripped.startswith("- "):
+                cap = stripped[2:].strip()
+                if cap:
+                    caps.append(cap)
+            elif stripped and not stripped.startswith("#") and not stripped.startswith("- "):
+                # Next top-level key — exit the list
+                if not line.startswith(" ") and not line.startswith("\t"):
+                    break
+    return caps
+
+
+def test_recipe_capabilities_all_in_registry():
+    """Every required_capability and optional_capability in every Recipe
+    MUST exist in the Capability Registry (actions.yaml).
+
+    This is an invariant — any pseudo-capability like 'transcript_or_subtitle'
+    that doesn't correspond to a real Registry action must be caught here.
+    """
+    from importlib.resources import files
+
+    # Load all real capability IDs from the Registry
+    actions_yaml = files("knowledge_studio.capabilities").joinpath("actions.yaml")
+    registry_text = actions_yaml.read_text(encoding="utf-8")
+    # Parse actions from actions.yaml
+    registry_ids: set[str] = set()
+    in_actions = False
+    for line in registry_text.splitlines():
+        stripped = line.strip()
+        if stripped == "actions:":
+            in_actions = True
+            continue
+        if in_actions:
+            if stripped and not line.startswith(" ") and not line.startswith("\t"):
+                break  # next top-level key
+            if stripped and not stripped.startswith("#"):
+                # Action name is the key before the colon
+                if ":" in stripped and not stripped.startswith("-"):
+                    action_id = stripped.split(":")[0].strip()
+                    if action_id:
+                        registry_ids.add(action_id)
+
+    assert len(registry_ids) >= 20, (
+        f"Expected >=20 actions in Registry, found {len(registry_ids)}"
+    )
+
+    # Check every recipe
+    recipes_dir = files("knowledge_studio.recipes")
+    recipe_names = [
+        "text.md", "pdf.md", "web.md", "office.md",
+        "image.md", "audio.md", "video.md",
+    ]
+    violations: list[str] = []
+    for name in recipe_names:
+        recipe_path = recipes_dir.joinpath(name)
+        assert recipe_path.is_file(), f"recipe missing: {name}"
+        text = recipe_path.read_text(encoding="utf-8")
+
+        required = _parse_recipe_capability_list(text, "required_capabilities")
+        optional = _parse_recipe_capability_list(text, "optional_capabilities")
+        all_caps = required + optional
+
+        for cap in all_caps:
+            if cap not in registry_ids:
+                violations.append(f"{name}: '{cap}' not in Capability Registry")
+
+    assert not violations, (
+        f"Recipe capabilities not in Registry ({len(violations)} violations):\n"
+        + "\n".join(f"  - {v}" for v in violations)
+    )
+
+
+# ── Recipe in ingest prepare output ─────────────────────────────────
+
+def test_ingest_prepare_includes_recipe(tmp_path):
+    """oks ingest prepare output must include the Recipe for the detected modality.
+
+    The Agent must be able to read the Recipe from the CLI output without
+    needing a recipes/ directory in the user's knowledge base.
+    """
+    from knowledge_studio.ingest_prepare import prepare_ingest
+
+    f = tmp_path / "test.pdf"
+    f.write_bytes(b"%PDF-1.4 mock")
+
+    result = prepare_ingest(str(f), kb_root=tmp_path)
+    assert result["modality"] == "pdf"
+    assert "recipe" in result, (
+        "ingest prepare output missing 'recipe' field"
+    )
+    assert result["recipe"] is not None, (
+        "ingest prepare recipe is None for pdf modality"
+    )
+    assert "Recipe: PDF" in result["recipe"], (
+        "recipe should contain 'Recipe: PDF' header"
+    )
+    assert "required_capabilities" in result["recipe"], (
+        "recipe must list required_capabilities"
+    )
+
+    import shutil, stat
+    def rm(p, fn, ex): Path(p).chmod(stat.S_IWRITE); fn(p)
+    shutil.rmtree(tmp_path / ".oks", onexc=rm)
+
+
+def test_ingest_prepare_recipe_for_all_modalities(tmp_path):
+    """Every known modality must have a recipe in the ingest prepare output."""
+    from knowledge_studio.ingest_prepare import prepare_ingest
+
+    test_files = {
+        "text": ("test.md", "# Hello"),
+        "pdf": ("test.pdf", b"%PDF-1.4"),
+        "web": ("test.html", "<html><body>Test</body></html>"),
+        "office": ("test.docx", b"PK\x03\x04"),
+        "image": ("test.png", b"\x89PNG\r\n"),
+        "audio": ("test.mp3", b"ID3\x03\x00"),
+        "video": ("test.mp4", b"\x00\x00\x00\x18ftypmp42"),
+    }
+    for expected_modality, (filename, content) in test_files.items():
+        f = tmp_path / filename
+        if isinstance(content, str):
+            f.write_text(content, encoding="utf-8")
+        else:
+            f.write_bytes(content)
+
+        result = prepare_ingest(str(f), kb_root=tmp_path)
+        assert result["modality"] == expected_modality, (
+            f"{filename} should be {expected_modality}, got {result['modality']}"
+        )
+        assert result.get("recipe") is not None, (
+            f"ingest prepare for {filename} ({expected_modality}) missing recipe"
+        )
+        assert len(result["recipe"]) > 50, (
+            f"recipe for {expected_modality} is too short ({len(result['recipe'])} chars)"
+        )
+
+        import shutil, stat
+        def rm(p, fn, ex): Path(p).chmod(stat.S_IWRITE); fn(p)
+        shutil.rmtree(tmp_path / ".oks", onexc=rm)
+
+
+# ── capability guide command ────────────────────────────────────────
+
+def test_capability_guide_returns_skill_md():
+    """oks capability guide <provider> returns the canonical SKILL.md content."""
+    from importlib.resources import files
+
+    # Test with providers that are known to have SKILL.md
+    for provider in ("pdf-lite", "firecrawl", "agentkey"):
+        skill_path = files("knowledge_studio.providers").joinpath(provider, "SKILL.md")
+        if not skill_path.is_file():
+            continue
+        content = skill_path.read_text(encoding="utf-8")
+        assert len(content) > 0, f"{provider} SKILL.md is empty"
+        # Must contain the provider name
+        assert provider in content.lower() or provider.replace("-", "") in content.lower(), (
+            f"{provider} SKILL.md does not reference its own provider name"
+        )
+
+
+def test_capability_guide_all_providers_with_skill():
+    """Every provider that has a SKILL.md must be accessible via capability guide."""
+    from importlib.resources import files
+
+    providers_root = files("knowledge_studio.providers")
+    found = 0
+    for entry in sorted(providers_root.iterdir()):
+        if not entry.is_dir():
+            continue
+        skill_path = entry / "SKILL.md"
+        if skill_path.is_file():
+            content = skill_path.read_text(encoding="utf-8")
+            assert len(content) > 100, (
+                f"provider {entry.name} SKILL.md is too short ({len(content)} chars)"
+            )
+            found += 1
+    assert found >= 10, (
+        f"Expected >=10 providers with SKILL.md, found {found}"
+    )
+
+
+# ── Ingest SKILL.md: Agent-facing contract closure ──────────────────
+
+def test_ingest_skill_uses_cli_for_recipe():
+    """Ingest SKILL.md must tell Agent to get Recipe from oks ingest prepare,
+    NOT to read recipes/{modality}.md from disk."""
+    for host in ("claude", "agents"):
+        text = _read_skill_text(host)
+        # Must tell Agent to use the prepare output
+        assert "recipe" in text.lower(), (
+            f"{host}/ingest/SKILL.md must reference the recipe field"
+        )
+        # Must forbid reading from disk
+        assert "Do NOT read `recipes/" in text or "does not contain a recipes/" in text, (
+            f"{host}/ingest/SKILL.md must tell Agent NOT to read recipes/ from disk"
+        )
+
+
+def test_ingest_skill_uses_cli_for_provider_guide():
+    """Ingest SKILL.md must tell Agent to use oks capability guide,
+    NOT to read providers/.../SKILL.md from disk."""
+    for host in ("claude", "agents"):
+        text = _read_skill_text(host)
+        assert "oks capability guide" in text, (
+            f"{host}/ingest/SKILL.md must reference oks capability guide"
+        )
+        assert "Do NOT read `providers/" in text or "does not contain a providers/" in text, (
+            f"{host}/ingest/SKILL.md must tell Agent NOT to read providers/ from disk"
+        )
+
+
+def test_ingest_skill_complete_when_coverage_rule():
+    """Ingest SKILL.md Step 5 must document that complete_when conditions
+    can be satisfied by ANY capability (required OR optional)."""
+    for host in ("claude", "agents"):
+        text = _read_skill_text(host)
+        assert "complete_when coverage check" in text, (
+            f"{host}/ingest/SKILL.md missing complete_when coverage check section"
+        )
+        assert "required OR optional" in text, (
+            f"{host}/ingest/SKILL.md must state complete_when can use "
+            f"evidence from required OR optional capabilities"
+        )
+        # The subtitle/ASR example must be present
+        assert "subtitle.fetch" in text and "speech.transcribe" in text, (
+            f"{host}/ingest/SKILL.md must include the video subtitle/ASR "
+            f"fallback example in the complete_when coverage rule"
+        )

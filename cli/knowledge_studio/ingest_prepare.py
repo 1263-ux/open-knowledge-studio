@@ -16,6 +16,8 @@ from hashlib import sha256 as _sha256
 from pathlib import Path
 from typing import Any
 
+from importlib.resources import files as _resource_files
+
 from knowledge_studio.store import repo_root
 from knowledge_studio.security.redaction import redact_text
 from knowledge_studio.security.sensitive_fields import REDACTED
@@ -118,6 +120,7 @@ def prepare_ingest(source: str, kb_root: Path | None = None) -> dict[str, Any]:
     # ── Determine source metadata ──
     modality = _detect_modality(source)
     access_mode = _detect_access_mode(source)
+    recipe = _load_recipe(modality)
     source_id = f"src-{uuid.uuid4().hex[:12]}"
     captured_at = datetime.now(timezone.utc).isoformat()
     is_text = modality == "text" and access_mode == "local_file"
@@ -329,6 +332,7 @@ def prepare_ingest(source: str, kb_root: Path | None = None) -> dict[str, Any]:
         "redaction_count": _redaction_count,
         "status": manifest.get("status", "complete"),
         "missing_assets": _missing_assets,
+        "recipe": recipe,
         "next_step": next_step,
     }
 
@@ -380,6 +384,23 @@ def _media_type(source: str) -> str | None:
         ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     }
     return known.get(suffix)
+
+
+def _load_recipe(modality: str) -> str | None:
+    """Load the Recipe markdown for *modality* from the package resource.
+
+    Recipes live in ``knowledge_studio/recipes/`` inside the installed
+    package — this is the canonical source.  The Agent receives recipe
+    content through ``oks ingest prepare`` output rather than reading
+    a file path that does not exist in the user's knowledge base.
+    """
+    try:
+        recipe_path = _resource_files("knowledge_studio.recipes").joinpath(f"{modality}.md")
+        if recipe_path.is_file():
+            return recipe_path.read_text(encoding="utf-8")
+    except (OSError, ModuleNotFoundError):
+        pass
+    return None
 
 
 def _next_step(text_ready: bool, run_id: str) -> str:

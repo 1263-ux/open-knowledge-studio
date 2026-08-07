@@ -57,7 +57,11 @@ Determine the source's modality from its file extension or URL pattern:
 
 ### 3a. Read the Recipe
 
-Read `recipes/{modality}.md` to understand what evidence is needed:
+The Recipe for this modality is in the `recipe` field of the `oks ingest prepare`
+output (Step 0).  Read it to understand what evidence is needed.
+
+Do NOT read `recipes/{modality}.md` from disk — the user's knowledge base
+does not contain a recipes/ directory.  The Recipe is served through the CLI.
 
 - **required_capabilities**: MUST be satisfied — if any are missing after execution, the ingest is `partial` or `failed`
 - **optional_capabilities**: nice-to-have — missing optional capabilities don't block Candidate generation
@@ -134,7 +138,9 @@ EvidenceFragments — do NOT iterate per capability.
 - **IMPORTANT:** Agent observation is valid evidence but MUST be labeled as such.  Never present agent-observed content as raw source text.
 
 **pdf-lite (one pymupdf4llm call → multiple fragments):**
-- Follow `providers/pdf-lite/SKILL.md` for the 3-step workflow
+- Run `oks capability guide pdf-lite` for the canonical execution guide (3-step workflow).
+  Do NOT read `providers/pdf-lite/SKILL.md` from disk — the user's knowledge base
+  does not contain a providers/ directory.  Provider guides are served through the CLI.
 - Fragment per page OR one fragment covering all pages with `locator: {kind: "page", page: N}`
 - `producer.provider: "pdf-lite"`, `agent_judgment: "mechanical"`
 
@@ -152,6 +158,28 @@ After executing all providers, compare obtained evidence against the Recipe's de
 ### Optional capabilities check:
 - Satisfied → bonus, record in manifest
 - Missing → note in warnings, do NOT block — optional means optional
+
+### complete_when coverage check (AFTER required + optional checks):
+
+**The final completeness judgment MUST respect the Recipe's `complete_when`
+conditions, not just the `required_capabilities` list.**
+
+A `complete_when` condition can be satisfied by evidence from **any**
+capability — required OR optional.  This means:
+
+- If `subtitle.fetch` (required) fails but `speech.transcribe` (optional, ASR)
+  produces a valid transcript → `subtitles_or_transcript_available` is SATISFIED.
+  Do NOT mark the ingest as partial for missing subtitles.
+
+- If one capability satisfies multiple `complete_when` conditions → each
+  condition is independently satisfied.
+
+- A `complete_when` condition is only unmet when NO capability (required or
+  optional) produced evidence that fulfills it.
+
+**Never mark an ingest as partial solely because a required capability failed,**
+if a different capability (including optional fallback) satisfied the same
+`complete_when` condition.
 
 Collect all fragments and create the EvidenceManifest (`oks schema show evidence-manifest`).
 Record every step in `manifest.steps[]` including provider name, capabilities satisfied,

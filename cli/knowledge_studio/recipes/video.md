@@ -4,11 +4,10 @@ source_type: video
 description: Platform videos (Bilibili, YouTube, Douyin) and local video files.
 
 required_capabilities:
-  - transcript_or_subtitle
+  - subtitle.fetch
   - metadata.fetch
 
 optional_capabilities:
-  - subtitle.fetch
   - media.download
   - media.probe
   - audio.extract
@@ -34,7 +33,7 @@ degradation:
   - priority: 2
     capability: subtitle.fetch
     condition: subtitles_available
-    note: "Extract or download subtitles. May require platform authentication. Fully substituted by speech.transcribe (priority 4) — if ASR succeeds, the transcript satisfies complete_when: subtitles_or_transcript_available."
+    note: "Extract or download subtitles. May require platform authentication. When subtitle.fetch fails, speech.transcribe (priority 4, ASR) is the automatic fallback — a successful ASR transcript satisfies complete_when: subtitles_or_transcript_available. Do NOT mark the ingest as partial for missing subtitles when ASR produced a valid transcript."
   - priority: 3
     capability: video.keyframes
     condition: media_file_available
