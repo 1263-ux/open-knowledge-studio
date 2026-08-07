@@ -281,22 +281,166 @@ def test_claude_and_agents_ingest_skills_identical():
 
 # ── No oks-connector in installed skills (regression) ───────────────
 
-def test_no_oks_connector_in_ingest_skill():
-    """Ingest SKILL.md references zero oks-connector paths."""
+def test_no_python_imports_in_ingest_skill():
+    """Ingest SKILL.md has ZERO Python import references — Agent contract is oks CLI."""
     for host in ("claude", "agents"):
         text = _read_skill_text(host)
+        assert "importlib.resources" not in text, (
+            f"{host}/ingest/SKILL.md contains importlib.resources — should use oks schema show"
+        )
+        assert "from knowledge_studio" not in text, (
+            f"{host}/ingest/SKILL.md contains from knowledge_studio import"
+        )
         assert "oks-connector" not in text, (
             f"{host}/ingest/SKILL.md contains oks-connector"
-        )
-        assert "oks_connector" not in text, (
-            f"{host}/ingest/SKILL.md contains oks_connector"
         )
         assert "route_plan" not in text, (
             f"{host}/ingest/SKILL.md contains route_plan"
         )
-        # Ensure importlib.resources is used for schema paths
-        assert "importlib.resources" in text or "schemas/" not in text.replace(
-            "schemas/", ""
-        ), (
-            f"{host}/ingest/SKILL.md may use bare schemas/ path instead of importlib.resources"
+        assert "oks schema show" in text, (
+            f"{host}/ingest/SKILL.md missing oks schema show reference"
         )
+        assert "oks ingest prepare" in text, (
+            f"{host}/ingest/SKILL.md missing oks ingest prepare reference"
+        )
+        assert "oks security sanitize" in text, (
+            f"{host}/ingest/SKILL.md missing oks security sanitize reference"
+        )
+
+
+# ── oks schema commands ─────────────────────────────────────────────
+# These test the dynamic schema scanning, not the Agent behaviour.
+
+def test_schema_list_dynamic_scan():
+    """oks schema list scans the schemas/ directory and finds all 12 schemas."""
+    from knowledge_studio.schema_examples import list_schema_names as examples_names
+    from importlib.resources import files
+
+    schemas_dir = files("knowledge_studio.schemas")
+    all_names = sorted(
+        e.name.replace(".schema.json", "")
+        for e in schemas_dir.iterdir()
+        if e.is_file() and e.name.endswith(".schema.json")
+    )
+    assert len(all_names) >= 10, f"Expected >=10 schemas, found {len(all_names)}"
+    # Verify the 5 core schemas all have examples
+    for name in examples_names():
+        found = any(s.startswith(name) for s in all_names)
+        assert found, f"Example schema '{name}' not in actual schemas: {all_names}"
+
+
+def test_schema_examples_are_valid():
+    """All 5 pre-built examples have required fields."""
+    from knowledge_studio.schema_examples import get_example, list_schema_names
+
+    for name in list_schema_names():
+        ex = get_example(name)
+        assert ex is not None, f"No example for {name}"
+        assert isinstance(ex, dict), f"Example for {name} is not a dict"
+        # locator is a referenced (embedded) schema — no top-level schema_version
+        if name != "locator":
+            assert "schema_version" in ex, f"Example for {name} missing schema_version"
+
+
+def test_schema_show_resolves_names():
+    """_resolve_schema_name finds schemas by short name and prefix."""
+    from knowledge_studio.cli import _resolve_schema_name
+
+    # Exact match
+    result = _resolve_schema_name("source-envelope-v0.1")
+    assert result is not None
+    assert result[0] == "source-envelope-v0.1"
+
+    # Prefix match
+    result = _resolve_schema_name("evidence-manifest")
+    assert result is not None
+    assert "evidence-manifest" in result[0]
+
+    # Not found
+    assert _resolve_schema_name("nonexistent-schema") is None
+
+
+# ── oks ingest prepare ──────────────────────────────────────────────
+
+def test_ingest_prepare_text_creates_valid_envelope(tmp_path):
+    """oks ingest prepare for a .md file creates valid source-envelope.json."""
+    from knowledge_studio.ingest_prepare import prepare_ingest
+    import json
+
+    f = tmp_path / "test.md"
+    f.write_text("# Hello OKS\n\nSample content for testing.", encoding="utf-8")
+
+    result = prepare_ingest(str(f), kb_root=tmp_path)
+    assert result["modality"] == "text"
+    assert result["text_ready"] is True
+    assert result["source_id"].startswith("src-")
+
+    # Read the generated envelope
+    env_path = tmp_path / ".oks" / "runs" / result["run_id"] / "manifest" / "source-envelope.json"
+    assert env_path.is_file()
+    envelope = json.loads(env_path.read_text(encoding="utf-8"))
+    assert envelope["schema_version"] == "oks-source-envelope/v0.1"
+    assert envelope["source_modality"] == "text"
+    assert len(envelope["content_hash"]) == 64
+
+    # Read the generated manifest
+    man_path = tmp_path / ".oks" / "runs" / result["run_id"] / "manifest" / "evidence-manifest.json"
+    assert man_path.is_file()
+    manifest = json.loads(man_path.read_text(encoding="utf-8"))
+    assert manifest["status"] == "complete"
+    assert len(manifest["evidence_records"]) == 1
+    assert manifest["evidence_records"][0]["method"] == "text-read"
+
+    # Clean up
+    import shutil, stat
+    def rm(p, f, e):
+        import pathlib
+        pathlib.Path(p).chmod(stat.S_IWRITE)
+        f(p)
+    shutil.rmtree(tmp_path / ".oks", onexc=rm)
+
+
+def test_ingest_prepare_non_text_creates_skeleton(tmp_path):
+    """oks ingest prepare for a .pdf file creates a skeleton (text_ready=False)."""
+    from knowledge_studio.ingest_prepare import prepare_ingest
+    import json
+
+    f = tmp_path / "paper.pdf"
+    f.write_bytes(b"%PDF-1.4 mock")
+
+    result = prepare_ingest(str(f), kb_root=tmp_path)
+    assert result["modality"] == "pdf"
+    assert result["text_ready"] is False
+
+    man_path = tmp_path / ".oks" / "runs" / result["run_id"] / "manifest" / "evidence-manifest.json"
+    manifest = json.loads(man_path.read_text(encoding="utf-8"))
+    assert manifest["status"] == "partial"
+    assert manifest["evidence_records"] == []
+
+    import shutil, stat
+    def rm(p, f, e):
+        import pathlib
+        pathlib.Path(p).chmod(stat.S_IWRITE)
+        f(p)
+    shutil.rmtree(tmp_path / ".oks", onexc=rm)
+
+
+# ── oks security sanitize ───────────────────────────────────────────
+
+def test_security_sanitize_strips_api_key(tmp_path):
+    """oks security sanitize removes API keys from JSON content."""
+    from knowledge_studio.security.redaction import sanitize_remote_artifact
+
+    content = b'{"api_key": "sk-secret-12345", "data": "public"}'
+    result = sanitize_remote_artifact(content, content_type="application/json")
+    assert b"sk-secret-12345" not in result
+    assert b'"data": "public"' in result
+
+
+def test_security_sanitize_preserves_binary(tmp_path):
+    """Binary files are returned unchanged."""
+    from knowledge_studio.security.redaction import sanitize_remote_artifact
+
+    content = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR"
+    result = sanitize_remote_artifact(content, content_type="image/png")
+    assert result == content

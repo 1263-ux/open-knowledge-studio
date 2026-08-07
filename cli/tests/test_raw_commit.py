@@ -105,6 +105,8 @@ def _run_commit(manifest_dir: Path, output: Path) -> subprocess.CompletedProcess
         ["oks", "raw-commit", str(manifest_dir), "-o", str(output)],
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
     )
 
 

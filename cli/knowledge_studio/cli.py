@@ -11,7 +11,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
-from typing import Optional
+from typing import Any, Optional
 
 import typer
 from rich.console import Console
@@ -112,7 +112,22 @@ app.add_typer(hook_app, name="hook")
 app.add_typer(eval_app, name="eval")
 app.add_typer(trace_app, name="trace")
 app.add_typer(feishu_app, name="feishu")
+ingest_app = typer.Typer(
+    help="Agent-native ingestion preparation and execution.",
+    no_args_is_help=True,
+)
+security_app = typer.Typer(
+    help="Credential redaction and security utilities.",
+    no_args_is_help=True,
+)
+schema_app = typer.Typer(
+    help="Protocol schema reference — list, show, and generate examples.",
+    no_args_is_help=True,
+)
 app.add_typer(capability_app, name="capability")
+app.add_typer(ingest_app, name="ingest")
+app.add_typer(security_app, name="security")
+app.add_typer(schema_app, name="schema")
 
 _CAPABILITIES = {
     "watch": {
@@ -271,47 +286,45 @@ def _recommended_capability(source: str, *, pdf_engine: str = "pdf-lite") -> str
     return "watch"  # video, audio, and platform URLs all route to watch
 
 
-@app.command()
-def ingest(
-    source: str = typer.Argument(..., help="Local file or supported platform URL"),
-    mode: str = typer.Option("quick", "--mode", help="quick or forensic"),
-    timeout_seconds: Optional[float] = typer.Option(None, "--timeout-seconds"),
-    progress: bool = typer.Option(True, "--progress/--no-progress"),
-    formula_secondary: bool = typer.Option(False, "--formula-secondary", help="Run PaddleOCR PP-FormulaNet on PDF equation crops."),
-    formula_max_regions: int = typer.Option(20, "--formula-max-regions", help="Cap equation blocks for formula secondary extraction."),
-    pdf_engine: str = typer.Option("pdf-lite", "--pdf-engine", help="pdf-lite (default) or mineru"),
+@ingest_app.command("prepare")
+def ingest_prepare(
+    source: str = typer.Argument(..., help="Local file or URL to prepare for ingestion"),
+    kb_root: Optional[str] = typer.Option(
+        None, "--kb-root", help="Knowledge base root (default: from OKS_ROOT or config)",
+    ),
+    json_output: bool = typer.Option(
+        True, "--json/--text", help="Output as JSON",
+    ),
 ):
-    """Acquire one source — Agent-native ingest is the default path.
+    """Prepare a source for Agent ingestion — generate protocol skeleton.
 
-    When run inside a Claude Code / Codex session, the Agent should use
-    the ``/ingest`` skill instead of this CLI command.  The skill reads
-    Source → reads Recipe → selects Providers → produces EvidenceFragment
-    → merges into EvidenceManifest → calls ``oks raw-commit``.
+    Creates a run workspace under .oks/runs/ and generates
+    source-envelope.json, evidence-manifest.json, and evidence fragments
+    with all deterministic fields pre-filled.  The Agent only needs to
+    supply evidence content — no hand-crafted protocol JSON required.
 
-    The legacy extractor path was removed in OKS 0.4.0.  Legacy code is
-    preserved in Git tag ``v0.4.0-legacy-final``.
-
-    In a pure terminal (no Agent host), this command identifies the source,
-    creates a Run Workspace, and outputs instructions for Agent continuation.
+    For text sources (Markdown, plain text, CSV) the evidence skeleton
+    is pre-filled and ready to commit.
     """
-    from knowledge_studio.raw_commit import create_run_workspace
+    from knowledge_studio.ingest_prepare import prepare_ingest
 
-    run = create_run_workspace(source)
-    run_id = run["run_id"]
-    workspace = run["workspace"]
+    root = Path(kb_root).expanduser().resolve() if kb_root else None
+    result = prepare_ingest(source, kb_root=root)
 
-    card_content = (
-        f"[bold]Source:[/bold] {source}\n"
-        f"[bold]Run ID:[/bold] {run_id}\n"
-        f"[bold]Workspace:[/bold] {workspace}\n\n"
-        f"[bold yellow]Agent Required[/bold yellow]\n\n"
-        f"This terminal cannot invoke the OKS ingest skill on its own.\n"
-        f"Continue in a supported Agent Host (Claude Code, Codex, etc.)\n"
-        f"with the /ingest skill, or open the workspace above.\n\n"
-        f"Instructions: [bold].claude/skills/ingest/SKILL.md[/bold]"
-    )
-    console.print(Panel.fit(card_content, title="Agent-Native Ingest"))
-    return
+    if json_output:
+        import json as _json
+        print(_json.dumps(result, ensure_ascii=False, indent=2))
+    else:
+        console.print(Panel.fit(
+            f"[bold]Source:[/bold] {source}\n"
+            f"[bold]Modality:[/bold] {result['modality']}\n"
+            f"[bold]Run ID:[/bold] {result['run_id']}\n"
+            f"[bold]Manifest dir:[/bold] {result['manifest_dir']}\n\n"
+            + "\n".join(f"  [green]+[/green] {f}" for f in result["files_generated"])
+            + f"\n\n[bold cyan]{result['next_step']}[/bold cyan]",
+            title="Ingest Prepared",
+            border_style="green" if result.get("text_ready") else "yellow",
+        ))
 
 
 def _feishu_worker_path() -> Path | None:
@@ -582,6 +595,134 @@ def capability_doctor_cmd(
     console.print(f"\n[bold]Overall: {'[green]all providers healthy[/green]' if all_healthy else '[yellow]some issues found[/yellow]'}[/bold]")
 
 
+# ── Schema ─────────────────────────────────────────────────────────
+
+def _resolve_schema_name(name: str) -> tuple[str, Path] | None:
+    """Resolve a short schema name to (canonical_name, path)."""
+    from importlib.resources import files
+
+    schemas_dir = files("knowledge_studio.schemas")
+    # Build lookup: short-name → full filename
+    # e.g. "evidence-manifest" → "evidence-manifest-v0.1.schema.json"
+    candidates: list[tuple[str, Path]] = []
+    for entry in sorted(schemas_dir.iterdir()):
+        if not entry.is_file() or not entry.name.endswith(".schema.json"):
+            continue
+        short = entry.name.replace(".schema.json", "")
+        candidates.append((short, entry))
+
+    # Exact match on short name
+    for short, path in candidates:
+        if short == name:
+            return (short, path)
+    # Prefix match
+    matches = [(s, p) for s, p in candidates if s.startswith(name)]
+    if len(matches) == 1:
+        return matches[0]
+    if len(matches) > 1:
+        return None  # ambiguous
+    # Substring match (last resort)
+    matches = [(s, p) for s, p in candidates if name in s]
+    if len(matches) == 1:
+        return matches[0]
+    return None
+
+
+@schema_app.command("list")
+def schema_list(
+    json_output: bool = typer.Option(False, "--json/--text", help="Output as JSON"),
+):
+    """List all available protocol schemas (dynamic scan)."""
+    from importlib.resources import files
+
+    schemas_dir = files("knowledge_studio.schemas")
+    names: list[dict[str, str]] = []
+    for entry in sorted(schemas_dir.iterdir()):
+        if entry.is_file() and entry.name.endswith(".schema.json"):
+            short = entry.name.replace(".schema.json", "")
+            size = entry.stat().st_size
+            names.append({"name": short, "file": entry.name, "size_bytes": size})
+
+    if json_output:
+        import json as _json
+        print(_json.dumps({"schemas": names}, ensure_ascii=False, indent=2))
+    else:
+        table = Table(title="Protocol Schemas")
+        table.add_column("Name", style="cyan")
+        table.add_column("File")
+        table.add_column("Size", justify="right")
+        for entry in names:
+            table.add_row(entry["name"], entry["file"], str(entry["size_bytes"]))
+        console.print(table)
+
+
+@schema_app.command("show")
+def schema_show(
+    name: str = typer.Argument(..., help="Schema short name (e.g. evidence-manifest)"),
+):
+    """Show the full JSON Schema for a protocol document type."""
+    resolved = _resolve_schema_name(name)
+    if resolved is None:
+        console.print(f"[red]Schema not found: {name}[/red]")
+        console.print("[dim]Run `oks schema list` to see available schemas.[/dim]")
+        raise typer.Exit(1)
+    _, path = resolved
+    print(path.read_text(encoding="utf-8"))
+
+
+@schema_app.command("example")
+def schema_example(
+    name: str = typer.Argument(..., help="Schema short name (e.g. evidence-manifest)"),
+):
+    """Show a minimal valid example for a protocol document type."""
+    from knowledge_studio.schema_examples import get_example
+
+    example = get_example(name)
+    if example is not None:
+        import json as _json
+        print(_json.dumps(example, ensure_ascii=False, indent=2))
+        return
+    # Fallback: show the schema as reference
+    resolved = _resolve_schema_name(name)
+    if resolved is None:
+        console.print(f"[red]No example or schema found for: {name}[/red]")
+        console.print("[dim]Run `oks schema list` to see available schemas.[/dim]")
+        raise typer.Exit(1)
+    console.print(f"[yellow]No pre-built example for '{name}'.[/yellow]")
+    console.print(f"[dim]Showing schema instead — use required fields to build your own.[/dim]")
+    schema_show(name)
+
+
+# ── Security ────────────────────────────────────────────────────────
+
+
+@security_app.command("sanitize")
+def security_sanitize(
+    file: str = typer.Argument(..., help="File to sanitize in-place"),
+    content_type: str = typer.Option(
+        "application/json", "--content-type", "-t",
+        help="MIME type hint: application/json, text/plain, text/html",
+    ),
+):
+    """Strip credentials from a remote artifact in-place.
+
+    Removes API keys, bearer tokens, session cookies, OAuth secrets,
+    and internal IP addresses.  Safe to run on any file — binary files
+    are returned unchanged.
+    """
+    from knowledge_studio.security.redaction import sanitize_remote_artifact
+
+    fp = Path(file).expanduser().resolve()
+    if not fp.is_file():
+        console.print(f"[red]File not found: {fp}[/red]")
+        raise typer.Exit(1)
+
+    raw = fp.read_bytes()
+    sanitized = sanitize_remote_artifact(raw, content_type=content_type)
+    fp.write_bytes(sanitized)
+    console.print(f"[green]Sanitized:[/green] {fp}")
+
+
 # ── Skills Install ──────────────────────────────────────────────
 
 def _install_skills(target_root: Path, force: bool) -> tuple[list[str], list[str]]:
@@ -686,7 +827,7 @@ def raw_commit(
     except CommitError as exc:
         if json_output:
             import json as _json
-            error_out = {
+            error_out: dict[str, Any] = {
                 "status": "rejected",
                 "error_code": exc.code,
                 "message": exc.message,
@@ -696,6 +837,15 @@ def raw_commit(
             print(_json.dumps(error_out, ensure_ascii=False, indent=2))
         else:
             console.print(f"[red]Rejected ({exc.code}):[/red] {exc.message}")
+            # Show individual errors when batch-collected
+            batch = (exc.details or {}).get("errors", [])
+            for i, err in enumerate(batch, 1):
+                detail_info = err.get("details", {})
+                json_path = detail_info.get("json_path", "") if isinstance(detail_info, dict) else ""
+                loc = f" [dim]{json_path}[/dim]" if json_path else ""
+                console.print(
+                    f"  {i}. [yellow]{err.get('code', '')}[/yellow]{loc}"
+                )
         raise typer.Exit(1)
 
 

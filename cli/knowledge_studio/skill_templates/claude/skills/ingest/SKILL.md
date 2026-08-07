@@ -9,14 +9,24 @@ Agent is the orchestrator.  OKS provides capability; Agent decides what to do.
 ## Flow
 
 ```
-Source → Judge modality → Read Recipe → Select Providers → Execute
-→ EvidenceFragment x N → Merge → EvidenceManifest → oks raw commit
+oks ingest prepare <source>  →  SourceEnvelope + Manifest skeleton
+→ Judge modality → Read Recipe → Select Providers → Execute
+→ Fill evidence_records  →  oks raw commit
 → AgentObservation → CandidateDraft → drafts/{slug}.md → Report
 ```
 
-## Step 1: Accept Source
+## Step 0: Prepare (use the CLI — do NOT hand-craft protocol JSON)
 
-Source is a file path, URL, or plain text.  If a path, read the file.
+Run `oks ingest prepare <source>` to create the workspace and generate
+the protocol skeleton (source-envelope.json, evidence-manifest.json,
+artifacts/).  This command fills all deterministic fields — source_id,
+content_hash, schema_version, timestamps, artifact hashes — so the
+Agent only needs to supply evidence content.  For text sources the
+skeleton includes pre-filled evidence fragments.
+
+DO NOT manually construct SourceEnvelope, EvidenceManifest, or
+EvidenceFragment JSON.  Use `oks schema show <name>` to inspect
+schema requirements when filling evidence records.
 
 ## Step 2: Judge Modality
 
@@ -38,18 +48,17 @@ the catalog says WHO provides each capability.
 For each chosen provider:
 1. Call the tool (Bash / MCP / API / Agent vision)
 2. Save raw output to `.oks/runs/{run_id}/work/{provider}/`
-3. **For external providers: sanitize with `knowledge_studio.security.redaction.sanitize_remote_artifact()`** before saving.
-4. Construct EvidenceFragment using schema from installed package:
-   `importlib.resources.files("knowledge_studio.schemas").joinpath("evidence-fragment-v0.1.schema.json")`
+3. **For external providers: sanitize before saving.**  Run `oks security sanitize .oks/runs/{run_id}/work/{provider}/output.json` to strip API keys, bearer tokens, session cookies, and internal IPs from the raw output before it enters the Raw Bundle.
+4. Construct EvidenceFragment.  Get the fragment schema:
+   `oks schema show evidence-fragment`
 
 Agent's own multimodal observation is also a fragment
 (`producer: agent-runtime`, `agent_judgment: agent_observed`).
 
 ## Step 5: Merge into EvidenceManifest
 
-Collect all fragments.  Create EvidenceManifest — load schema from
-installed package, do NOT reference `schemas/` as a filesystem path:
-`importlib.resources.files("knowledge_studio.schemas").joinpath("evidence-manifest-v0.1.schema.json")`
+Collect all fragments.  Create EvidenceManifest — get the manifest schema:
+`oks schema show evidence-manifest`
 Judge overall status:
 - `complete` — all required evidence obtained
 - `partial` — some missing, must declare `failure_disposition` and `warnings`

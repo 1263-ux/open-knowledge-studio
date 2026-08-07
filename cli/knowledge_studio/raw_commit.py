@@ -735,27 +735,116 @@ def raw_commit(
     manifest_path = md / "evidence-manifest.json"
     artifacts_dir = md / "artifacts"
 
-    # ── Step 1-2: Read + validate against formal JSON Schemas ──
-    envelope = _read_json(envelope_path)
-    _validate_envelope(envelope)
+    # ── Step 1-2: Read files ──
+    gather: list[CommitError] = []
+    envelope: dict[str, Any] | None = None
+    manifest: dict[str, Any] | None = None
+    locator_warnings: list[str] = []
 
-    manifest = _read_json(manifest_path)
-    _validate_manifest(manifest)
+    try:
+        envelope = _read_json(envelope_path)
+    except CommitError as exc:
+        gather.append(exc)
 
-    # ── Step 3: Cross-reference ──
-    _cross_check(envelope, manifest)
+    try:
+        manifest = _read_json(manifest_path)
+    except CommitError as exc:
+        gather.append(exc)
 
-    # ── Step 4: Artifact existence + hash ──
-    if not artifacts_dir.is_dir():
+    # ── Schema validation: use iter_errors() for ALL violations ──
+    if envelope is not None:
+        from jsonschema import Draft202012Validator
+        try:
+            envelope_schema = _load_schema("source-envelope-v0.1.schema.json")
+        except CommitError as exc:
+            gather.append(exc)
+            envelope_schema = None
+        if envelope_schema is not None:
+            for exc in Draft202012Validator(envelope_schema).iter_errors(envelope):
+                gather.append(CommitError(
+                    "INVALID_ENVELOPE",
+                    f"source-envelope.json: {exc.message}",
+                    {"json_path": exc.json_path,
+                     "schema_path": list(exc.relative_schema_path)},
+                ))
+            # Semantic: content_hash format
+            ch = envelope.get("content_hash", "")
+            if not re.fullmatch(r"[a-f0-9]{64}", str(ch)):
+                gather.append(CommitError(
+                    "INVALID_ENVELOPE",
+                    "source-envelope.json: content_hash must be 64 hex chars",
+                ))
+
+    if manifest is not None:
+        from jsonschema import Draft202012Validator
+        try:
+            manifest_schema = _load_schema("evidence-manifest-v0.1.schema.json")
+        except CommitError as exc:
+            gather.append(exc)
+            manifest_schema = None
+        if manifest_schema is not None:
+            registry = _build_registry()
+            validator_kwargs: dict[str, Any] = {}
+            if registry is not None:
+                validator_kwargs["registry"] = registry
+            for exc in Draft202012Validator(
+                manifest_schema, **validator_kwargs,
+            ).iter_errors(manifest):
+                gather.append(CommitError(
+                    "INVALID_MANIFEST",
+                    f"evidence-manifest.json: {exc.message}",
+                    {"json_path": exc.json_path,
+                     "schema_path": list(exc.relative_schema_path)},
+                ))
+            # Semantic: partial must declare failure_disposition
+            if manifest.get("status") == "partial":
+                fd = manifest.get("failure_disposition", "none")
+                if fd == "none":
+                    gather.append(CommitError(
+                        "INVALID_MANIFEST",
+                        "partial manifest must declare a non-'none' failure_disposition",
+                    ))
+
+    # ── Step 3: Cross-reference (only if both parsed) ──
+    if envelope is not None and manifest is not None:
+        try:
+            _cross_check(envelope, manifest)
+        except CommitError as exc:
+            gather.append(exc)
+
+    # ── Step 4: Artifact existence + hash (only if manifest parsed) ──
+    if manifest is not None:
+        if not artifacts_dir.is_dir():
+            gather.append(CommitError(
+                "MISSING_ARTIFACTS_DIR",
+                f"artifacts/ directory not found: {artifacts_dir}",
+            ))
+        else:
+            try:
+                _check_artifacts(manifest, artifacts_dir)
+            except CommitError as exc:
+                gather.append(exc)
+
+        # ── Step 5-6: Evidence cross-ref + locator ──
+        try:
+            _check_evidence_cross_ref(manifest)
+        except CommitError as exc:
+            gather.append(exc)
+        locator_warnings = _check_locators(manifest)
+
+    # ── Raise all errors at once ──
+    if gather:
         raise CommitError(
-            "MISSING_ARTIFACTS_DIR",
-            f"artifacts/ directory not found: {artifacts_dir}",
+            "VALIDATION_FAILED",
+            f"Found {len(gather)} problem(s)",
+            {"errors": [
+                {"code": e.code, "message": e.message, "details": e.details}
+                for e in gather
+            ]},
         )
-    _check_artifacts(manifest, artifacts_dir)
 
-    # ── Step 5-6: Evidence cross-ref + locator ──
-    _check_evidence_cross_ref(manifest)
-    locator_warnings = _check_locators(manifest)
+    # envelope and manifest are guaranteed non-None after gather check
+    assert envelope is not None and manifest is not None
 
     # ── Step 7: Determine output path ──
     if output is None:
