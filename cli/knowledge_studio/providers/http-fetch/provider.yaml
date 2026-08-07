@@ -5,9 +5,9 @@ description: 安全 HTTP GET 请求，带 SSRF 保护和 redirect 处理。用�
 
 provides:
   source.fetch:
-    maturity: stable
+    maturity: experimental
   web.fetch:
-    maturity: stable
+    maturity: experimental
 
 requirements:
   python_package: requests

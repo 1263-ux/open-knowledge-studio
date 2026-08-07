@@ -1351,3 +1351,265 @@ def test_degradation_stops_after_required():
         assert "Stop escalating after required" in text, (
             f"{host}/ingest/SKILL.md missing stop-after-required rule"
         )
+
+
+# ══════════════════════════════════════════════════════════════════════
+# Gate 3A-M-R1: Capability Truthfulness & Safe Degradation
+# ══════════════════════════════════════════════════════════════════════
+
+
+# ── P0-1: CJK boundary credential leakage ──────────────────────────
+
+def test_redact_text_catches_cjk_adjacent_sk_key():
+    """sk- key immediately preceded by Chinese character (no space) MUST be caught.
+
+    Python 3 \\w includes CJK characters via re.UNICODE (default), so \\b
+    does NOT match at CJK→ASCII transitions — both sides are \\w chars.
+    The fix replaces \b with (?<![a-zA-Z0-9_]) / (?![a-zA-Z0-9_]).
+    """
+    from knowledge_studio.security.redaction import redact_text
+
+    # CJK character "为" immediately before sk- — no space
+    cases = [
+        "密钥为sk-proj-abc123xyz789def456ghi012jkl345mno",
+        "API密钥：sk-c0b1f0123456789abcdef0123456789abcd",
+        "设置sk-proj-0123456789abcdef0123456789abcdef为环境变量",
+        "我的sk-admin-abcdef0123456789abcdef01234567密钥已配置",
+    ]
+    for text in cases:
+        result = redact_text(text)
+        assert "sk-" not in result, (
+            f"CJK-adjacent sk- key NOT redacted!\n"
+            f"  Input:  {text[:80]}...\n"
+            f"  Output: {result[:80]}..."
+        )
+        assert "***REDACTED***" in result
+
+
+def test_redact_text_cjk_boundary_all_patterns():
+    """All SENSITIVE_PATTERNS must work when adjacent to CJK characters.
+
+    This verifies the \b→ASCII-lookaround fix for every credential pattern.
+    """
+    from knowledge_studio.security.redaction import redact_text
+
+    cjk_cases = [
+        # CJK before Bearer
+        ("令牌为Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.abc123def456ghi789",
+         "Bearer"),
+        # CJK before JWT
+        ("解析eyJhbGciOiJIUzI1NiJ9.eyJuYW1lIjoiSm9obiJ9.xJgfW6qcBzOJKFpYjH2TIA",
+         "eyJ"),
+        # CJK before Basic auth
+        ("认证方式Basic dXNlcjpwYXNzd29yZA==",
+         "Basic"),
+        # CJK before API key pattern
+        ("配置api_key=abcdef0123456789abcdef0123456789ab即可",
+         "api_key"),
+        # CJK before AWS key
+        ("使用AKIAIOSFODNN7EXAMPLE后",
+         "AKIA"),
+    ]
+    for text, credential_type in cjk_cases:
+        result = redact_text(text)
+        assert "***REDACTED***" in result, (
+            f"CJK-adjacent {credential_type} NOT redacted!\n"
+            f"  Input:  {text[:100]}\n"
+            f"  Output: {result[:100]}"
+        )
+
+
+def test_root_and_package_sensitive_fields_identical():
+    """Root security/sensitive_fields.py and package copy MUST be byte-identical."""
+    root = Path(__file__).parent.parent.parent / "security" / "sensitive_fields.py"
+    pkg = Path(__file__).parent.parent / "knowledge_studio" / "security" / "sensitive_fields.py"
+
+    root_text = root.read_text(encoding="utf-8")
+    pkg_text = pkg.read_text(encoding="utf-8")
+    assert root_text == pkg_text, (
+        f"Root and package sensitive_fields.py differ! "
+        f"(root: {len(root_text)} chars, package: {len(pkg_text)} chars)"
+    )
+
+
+# ── P0-2: Agent multimodal not unconditionally available ────────────
+
+def test_agent_runtime_is_runtime_only():
+    """agent-runtime MUST be runtime_only — depends on current Agent model.
+
+    Text-only orchestrators cannot perform multimodal capabilities.
+    """
+    from knowledge_studio.capability_commands import _provider_status
+
+    status = _provider_status([], "agent-runtime", "agent_native")
+    assert status == "runtime_only", (
+        f"agent-runtime should be 'runtime_only', got '{status}'"
+    )
+
+
+def test_runtime_only_not_in_can_do():
+    """runtime_only providers must NOT appear as 'available now' in init output."""
+    from knowledge_studio.capability_commands import (
+        _describe_ready_capabilities,
+        _build_capability_summary,
+    )
+
+    doctor = {
+        "overall": "issues_found",
+        "providers": [
+            {"id": "agentkey", "execution": "external", "status": "runtime_only",
+             "label": "受限平台内容获取"},
+            {"id": "agent-runtime", "execution": "agent_native", "status": "runtime_only",
+             "label": "Agent 多模态理解"},
+        ],
+    }
+    summary = _build_capability_summary(doctor)
+    can_do, can_enable = _describe_ready_capabilities(summary)
+
+    # agent-runtime is always-available-filtered — should be absent from both
+    for label in can_do:
+        assert "Agent" not in label, (
+            f"agent-runtime should not appear in can_do: '{label}'"
+        )
+    # agentkey is runtime_only — should appear in can_enable, not can_do
+    assert not any("受限平台" in label for label in can_do), (
+        "runtime_only agentkey should not be in can_do"
+    )
+    assert any("受限平台" in label for label in can_enable), (
+        "runtime_only agentkey should be in can_enable with caveat"
+    )
+
+
+def test_capability_status_agent_runtime_is_runtime_only():
+    """capability_status must report agent-runtime as runtime_only, not ready."""
+    from knowledge_studio.capability_commands import capability_status
+
+    result = capability_status()
+    ar = next((p for p in result["providers"] if p["id"] == "agent-runtime"), None)
+    assert ar is not None, "agent-runtime missing from capability_status"
+    assert ar["status"] == "runtime_only", (
+        f"agent-runtime should be 'runtime_only', got '{ar['status']}'"
+    )
+
+
+# ── P1-1: Ordinary web fallback chain ───────────────────────────────
+
+def test_agent_runtime_declares_web_fetch():
+    """Agent Runtime must declare web.fetch — it can fetch public web pages."""
+    from knowledge_studio.capability_commands import capability_list
+
+    catalog = capability_list()
+    ar = next(p for p in catalog["providers"] if p["id"] == "agent-runtime")
+    assert "web.fetch" in ar["actions"], (
+        "agent-runtime must provide web.fetch as a truthful fallback "
+        "for ordinary public web pages"
+    )
+
+
+def test_http_fetch_is_experimental():
+    """http-fetch must be consistently experimental across provider.yaml + status."""
+    from knowledge_studio.capability_commands import _provider_status
+
+    status = _provider_status([], "http-fetch", "managed")
+    assert status == "experimental", (
+        f"http-fetch should be 'experimental', got '{status}'"
+    )
+
+
+def test_http_fetch_provider_yaml_consistent():
+    """http-fetch provider.yaml must declare experimental maturity, not stable."""
+    from knowledge_studio.capability_commands import _scan_providers, _providers_root
+
+    providers = _scan_providers(_providers_root())
+    hf = next(p for p in providers if p.get("id") == "http-fetch")
+    provides = hf.get("provides", {})
+    for cap, info in provides.items():
+        if isinstance(info, dict):
+            maturity = info.get("maturity", "")
+            assert maturity == "experimental", (
+                f"http-fetch {cap} should be 'experimental', got '{maturity}'"
+            )
+
+
+# ── P1-2: Video Recipe subtitle/ASR fallback ────────────────────────
+
+def test_video_recipe_allows_asr_substitute():
+    """No subtitles + ASR success must satisfy video transcript requirement.
+
+    subtitle.fetch failure should NOT permanently partial the result when
+    speech.transcribe produces a valid transcript.
+    """
+    from importlib.resources import files
+
+    video_recipe = files("knowledge_studio.recipes").joinpath("video.md")
+    text = video_recipe.read_text(encoding="utf-8")
+
+    # subtitle.fetch must NOT be in required_capabilities — it's optional,
+    # substituted by speech.transcribe (fallback)
+    assert "transcript_or_subtitle" in text, (
+        "video.md required_capabilities must use transcript_or_subtitle, "
+        "not subtitle.fetch — ASR is a valid substitute"
+    )
+    # The degradation note must document the substitution
+    assert "Fully substituted by speech.transcribe" in text, (
+        "video.md degradation must document speech.transcribe as subtitle.fetch substitute"
+    )
+    # complete_when already has subtitles_or_transcript_available
+    assert "subtitles_or_transcript_available" in text, (
+        "video.md complete_when missing subtitles_or_transcript_available"
+    )
+
+
+# ── Firecrawl metadata.fetch declaration ────────────────────────────
+
+def test_firecrawl_declares_metadata_fetch():
+    """Firecrawl provider.yaml must declare metadata.fetch.
+
+    Ingest SKILL.md references Firecrawl metadata.fetch as part of the
+    provider cluster (one /scrape → web.fetch + web.extract + metadata.fetch).
+    The provider.yaml must match.
+    """
+    from knowledge_studio.capability_commands import capability_list
+
+    catalog = capability_list()
+    firecrawl = next(p for p in catalog["providers"] if p["id"] == "firecrawl")
+    assert "metadata.fetch" in firecrawl["actions"], (
+        "firecrawl must declare metadata.fetch — SKILL.md Step 4 references it "
+        "as part of the 3-capability provider cluster"
+    )
+
+
+# ── MediaCrawler truthfulness ───────────────────────────────────────
+
+def test_mediacrawler_all_experimental():
+    """All MediaCrawler capabilities must be experimental — no validated claims.
+
+    MediaCrawler OKS integration has never been independently verified.
+    """
+    from knowledge_studio.capability_commands import _scan_providers, _providers_root
+
+    providers = _scan_providers(_providers_root())
+    mc = next(p for p in providers if p.get("id") == "mediacrawler")
+    provides = mc.get("provides", {})
+    for cap, info in provides.items():
+        if isinstance(info, dict):
+            maturity = info.get("maturity", "")
+            assert maturity == "experimental", (
+                f"mediacrawler {cap} maturity='{maturity}' — "
+                f"must be 'experimental' (OKS integration unverified)"
+            )
+
+
+def test_mediacrawler_skill_in_package():
+    """MediaCrawler SKILL.md must exist in the package directory for wheel inclusion."""
+    from importlib.resources import files
+
+    skill_path = files("knowledge_studio.providers.mediacrawler").joinpath("SKILL.md")
+    assert skill_path.is_file(), (
+        "cli/knowledge_studio/providers/mediacrawler/SKILL.md missing — "
+        "not included in wheel"
+    )
+    text = skill_path.read_text(encoding="utf-8")
+    assert "experimental" in text.lower(), (
+        "mediacrawler SKILL.md must reflect experimental (unverified) status"
+    )

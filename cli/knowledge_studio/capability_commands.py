@@ -223,7 +223,7 @@ def _provider_status(checks: list[dict[str, Any]], provider_id: str, execution: 
         return "experimental"
 
     # ── runtime-only (MCP / Agent-dependent) ──
-    if provider_id in ("agentkey",):
+    if provider_id in ("agentkey", "agent-runtime"):
         return "runtime_only"
 
     # ── external optional (user must install separately, not bundled) ──
@@ -292,8 +292,12 @@ def _check_provider_health(provider: dict[str, Any]) -> list[dict[str, Any]]:
         checks.append({
             "type": "note",
             "name": "agent-runtime",
-            "available": True,
-            "message": "Agent native capability — always available when Agent is running",
+            "available": None,
+            "message": (
+                "Agent native capability — depends on current model. "
+                "Multimodal models support image/page understanding; "
+                "text-only models can only use registered Providers."
+            ),
         })
     elif pid == "human":
         checks.append({
@@ -561,9 +565,9 @@ def _describe_ready_capabilities(
     # Remote ready
     for p in summary.get("remote_ready", []):
         can_do.append(_label(p["id"]))
-    # Remote runtime_only (available via Agent at runtime)
+    # Remote runtime_only — depends on the Agent model; not guaranteed
     for p in summary.get("remote_runtime_only", []):
-        can_do.append(_label(p["id"]))
+        can_enable.append(f"{_label(p['id'])}（取决于 Agent 模型和 MCP 配置）")
 
     # Local missing (installable)
     for p in summary.get("local_missing", []):
@@ -627,7 +631,9 @@ def print_capability_summary(
     # ── Always-available capabilities ──
     console.print(f"\n[bold green]{t('init_always_available')}[/bold green]")
     console.print(f"  [green]✓[/green] {t('cap_markdown_text')}")
-    console.print(f"  [green]✓[/green] {t('cap_agent_multimodal')}")
+    # Agent multimodal capability depends on the current model — not
+    # unconditionally available for text-only orchestrators.
+    console.print(f"  [dim]?[/dim] {t('cap_agent_multimodal')}")
 
     # ── Currently available ──
     if can_do:

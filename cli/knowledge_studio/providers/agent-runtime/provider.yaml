@@ -5,11 +5,13 @@ description: 当前 Agent Runtime（Claude Code / Codex）的自身多模态能�
 
 provides:
   image.observe:
-    maturity: validated
+    maturity: runtime_dependent
   layout.understand:
-    maturity: validated
+    maturity: runtime_dependent
   chart.interpret:
-    maturity: validated
+    maturity: runtime_dependent
+  web.fetch:
+    maturity: runtime_dependent
   evidence.cross_check:
     maturity: experimental
 

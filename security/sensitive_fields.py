@@ -60,19 +60,25 @@ SENSITIVE_PATTERNS: tuple[re.Pattern, ...] = tuple(
     re.compile(p, re.IGNORECASE | re.MULTILINE)
     for p in [
         # Bearer tokens
-        r'\bBearer\s+[A-Za-z0-9\-._~+/]+=*\b',
+        # (?<![a-zA-Z0-9_]) replaces \b — Python 3 \w includes CJK chars,
+        # so \b does NOT match at CJK→ASCII transitions (both are \w).
+        # Explicit ASCII boundary check prevents credential leakage when
+        # Chinese/Unicode text is adjacent without a space.
+        r'(?<![a-zA-Z0-9_])Bearer\s+[A-Za-z0-9\-._~+/]+=*(?![a-zA-Z0-9_])',
         # Basic auth
-        r'\bBasic\s+[A-Za-z0-9+/]+=*\b',
-        # API keys in key=value form
-        r'\b(?:api[_-]?key|apikey|access[_-]?token|secret)\s*[:=]\s*\S+',
+        r'(?<![a-zA-Z0-9_])Basic\s+[A-Za-z0-9+/]+=*(?![a-zA-Z0-9_])',
+        # API keys in key=value form (also matches "api key" with space)
+        r'(?<![a-zA-Z0-9_])(?:api[ _-]?key|apikey|access[ _-]?token|secret)\s*[:=]\s*\S+',
         # JWT tokens (header.payload.signature)
-        r'\beyJ[A-Za-z0-9\-_]+\.eyJ[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+',
+        r'(?<![a-zA-Z0-9_])eyJ[A-Za-z0-9\-_]+\.eyJ[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+',
+        # OpenAI / DashScope / LLM provider API keys (sk- prefix)
+        r'(?<![a-zA-Z0-9_])sk-[A-Za-z0-9_-]{20,}(?![a-zA-Z0-9_])',
         # AWS-style access keys
-        r'\bAKIA[0-9A-Z]{16}\b',
+        r'(?<![a-zA-Z0-9_])AKIA[0-9A-Z]{16}(?![a-zA-Z0-9_])',
         # Generic hex-encoded secrets (32+ hex chars after key=)
-        r'\b(?:token|key|secret|password)\s*[:=]\s*[0-9a-fA-F]{32,}\b',
+        r'(?<![a-zA-Z0-9_])(?:token|key|secret|password)\s*[:=]\s*[0-9a-fA-F]{32,}(?![a-zA-Z0-9_])',
         # session cookie values
-        r'\bsession\s*[:=]\s*[A-Za-z0-9+/=]{20,}',
+        r'(?<![a-zA-Z0-9_])session\s*[:=]\s*[A-Za-z0-9+/=]{20,}',
     ]
 )
 

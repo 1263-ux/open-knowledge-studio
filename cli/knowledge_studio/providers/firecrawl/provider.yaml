@@ -8,6 +8,8 @@ provides:
     maturity: validated
   web.extract:
     maturity: validated
+  metadata.fetch:
+    maturity: validated
   web.screenshot:
     maturity: experimental
   document.text.extract:

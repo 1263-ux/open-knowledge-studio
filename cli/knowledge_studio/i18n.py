@@ -179,8 +179,8 @@ _TEXTS: dict[str, dict[str, str]] = {
         "en": "Ingest Markdown / text",
     },
     "cap_agent_multimodal": {
-        "zh": "使用 Agent 理解图片和网页内容",
-        "en": "Agent multimodal understanding (images and web pages)",
+        "zh": "使用 Agent 理解图片和网页（需要支持多模态的模型）",
+        "en": "Agent multimodal understanding — images and web pages (requires multimodal model)",
     },
     "init_can_do_now": {
         "zh": "现在可以直接：",
