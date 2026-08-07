@@ -193,13 +193,19 @@ def test_ingest_skill_contains_must_constraints():
 
 
 def test_ingest_skill_contains_unified_card():
-    """Both versions contain the unified result card output format."""
+    """Both versions contain the unified result card output format (Guided UX)."""
     for host in ("claude", "agents"):
         text = _read_skill_text(host)
         assert "摄入完成" in text, f"{host}/ingest/SKILL.md missing unified card header"
-        assert "使用路径" in text, f"{host}/ingest/SKILL.md missing 使用路径"
         assert "已获得" in text, f"{host}/ingest/SKILL.md missing 已获得"
         assert "缺失" in text, f"{host}/ingest/SKILL.md missing 缺失"
+        assert "待审核知识" in text, f"{host}/ingest/SKILL.md missing 待审核知识"
+        assert "/promote" in text, f"{host}/ingest/SKILL.md missing /promote"
+        # Guided UX: internal IDs hidden from user-facing card
+        assert "使用路径" not in text, (
+            f"{host}/ingest/SKILL.md contains 使用路径 — provider chain should only "
+            f"appear in result.json, not in the user-facing card"
+        )
 
 
 def test_claude_and_agents_ingest_skills_identical():
