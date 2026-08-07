@@ -1875,3 +1875,57 @@ def test_ingest_skill_complete_when_coverage_rule():
             f"{host}/ingest/SKILL.md must include the video subtitle/ASR "
             f"fallback example in the complete_when coverage rule"
         )
+
+
+# ── Hotfix R2.1: Unified required-capability / complete_when semantics ─
+
+def test_required_capability_not_absolute_condition():
+    """Step 3a must NOT contain the unconditional 'missing => partial/failed' rule.
+
+    The old text 'if any are missing after execution, the ingest is partial or
+    failed' contradicts the complete_when coverage rule.  required_capabilities
+    are the primary path, not an absolute provider-ID success condition.
+    """
+    for host in ("claude", "agents"):
+        text = _read_skill_text(host)
+        # Must NOT contain the old unconditional language
+        assert "MUST be satisfied — if any are missing after execution, the ingest is `partial` or `failed`" not in text, (
+            f"{host}/ingest/SKILL.md still contains the old unconditional "
+            f"'missing => partial/failed' language in Step 3a"
+        )
+        # Must contain the new nuanced language
+        assert "primary Evidence acquisition path" in text, (
+            f"{host}/ingest/SKILL.md Step 3a missing 'primary Evidence acquisition path'"
+        )
+        assert "NOT an absolute" in text, (
+            f"{host}/ingest/SKILL.md Step 3a missing 'NOT an absolute' qualifier"
+        )
+        assert "satisfied by fallback" in text, (
+            f"{host}/ingest/SKILL.md Step 5 missing 'satisfied by fallback' outcome"
+        )
+        # The three-outcome model must be present
+        assert "Neither the original capability nor any degradation fallback" in text, (
+            f"{host}/ingest/SKILL.md Step 5 missing outcome 3 (neither original nor fallback)"
+        )
+
+
+def test_completeness_by_complete_when_not_capability_count():
+    """Final completeness is determined by complete_when satisfaction,
+    not by counting how many required capability IDs succeeded.
+
+    This ensures the video subtitle/ASR scenario stays closed:
+    subtitle.fetch failed + speech.transcribe succeeded → complete, not partial.
+    """
+    for host in ("claude", "agents"):
+        text = _read_skill_text(host)
+        assert "complete_when satisfaction" in text or "complete_when" in text, (
+            f"{host}/ingest/SKILL.md missing complete_when reference"
+        )
+        # The authoritative standard must be complete_when, not capability tally
+        assert "authoritative completeness standard" in text, (
+            f"{host}/ingest/SKILL.md missing 'authoritative completeness standard'"
+        )
+        # Must explicitly forbid marking as partial when fallback succeeded
+        assert "Do NOT mark the ingest as partial" in text or "Do NOT mark as missing" in text, (
+            f"{host}/ingest/SKILL.md must forbid marking as partial when fallback succeeded"
+        )

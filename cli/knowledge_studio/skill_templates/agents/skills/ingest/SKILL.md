@@ -63,9 +63,15 @@ output (Step 0).  Read it to understand what evidence is needed.
 Do NOT read `recipes/{modality}.md` from disk — the user's knowledge base
 does not contain a recipes/ directory.  The Recipe is served through the CLI.
 
-- **required_capabilities**: MUST be satisfied — if any are missing after execution, the ingest is `partial` or `failed`
+- **required_capabilities**: the primary Evidence acquisition path for this Recipe.
+  They are NOT an absolute "this specific provider capability ID must succeed" condition.
+  Final completeness is determined by whether the `complete_when` conditions are satisfied
+  (see Step 5 for the full coverage check).  A required capability that fails can still
+  produce a complete result if a declared fallback capability yields equivalent Evidence.
 - **optional_capabilities**: nice-to-have — missing optional capabilities don't block Candidate generation
-- **degradation**: priority-ordered fallback chain when a required capability fails
+- **degradation**: priority-ordered fallback chain — when a required capability at a given
+  priority level fails, the next priority is attempted.  Fallback capabilities (including
+  optional ones at lower priority) can satisfy the same `complete_when` condition.
 
 ### 3b. Query Current Capability
 
@@ -149,23 +155,37 @@ EvidenceFragments — do NOT iterate per capability.
 After executing all providers, compare obtained evidence against the Recipe's demands:
 
 ### Required capabilities check:
-- All required satisfied → status: `complete`
-- Some required missing:
-  - Auto-fallback to next degradation priority if available
-  - If no fallback available: status `partial`, `failure_disposition: "needs_user_action"`
-  - Present the gap to the user in plain language (see Step 9 Guided UX)
+
+For each required capability, determine its outcome against the Recipe's degradation chain:
+
+1. **Original capability succeeds** → satisfied. Record the capability and provider.
+2. **Original capability fails, but a declared fallback (from the degradation list)
+   produces equivalent Evidence and satisfies the relevant `complete_when` condition**
+   → satisfied by fallback.  Record both the attempted capability (status: `failed`)
+   and the fallback that succeeded (status: `success`).  Do NOT mark as missing.
+3. **Neither the original capability nor any degradation fallback produces
+   valid Evidence for the related `complete_when`** → missing required evidence.
+
+Final completeness is determined by `complete_when` satisfaction, not by counting
+how many required capability IDs succeeded.  A recipe with one failed required
+capability that was fully compensated by fallback is still `complete`.
+
+Example: Video Recipe requires `subtitle.fetch`.  If subtitle extraction fails but
+`speech.transcribe` (degradation priority 4, optional) produces a valid transcript,
+`complete_when: subtitles_or_transcript_available` is satisfied — the ingest is
+`complete`, not `partial`.
 
 ### Optional capabilities check:
 - Satisfied → bonus, record in manifest
 - Missing → note in warnings, do NOT block — optional means optional
 
-### complete_when coverage check (AFTER required + optional checks):
+### complete_when coverage check:
 
-**The final completeness judgment MUST respect the Recipe's `complete_when`
-conditions, not just the `required_capabilities` list.**
+The `complete_when` conditions are the authoritative completeness standard —
+they override any mechanical capability-ID success/failure tally.
 
 A `complete_when` condition can be satisfied by evidence from **any**
-capability — required OR optional.  This means:
+capability — required OR optional, primary path OR degradation fallback.
 
 - If `subtitle.fetch` (required) fails but `speech.transcribe` (optional, ASR)
   produces a valid transcript → `subtitles_or_transcript_available` is SATISFIED.
