@@ -453,6 +453,21 @@ def feishu_listen(max_events: int = typer.Option(1, "--max-events"), timeout: st
     _run_feishu_worker("listen-reviews", ["--max-events", str(max_events), "--timeout", timeout])
 
 
+@feishu_app.command("pending")
+def feishu_pending(
+    limit: int = typer.Option(200, "--limit"),
+):
+    """List pending Inbox records from Feishu Base (Pull-mode entry point).
+
+    Returns JSON with record_id, content, thought, status, created,
+    and metadata for each pending record. The Agent filters records
+    by date client-side.
+
+    No daemon, no WebSocket, no background service needed.
+    """
+    _run_feishu_worker("pending", ["--limit", str(limit)])
+
+
 @feishu_app.command("setup")
 def feishu_setup(
     base_token: Optional[str] = typer.Option(None, "--base-token", help="已有 Base token（跳过创建）"),
@@ -1178,12 +1193,17 @@ def config_init(
 @config_app.command("show")
 def config_show():
     """Show current global configuration."""
-    from knowledge_studio.config import load_config, config_path
+    from knowledge_studio.config import load_config, config_path, VALID_STRATEGIES
 
     config = load_config()
+    strategy = config.get("strategy", "")
+    strategy_display = strategy if strategy else "(not set)"
+
     console.print(f"[dim]Config file: {config_path()}[/dim]\n")
     console.print(Panel.fit(
         f"[bold]Knowledge Base[/bold]\n  {config.get('knowledge_base_path', '(not set)')}\n\n"
+        f"[bold]Strategy[/bold]\n  {strategy_display}\n"
+        f"  Valid values: {', '.join(sorted(VALID_STRATEGIES))}\n\n"
         f"[dim]The core CLI stores no model credentials or handler configuration.[/dim]",
         border_style="cyan",
     ))
@@ -1214,6 +1234,11 @@ def config_set(
             )
         value = str(resolved)
         target[keys[-1]] = value
+    elif key == "strategy":
+        from knowledge_studio.config import set_strategy as _set_strategy
+        _set_strategy(value)
+        console.print(f"[green]Set:[/green] strategy = {value}")
+        return
     elif value.lower() in ("true", "false"):
         target[keys[-1]] = value.lower() == "true"
     elif value.isdigit():

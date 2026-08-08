@@ -152,6 +152,9 @@ CAPTURE_FIELDS = [
     "重试",
     "租约所有者",
     "租约到期",
+    "创建时间",
+    "Wiki状态",
+    "采集模式",
 ]
 # REVIEW_ACTIONS and REVIEW_ACTION_RE are re-exported from feishu_worker.review_events
 
@@ -919,6 +922,27 @@ def main() -> int:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     args = parse_args()
     config = load_config(args)
+    if args.command == "pending":
+        records = list_records(config, args.limit)
+        result = {
+            "count": len(records),
+            "records": [
+                {
+                    "record_id": r.get("record_id", ""),
+                    "content": r.get("内容", ""),
+                    "thought": r.get("思考", ""),
+                    "status": r.get("运行状态", ""),
+                    "created": r.get("创建时间", ""),
+                    "run_id": r.get("运行ID", ""),
+                    "attachments": r.get("附件", ""),
+                    "wiki_status": r.get("Wiki状态", ""),
+                    "capture_mode": r.get("采集模式", ""),
+                }
+                for r in records
+            ],
+        }
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return 0
     if args.command == "enqueue":
         fields: dict[str, Any] = {
             "内容": args.content,
