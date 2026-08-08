@@ -30,6 +30,7 @@ dependencies = [
     "jieba>=0.42",
     "gitpython>=3",
     "pyyaml>=6",
+    "jsonschema>=4.20",
 ]
 
 [project.optional-dependencies]
@@ -68,6 +69,7 @@ oks-connector = "oks_connector.raw_bundle_adapter:main"
 include-package-data = false
 packages = [
     "knowledge_studio",
+    "knowledge_studio.schemas",
     "oks_connector",
     "oks_connector.extractors",
     "oks_connector.feishu_worker",
@@ -79,3 +81,4 @@ packages = [
 
 [tool.setuptools.package-data]
 knowledge_studio = ["_assets/**/*", "_assets/scripts/*.py"]
+"knowledge_studio.schemas" = ["*.json", "*.md"]

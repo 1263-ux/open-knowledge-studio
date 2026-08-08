@@ -108,10 +108,25 @@ are git-synced (P1) and sit at top level alongside the cognitive buckets, but
 neither is "memory" in the cognitive sense — do not treat them as recallable
 knowledge.
 
-**Directory structure:**
+**Directory structure:** The following two views are intentionally different.
+`assets/` is the repository's tracked template source. The second tree is the
+materialized layout created inside an initialized OKS instance.
 
 ```
-open-knowledge-studio/
+Repository: open-knowledge-studio/
+├── assets/                       # Template source shipped by the repository
+│   ├── profiles/
+│   ├── settings/
+│   ├── _meta/
+│   ├── skills/
+│   ├── hooks/
+│   ├── rules/
+│   └── templates/
+└── cli/                          # The API-free `oks` core
+```
+
+```text
+OKS instance: <knowledge-base>/
 ├── profiles/                     # ① Portraits
 │   ├── team.md
 │   ├── users/{id}.md

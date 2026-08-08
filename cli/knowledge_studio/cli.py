@@ -21,6 +21,8 @@ from rich.markup import escape
 
 from knowledge_studio import store
 from knowledge_studio.i18n import t
+from knowledge_studio.raw_commit import CommitError as _CommitError
+from knowledge_studio.raw_commit import raw_commit as _raw_commit
 from knowledge_studio.recall import (
     RECALL_RESPONSE_SCHEMA,
     SEARCH_RESPONSE_SCHEMA,
@@ -338,6 +340,48 @@ def ingest(
     if exit_code == 0:
         print(t("ingest_done_hint"), file=sys.stderr)
     raise typer.Exit(exit_code)
+
+
+@app.command(name="raw-commit")
+def raw_commit_cmd(
+    manifest_dir: Path = typer.Argument(
+        ...,
+        exists=True,
+        file_okay=False,
+        dir_okay=True,
+        readable=True,
+        help="Agent-submitted manifest directory containing source-envelope.json, evidence-manifest.json, and artifacts/.",
+    ),
+    output: Optional[Path] = typer.Option(
+        None,
+        "--output",
+        "-o",
+        help="Destination directory for the assembled Raw Bundle.",
+    ),
+    overwrite: bool = typer.Option(
+        False,
+        "--overwrite",
+        help="Replace an existing Raw Bundle destination.",
+    ),
+):
+    """Validate an Agent manifest and assemble a Raw Bundle v0.2."""
+    try:
+        result = _raw_commit(
+            manifest_dir,
+            output=output,
+            overwrite=overwrite,
+        )
+    except _CommitError as exc:
+        error: dict[str, object] = {
+            "code": exc.code,
+            "message": exc.message,
+        }
+        if exc.details:
+            error["details"] = exc.details
+        _emit_json({"status": "rejected", "error": error})
+        raise typer.Exit(1)
+
+    _emit_json(result)
 
 
 def _extractor_env_for(capability: str) -> str:

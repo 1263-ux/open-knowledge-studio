@@ -81,14 +81,3 @@ raw/**
 # Drafts content (local only — do not push to remote)
 drafts/*.md
 !drafts/.gitkeep
-
-# Old profiles (local only, not published to remote)
-profiles/projects/agentuniverse.md
-profiles/projects/apache-project-contribution.md
-profiles/projects/current-microservice-migration.md
-profiles/projects/current-paper-project.md
-profiles/projects/current-ui-refactor.md
-profiles/projects/higress.md
-profiles/projects/oss-compass.md
-profiles/projects/rocketmq.md
-profiles/users/mrjlv1/
