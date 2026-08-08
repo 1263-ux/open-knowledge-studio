@@ -1,10 +1,12 @@
 # 平台反爬、轻量化部署与用户交互研究
 
-日期：2026-08-02
+日期：2026-08-08
 状态：`active`
-版本：v3 — 实验验证版（实测数据已同步）
+版本：v4 — v0.4.0 当前口径 + 历史实验记录
 
 目的：围绕 OKS 的三个核心目标——**部署轻量化、知识提取能力提升、用户交互体验优化**——给出可落地的方案和建议。反爬边界定义约束条件，不投入研发资源对抗。
+
+> **阅读说明（v0.4.0）**：本文前半部分保留了 2026-08-02 至 2026-08-04 的研究过程、失败样本和设计预案，便于追溯；其中出现的 `oks-connector`、旧 `route.py`、`oks ingest --mode quick`、50–100MB 单体安装等内容均属于历史口径，不是当前命令或推广承诺。当前可用的 Provider、安装方式、隐私边界和推荐组合，以[能力边界与选型指南](../capability-boundaries.md)及本文末尾的“v0.4.0 当前有效结论”为准。
 
 ---
 
@@ -14,47 +16,41 @@
 
 经过代码审查，OKS 实际已经比文档描述的更完善：
 
-**提取器层（5 个 + 路由）：**
+**当前入口是 Agent-Native ingest，而不是 CLI 内置的统一提取器路由：**
 
-| 提取器 | 命令 | 能力 | 依赖 |
-|--------|------|------|------|
-| `watch` | `oks-connector watch` | 视频/音频 → 平台字幕采集 → 本地 ASR (faster-whisper) → 场景检测 → 关键帧 → RapidOCR | yt-dlp, ffmpeg, faster-whisper, PySceneDetect, Pillow, av |
-| `markitdown` | `oks-connector markitdown` | 办公文档 (docx/pptx/xlsx/html/csv/md) → Markdown | markitdown |
-| `mineru` | `oks-connector mineru` | PDF → 文本+版面+公式+OCR | MinerU v3.4 |
-| `web` | `oks-connector` (web.py) | 公开网页 → Trafilatura 提取 + Markdown + HTML 快照 | trafilatura, requests |
-| `image` | `oks-connector image` | 图片 → RapidOCR | rapidocr |
-
-**能力按需安装系统（`capability_check.py`）：**
-```
-oks capability install watch     # 视频/音频提取
-oks capability install document  # 办公文档
-oks capability install pdf       # PDF 提取
-oks capability install formula   # 公式 OCR
-oks capability install feishu    # 飞书集成
+```text
+Agent Host (Codex / Claude Code)
+  → oks ingest prepare
+  → 读取 Recipe、candidate_providers 和协议骨架
+  → 选择已注册 Provider 并执行（本地、远程或人工）
+  → work/<provider>/ + EvidenceFragment + evidence-manifest.json
+  → oks raw-commit（机械校验 provenance）
+  → Raw Bundle v0.2 → Candidate → 人工审核 → Wiki / recall
 ```
 
-**路由系统（`route.py`）：** 自动检测来源类型（URL vs 本地文件，平台识别，扩展名检测），分派对应提取器。当前支持 YouTube、Bilibili、抖音的 URL 路由。
+当前仓库注册了 17 个 Provider，按执行边界分为 agent_native、managed、external、human 和 blocked/experimental；它们提供文本、网页、PDF、办公文档、图片、音视频和平台内容等能力。CLI 负责准备协议、验证证据和组装 Raw Bundle，不替 Agent 选择 Provider，也不把远程服务伪装成本地能力。
 
-**两条用户路径已跑通：**
-- **Agent 路径**：`/ingest` skill → `oks ingest` → `oks-connector` → Raw Bundle → `/promote` → Wiki
-- **飞书路径**：飞书 Base 表单 → `feishu_base_worker.py` → CI worker → review → Raw Bundle
+**能力按需安装系统（当前 CLI）：**
+```
+oks capability list
+oks capability install pdf-lite --yes  # 轻量数字 PDF，默认推荐
+oks capability install document --yes  # docx/pptx 等办公文档
+oks capability install watch --yes     # 视频/音频、字幕、ASR、OCR
+oks capability install pdf --yes       # MinerU 重型 PDF 能力
+oks capability install formula --yes   # 公式/复杂 OCR
+oks capability doctor --verbose
+```
+
+远程 Provider（Firecrawl、AgentKey、remote-asr 等）不通过 `oks capability install` 安装；它们需要用户自己的 API Key / OAuth / MCP 配置，并在证据中保留 provenance。MediaCrawler、Browser 和 remote-asr 仍是实验性或受环境约束的路径，不能写成默认支持。
+
+**当前用户路径：**
+- **Agent 路径**：`/ingest` → `oks ingest prepare` → Provider → `oks raw-commit` → `/promote` → Wiki
+- **本地快速路径**：`.md/.txt` → `text_ready=true` → `oks raw-commit`，无需 Provider 执行
+- **飞书路径**：作为提交与审核入口，由 Agent/worker 编排；不是绕过 provenance 的另一套摄入协议
 
 ### 1.2 当前依赖的实际重量
 
-从 `raw-tools.json` 可以看到当前部署：
-
-```json
-{
-  "watch_python": "D:/.../watch-venv/Scripts/python.exe",    // faster-whisper + RapidOCR + yt-dlp
-  "document_python": "D:/.../.venv/Scripts/python.exe",       // markitdown
-  "mineru_python": "D:/.../mineru-venv/Scripts/python.exe",   // MinerU (最重)
-  "formula_python": "D:/.../paddle-formula-venv/Scripts/python.exe", // PaddleOCR
-  "ffmpeg": "C:/.../ffmpeg.exe",
-  "ffprobe": "C:/.../ffprobe.exe"
-}
-```
-
-**5 个独立 Python venv + ffmpeg**，这是当前"重"的来源。但架构已经做到 isolation——每个提取器独立 venv，互不污染。
+当前部署不是一个固定的 `raw-tools.json` 和“五个 venv”，而是核心 CLI 加按需 capability 的组合。默认建议先安装 `pdf-lite` 和 `document`；只有处理视频/音频、扫描 PDF、公式或 OCR 时，才安装对应能力。每个 managed capability 使用隔离环境，实际体积取决于用户选择的组合；远程 Provider 的体积接近零，但会增加网络、费用、密钥和数据出境约束。
 
 ---
 
@@ -86,20 +82,23 @@ oks capability install feishu    # 飞书集成
 
 ### 2.2 成熟工具生态：OKS 的下游
 
-这些工具已经解决了采集问题，OKS 不需要重复造轮子：
+这些工具已经解决了部分采集问题，OKS 应把它们作为可替换 Provider，而不是重新实现采集器：
 
 | 工具 | 覆盖 | 状态 | OKS 集成方式 |
 |------|------|------|------------|
-| yt-dlp | 1800+ 站点 | 活跃（v2026.07.21） | `oks-connector watch` 已集成 |
-| Firecrawl | 网页抓取+JS渲染 | 活跃，500页/月免费 | API Key → 本地 Raw Bundle |
-| **MediaCrawler** | **小红书/抖音/快手/B站/微博/贴吧/知乎** | **59.4K stars, 活跃** | **子进程→API包装→库复用** |
-| Playwright | 浏览器自动化 | 活跃 | Agent 直接调用 |
-| Deepgram/Groq/腾讯云 | ASR | 商用 API | 远程替代本地 Whisper |
-| LlamaParse/Firecrawl Fire-PDF | PDF 解析 | 商用 API | 远程替代 MinerU |
+| yt-dlp | 1800+ 站点的元数据/字幕/下载 | managed，字幕能力已验证 | `yt-dlp` Provider；Cookie 和平台内容决定成功率 |
+| Firecrawl | 公开网页、JS 渲染、远程 PDF/OCR | external，网页/PDF 路径已验证 | `firecrawl` Provider；需要 API Key，当前最推荐的公开网页远程方案之一 |
+| **AgentKey** | **中文平台网页和结构化抓取** | **external，按平台实测；知乎一例通过、微信部分可用、B站以元数据为主** | **`agentkey` Provider；需要 MCP、OAuth/API 权限和用户确认** |
+| **MediaCrawler** | **小红书/抖音/快手/B站/微博/贴吧/知乎** | **external，当前仍为 experimental/unvalidated** | **用户单独安装；不作为 OKS 默认依赖** |
+| Browser / Playwright | 浏览器自动化和用户侧采集 | experimental | Agent 或用户浏览器路径；不绕过 CAPTCHA、DRM 或付费墙 |
+| remote-asr | 远程语音转写 | experimental/environment-limited | 需要用户 API Key；长音频质量、延迟和费用仍需按环境验收 |
+| MinerU / pdf-lite | PDF 文本、版面、OCR | managed；按 PDF 类型分层 | `pdf-lite` 轻量优先，`pdf` 用于重型解析 |
 
 ---
 
-## 三、MediaCrawler：中文社交平台采集的突破口
+## 三、MediaCrawler：中文社交平台采集的实验路径
+
+> MediaCrawler 的研究价值在于说明“真实浏览器 + 用户登录态”为什么能改善平台采集，但它不是当前 OKS 的默认 Provider。当前优先顺序是：公开网页用 Firecrawl，中文平台优先评估 AgentKey，必须使用用户浏览器时再考虑 Browser；MediaCrawler 仍需单独安装、单独验收。
 
 ### 3.1 基本信息
 
@@ -130,13 +129,15 @@ MediaCrawler 的反爬策略是 **"不要逆向，要复用"**：
 - 2025-03 常州案：3 人因爬取小红书用户数据获刑（缓刑 3-5 年，罚金+没收 653 万元）
 - **OKS 如果集成 MediaCrawler，需要：** 仅采集公开内容、控制频率、明确非商业研究用途、咨询法律顾问
 
-### 3.4 集成路径
+### 3.4 集成路径（仍是后续实验，不是当前默认能力）
 
 ```
-阶段一（原型验证）: Fork MediaCrawler → 子进程调用 → 选 1-2 个平台
-阶段二（正式集成）: 扩展 api/main.py → REST 微服务 → HTTP 接入 OKS
-阶段三（生产加固）: 跟踪上游更新 → 速率控制 → 失败重试 → 监控
+阶段一（单独验证）: 用户自行安装 → 选 1-2 个公开平台 → 输出原始结果
+阶段二（协议接入）: 把输出保存到 work/mediacrawler/ → 填 EvidenceFragment → 由 Agent 调用 oks raw-commit
+阶段三（是否集成）: 只有在许可证、平台条款、稳定性和证据质量均通过验收后，才考虑 Provider 化
 ```
+
+在完成上述验收前，OKS 不捆绑 Node.js、浏览器、代理池或 MediaCrawler，也不承诺登录态、签名、验证码和封禁问题可自动解决。
 
 ---
 
@@ -146,16 +147,16 @@ MediaCrawler 的反爬策略是 **"不要逆向，要复用"**：
 
 | 平台 | 技术可行性 | 法律安全性 | 推荐方案 | 硬边界 |
 |------|:---:|:---:|---|---|
-| YouTube | 中-高 | **低** | yt-dlp --skip-download（只取元数据+字幕） | DRM 视频、Premium 专享 |
-| Bilibili | 中 | **低** | yt-dlp（⚠️ bilibili-api-python 已于 2026-07-06 永久关停） | 付费课程 DRM |
-| 小红书 | 低-中 | **极低** | MediaCrawler CDP 模式 / 用户浏览器扩展采集 | 个人数据、大规模抓取 |
-| 抖音 | 低 | **极低** | MediaCrawler / 用户手动分享链接 | 签名对抗、账号封禁 |
-| 微信公众号 | 中 | **极低** | RSS 桥接 / 浏览器扩展导出 Markdown | 版权+个人信息 |
-| 知乎 | 中 | 低 | MediaCrawler（需 Node.js 签名） | 用户内容版权 |
-| 微博 | 中 | 低 | MediaCrawler / 公开 API | 用户隐私 |
-| 学术论文 | **高** | **高** | **OpenAlex (CC0, 2.5 亿论文)** → arXiv → Semantic Scholar | 付费出版商 |
-| 普通网页（英文） | 高 | 高 | Firecrawl API（实测 50KB+ Markdown 提取） | 硬付费墙 |
-| 普通网页（中文） | 中-高 | 高 | Trafilatura 本地（⚠️ Firecrawl 对知乎/CSDN/掘金实测全挂） | 硬付费墙 |
+| YouTube | 中-高 | **低** | yt-dlp Provider：优先元数据/字幕，必要时再启用媒体处理 | DRM 视频、Premium 专享 |
+| Bilibili | 中 | **低** | AgentKey 取平台可用信息；yt-dlp 在有临时 Cookie 且有字幕时可部分成功 | 付费课程 DRM；不承诺全量字幕 |
+| 小红书 | 低-中 | **极低** | 先走 AgentKey 或用户手动导出；MediaCrawler 仅实验 | 个人数据、大规模抓取、账号风险 |
+| 抖音 | 低 | **极低** | AgentKey/用户手动分享链接；MediaCrawler 仅实验 | 签名对抗、账号封禁 |
+| 微信公众号 | 中 | **极低** | AgentKey 或用户手动导出；实时页可能加密或为空 | 版权、个人信息、登录态 |
+| 知乎 | 中 | 低 | AgentKey 优先；本项目一条样本已验证，不外推为全站保证 | 用户内容版权、接口权限 |
+| 微博 | 中 | 低 | AgentKey 或用户手动导出；MediaCrawler 仅实验 | 用户隐私、频率限制 |
+| 学术论文 | **高** | **高** | **OpenAlex (CC0)** → arXiv → Semantic Scholar；PDF 可选 Firecrawl | 付费出版商 |
+| 普通网页（英文/JS） | 高 | 高 | **Firecrawl 优先**（网页和远程 PDF 实测通过） | 硬付费墙、敏感数据出境 |
+| 普通网页（中文静态） | 中-高 | 高 | Trafilatura 本地；公开动态页优先 AgentKey，Firecrawl 作备选 | 平台反爬、登录和空返回 |
 
 **实测数据（2026-08-02）：**
 - Firecrawl 英文博客：✅ 50,838 chars，内容完整
@@ -163,7 +164,7 @@ MediaCrawler 的反爬策略是 **"不要逆向，要复用"**：
 - Firecrawl 知乎：❌ 151 chars（反爬页面，乱码）
 - Firecrawl CSDN：❌ 超时
 - Firecrawl 掘金：❌ 26 chars（几乎空返回）
-- **结论：Firecrawl 中文平台不可用。中文网页走本地 Trafilatura + 用户手动 Markdown 兜底。**
+- **结论：Firecrawl 对英文公开网页和远程 PDF 表现稳定，但不能概括为中文平台通用方案。中文平台优先看 AgentKey 的平台覆盖；静态公开 HTML 仍可用 Trafilatura，本地或人工导出是兜底。**
 
 ### 4.2 绕过策略总则
 
@@ -231,12 +232,14 @@ MediaCrawler 的反爬策略是 **"不要逆向，要复用"**：
 | LaTeX | 保留 ✅ | 文本可读但格式丢失 ⚠️ | MinerU 胜 |
 | **体积** | 2.4GB | **~20MB** | **pymupdf4llm 小 120x** |
 
-**推荐分层（← 实测修正）：**
+**推荐分层（实验结论 + v0.4.0 映射）：**
 ```
-文本型学术 PDF → pymupdf4llm (9s, 20MB, 等价质量, 零成本) ← P0 首选
-扫描/图片重 PDF → Firecrawl Fire-PDF (远程, 智能分页, 免费额度内)
-中文复杂 PDF → MinerU v3.4 (本地, 需 2.4GB, 仅必要时安装)
+文本型学术 PDF → `pdf-lite` / pymupdf4llm（轻量 Provider，P0 首选）
+扫描/图片重 PDF → Firecrawl（远程 OCR fallback；需要 API Key）
+中文复杂 PDF → `pdf` / MinerU（本地重型 capability，仅必要时安装）
 ```
+
+注意：pymupdf4llm 的独立实验通过，不等于所有 PDF 都由轻量路径覆盖；扫描件、复杂版面、公式和图片资产仍应按 Recipe 选择 Firecrawl 或 MinerU，并保留失败/部分成功状态。
 
 ### 5.3 n8n 编排层——镜像大小修正
 
@@ -267,7 +270,7 @@ OpenAlex API → 学术论文（完全免费、CC0）
 
 ### 5.5 实测 Level C 依赖清单
 
-基于实验 1.1 的逐层拆除结果，**Level C（拆 ASR + 拆 PDF 重型解析 + 拆浏览器 + 拆公式 OCR）已可达**：
+历史实验计划曾把 Level C（拆 ASR + 拆 PDF 重型解析 + 拆浏览器 + 拆公式 OCR）写成“已可达”；后续附录已修正这一表述，当前只保留为拆分思路：
 
 ```
 ✅ 保留（本地 ~73MB）:
@@ -280,13 +283,13 @@ OpenAlex API → 学术论文（完全免费、CC0）
   faster-whisper (~2GB)     → OpenAI whisper-1 $0.006/min ✅ 已验证
   MinerU (~2.4GB)            → pymupdf4llm 覆盖文本 PDF + Firecrawl 覆盖扫描 PDF ✅ 已验证
   PaddleOCR formula (~865MB) → P0 不需要
-  Playwright (~300MB)        → Firecrawl API（⚠️ 中文网站不行，需 Trafilatura 本地兜底）
+  Playwright (~300MB)        → Firecrawl API（公开动态网页优先；中文平台按样本判断，AgentKey 是另一条推荐路径）
 
 ⏳ 待确认:
   ffmpeg (~80MB)             → yt-dlp --skip-download 是否强制依赖？大概率可拆
 ```
 
-**最终结论：Level C 本地 50-100MB 是已验证可达的目标。**
+**修正后的结论：50–100MB 只能作为历史目标/估算，不能作为当前推广承诺。** 后续实测表明，Core + yt-dlp 约 100MB 级，加入 `pdf-lite` 约 150MB 级，加入 MarkItDown 或重型能力后会明显增大；默认应按 capability 安装。
 
 ### 5.6 E2E 闭环验证（⭐ 2026-08-02 实测）
 
@@ -294,7 +297,7 @@ OpenAlex API → 学术论文（完全免费、CC0）
 
 ```
 1. Source     Markdown 文章："AI Agent Memory Systems in 2026"
-2. Raw        oks ingest --mode quick → ✅ Raw Bundle (ok 状态)
+2. Raw        `oks ingest prepare` → Agent/Provider evidence → `oks raw-commit` → ✅ Raw Bundle (ok 状态)
 3. Draft      Agent 蒸馏 → drafts/agent-memory-gap-2026.md
 4. Promote    oks drafts promote → ✅ Wiki page (score=0.70, tier=hot)
 5. Recall     oks recall "human review gate agent memory" → 🥇 首条命中！
@@ -311,8 +314,9 @@ OpenAlex API → 学术论文（完全免费、CC0）
 
 | 工具 | 用途 | 状态 |
 |------|------|:--:|
-| Firecrawl API (fc-...) | 英文网页+PDF抓取 | ✅ 已验证 |
-| OpenAI API (sk-...) | ASR + Vision + LLM蒸馏 | ✅ 已验证 |
+| Firecrawl Provider | 英文网页、JS 网页、远程 PDF/OCR | ✅ 已验证；中文平台按样本判断 |
+| AgentKey Provider | 中文平台网页/结构化抓取 | ✅ 部分平台已验证；需 MCP/OAuth/API 权限 |
+| OpenAI API (sk-...) | ASR + Vision + LLM蒸馏 | 12 秒 ASR 已验证；长音频受环境限制 |
 | pymupdf4llm v1.28 | 轻量PDF解析 | ✅ 已验证 |
 | vision skill (xiincs) | 截图分析 (gpt-4o) | ✅ 已验证 |
 | 千问 API (sk-...) | 中文视觉（更便宜） | ⚠️ DashScope 端点超时，待排查 |
@@ -326,84 +330,52 @@ OpenAlex API → 学术论文（完全免费、CC0）
 
 ### 6.1 推荐的多层安装策略
 
-对标 OpenClaw skill metadata、pip extras、yt-dlp 单二进制分发、Bun 零依赖安装的业界最佳实践：
+当前推荐的是“核心 CLI + 按需 capability + 远程 Provider”，而不是一次安装全部提取器：
 
 ```
-第 0 层：核心 CLI (~5MB, 永远必装)
+第 0 层：核心 CLI
   pipx install open-knowledge-studio
-  → 包含 CLI 框架、配置管理、远程 API 客户端、依赖解析器
+  oks init my-knowledge-base
+  oks skills-install
 
-第 1 层：纯 Python 可选依赖 (pip extras)
-  pip install oks[video,audio,browser]
-  → yt-dlp (3MB), openai-whisper, faster-whisper, playwright
+第 1 层：大多数用户的本地文档基线
+  oks capability install pdf-lite --yes
+  oks capability install document --yes
+  oks capability doctor --verbose
 
-第 2 层：系统级依赖 (oks capability install)
-  oks capability install watch     → 自动检测平台，安装 ffmpeg
-  oks capability install pdf       → 安装 MinerU + PaddleOCR
-  → 封装为 Docker sidecar 或 Nix devShell
+第 2 层：按来源增加本地能力
+  oks capability install watch --yes      # 视频/音频、字幕、ASR、OCR
+  oks capability install pdf --yes        # MinerU 重型 PDF
+  oks capability install formula --yes    # 公式/复杂 OCR
+  oks capability install feishu --yes     # 需要用户另行准备 lark-cli/auth
 
-第 3 层：模型数据 (首次使用时自动下载)
-  ~/.cache/oks/models/
-  ├── whisper-base.ggml    (~140MB)
-  ├── whisper-large.ggml   (~3GB, 显式请求)
-  └── tessdata/            (按语言按需)
-  → 参考 whisper.cpp / llamafile 的模型缓存模式
+第 3 层：远程 Provider（不增加本地 venv）
+  Firecrawl → 公开动态网页、英文资料、远程 PDF/OCR
+  AgentKey  → 中文平台和需要平台适配的网页
+  remote-asr → 仅在用户接受密钥、成本和数据出境时启用
 
-第 4 层：远程 API (零本地安装)
-  export OKS_REMOTE_MODE=1
-  oks transcribe audio.mp3  → 自动使用 Groq/腾讯云 API
+第 4 层：模型与系统依赖
+  `watch` 首次使用可能下载 1–3GB 级 ASR 模型；`pdf`、`formula` 也可能显著增重。
+  ffmpeg 仅在媒体处理场景安装；仅取字幕的部分 yt-dlp 路径不应默认绑定 ffmpeg。
 ```
 
 ### 6.2 远程 Fallback 链 (核心降级引擎)
 
-对标 AgentOS `FallbackSTTProxy` 和 Factory CLI 的多 provider 自动切换：
+旧版研究曾设想由 `~/.oks/config.yaml` 自动切换 ASR/OCR/browser 后端。当前 OKS 不把这套伪配置当作已实现功能；降级由 Agent 根据 Recipe、candidate_providers 和实际证据状态选择，并把失败原因写入协议对象。
 
-```python
-# 降级链配置 (~/.oks/config.yaml)
-backends:
-  transcription:
-    chain:
-      - name: platform-captions       # 0. 平台字幕（最快最轻）
-        method: yt-dlp --skip-download --write-subs
-      - name: local-whisper-cpp       # 1. 本地轻量 (~2MB binary + 140MB model)
-        package: whisper-cpp
-        model: base
-      - name: local-faster-whisper    # 2. 本地 GPU 高精度
-        package: faster-whisper
-        model: large-v3
-        min_vram_mb: 4096
-      - name: groq-whisper            # 3. 远程最快 ($0.04/h)
-        env_key: GROQ_API_KEY
-        free_tier_daily: 2000
-      - name: openai-whisper          # 4. 远程备选 ($0.18-0.36/h)
-        env_key: OPENAI_API_KEY
-
-  ocr:
-    chain:
-      - name: pymupdf4llm-native     # 0. 文本型PDF直接提取
-      - name: firecrawl-fire-pdf      # 1. 远程智能分页OCR
-        env_key: FIRECRAWL_API_KEY
-      - name: mineru                  # 2. 本地完整PDF解析
-        package: mineru
-
-  browser:
-    chain:
-      - name: firecrawl-api          # 0. 远程JS渲染（500页/月免费）
-      - name: playwright-local        # 1. 本地Chromium (~300MB)
-```
-
-**核心退化逻辑：**
+**当前退化逻辑：**
 1. 优先尝试零依赖方案（平台字幕 / 远程 API / 纯文本提取）
-2. 失败后逐级降级到本地重依赖
-3. 本地也失败 → 标记为 `restricted`，记录证据链
-4. 用户始终可以用 `--local` 或 `--remote` 显式选择
+2. Agent 根据 Recipe 选择本地或远程 Provider，并记录 policy、confidence 和 agent_judgment
+3. 失败后可换 Provider；不可验证时保留 `partial`、`failed`、`skipped` 或 `environment_limited`
+4. `oks raw-commit` 检查 `work/<provider>/` 和 provenance，缺失原始输出时拒绝提交
 
 ### 6.3 对当前 OKS 架构的具体优化建议
 
-**当前状态（已在 work）：**
-- `oks capability install` 已实现按需安装
-- 5 个独立 venv 已做到隔离
-- `route.py` 已做来源类型检测
+**当前状态：**
+- `oks capability install` 已实现按需安装和隔离环境
+- `oks ingest prepare` 已输出 Recipe、candidate_providers 和协议骨架
+- `oks raw-commit` 已把 provenance 完整性作为机械检查
+- Provider 的选择和执行由 Agent 负责；CLI 不隐式替用户调用远程服务
 
 **短期可改进（参考 OpenClaw metadata 规范）：**
 
@@ -452,12 +424,12 @@ metadata:
 
 | 方案 | 适合用户 | 本地大小 | 上手难度 |
 |------|---------|---------|---------|
-| `pipx install oks` (核心) | Python 开发者 | ~20MB | 低 |
-| `pipx inject oks yt-dlp` (逐步扩展) | 需要额外能力 | + 按需 | 低 |
-| `nix develop github:org/oks` (声明式) | 追求可复现 | 首次 ~2GB | 高 |
-| Docker 分层镜像 | CI/CD 和生产 | 核心 200MB | 中 |
-| GitHub Codespaces 一键 | 零安装体验 | 云端 | 极低 |
-| `export OKS_REMOTE_MODE=1` | 零本地依赖 | 0 | 极低 |
+| `pipx install open-knowledge-studio` + `pdf-lite` | 大多数本地文档用户 | 约 150MB 级（实测组合） | 低 |
+| 加装 `document` | docx/pptx 等办公文档 | 约 280MB 级（实测组合） | 低 |
+| 加装 `watch` | 视频/音频、字幕、ASR | 按模型和 ffmpeg 增长 | 中 |
+| 加装 `pdf` / `formula` | 复杂 PDF、公式 OCR | 重型，按需安装 | 中-高 |
+| Firecrawl + AgentKey | 允许远程处理、追求成功率 | 本地增量接近 0 | 低；需密钥/权限 |
+| MediaCrawler / Browser | 平台实验或用户浏览器采集 | 外部依赖 | 高；不属于默认路径 |
 
 ---
 
@@ -465,10 +437,10 @@ metadata:
 
 ### 7.1 核心洞察
 
-**CLI 本身不适合非技术用户，但 OKS 不需要让非技术用户用 CLI。**
+**CLI 本身不适合非技术用户，但 OKS 不需要让非技术用户用 CLI。** 当前 CLI 是 Agent/管理员的协议与能力管理入口，面向普通用户的低摩擦入口仍属于后续产品化工作。
 
 正确的架构：
-- **CLI** = 管理员/技术用户的配置入口（`oks init`, `oks watch`, `oks capability install`）
+- **CLI** = 管理员/技术用户的配置入口（`oks init`, `oks ingest prepare`, `oks capability install`）
 - **浏览器扩展/Watch Folder/Bot** = 普通用户的日常使用入口
 - 技术用户配置好 Workspace 后，普通用户不需要打开终端
 
@@ -488,20 +460,20 @@ metadata:
 
 ### 7.3 分阶段实施建议
 
-**第一步（已实现）：Agent 和飞书路径**
+**第一步（当前可用）：Agent-Native 和飞书协议路径**
 
-两条路径已跑通，当前即可用。
+Agent-Native 路径当前即可用；飞书作为可选入口，仍通过同一套 Raw/provenance 协议进入审核链路。
 
-**第二步（立即可做）：Watch Folder**
+**第二步（规划项，当前 CLI 未作为稳定命令承诺）：Watch Folder**
 
 ```bash
-# 用户只需这一条命令，零认知负担
+# 旧设计草案；不是当前 v0.4.0 的稳定命令
 oks watch ~/Knowledge/Inbox
 
 # 把任何文件扔进去 → 自动 ingest → Agent 处理 → Drafts → 人工审核 → Wiki
 ```
 
-这是最低摩擦的新入口。对标 Hazel ($42 Mac 独占) 的理念，但 AI 驱动。
+这是未来可做的最低摩擦入口。当前稳定入口仍是 Agent 调用 `/ingest`，或由用户把文件/URL交给 Agent 后执行 `oks ingest prepare`。
 
 **第三步（短期，最高 ROI）：浏览器扩展**
 
@@ -527,9 +499,9 @@ OKS CONSTITUTION 已经提到 OpenClaw Skill Hub 集成——可以直接复用 
 
 ---
 
-## 八、飞书 CI 决策框架
+## 八、飞书 CI 决策框架（历史决策记录）
 
-飞书 CI 由 `scripts/feishu_base_worker.py`（2,384 行）驱动，架构上被设计为完全可选扩展。
+早期版本曾由 `scripts/feishu_base_worker.py` 驱动飞书 CI，并把它设计为可选扩展。本节保留当时的决策记录；当前实现应以 `feishu` capability、Agent-Native ingest 和[能力边界与选型指南](../capability-boundaries.md)为准。
 
 | 场景 | 建议 |
 |------|------|
@@ -537,11 +509,11 @@ OKS CONSTITUTION 已经提到 OpenClaw Skill Hub 集成——可以直接复用 
 | 闭环跑通但飞书 CI 是瓶颈 | 保留飞书仅做通知，用 n8n 编排 |
 | 闭环跑通且飞书 CI 良好 | 保留并深化 |
 
-当前状态：两条路径都已跑通。在闭环验证完成前，不投入更多精力在飞书 CI 上。
+当前原则：飞书可以作为提交、通知和审核入口，但不替代 Raw 协议，也不自动获得远程 Provider 权限。
 
 ---
 
-## 九、实验设计：回答三个核心问题
+## 九、实验设计：回答三个核心问题（历史实验计划）
 
 > 不追求全覆盖。聚焦三个决定性问题的验证。
 > 每个实验都有明确的 go/no-go 阈值。到阈值就决策，不为完美数据拖延。
@@ -633,7 +605,7 @@ oks ingest "https://lilianweng.github.io/posts/2023-06-23-agent/"
 # 预期：直接走 Trafilatura 本地提取（无重依赖），最简单
 
 # === 测试 2: 视频 URL → 关键测试 ===
-# 当前: oks-connector watch → yt-dlp 下载 → ffprobe → faster-whisper ASR → RapidOCR
+# 历史实现基线：oks-connector watch → yt-dlp 下载 → ffprobe → faster-whisper ASR → RapidOCR
 # 目标: yt-dlp 只取元数据和字幕 → 如果无字幕，音频发 Groq → 视觉层跳过（仅 transcript_only 模式）
 oks ingest "https://www.youtube.com/watch?v=sznAe4rJkOM" --mode quick
 # 关键指标: (a) 能拿到字幕或转录吗？(b) 没有 ffmpeg 时 yt-dlp 能否独立工作？
@@ -849,12 +821,12 @@ oks ingest ./whiteboard-photo.jpg
 **问题二（API 部署是否可行）：**
 预判：对于文本和字幕提取，可行——这是已验证的路径。主要风险是中文本地视频的 ASR 准确率和成本，以及中文扫描 PDF 的 Firecrawl 解析质量。如果这两个路径不可接受，就需要保留本地 faster-whisper 和/或 MinerU 作为特定场景的 fallback，但不用作为默认安装项。
 
-**问题三（飞书作为第一阶段入口）：**
+**问题三（飞书作为第一阶段入口，历史预判）：**
 预判：飞书可以作为辅助入口，但不适合作为唯一入口。原因：(a) URL 粘贴到表单比 CLI 的 `oks ingest` 多一步操作（打开飞书 → 找到表单 → 粘贴 → 提交 vs 终端直接粘贴），对技术用户来说更慢；(b) 飞书的文件上传体验对非技术用户友好，但端到端延迟取决于 worker 轮询间隔；(c) 审核流程在飞书中完成体验不错（已有的 review_events 逻辑）。建议：Phase 1 保留三条路径并行（Agent / 飞书 / Watch Folder），不需要选一个"唯一入口"。
 
 ---
 
-## 十、决策总结
+## 十、决策总结（历史研究版）
 
 ### 不做的事
 
@@ -973,3 +945,84 @@ OKS 的知识闭环和飞书入口闭环保持冻结，不重复验证。推广�
 ### 11.11 2026-08-04 最终推广口径
 
 本轮实验支持的推广模型是“轻量 Core + 按需 capability + 远程 fallback + Feishu/Agent 编排”。All-in-one Level C 的实测安装体积不满足 50–100MB，因此不作为单体承诺；Bilibili 需要登录 Cookie 且字幕成功率受平台内容影响；扫描中文 PDF 由 Firecrawl 提供远程 OCR fallback；5 分钟 OpenAI ASR 和 MediaCrawler 仍是外部网络条件下的补证项。详细摘要见 `experiments/promotion-summary-2026-08-04.md`。
+
+---
+
+## 十二、v0.4.0 当前有效结论（2026-08-08）
+
+本节是当前推广、安装和用户交互的准确信息源；前文的研究计划和历史命令只用于解释决策如何形成。
+
+### 12.1 推荐组合：本地隐私优先与远程高成功率并存
+
+| 用户场景 | 推荐组合 | 为什么 | 需要用户准备什么 |
+|---|---|---|---|
+| 本地 Markdown / TXT | `text-read` + Agent-Native quick path | 零 Provider、最快、数据不出本地 | 安装 OKS 和 Agent Host |
+| 本地办公文档 / 数字 PDF | `document` + `pdf-lite` | 体积可控，适合默认安装 | `oks capability install document --yes`、`pdf-lite --yes` |
+| 公开动态网页、英文资料、远程 PDF | **Firecrawl** | JS 网页、英文博客和 arXiv PDF 实测表现好 | `FIRECRAWL_API_KEY`，允许远程处理 |
+| 中文平台网页 | **AgentKey** | 当前中文平台适配表现好；比把所有平台塞进本地爬虫更合适 | AgentKey MCP、OAuth/API 权限、按平台授权 |
+| 视频字幕 | `yt-dlp` Provider | 有字幕时本地轻量；Bilibili 需 Cookie，成功率受内容影响 | `watch` capability；必要时临时 Netscape Cookie |
+| 视频/音频转写 | `watch` + `local-asr` 或 `remote-asr` | 本地可控，远程可减轻模型体积 | 本地模型/ffmpeg，或用户 API Key 和费用确认 |
+| 扫描 PDF / 复杂版面 | Firecrawl 远程 fallback 或 `pdf`/MinerU | `pdf-lite` 不做 OCR；重型能力不应默认安装 | 选择数据出境或安装 MinerU |
+| 小红书、抖音等强反爬平台 | AgentKey / 用户手动导出；MediaCrawler 仅实验 | 只保留可验证、可合规的路径 | 平台授权、低频使用、必要时用户浏览器 |
+
+Firecrawl 和 AgentKey 是当前最值得优先推荐的两个远程 Provider：Firecrawl 更适合公开动态网页、英文技术资料和远程 PDF；AgentKey 更适合中文平台和需要平台适配的网页。两者都不能被表述为“绕过反爬”，仍须尊重 robots、平台条款、版权、隐私和用户授权。
+
+### 12.2 用户最小安装路径
+
+```bash
+pipx install open-knowledge-studio
+oks init my-knowledge-base
+cd my-knowledge-base
+oks skills-install
+
+# 默认本地文档组合
+oks capability install pdf-lite --yes
+oks capability install document --yes
+oks capability doctor --verbose
+```
+
+按需增加：
+
+```bash
+# 视频/音频、字幕、ASR、OCR
+oks capability install watch --yes
+
+# 复杂 PDF；明显更重，不作为默认安装
+oks capability install pdf --yes
+
+# 公式和复杂 OCR
+oks capability install formula --yes
+
+# 飞书入口；认证和用户 token 仍需用户自己配置
+oks capability install feishu --yes
+```
+
+远程 Provider 不靠安装全部本地依赖获得：用户在 Agent Host 中配置 Firecrawl 或 AgentKey 的 MCP/API/OAuth，然后由 `oks ingest prepare` 返回的 `candidate_providers` 指示可选路径。密钥、是否允许远程处理和敏感数据策略必须由用户明确决定。
+
+### 12.3 当前用户交互路径
+
+```text
+用户给 Agent 一个 URL 或文件
+  → Agent 调用 oks ingest prepare
+  → 用户/Agent 确认 recipe、provider 和远程处理策略
+  → Provider 执行，原始输出保存到 work/<provider>/
+  → Agent 填 evidence-manifest.json
+  → oks raw-commit 机械检查 provenance
+  → Agent 读取 evidence.jsonl 生成 drafts/<slug>.md
+  → 人工审查 → oks drafts promote → wiki/
+  → oks search / /query 验证召回
+```
+
+本地 `.md` / `.txt` 可以走 `text_ready=true` 快速路径；网页、PDF、平台内容和多模态来源应走 Protocol 路径。CLI 不代替 Agent 做内容判断，也不在用户不知情时自动调用远程 Provider。
+
+### 12.4 实验记录的当前解释
+
+- Firecrawl 英文博客和 arXiv PDF：本项目样本中内容完整；受控中文扫描 PDF 的远程 OCR fallback 返回 HTTP 200，但这不是本地 OCR，也不是所有中文平台通用保证。
+- AgentKey：中文平台表现值得推荐；当前证据应按平台看待：知乎一条样本已验证，微信为部分可用且实时页可能加密/为空，Bilibili 以元数据为主。
+- Bilibili：人工提供临时 Netscape Cookie 后，同一组样本字幕为 7/10；无 Cookie 的浏览器 DPAPI 解密失败。结论是“部分可用”，不是稳定全量采集；字幕路径在该对照中不需要 ffmpeg，但媒体处理仍可能需要 ffmpeg。
+- `pdf-lite`：适合数字 PDF，不做 OCR；`pdf`/MinerU 是重型本地能力。5 分钟 ASR 和 MediaCrawler 的完整生产级结论仍受环境或外部网络条件限制。
+- 50–100MB 单体安装：已降级为历史目标；当前应宣传“核心轻量、能力按需安装”，不宣传“所有来源一个环境全部覆盖”。
+
+### 12.5 不可越过的边界
+
+OKS 不破解 DRM、不绕过付费墙、不维护代理池对抗封禁、不抓取未经授权的个人数据。任何 Provider 失败或证据不足，都必须保留 `partial`、`failed`、`skipped` 或 `environment_limited`，不能由 Agent 填成“成功”。协议对象和 provenance 规则见[协议对象](../ingest/protocol-objects.md)。

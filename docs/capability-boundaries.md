@@ -25,7 +25,7 @@ oks capability doctor --verbose
 - **需要看图、看表、理解复杂版式**：仍使用 Codex 或 Claude Code 的多模态理解，但把其结论标为 `agent_observed`；它不是字符级 OCR 的替代品。
 - **不要把 Kimi K3 当作默认必装 Agent 或默认 Provider。** 当前仓库中 K3 是一份已完成的知识案例，尚未以 `provider.yaml` 注册为可自动选择的生产 Provider。见 [Kimi K3 深度分析](cases/kimi-k3-deep-analysis.md)。
 
-### 默认安装组合：大多数用户从这里开始
+### 本地默认组合：隐私优先的用户从这里开始
 
 这是文档、PDF 和公开网页的低成本、可解释组合；不需要 API Key，也不会把源文件上传给远程服务。
 
@@ -44,19 +44,28 @@ oks capability doctor --verbose
 
 开发仓库内安装时，将第一行替换为 `pipx install ./cli --force`。`oks capability install` 会把重依赖放进独立能力环境；不要为了“也许会用”一次性安装所有能力。
 
+### 高成功率推荐组合：允许远程处理时优先启用
+
+如果来源本来就是公开网页或用户明确允许上传到远程服务，**Firecrawl + AgentKey 是当前最值得推荐的两个远程 Provider**：
+
+- **Firecrawl**：公开网页、JavaScript 渲染页面、英文技术资料和远程 PDF 的主力路径。已验证英文博客和 arXiv PDF 的完整抓取，省掉本地浏览器和重型解析依赖。
+- **AgentKey**：知乎、微信公众号、B 站等中文平台的专用路径。适合平台 API 能覆盖的来源，调用成本低；遇到实时加密或平台策略变化时仍要保留 partial 并回退人工。
+
+推荐组合不是“所有来源都远程上传”：含隐私、内部资料或禁止远程处理的来源仍走本地 Provider。使用前确认 `policy.remote_processing`，并配置对应 MCP / API 凭据。
+
 ### 按来源增配，而不是全装
 
 | 你的来源 | 首选路径 | 需要额外安装或配置 | 何时升级 |
 |---|---|---|---|
 | `.md` / `.txt` / `.csv` | `text-read`，快速路径 | 无 | 文件很大时分段或人工挑选 |
-| 可公开访问的静态网页 | `http-fetch` + `trafilatura` | 通常随核心环境可用 | 页面依赖 JavaScript 时改走 Firecrawl 或浏览器 |
+| 可公开访问的静态网页 | `http-fetch` + `trafilatura` | 通常随核心环境可用 | 页面依赖 JavaScript 或需要高成功率时优先改走 Firecrawl |
 | 普通文本型 PDF | `pdf-lite` | `oks capability install pdf-lite --yes` | 需要版面、图片或公式时用 MinerU |
 | DOCX / PPTX / XLSX / HTML | `markitdown` | `oks capability install document --yes` | 图表、嵌入媒体和复杂排版需 Agent / 人工复核 |
 | 扫描 PDF / 截图 | `rapidocr` + Agent 复核 | `oks capability install watch --yes`；单独管理环境时以 `doctor` 的提示为准 | 中文复杂版面或公式再考虑 MinerU |
 | 复杂 PDF、公式、版面还原 | `mineru` | `oks capability install pdf --yes` | 仅在 `pdf-lite` 不够时安装；依赖大、可能耗时很长 |
 | 视频、音频、字幕 | `yt-dlp` + `ffmpeg`，必要时 `watch` | `oks capability install watch --yes`；`ffmpeg` 需系统可执行文件 | 需要语音正文时启用本地 ASR |
-| 需登录或 JavaScript 网页 | Firecrawl 或用户已登录的浏览器 | Firecrawl API Key / MCP；或用户 Chrome profile | 不绕过 CAPTCHA、付费墙和 DRM |
-| 知乎、微信、B 站等平台 | 用户手动提供正文优先；AgentKey 仅作补充 | AgentKey MCP / OAuth | 平台反爬、加密或登录要求出现时回退人工 |
+| 需登录或 JavaScript 网页 | **Firecrawl**；登录态才考虑用户浏览器 | Firecrawl API Key / MCP；或用户 Chrome profile | 不绕过 CAPTCHA、付费墙和 DRM |
+| 知乎、微信、B 站等平台 | **AgentKey**；失败时人工补证 | AgentKey MCP / OAuth | 平台反爬、加密或登录要求出现时回退人工 |
 
 ## Provider 全表：当前 17 个注册能力
 
@@ -85,8 +94,8 @@ oks capability doctor --verbose
 
 | Provider | 执行方式 / 状态 | 安装与使用 | 硬边界 |
 |---|---|---|---|
-| `firecrawl` | external / 网页获取、正文提取 validated；文档 partial | 配置 `FIRECRAWL_API_KEY` 与 Firecrawl MCP / API | **动态公开网页的首选升级。** 中文平台可能被反爬；不处理登录态，也不保证 Office 公式或嵌入媒体。 |
-| `agentkey` | external / 知乎验证；微信 validated_partial；B 站仅元数据 | 配置 AgentKey MCP 并完成 OAuth | 适合平台专用接口补充；实时微信正文曾返回加密/空内容，必须保留 partial 并回退人工。 |
+| `firecrawl` | external / 网页获取、正文提取 validated；文档 partial | 配置 `FIRECRAWL_API_KEY` 与 Firecrawl MCP / API | **推荐的动态公开网页主力。** 中文平台可能被反爬；不处理登录态，也不保证 Office 公式或嵌入媒体。 |
+| `agentkey` | external / 知乎验证；微信 validated_partial；B 站仅元数据 | 配置 AgentKey MCP 并完成 OAuth | **推荐的中文平台专用 Provider。** 实时微信正文曾返回加密/空内容；必须保留 partial 并回退人工。 |
 | `browser` | managed / experimental，当前未独立验收 | 用户已登录的 Chrome Default profile | 可复用用户 Cookie 与页面状态，但**不绕过** CAPTCHA、付费墙或 DRM；当前 Chrome Web Store 扩展路径受阻。 |
 | `mediacrawler` | external / experimental，未独立验证 | 用户自行安装 MediaCrawler | 仅公开内容，不能绕过登录墙；小红书、抖音等采集还涉及平台规则与合规风险，**不作为默认推荐**。 |
 
@@ -105,7 +114,7 @@ oks capability doctor --verbose
 
 适合研究资料、会议笔记、普通网页、PDF、Office 文档。安装 **Agent Host + `pdf-lite` + `document`** 即可；使用 `text-read`、`http-fetch`、`trafilatura` 处理文本与静态网页。优点是成本低、可离线处理大部分文件、证据边界最清楚。
 
-不要默认安装：`mineru`、`watch`、`formula`、Firecrawl、AgentKey、MediaCrawler、远程 ASR、飞书。它们都有重量、凭据、远程调用、合规或未验证边界。
+如果用户允许远程处理，建议在这个本地基线上再配置 **Firecrawl + AgentKey**；它们不是 experimental 的“试试看”，而是当前公开网页和中文平台的推荐增强路径。不要默认安装的仍是 `mineru`、`watch`、`formula`、MediaCrawler、远程 ASR、飞书，因为它们分别有重量、媒体依赖、公式专用、未独立验证、远程成本或协作配置边界。
 
 ### P1：多媒体或扫描件用户
 
@@ -123,9 +132,9 @@ oks capability install pdf --yes
 
 ### P2：动态网页与登录态用户
 
-- 公开且 JavaScript 渲染的网页：优先 Firecrawl，并保存其原始响应到 `work/firecrawl/`。
+- 公开且 JavaScript 渲染的网页：**优先 Firecrawl**，并保存其原始响应到 `work/firecrawl/`。
 - 已登录但不含受限内容的页面：用户自己的浏览器会话可以作为实验路径；不要导出或分享 Cookie。
-- 微信、知乎、B 站等：先确认用户有权访问；AgentKey 只作为有限补充。遇到加密、登录墙或反爬，要求用户提供正文、截图或手动导出，而不是绕过。
+- 微信、知乎、B 站等：先确认用户有权访问；**优先 AgentKey**。遇到加密、登录墙或反爬，要求用户提供正文、截图或手动导出，而不是绕过。
 
 ### P3：团队协作与飞书
 
@@ -148,6 +157,7 @@ oks capability install feishu --yes
 | 扫描 PDF | `pdf-lite` 降级 → `rapidocr` | complete；3 页级 + 43 bbox evidence | OCR 可补齐扫描件；未安装 OCR 的同一 E2E 只能 honest partial。 |
 | 静态网页 | `http-fetch` + `trafilatura` | complete | 公开静态页面先走本地轻量路径。 |
 | JavaScript 网页 | 静态获取；浏览器渲染对照 | 静态路径 partial；浏览器路径能看到完整 DOM | 检测到空 DOM 后升级 Firecrawl / 浏览器，不要把脚本源码当正文。 |
+| 动态公开网页 / 英文资料 | `firecrawl` | 英文博客实测约 50K 字符完整；arXiv PDF 实测约 37K 字符完整 | **推荐 Firecrawl。** 中文平台反爬是来源限制，不代表 Firecrawl 的公开英文网页路径不可用。 |
 | 视频 | `yt-dlp` + 关键帧 / 弹幕 | partial | 元数据、公开字幕、帧可以入料；B 站常规字幕需要登录，不能声称完整转写。 |
 | DOCX | `markitdown` | complete；正文与表格保留 | Office 的默认选项；复杂格式仍需复核。 |
 | PPTX / XLSX | `markitdown` / `openpyxl` | partial by design | 文本和表格可用；图表数据、公式计算与视觉排版不是自动保证。 |
