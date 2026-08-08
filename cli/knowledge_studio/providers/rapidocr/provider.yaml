@@ -21,6 +21,15 @@ known_limits:
 
 last_validated: 2026-08-06
 
+user_impact:
+  install: "首次需要安装 rapidocr-onnxruntime 及 ONNX 模型"
+  disk: "模型及依赖约 500 MB–1.5 GB"
+  runtime: "CPU 可运行，处理速度取决于图片大小和 CPU 性能"
+  execution: "local"
+  privacy: "原始图片不上传，全部本地处理"
+  cost: "免费"
+  skip_effect: "图片中的文字无法被提取，只能通过 Agent 视觉观察获得粗略描述"
+
 evidence:
   method: rapidocr_engine
   locator_kind: bbox

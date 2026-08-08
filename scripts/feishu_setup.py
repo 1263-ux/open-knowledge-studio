@@ -74,6 +74,23 @@ def _redact_token(token: str) -> str:
     return token[:6] + "***" + token[-4:]
 
 
+def _brand_domain() -> str:
+    """Return the Feishu/Lark domain for the current tenant."""
+    try:
+        auth = json.loads(
+            subprocess.run(
+                [_LARK_CLI, "auth", "status", "--json"],
+                capture_output=True, text=True,
+            ).stdout
+        )
+        brand = (auth.get("brand") or "feishu").lower()
+    except Exception:
+        brand = "feishu"
+    # The actual tenant domain is in the app's URL, but we don't have it.
+    # Return the general domain; the base URL will come from base-get.
+    return "feishu.cn" if brand == "feishu" else "larkoffice.com"
+
+
 def _redact_text(text: str, token: str | None) -> str:
     """Replace every occurrence of *token* in *text* with its redacted form."""
     if not token:
@@ -86,13 +103,24 @@ def _oks_config_path() -> Path:
     return Path.home() / _CONFIG_DIR_NAME / _CONFIG_FILE_NAME
 
 
+def _read_config_text(path: Path) -> str:
+    """Read config text with encoding fallback (UTF-8 → GBK) and newline normalization."""
+    raw = path.read_bytes()
+    for enc in ("utf-8", "gbk"):
+        try:
+            return raw.decode(enc).replace("\r\n", "\n")
+        except UnicodeDecodeError:
+            continue
+    return raw.decode("utf-8", errors="replace").replace("\r\n", "\n")
+
+
 def _load_oks_config() -> dict[str, Any]:
     """Load the shared config while preserving unrelated OKS settings."""
     path = _oks_config_path()
     if not path.exists():
         return {}
     try:
-        value = json.loads(path.read_text(encoding="utf-8"))
+        value = json.loads(_read_config_text(path))
     except json.JSONDecodeError as exc:
         raise RuntimeError(
             f"OKS 配置文件损坏: {path}；请先修复 JSON，再重试飞书初始化"
@@ -107,7 +135,7 @@ def _save_oks_config(config: dict[str, Any]) -> bool:
     path = _oks_config_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     encoded = json.dumps(config, indent=2, ensure_ascii=False) + "\n"
-    if path.exists() and path.read_text(encoding="utf-8") == encoded:
+    if path.exists() and _read_config_text(path) == encoded:
         return False
     fd, tmp_name = tempfile.mkstemp(
         dir=str(path.parent), prefix="config.", suffix=".tmp"
@@ -812,7 +840,7 @@ def setup(args: argparse.Namespace) -> int:
     display_token = base_token if show_credentials else _redact_token(base_token)
     print()
     print("=" * 60)
-    print("飞书配置完成。请将以下内容设置为环境变量：")
+    print("飞书配置完成。环境变量：")
     print()
     print(f"  $env:OKS_FEISHU_BASE_TOKEN = \"{display_token}\"")
     print(f"  $env:OKS_FEISHU_TABLE_ID   = \"{table_id}\"")
@@ -836,6 +864,28 @@ def setup(args: argparse.Namespace) -> int:
         print()
         print("  [提示] 使用 --show-credentials 查看完整 Base token。")
     print("=" * 60)
+
+    # ── form share instructions ──
+    # Form share URL requires a share_token obtainable only via Base UI.
+    # view_id/form_id are *internal* identifiers, not shareable.
+    # Use display_token (possibly redacted) to avoid leaking raw token.
+    try:
+        base_info = _lark(["base", "+base-get", "--base-token", base_token], redact_token=base_token)
+        raw_url = (base_info.get("data", {}).get("base", {}).get("url")
+                   or f"https://{_brand_domain()}/base/{display_token}")
+    except Exception:
+        raw_url = f"https://{_brand_domain()}/base/{display_token}"
+    print()
+    print("━" * 50)
+    print("📋 获取填写表单链接（给其他用户填写的，不是编辑界面）：")
+    print()
+    print(f"  1. 打开 Base: {raw_url}")
+    print(f"  2. 左侧找到表单 \"OKS Daily Knowledge Intake\"")
+    print(f"  3. 点表单右边的 ··· → 分享 → 复制链接")
+    print(f"  4. 链接格式: https://***.feishu.cn/share/base/form/shrcnXXX")
+    print()
+    print("  把这个 /share/base/form/ 链接发给用户，不要给 view/table 编辑链接。")
+    print("━" * 50)
 
     return 0
 

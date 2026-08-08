@@ -67,6 +67,7 @@ _ARTIFACT_KIND_TO_DERIVED: dict[str, str] = {
     "page_image": "visual_observation",
     "ocr_result": "ocr",
     "subtitle": "other",
+    "transcript": "other",
     "screenshot": "visual_observation",
     "dom_snapshot": "layout",
     "api_response": "other",
@@ -319,6 +320,128 @@ def _check_evidence_cross_ref(manifest: dict[str, Any]) -> None:
             f"modality evidence_count total ({declared}) != "
             f"actual evidence records ({actual})",
         )
+
+
+def _check_fragment_manifest_consistency(
+    manifest: dict[str, Any], manifest_dir: Path
+) -> list[str]:
+    """Validate Fragment ↔ Manifest evidence consistency.
+
+    For each fragment_id in manifest.fragment_refs:
+    1. If fragments/ dir does not exist, the check is skipped (backward
+       compat — older manifests may not have fragment snapshots).
+    2. The fragment file must exist in fragments/ (MISSING_FRAGMENT).
+    3. Every evidence_id in the fragment must exist in manifest
+       evidence_records (FRAGMENT_EVIDENCE_NOT_IN_MANIFEST).
+    4. For matching evidence_ids, compare stable core fields:
+       artifact_id, kind, method, agent_judgment.
+       If both sides declare the same field but values conflict →
+       FRAGMENT_MANIFEST_MISMATCH.
+
+    This is a minimal mechanical check — not a full lineage validator.
+    Fields that are absent or null on either side are skipped (no false
+    positives from incomplete fragments).
+
+    Returns a list of warning strings (for locator_warnings-style output).
+    """
+    fragment_refs = manifest.get("fragment_refs", [])
+    if not fragment_refs:
+        return []  # No fragments to validate (shouldn't happen per schema minItems:1)
+
+    fragments_dir = manifest_dir / "fragments"
+    if not fragments_dir.is_dir():
+        # Backward compat: older manifests may not include fragment snapshots.
+        # When the directory does not exist, we skip the check rather than
+        # breaking existing valid manifests.
+        return [
+            f"fragments/ directory not found — "
+            f"fragment_refs ({', '.join(fragment_refs)}) "
+            f"could not be validated"
+        ]
+
+    manifest_records: dict[str, dict[str, Any]] = {
+        rec["evidence_id"]: rec for rec in manifest["evidence_records"]
+    }
+
+    # Fields to compare when both sides declare them
+    _COMPARE_FIELDS = ("artifact_id", "kind", "method", "agent_judgment")
+
+    warnings: list[str] = []
+
+    for frag_id in fragment_refs:
+        frag_path = fragments_dir / f"{frag_id}.json"
+        if not frag_path.is_file():
+            raise CommitError(
+                "MISSING_FRAGMENT",
+                f"fragment_ref {frag_id!r} has no corresponding file at "
+                f"fragments/{frag_id}.json",
+                {"fragment_id": frag_id, "expected_path": str(frag_path)},
+            )
+
+        try:
+            fragment = _read_json(frag_path)
+        except CommitError as exc:
+            raise CommitError(
+                "INVALID_FRAGMENT",
+                f"fragment file fragments/{frag_id}.json is not valid JSON: {exc}",
+                {"fragment_id": frag_id, "error": str(exc)},
+            ) from exc
+
+        fragment_evidence = fragment.get("evidence", [])
+        if not isinstance(fragment_evidence, list):
+            raise CommitError(
+                "INVALID_FRAGMENT",
+                f"fragment {frag_id!r}: evidence must be an array",
+                {"fragment_id": frag_id},
+            )
+
+        for fev in fragment_evidence:
+            fev_id = fev.get("evidence_id", "")
+            if not fev_id:
+                raise CommitError(
+                    "INVALID_FRAGMENT",
+                    f"fragment {frag_id!r}: evidence record missing evidence_id",
+                    {"fragment_id": frag_id},
+                )
+
+            # (1) Evidence must exist in manifest
+            if fev_id not in manifest_records:
+                raise CommitError(
+                    "FRAGMENT_EVIDENCE_NOT_IN_MANIFEST",
+                    f"fragment {frag_id!r} evidence {fev_id!r} not found "
+                    f"in manifest evidence_records",
+                    {"fragment_id": frag_id, "evidence_id": fev_id},
+                )
+
+            mev = manifest_records[fev_id]
+
+            # (2) Compare core fields — only when both sides declare a value
+            mismatches: list[dict[str, Any]] = []
+            for field in _COMPARE_FIELDS:
+                f_val = fev.get(field)
+                m_val = mev.get(field)
+                # Only compare when both sides declare a non-None value
+                if f_val is not None and m_val is not None and f_val != m_val:
+                    mismatches.append({
+                        "field": field,
+                        "fragment_value": f_val,
+                        "manifest_value": m_val,
+                    })
+
+            if mismatches:
+                raise CommitError(
+                    "FRAGMENT_MANIFEST_MISMATCH",
+                    f"fragment {frag_id!r} evidence {fev_id!r}: "
+                    f"{len(mismatches)} field(s) conflict between "
+                    f"Fragment and Manifest",
+                    {
+                        "fragment_id": frag_id,
+                        "evidence_id": fev_id,
+                        "mismatches": mismatches,
+                    },
+                )
+
+    return warnings
 
 
 # Providers that do NOT produce external work/ output files.
@@ -815,7 +938,6 @@ def raw_commit(
     gather: list[CommitError] = []
     envelope: dict[str, Any] | None = None
     manifest: dict[str, Any] | None = None
-    locator_warnings: list[str] = []
 
     try:
         envelope = _read_json(envelope_path)
@@ -899,7 +1021,9 @@ def raw_commit(
         except CommitError as exc:
             gather.append(exc)
 
-    # ── Step 4-6: Artifact, evidence cross-ref, locator (only if manifest schema passed) ──
+    # ── Step 4-6: Artifact, evidence cross-ref, fragment consistency, locator ──
+    locator_warnings: list[str] = []
+    fragment_warnings: list[str] = []
     if manifest_schema_ok:
         if not artifacts_dir.is_dir():
             gather.append(CommitError(
@@ -918,6 +1042,11 @@ def raw_commit(
             gather.append(exc)
 
         try:
+            fragment_warnings = _check_fragment_manifest_consistency(manifest, md)
+        except CommitError as exc:
+            gather.append(exc)
+
+        try:
             _verify_provenance_artifacts(manifest, md)
         except CommitError as exc:
             gather.append(exc)
@@ -927,8 +1056,9 @@ def raw_commit(
         except CommitError as exc:
             gather.append(exc)
             locator_warnings = []
-    else:
-        locator_warnings = []
+
+    # Combine warnings from all checks
+    all_warnings: list[str] = fragment_warnings + locator_warnings
 
     # ── Raise all errors at once ──
     if gather:
@@ -978,5 +1108,5 @@ def raw_commit(
         "content_hash": envelope["content_hash"],
         "evidence_count": len(manifest.get("evidence_records", [])),
         "artifact_count": 1 + len(manifest.get("supplementary_artifacts", [])),
-        "locator_warnings": locator_warnings,
+        "locator_warnings": all_warnings,
     }

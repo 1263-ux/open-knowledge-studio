@@ -5,9 +5,9 @@ nav_order: 12
 
 # 能力边界与选型指南
 
-这不是一张“功能愿望清单”，而是给使用者的选型说明：**现在应装什么、每类来源该走谁、哪些路径已经做过实验、哪些只能按 partial 或 experimental 对待。**
+这不是一张”功能愿望清单”，而是给使用者的选型说明：**现在应装什么、每类来源该走谁、哪些路径已经做过实验、哪些只能按 partial 或 experimental 对待。**
 
-本页以仓库的 `providers/*/provider.yaml`、`oks capability doctor --verbose` 和已完成的摄入实验为事实源。运行前先执行：
+本页以仓库的 `providers/*/provider.yaml`、`oks capability doctor --verbose`、`oks capability status --json`（含 `user_impact` 字段）和已完成的摄入实验为事实源。运行前先执行：
 
 ```bash
 oks capability doctor --verbose
@@ -24,6 +24,19 @@ oks capability doctor --verbose
 - **只处理本地 Markdown、文本、普通文档**：任一 Agent Host 均可，优先保持本地路径。
 - **需要看图、看表、理解复杂版式**：仍使用 Codex 或 Claude Code 的多模态理解，但把其结论标为 `agent_observed`；它不是字符级 OCR 的替代品。
 - **不要把 Kimi K3 当作默认必装 Agent 或默认 Provider。** 当前仓库中 K3 是一份已完成的知识案例，尚未以 `provider.yaml` 注册为可自动选择的生产 Provider。见 [Kimi K3 深度分析](cases/kimi-k3-deep-analysis.md)。
+
+### 策略偏好（v0.4 Beta 新增）
+
+首次遇到需要安装新能力时，Agent 会询问你的处理策略，之后自动遵循：
+
+```bash
+oks config set strategy lightweight     # 轻量优先：尽量用已有能力，不主动装大型组件
+oks config set strategy quality         # 效果优先：优先保证提取完整度
+oks config set strategy privacy         # 本地隐私优先：优先本地处理，尽量不上传
+oks config set strategy ask_each_time   # 每次询问：没有固定倾向
+```
+
+策略保存在 `~/.oks/config.json`，Agent 通过 `oks config show` 读取。每个 Provider 的 `user_impact`（安装量、磁盘、运行时、隐私、费用、跳过后果）通过 `oks capability status --json` 暴露给 Agent，用于向用户解释"为什么推荐这个、资源影响多大"。
 
 ### 本地默认组合：隐私优先的用户从这里开始
 

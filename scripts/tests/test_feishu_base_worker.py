@@ -111,7 +111,11 @@ def test_claim_record_only_reads_and_claims_the_explicit_record(monkeypatch, tmp
     claimed = worker.claim_record(config, "rec_selected")
 
     assert claimed is not None
-    assert requested == [("rec_selected", worker.CAPTURE_FIELDS)]
+    # claim_record uses _CLAIM_PROJECTION (minimal fields for leasing), not
+    # CAPTURE_FIELDS (full projection for pending/pipeline commands).
+    assert requested[0][0] == "rec_selected"
+    assert "运行状态" in requested[0][1]
+    assert "重试" in requested[0][1]
     assert updates[0][0] == "rec_selected"
     assert updates[0][1]["运行状态"] == "已领取"
 
@@ -1083,41 +1087,38 @@ def test_accept_review_promotes_exact_base_content(monkeypatch, tmp_path):
 
 
 def test_needs_user_action_never_claims_raw_ready(monkeypatch, tmp_path):
+    """URL records use Agent handoff — Worker never claims Raw-ready on probe failure."""
     config = worker.WorkerConfig("base", "table", tmp_path / "lark.exe", tmp_path, tmp_path / "python.exe", tmp_path / "out")
     updates = []
     monkeypatch.setattr(worker, "update_record", lambda _c, _r, patch: updates.append(patch) or {})
+    # probe_source is no longer called for URL records — they go straight to Agent handoff
+    # Even with a monkeypatched probe_source that would fail, the pipeline never calls it
     monkeypatch.setattr(
         worker,
         "probe_source",
-        lambda *_: {
-            "status": "needs_user_action",
-            "error": {"code": "CHALLENGE_REQUIRED", "message": "captcha required"},
-        },
+        lambda *_: (_ for _ in ()).throw(AssertionError("probe_source must not be called for URL records")),
     )
     result = worker.process_record(
         config,
         {"record_id": "rec_1", "fields": {"内容": "https://example.com", "思考": "test"}},
     )
-    assert result["status"] == "failed"
-    assert result["failure_disposition"] == "needs_user_auth"
-    assert updates[-1]["运行状态"] == "需授权"
+    assert result["status"] == "awaiting_agent"
+    assert result["failure_disposition"] == "none"
+    assert updates[-1]["运行状态"] == "需人工"
     assert updates[-1]["Raw Bundle"] is None
     assert all(update.get("运行状态") != "Raw就绪" for update in updates)
 
 
 def test_javascript_page_waits_for_browser_snapshot(monkeypatch, tmp_path):
+    """JS-heavy pages are no longer probed by the Worker — they go to Agent handoff."""
     config = worker.WorkerConfig("base", "table", tmp_path / "lark.exe", tmp_path, tmp_path / "python.exe", tmp_path / "out")
     updates = []
     monkeypatch.setattr(worker, "update_record", lambda _c, _r, patch: updates.append(patch) or {})
+    # probe_source is never called for URL records in the Agent-handoff pipeline
     monkeypatch.setattr(
         worker,
         "probe_source",
-        lambda *_: {
-            "status": "ok",
-            "content_type": "text/html",
-            "next_action": "browser_public",
-            "error": {"code": "JS_RENDER_REQUIRED", "message": "render required"},
-        },
+        lambda *_: (_ for _ in ()).throw(AssertionError("probe_source must not be called")),
     )
     monkeypatch.setattr(worker, "package_public_web", lambda *_: (_ for _ in ()).throw(AssertionError("must not package pre-render HTML")))
 
@@ -1126,22 +1127,20 @@ def test_javascript_page_waits_for_browser_snapshot(monkeypatch, tmp_path):
         {"record_id": "rec_js", "fields": {"内容": "https://example.com/app", "思考": "test"}},
     )
 
-    assert result["status"] == "failed"
-    assert result["failure_disposition"] == "needs_user_action"
+    assert result["status"] == "awaiting_agent"
+    assert result["failure_disposition"] == "none"
     assert updates[-1]["运行状态"] == "需人工"
-    assert updates[-1]["采集模式"] == "公开浏览器"
+    assert updates[-1]["采集模式"] == "HTTP"
     assert updates[-1]["Raw Bundle"] is None
 
 
 def test_plain_text_submission_becomes_raw_without_network_probe(monkeypatch, tmp_path):
-    """The form promises text intake, so text-only rows must be a first-class route."""
+    """Inline text uses Agent handoff — Worker captures, Agent completes the bundle."""
     config = worker.WorkerConfig(
         "base", "table", tmp_path / "lark.exe", tmp_path,
         tmp_path / "python.exe", tmp_path / "out",
     )
     updates = []
-    packaged = []
-    finalized = []
 
     monkeypatch.setattr(worker, "update_record", lambda _c, _r, patch: updates.append(patch) or {})
     monkeypatch.setattr(
@@ -1150,115 +1149,69 @@ def test_plain_text_submission_becomes_raw_without_network_probe(monkeypatch, tm
         lambda *_: (_ for _ in ()).throw(AssertionError("plain text must not use the network")),
     )
 
-    def fake_package(_config, source, output):
-        packaged.append(source)
-        assert source.read_text(encoding="utf-8") == "一条可以直接沉淀的知识。\n"
-        output.mkdir(parents=True)
-        (output / "metadata.json").write_text('{"processing_status":"complete"}', encoding="utf-8")
-        return {"processing_status": "complete", "evidence_count": 1}
-
-    monkeypatch.setattr(worker, "package_local_attachment", fake_package)
-    monkeypatch.setattr(
-        worker,
-        "finalize_raw_v2",
-        lambda *_args: finalized.append(_args) or {"valid": True},
-    )
-
     result = worker.process_record(
         config,
         {"record_id": "rec_text", "fields": {"内容": "一条可以直接沉淀的知识。", "思考": "保留原意"}},
     )
 
-    assert result["status"] == "complete"
+    assert result["status"] == "awaiting_agent"
     assert result["job"]["capability"] == "office.markitdown"
-    assert result["modalities"]["text"]["status"] == "succeeded"
-    assert len(packaged) == 1
-    assert finalized[0][-1] == packaged[0]
-    assert updates[-1]["运行状态"] == "Raw就绪"
+    assert result["modalities"]["text"]["status"] == "running"
+    assert updates[-1]["运行状态"] == "需人工"
     assert updates[-1]["采集模式"] == "直接文本"
 
 
 def test_platform_route_uses_watch_and_reference_snapshot(monkeypatch, tmp_path):
+    """Platform URLs go to Agent handoff — Worker no longer probes or routes."""
     config = worker.WorkerConfig("base", "table", tmp_path / "lark.exe", tmp_path, tmp_path / "python.exe", tmp_path / "out")
     updates = []
     monkeypatch.setattr(worker, "update_record", lambda _c, _r, patch: updates.append(patch) or {})
+    # probe_source is never called — Agent handles platform detection
     monkeypatch.setattr(
         worker,
         "probe_source",
-        lambda *_: {
-            "status": "ok", "content_type": "text/html", "final_url": "https://www.bilibili.com/video/BV1/",
-            "next_action": "platform_extractor", "route_plan": {"platform": "bilibili", "source_type": "video"},
-        },
+        lambda *_: (_ for _ in ()).throw(AssertionError("probe_source must not be called for URL records")),
     )
-    def fake_package(_config, _source, output):
-        output.mkdir(parents=True)
-        (output / "metadata.json").write_text('{"processing_status":"partial"}', encoding="utf-8")
-        (output / "quality-report.json").write_text('{"processing_status":"partial","frame_count":1,"transcript_segment_count":0,"ocr_block_count":2,"warnings":[]}', encoding="utf-8")
-        return {"processing_status": "partial"}
-    finalized = []
-    monkeypatch.setattr(worker, "package_routed_source", fake_package)
-    monkeypatch.setattr(worker, "finalize_raw_v2", lambda *_args: finalized.append(_args) or {"valid": True})
 
     result = worker.process_record(config, {"record_id": "rec_video", "fields": {"内容": "https://www.bilibili.com/video/BV1", "思考": "test"}})
 
-    assert result["status"] == "partial"
-    assert result["job"]["capability"] == "video.watch"
-    assert result["modalities"]["video"]["evidence_count"] == 1
-    assert result["modalities"]["ocr"]["evidence_count"] == 2
-    assert updates[-1]["运行状态"] == "Raw就绪"
-    assert updates[-1]["采集模式"] == "平台提取器"
-    reference = finalized[0][-1]
-    assert json.loads(reference.read_text(encoding="utf-8"))["original_media_retained"] is False
+    assert result["status"] == "awaiting_agent"
+    assert result["failure_disposition"] == "none"
+    assert result["recipe_version"] == "feishu-url-v0.1"
+    assert result["modalities"]["text"]["status"] == "running"
+    assert updates[-1]["运行状态"] == "需人工"
+    assert updates[-1]["采集模式"] == "HTTP"
 
 
 def test_platform_failure_is_attributed_to_video_modality(monkeypatch, tmp_path):
+    """Platform extractor failure is no longer triggered — URL records use Agent handoff."""
     config = worker.WorkerConfig("base", "table", tmp_path / "lark.exe", tmp_path, tmp_path / "python.exe", tmp_path / "out")
     updates = []
     monkeypatch.setattr(worker, "update_record", lambda _c, _r, patch: updates.append(patch) or {})
+    # Even if probe_source returned a platform route, it's never called
     monkeypatch.setattr(
         worker,
         "probe_source",
-        lambda *_: {
-            "status": "ok", "content_type": "text/html", "final_url": "https://www.bilibili.com/video/BV1/",
-            "next_action": "platform_extractor", "route_plan": {"platform": "bilibili", "source_type": "video"},
-        },
+        lambda *_: (_ for _ in ()).throw(AssertionError("probe_source must not be called")),
     )
-    monkeypatch.setattr(worker, "package_routed_source", lambda *_: (_ for _ in ()).throw(RuntimeError("HTTP 412")))
 
     result = worker.process_record(config, {"record_id": "rec_video_fail", "fields": {"内容": "https://www.bilibili.com/video/BV1", "思考": "test"}})
 
-    assert result["status"] == "failed"
-    assert result["modalities"]["video"]["status"] == "failed"
-    assert result["modalities"]["video"]["error_code"] == "PLATFORM_EXTRACTOR_FAILED"
-    assert result["modalities"]["text"]["status"] == "skipped"
-    assert result["errors"][0]["modality"] == "video"
-    assert updates[-1]["运行状态"] == "可重试失败"
+    assert result["status"] == "awaiting_agent"
+    assert result["failure_disposition"] == "none"
+    assert updates[-1]["运行状态"] == "需人工"
 
 
 def test_monkeypatched_worker_update_record_is_invoked_not_subprocess(monkeypatch, tmp_path):
-    """A monkeypatched worker.update_record must be invoked by process_record.
-
-    The pipeline module uses its own module-level bindings for I/O helpers.
-    Without explicit callback injection from the worker wrapper, tests that
-    monkeypatch worker attributes (update_record, probe_source,
-    package_routed_source, etc.) would be silently bypassed and the real
-    subprocess-based implementations would execute instead.
-
-    This is a targeted regression test: it monkeypatches the workerʼs
-    update_record and then calls process_record with a public-web URL.
-    The test fails the pipeline before probe_source so the update_record
-    calls for the initial status write are the only ones that matter.
-    """
+    """Worker.update_record monkeypatch is effective — URL records use Agent handoff."""
     config = worker.WorkerConfig("base", "table", tmp_path / "lark.exe", tmp_path, tmp_path / "python.exe", tmp_path / "out")
     updates = []
     monkeypatch.setattr(worker, "update_record", lambda _c, _r, patch: updates.append(patch) or {})
+    # probe_source is never called in the Agent-handoff pipeline
     monkeypatch.setattr(
         worker,
         "probe_source",
-        lambda *_: {
-            "status": "needs_user_action",
-            "error": {"code": "CHALLENGE_REQUIRED", "message": "captcha required"},
-        },
+        lambda *_: (_ for _ in ()).throw(AssertionError("probe_source must not be called")),
     )
     result = worker.process_record(
         config,
@@ -1267,32 +1220,19 @@ def test_monkeypatched_worker_update_record_is_invoked_not_subprocess(monkeypatc
     # If the pipeline bypassed the monkeypatched update_record and called
     # its own module-level function, this would have tried to spawn a
     # subprocess (lark.exe) and either hung or raised a different error.
-    assert result["status"] == "failed"
+    assert result["status"] == "awaiting_agent"
     assert len(updates) >= 2, f"Expected at least 2 update_record calls, got {len(updates)}"
     # First call: 运行状态="已领取" (initial claim state write)
     assert updates[0]["运行状态"] == "已领取"
-    # Last call: 运行状态="需授权" (probe failure disposition)
-    assert updates[-1]["运行状态"] == "需授权"
+    # Last call: 运行状态="需人工" (Agent handoff disposition)
+    assert updates[-1]["运行状态"] == "需人工"
 
 
 # ── Pipeline dedup helper contract ──────────────────────────────────
 
 
-def test_dedup_helpers_invoked_by_two_branch_paths(monkeypatch, tmp_path):
-    """_complete_bundle and _fail_bundle are invoked by at least two branch paths."""
-    from feishu_worker import pipeline as pipeline_mod
-
-    complete_calls = []
-    fail_calls = []
-
-    def fake_complete(**kwargs):
-        complete_calls.append(kwargs)
-
-    def fake_fail(**kwargs):
-        fail_calls.append(kwargs)
-
-    monkeypatch.setattr(pipeline_mod, "_complete_bundle", fake_complete)
-    monkeypatch.setattr(pipeline_mod, "_fail_bundle", fake_fail)
+def test_url_records_use_agent_handoff(monkeypatch, tmp_path):
+    """URL records are handed off to Agent — Worker no longer probes or packages."""
     monkeypatch.setattr(worker, "update_record", lambda _c, _r, patch: None)
 
     config = worker.WorkerConfig(
@@ -1301,40 +1241,35 @@ def test_dedup_helpers_invoked_by_two_branch_paths(monkeypatch, tmp_path):
         tmp_path / "python.exe", tmp_path / "out",
     )
 
-    # --- Branch 1: public-web success ---
-    monkeypatch.setattr(worker, "probe_source", lambda *_: {
-        "status": "ok", "content_type": "text/html",
-    })
-    monkeypatch.setattr(worker, "package_public_web", lambda _c, _u, out, _h: (
-        out.mkdir(parents=True, exist_ok=True),
-        (out / "metadata.json").write_text('{"processing_status":"complete"}', encoding="utf-8"),
-    ) and {"processing_status": "complete"})
-    monkeypatch.setattr(worker, "finalize_raw_v2", lambda *_: {"valid": True, "schema_version": "raw-multimodal/v0.2"})
-
-    worker.process_record(config, {
-        "record_id": "rec_web_ok",
+    # URL record: Worker captures URL, sets awaiting_agent.
+    result = worker.process_record(config, {
+        "record_id": "rec_url_agent_handoff",
         "fields": {"内容": "https://example.com/page", "思考": "test"},
     })
 
-    assert len(complete_calls) == 1, f"Expected 1 _complete_bundle call, got {len(complete_calls)}"
-    assert complete_calls[0]["modality_key"] == "text"
-    assert complete_calls[0]["record_id"] == "rec_web_ok"
+    # Run should be awaiting_agent (Worker hands off, does not call dead stubs)
+    assert result["status"] == "awaiting_agent", f"Expected awaiting_agent, got {result['status']}"
+    assert len(result.get("outputs", [])) == 1
+    assert result["outputs"][0]["kind"] == "capture_run_dir"
+    assert result["recipe_version"] == "feishu-url-v0.1"
 
-    # --- Branch 2: public-web failure ---
-    monkeypatch.setattr(
-        worker, "package_public_web",
-        lambda *_: (_ for _ in ()).throw(RuntimeError("extraction failed")),
-    )
-
-    worker.process_record(config, {
-        "record_id": "rec_web_fail",
-        "fields": {"内容": "https://example.com/page2", "思考": "test"},
+    # Attachment record with inline text: also hands off to Agent.
+    result2 = worker.process_record(config, {
+        "record_id": "rec_text_agent_handoff",
+        "fields": {"内容": "Some knowledge text here", "思考": "test"},
     })
 
-    assert len(fail_calls) == 1, f"Expected 1 _fail_bundle call, got {len(fail_calls)}"
-    assert fail_calls[0]["failure_code"] == "EXTRACTION_FAILED"
-    assert fail_calls[0]["record_id"] == "rec_web_fail"
-    assert fail_calls[0]["clear_outputs"] is False
+    assert result2["status"] == "awaiting_agent"
+    assert result2["recipe_version"] == "feishu-inline-text-v0.1"
+
+    # No URL, no text, no attachment → should fail (unsupported)
+    result3 = worker.process_record(config, {
+        "record_id": "rec_empty",
+        "fields": {"内容": "", "思考": "test"},
+    })
+
+    assert result3["status"] == "failed"
+    assert result3.get("errors", [{}])[0].get("code") == "UNSUPPORTED_SOURCE"
 
 
 # ── Fix 1: .oks/ gitignore regression tests ────────────────────────
@@ -1705,6 +1640,10 @@ def test_setup_accepts_current_base_create_response_envelope(monkeypatch):
             return [{"name": field["name"]} for field in USER_FIELDS]
         if sub == "+form-create":
             return {"data": {"form_id": "frmXYZ"}}
+        if sub == "+form-questions-list":
+            return {"data": {"questions": []}}
+        if sub == "+view-list":
+            return {"views": []}
         return {}
 
     monkeypatch.setattr("feishu_setup._lark", _mock_lark)
@@ -1784,7 +1723,7 @@ def test_setup_shows_fixture_token_only_with_show_credentials(monkeypatch):
     def _mock_lark(args, *, timeout=60.0, redact_token=None):
         sub = args[1] if len(args) > 1 else ""
         if sub == "+base-get":
-            return {"name": "OKS Base"}
+            return {"name": "OKS Base", "data": {"base": {"url": "https://feishu.cn/base/B4s3T0***ishu"}}}
         if sub == "+table-list":
             return [{"name": "每日知识采集", "id": table_id}]
         if sub == "+field-list":
@@ -1800,6 +1739,10 @@ def test_setup_shows_fixture_token_only_with_show_credentials(monkeypatch):
             return {"data": {"form_id": "frmXYZ"}, "form_id": "frmXYZ"}
         if sub == "+field-create":
             return {"field_id": "fld_new"}
+        if sub == "+form-questions-list":
+            return {"data": {"questions": []}}
+        if sub == "+view-list":
+            return {"views": []}
         return {}
 
     monkeypatch.setattr("feishu_setup._lark", _mock_lark)
@@ -2145,28 +2088,26 @@ def test_redact_error_text_preserves_short_values():
 
 
 def test_failed_record_error_text_is_redacted_before_truncation(monkeypatch, tmp_path):
+    """URL records use Agent handoff — no error text to redact on probe."""
     config = worker.WorkerConfig("base", "table", tmp_path / "lark.exe", tmp_path, tmp_path / "python.exe", tmp_path / "out")
     updates = []
     monkeypatch.setattr(worker, "update_record", lambda _c, _r, patch: updates.append(patch) or {})
+    # probe_source is never called in the Agent-handoff pipeline
     monkeypatch.setattr(
         worker,
         "probe_source",
-        lambda *_: {
-            "status": "needs_user_action",
-            "error": {"code": "AUTH_REQUIRED", "message": f"auth failed with Bearer secret123abc and path {worker.HOME}/token"},
-        },
+        lambda *_: (_ for _ in ()).throw(AssertionError("probe_source must not be called")),
     )
     result = worker.process_record(
         config,
         {"record_id": "rec_1", "fields": {"内容": "https://example.com", "思考": "test"}},
     )
-    assert result["status"] == "failed"
-    error_text = updates[-1]["错误说明"]
-    assert "Bearer secret123abc" not in error_text
-    assert "Bearer ***" in error_text
-    home_str = str(worker.HOME)
-    if len(home_str) > 4:
-        assert home_str not in error_text
+    assert result["status"] == "awaiting_agent"
+    # The summary field should not contain any secrets — it's a handoff message
+    summary = updates[-1].get("总结", "")
+    assert "secret" not in summary.lower()
+    assert updates[-1]["错误说明"] is None
+    assert updates[-1]["错误码"] is None
 
 
 # ── Round 2 / Part A: lark_json bounded exponential retry ─────────────

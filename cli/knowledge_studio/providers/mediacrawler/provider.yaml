@@ -38,3 +38,12 @@ known_limits:
   - 评论和创作者信息为 experimental 状态
 
 last_validated: null
+
+user_impact:
+  install: "需要安装 mediacrawler Python 包及平台相关依赖"
+  disk: "未知，取决于目标和依赖"
+  runtime: "本地执行，爬取速度取决于平台反爬策略"
+  execution: "local"
+  privacy: "请求发送至目标平台；本地文件不上传"
+  cost: "免费"
+  skip_effect: "社交平台公开内容可能无法批量获取"

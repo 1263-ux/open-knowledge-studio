@@ -1,6 +1,6 @@
 # OKS 核心架构
 
-日期：2026-08-07（v0.4.0-dev 更新）
+日期：2026-08-08（v0.4 Beta Final Engineering Closure 更新）
 
 本页是当前 OKS 架构的主事实源。它必须区分三件事：设计上存在、代码中实现、真实环境验证通过。不要把三者混成”全部可用”。
 
@@ -88,8 +88,13 @@ Claude Code Marketplace、OpenClaw Skill Hub、浏览器工具、模型 API、OC
 | Schema 验证 | fail-open (`try/except: pass`) | fail-closed (`SCHEMA_VALIDATOR_UNAVAILABLE`) |
 | 提交方式 | 直接写入最终目录 | 暂存目录 → 验证 → 原子 `shutil.move` |
 | Provider 发现 | 扁平 JSON 文件 | 结构化 `providers/<id>/provider.yaml` |
-| 测试 | ~380 | 426 (425 passed) |
+| 测试 | ~380 | 547 (546 passed, 1 pre-existing) |
 | 技能安装可复现性 | 不可保证 | `oks init` ≡ `oks skills-install`（SHA256 一致） |
+| Evidence 一致性 | 无校验 | Fragment ↔ Manifest 4 核心字段校验，fail-closed |
+| ASR 语义 | transcript 伪装 subtitle | `kind=transcript` + `method=asr_transcription` 合法 |
+| 策略配置 | 无 | `oks config set strategy` — lightweight/quality/privacy/ask_each_time |
+| Provider 影响元数据 | Agent 无法获取 | 11 个 Provider 含 `user_impact`，通过 `oks capability status --json` 暴露 |
+| 飞书采集 | 仅实时事件模式 | 新增 Pull Mode — `oks feishu pending`，零常驻进程 |
 
 ## 当前证据
 
@@ -97,13 +102,18 @@ Claude Code Marketplace、OpenClaw Skill Hub、浏览器工具、模型 API、OC
 |---|---|---|
 | 轻量文本核心闭环 | `已验证但有发现` | `docs/acceptance/clean-server-deployment-report.md` |
 | Raw Bundle v0.2 验证管线 | `已验证` | Gate RC-PROTOCOL-01 + Phase 2A 审计 |
+| Fragment ↔ Manifest 一致性 | `已验证` | v0.4 Beta Closure Gate 1 — 10 项专用测试 |
+| ASR transcript 语义 | `已验证` | v0.4 Beta Closure Gate 2 — Schema 已接受 `kind=transcript` |
+| Guided Decision UX | `已验证（基础设施层）` | v0.4 Beta Closure Gate 3 — 策略配置 + user_impact + 技能模板 |
+| Feishu Pull Mode | `已验证（命令行层）` | v0.4 Beta Closure Gate 4 — `oks feishu pending` 就位 |
 | Skill 安装闭合 | `已验证` | Phase 2A 外部 Wheel 安装验证 |
 | `document` 能力 | `已验证` | 远端干净服务器 document 安装与 ingest |
 | pdf-lite / watch | `已验证` | Provider 验收报告 |
+| 完整 E2E 闭环 | `已验证` | v0.4 Beta Closure Gate 5 — Source → Recall 全链路 |
 | Agent 最终回答 locator 纪律 | `部分验证` | B 组质量提升，但首次未满足严格 locator 阈值 |
 | 飞书控制面 | `部分验证` | `docs/acceptance/feishu-e2e-status.md` |
 | pdf / formula | `部分验证 / 有产品问题` | 组件验收报告与后续修复清单 |
-| 冷启动 E2E | `尚未验证` | 已推迟至阶段三 |
+| 冷启动 E2E | `部分验证` | 基础设施就位；需独立 Auditor 在干净会话中执行 |
 
 ## 架构规则
 

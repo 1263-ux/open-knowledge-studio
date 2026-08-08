@@ -34,10 +34,17 @@ def _make_manifest(
     primary_content: str,
     evidence_records: list[dict],
     supp: tuple[tuple[str, str, str], ...] = (),
+    fragment_evidence: list[dict] | None = None,
+    create_fragment: bool = True,
 ) -> tuple[Path, str]:
     """Build a minimal Agent-submitted manifest directory.
 
     Returns ``(manifest_dir, primary_hash)``.
+
+    When *create_fragment* is True (default), a matching fragment file
+    ``fragments/f1.json`` is written with *fragment_evidence* (defaults to
+    *evidence_records* when None).  Pass ``create_fragment=False`` to test
+    the missing-fragment error path.
     """
     m = art_dir.parent
     p = art_dir / primary_name
@@ -97,6 +104,44 @@ def _make_manifest(
             }
         )
     )
+
+    # ── Fragment file (matching by default) ──
+    if create_fragment:
+        fev = fragment_evidence if fragment_evidence is not None else evidence_records
+        frag_dir = m / "fragments"
+        frag_dir.mkdir(exist_ok=True)
+        (frag_dir / "f1.json").write_text(
+            json.dumps(
+                {
+                    "schema_version": "oks-evidence-fragment/v0.1",
+                    "fragment_id": "f1",
+                    "source_id": sid,
+                    "producer": {
+                        "runtime": "claude-code",
+                        "provider": "test-provider",
+                        "tool": "test-tool",
+                    },
+                    "status": "succeeded",
+                    "artifacts": [
+                        {
+                            "artifact_id": primary_name,
+                            "kind": "primary_text",
+                            "path": primary_name,
+                            "sha256": ph,
+                        }
+                    ],
+                    "evidence": fev,
+                    "modalities": {
+                        "text": {
+                            "modality": "text",
+                            "status": "succeeded",
+                            "evidence_count": len(fev),
+                        }
+                    },
+                }
+            )
+        )
+
     return m, ph
 
 
@@ -326,6 +371,7 @@ def test_legacy_locator_without_kind_rejected():
     ("page_image", "visual_observation"),
     ("subtitle", "other"),
     ("primary_text", "other"),
+    ("transcript", "other"),
 ])
 def test_artifact_kind_maps_to_derived_kind(art_kind, expected):
     """Each artifact ``kind`` maps to the correct derived ``kind``."""
@@ -541,4 +587,225 @@ def test_schema_mirrors_identical():
     assert len(mismatches) == 0, (
         f"Schema mirror mismatch — {len(mismatches)} file(s) differ:\n"
         + "\n".join(f"  {n}: repo={r}... pkg={p}..." for n, r, p in mismatches)
+    )
+
+
+# ── A1: Fragment ↔ Manifest evidence consistency ────────────────────
+
+def test_fragment_manifest_consistent_passes():
+    """Consistent fragment + manifest → commit succeeds."""
+    base = Path(tempfile.mkdtemp())
+    art = base / "manifest" / "artifacts"
+    art.mkdir(parents=True)
+    ev = [{"evidence_id": "e1", "artifact_id": "page.md", "kind": "text",
+           "method": "read", "locator": {"kind": "document"},
+           "agent_judgment": "mechanical"}]
+    m, _ = _make_manifest(art, "page.md", "# Test\n", ev)
+    r = _run_commit(m, base / "out")
+    assert r.returncode == 0, f"Commit failed: {r.stderr[:300]}"
+
+
+def test_fragment_missing_file_rejected():
+    """fragment_refs points to a file that doesn't exist → MISSING_FRAGMENT."""
+    base = Path(tempfile.mkdtemp())
+    art = base / "manifest" / "artifacts"
+    art.mkdir(parents=True)
+    ev = [{"evidence_id": "e1", "artifact_id": "page.md", "kind": "text",
+           "method": "read", "locator": {"kind": "document"}}]
+    m, _ = _make_manifest(art, "page.md", "# Test\n", ev)
+    # Create fragments/ dir but delete the fragment file — triggers MISSING_FRAGMENT
+    frag_file = m / "fragments" / "f1.json"
+    frag_file.unlink()
+    r = _run_commit(m, base / "out")
+    assert r.returncode != 0, "Missing fragment file must be rejected"
+    assert "MISSING_FRAGMENT" in r.stderr + r.stdout, (
+        f"Must mention MISSING_FRAGMENT. Got: {r.stderr[:300]} {r.stdout[:300]}"
+    )
+
+
+def test_fragment_evidence_not_in_manifest_rejected():
+    """Fragment evidence_id not in manifest → FRAGMENT_EVIDENCE_NOT_IN_MANIFEST."""
+    base = Path(tempfile.mkdtemp())
+    art = base / "manifest" / "artifacts"
+    art.mkdir(parents=True)
+    manifest_ev = [{"evidence_id": "e1", "artifact_id": "page.md",
+                    "kind": "text", "method": "read",
+                    "locator": {"kind": "document"}}]
+    fragment_ev = [{"evidence_id": "e2", "artifact_id": "page.md",
+                    "kind": "text", "method": "read",
+                    "locator": {"kind": "document"}}]
+    m, _ = _make_manifest(art, "page.md", "# Test\n", manifest_ev,
+                          fragment_evidence=fragment_ev)
+    r = _run_commit(m, base / "out")
+    assert r.returncode != 0, "Fragment evidence not in manifest must be rejected"
+    assert "FRAGMENT_EVIDENCE_NOT_IN_MANIFEST" in r.stderr + r.stdout, (
+        f"Must mention FRAGMENT_EVIDENCE_NOT_IN_MANIFEST. "
+        f"Got: {r.stderr[:300]} {r.stdout[:300]}"
+    )
+
+
+def test_fragment_manifest_artifact_id_mismatch():
+    """artifact_id differs between Fragment and Manifest → BLOCK."""
+    base = Path(tempfile.mkdtemp())
+    art = base / "manifest" / "artifacts"
+    art.mkdir(parents=True)
+    manifest_ev = [{"evidence_id": "e1", "artifact_id": "page.md",
+                    "kind": "text", "method": "read",
+                    "locator": {"kind": "document"}}]
+    fragment_ev = [{"evidence_id": "e1", "artifact_id": "different.md",
+                    "kind": "text", "method": "read",
+                    "locator": {"kind": "document"}}]
+    m, _ = _make_manifest(art, "page.md", "# Test\n", manifest_ev,
+                          fragment_evidence=fragment_ev)
+    r = _run_commit(m, base / "out")
+    assert r.returncode != 0, "artifact_id mismatch must be rejected"
+    assert "FRAGMENT_MANIFEST_MISMATCH" in r.stderr + r.stdout, (
+        f"Must mention FRAGMENT_MANIFEST_MISMATCH. "
+        f"Got: {r.stderr[:300]} {r.stdout[:300]}"
+    )
+
+
+def test_fragment_manifest_kind_mismatch():
+    """kind differs between Fragment and Manifest → BLOCK."""
+    base = Path(tempfile.mkdtemp())
+    art = base / "manifest" / "artifacts"
+    art.mkdir(parents=True)
+    manifest_ev = [{"evidence_id": "e1", "artifact_id": "page.md",
+                    "kind": "subtitle", "method": "subtitle_extraction",
+                    "locator": {"kind": "timestamp", "start_ms": 0, "end_ms": 1000}}]
+    fragment_ev = [{"evidence_id": "e1", "artifact_id": "page.md",
+                    "kind": "transcript", "method": "subtitle_extraction",
+                    "locator": {"kind": "timestamp", "start_ms": 0, "end_ms": 1000}}]
+    m, _ = _make_manifest(art, "page.md", "# Test\n", manifest_ev,
+                          fragment_evidence=fragment_ev)
+    r = _run_commit(m, base / "out")
+    assert r.returncode != 0, "kind mismatch must be rejected"
+    assert "FRAGMENT_MANIFEST_MISMATCH" in r.stderr + r.stdout
+
+
+def test_fragment_manifest_method_mismatch():
+    """method differs between Fragment and Manifest → BLOCK."""
+    base = Path(tempfile.mkdtemp())
+    art = base / "manifest" / "artifacts"
+    art.mkdir(parents=True)
+    manifest_ev = [{"evidence_id": "e1", "artifact_id": "page.md",
+                    "kind": "transcript", "method": "subtitle_extraction",
+                    "locator": {"kind": "timestamp", "start_ms": 0, "end_ms": 1000}}]
+    fragment_ev = [{"evidence_id": "e1", "artifact_id": "page.md",
+                    "kind": "transcript", "method": "asr_transcription",
+                    "locator": {"kind": "timestamp", "start_ms": 0, "end_ms": 1000}}]
+    m, _ = _make_manifest(art, "page.md", "# Test\n", manifest_ev,
+                          fragment_evidence=fragment_ev)
+    r = _run_commit(m, base / "out")
+    assert r.returncode != 0, "method mismatch must be rejected"
+    assert "FRAGMENT_MANIFEST_MISMATCH" in r.stderr + r.stdout
+
+
+def test_fragment_manifest_agent_judgment_mismatch():
+    """agent_judgment differs between Fragment and Manifest → BLOCK."""
+    base = Path(tempfile.mkdtemp())
+    art = base / "manifest" / "artifacts"
+    art.mkdir(parents=True)
+    manifest_ev = [{"evidence_id": "e1", "artifact_id": "page.md",
+                    "kind": "text", "method": "read",
+                    "locator": {"kind": "document"},
+                    "agent_judgment": "mechanical"}]
+    fragment_ev = [{"evidence_id": "e1", "artifact_id": "page.md",
+                    "kind": "text", "method": "read",
+                    "locator": {"kind": "document"},
+                    "agent_judgment": "agent_observed"}]
+    m, _ = _make_manifest(art, "page.md", "# Test\n", manifest_ev,
+                          fragment_evidence=fragment_ev)
+    r = _run_commit(m, base / "out")
+    assert r.returncode != 0, "agent_judgment mismatch must be rejected"
+    assert "FRAGMENT_MANIFEST_MISMATCH" in r.stderr + r.stdout
+
+
+def test_fragment_null_field_not_compared():
+    """Fragment has null for a field → skip comparison, commit succeeds.
+
+    Only fields where BOTH sides declare a non-null value are compared.
+    A null fragment field is treated as "not declared" — no false positive.
+    """
+    base = Path(tempfile.mkdtemp())
+    art = base / "manifest" / "artifacts"
+    art.mkdir(parents=True)
+    manifest_ev = [{"evidence_id": "e1", "artifact_id": "page.md",
+                    "kind": "text", "method": "read",
+                    "locator": {"kind": "document"},
+                    "agent_judgment": "mechanical"}]
+    fragment_ev = [{"evidence_id": "e1", "artifact_id": "page.md",
+                    "kind": "text", "method": "read",
+                    "locator": {"kind": "document"},
+                    "agent_judgment": None}]
+    m, _ = _make_manifest(art, "page.md", "# Test\n", manifest_ev,
+                          fragment_evidence=fragment_ev)
+    r = _run_commit(m, base / "out")
+    assert r.returncode == 0, (
+        f"Null fragment fields should not cause mismatch. "
+        f"Got: {r.stderr[:300]}"
+    )
+
+
+def test_manifest_extra_evidence_not_in_fragment_ok():
+    """Manifest has extra evidence not in Fragment → commit succeeds.
+
+    This is NOT a bidirectional check — Manifest MAY have additional
+    evidence records that aren't in any fragment.
+    """
+    base = Path(tempfile.mkdtemp())
+    art = base / "manifest" / "artifacts"
+    art.mkdir(parents=True)
+    manifest_ev = [
+        {"evidence_id": "e1", "artifact_id": "page.md",
+         "kind": "text", "method": "read", "locator": {"kind": "document"}},
+        {"evidence_id": "e2", "artifact_id": "page.md",
+         "kind": "metadata", "method": "metadata_extraction",
+         "locator": {"kind": "document"}},
+    ]
+    fragment_ev = [
+        {"evidence_id": "e1", "artifact_id": "page.md",
+         "kind": "text", "method": "read", "locator": {"kind": "document"}},
+    ]
+    m, _ = _make_manifest(art, "page.md", "# Test\n", manifest_ev,
+                          fragment_evidence=fragment_ev)
+    r = _run_commit(m, base / "out")
+    assert r.returncode == 0, (
+        f"Manifest may have extra evidence. Got: {r.stderr[:300]}"
+    )
+
+
+# ── A2: ASR transcript semantics ─────────────────────────────────────
+
+def test_asr_transcript_kind_accepted():
+    """ASR transcript (kind=transcript, method=asr_transcription) passes raw_commit.
+
+    Transcript must NOT be renamed to subtitle to pass schema validation.
+    The schema accepts 'transcript' artifact kind and the evidence
+    records keep their original semantics.
+    """
+    base = Path(tempfile.mkdtemp())
+    art = base / "manifest" / "artifacts"
+    art.mkdir(parents=True)
+    ev = [{"evidence_id": "e1", "artifact_id": "page.md",
+           "kind": "transcript", "method": "asr_transcription",
+           "locator": {"kind": "timestamp", "start_ms": 0, "end_ms": 12000},
+           "agent_judgment": "mechanical"}]
+    m, _ = _make_manifest(art, "page.md", "# ASR test\n", ev)
+    r = _run_commit(m, base / "out")
+    assert r.returncode == 0, (
+        f"ASR transcript must be accepted as valid evidence. "
+        f"Got: {r.stderr[:300]}"
+    )
+    # Verify the evidence in the bundle preserves transcript semantics
+    evidence_lines = (base / "out" / "evidence.jsonl").read_text(encoding="utf-8")
+    assert "transcript" in evidence_lines, (
+        f"evidence.jsonl must contain 'transcript' kind. Got: {evidence_lines[:200]}"
+    )
+    assert "asr_transcription" in evidence_lines, (
+        f"evidence.jsonl must contain 'asr_transcription' method. "
+        f"Got: {evidence_lines[:200]}"
+    )
+    assert "subtitle_extraction" not in evidence_lines, (
+        "ASR transcript must NOT be renamed to subtitle_extraction"
     )

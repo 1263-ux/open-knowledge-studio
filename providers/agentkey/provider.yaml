@@ -27,6 +27,15 @@ known_limits:
 
 last_validated: 2026-08-06
 
+user_impact:
+  install: "需要注册 AgentKey 账号并配置 API Key 到 MCP"
+  disk: "无本地磁盘占用"
+  runtime: "远程执行，响应速度取决于 API 和网络条件"
+  execution: "remote"
+  privacy: "查询内容发送至 AgentKey 服务"
+  cost: "按 credits 计费，需预充值"
+  skip_effect: "受限平台（知乎/微信/B站）的内容可能无法获取"
+
 maturity_by_action:
   web.extract.zhihu: validated
   web.extract.wechat: validated_partial

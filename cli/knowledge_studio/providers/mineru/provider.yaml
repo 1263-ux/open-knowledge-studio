@@ -25,3 +25,12 @@ known_limits:
   - 按需安装：oks capability install pdf --yes
 
 last_validated: 2026-08-03
+
+user_impact:
+  install: "首次安装需下载模型文件，oks capability install pdf 自动化完成"
+  disk: "模型文件约 500 MB–1 GB"
+  runtime: "CPU 可运行，GPU 加速推荐用于大批量处理"
+  execution: "local"
+  privacy: "PDF 文件不上传，全部本地处理"
+  cost: "免费"
+  skip_effect: "复杂排版（表格、公式、多栏）恢复质量可能下降"

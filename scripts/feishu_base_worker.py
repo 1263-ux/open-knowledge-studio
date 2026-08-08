@@ -152,6 +152,9 @@ CAPTURE_FIELDS = [
     "重试",
     "租约所有者",
     "租约到期",
+    "创建时间",
+    "Wiki状态",
+    "采集模式",
 ]
 # REVIEW_ACTIONS and REVIEW_ACTION_RE are re-exported from feishu_worker.review_events
 
@@ -811,67 +814,33 @@ def complete_browser_snapshot(config: WorkerConfig, record_id: str, snapshot_dir
         },
     )
     try:
-        output = config.output_root / f"feishu-{record_id}-{source_hash[:10]}-browser"
-        report = package_local_attachment(config, html, output)
-        assets = output / "assets"
-        derived = output / "derived"
-        assets.mkdir(exist_ok=True)
-        derived.mkdir(exist_ok=True)
-        shutil.copy2(screenshot, assets / "browser-screenshot.png")
-        shutil.copy2(snapshot_manifest, derived / "browser-snapshot.json")
-        evidence_path = output / "evidence.jsonl"
-        existing_evidence = [
-            json.loads(line)
-            for line in evidence_path.read_text(encoding="utf-8").splitlines()
-            if line.strip()
-        ]
-        existing_evidence.append(
-            {
-                "id": "browser-screenshot-0001",
-                "kind": "browser_screenshot",
-                "text": str(snapshot.get("title") or "Rendered browser snapshot"),
-                "method": "browser.public",
-                "locator": {"asset": "assets/browser-screenshot.png", "url": snapshot["url"]},
-            }
-        )
-        atomic_write_text(
-            evidence_path,
-            "".join(json.dumps(item, ensure_ascii=False) + "\n" for item in existing_evidence),
-        )
-        quality_path = output / "quality-report.json"
-        quality_report = json.loads(quality_path.read_text(encoding="utf-8"))
-        quality_report["evidence_count"] = len(existing_evidence)
-        quality_report.setdefault("coverage_checks", {})["browser_screenshot"] = {
-            "expected": 1,
-            "observed": 1,
-            "status": "passed",
-        }
-        atomic_write_json(quality_path, quality_report)
-        metadata_path = output / "metadata.json"
-        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
-        metadata["capture_envelope"] = capture
-        metadata["browser_snapshot"] = {
-            "manifest": "derived/browser-snapshot.json",
-            "screenshot": "assets/browser-screenshot.png",
-        }
-        atomic_write_json(metadata_path, metadata)
-        quality = report.get("processing_status") or metadata.get("processing_status") or "partial"
-        run["modalities"]["text"].update({"status": "succeeded", "evidence_count": len(existing_evidence)})
-        run["outputs"] = [{"dataset_id": f"bundle:{capture['capture_id']}", "uri": str(output), "kind": "bundle", "sha256": None}]
-        finish_run(run, "complete" if quality == "complete" else "partial")
+        # ── Agent handoff ── source_router / oks-connector deleted in v0.4.0.
+        # Worker copies browser snapshot assets into the run dir and hands off;
+        # Agent builds Raw Bundle → Candidate → raw-commit → publish.
+        assets_dir = run_dir / "browser-assets"
+        assets_dir.mkdir(exist_ok=True)
+        shutil.copy2(html, assets_dir / "rendered.html")
+        shutil.copy2(screenshot, assets_dir / "screenshot.png")
+        shutil.copy2(snapshot_manifest, assets_dir / "snapshot.json")
+        run["outputs"] = [{
+            "dataset_id": capture["capture_id"],
+            "uri": str(run_dir),
+            "kind": "capture_run_dir",
+            "sha256": None,
+        }]
+        finish_run(run, "awaiting_agent", disposition="none")
         atomic_write_json(run_dir / "processing-run.json", run)
-        finalize_raw_v2(config, output, run_dir / "capture-envelope.json", run_dir / "processing-run.json", html)
         update_record(
             config,
             record_id,
             {
-                "运行状态": "Raw就绪",
+                "运行状态": "需人工",
                 "采集模式": "公开浏览器",
-                "Raw Bundle": str(output),
-                "质量状态": quality,
+                "Raw Bundle": None,
+                "质量状态": None,
                 "错误码": None,
                 "错误说明": None,
-                "总结": f"公开 JavaScript 页面已从受控浏览器快照生成 Raw Bundle v0.2；质量状态={quality}。",
+                "总结": "浏览器快照已保存，等待 Agent 生成 Raw Bundle 和 Candidate。",
             },
         )
         return run
@@ -914,12 +883,6 @@ def process_record(
         claimed_run_id=claimed_run_id,
         _update_record=update_record,
         _download_attachments=download_attachments,
-        _package_local_attachment=package_local_attachment,
-        _finalize_raw_v2=finalize_raw_v2,
-        _probe_source=probe_source,
-        _download_public_source=download_public_source,
-        _package_routed_source=package_routed_source,
-        _package_public_web=package_public_web,
     )
 
 
@@ -937,6 +900,27 @@ def main() -> int:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     args = parse_args()
     config = load_config(args)
+    if args.command == "pending":
+        records = list_records(config, args.limit)
+        result = {
+            "count": len(records),
+            "records": [
+                {
+                    "record_id": r.get("record_id", ""),
+                    "content": r.get("内容", ""),
+                    "thought": r.get("思考", ""),
+                    "status": r.get("运行状态", ""),
+                    "created": r.get("创建时间", ""),
+                    "run_id": r.get("运行ID", ""),
+                    "attachments": r.get("附件", ""),
+                    "wiki_status": r.get("Wiki状态", ""),
+                    "capture_mode": r.get("采集模式", ""),
+                }
+                for r in records
+            ],
+        }
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return 0
     if args.command == "enqueue":
         fields: dict[str, Any] = {
             "内容": args.content,

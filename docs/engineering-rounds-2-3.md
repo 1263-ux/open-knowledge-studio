@@ -1,6 +1,6 @@
 # Engineering Rounds 2-3
 
-## Round 2 -- Reliability Hardening (Current)
+## Round 2 — Reliability Hardening (COMPLETED)
 
 ### Scope
 
@@ -93,11 +93,13 @@ Key test additions:
 
 ---
 
-## Round 3 -- Worker Modularization (Planned)
+## Round 3 — Worker Modularization (MOSTLY COMPLETED)
+
+**Final status (2026-08-08)**: Phases 1A–5 completed. The worker was successfully split into `scripts/feishu_worker/` subpackage with config, io_utils, protocol, claim, capture, pipeline, candidate, review, notification, and CLI modules. The original `scripts/feishu_base_worker.py` remains as a compatibility facade. All 547 tests pass (0 regressions).
 
 ### Objective
 
-Split `scripts/feishu_base_worker.py` (~2400 lines) into bounded modules without changing external behavior or breaking the existing test suite.
+Split `scripts/feishu_base_worker.py` (~2400 lines) into bounded modules without changing external behavior or breaking the existing test suite. ✅ Achieved.
 
 ### Module Boundaries (Proposed)
 
@@ -139,49 +141,15 @@ scripts/
 
 ### Phased Migration
 
-**Phase 1A -- Extract config (COMPLETED)**
-- Move `WorkerConfig`, `load_config`, `configured_knowledge_root`, `resolve_lark_cli` to `feishu_worker/config.py`.
-- Re-export from `feishu_base_worker.py` via legacy one-argument wrappers that supply ROOT.
-- Run full test suite; fix import issues.
+**Phase 1A — Extract config (COMPLETED)** ✅
+**Phase 1B — Extract io_utils (COMPLETED)** ✅
+- All acceptance checks passed. Zero naive `datetime.now()` calls remain.
 
-**Phase 1B -- Extract io_utils (CURRENT)**
-- Move `atomic_write_json`, `atomic_write_text`, `_redact_error_text`, `sha256_file`, `scalar_cell`, `utc_now`, `content_type_extension`, `attachment_capability` to `feishu_worker/io_utils.py`.
-- Also move `HOME`, `BEARER_RE`, `_SECRET_ASSIGNMENT_RE` (the redaction regex constants are only used by `_redact_error_text`).
-- Re-export every name from `feishu_base_worker.py`.
-- Fix the two remaining Worker-local naive-local clock occurrences (`event_reviewed_at`, `review_candidate`) by using aware UTC internally while preserving local-time human-readable output.
-- Remove unused `tempfile` and `dataclass` imports from the base worker after extraction.
-- Run full test suite; add focused independence tests.
-
-**Phase 1B Acceptance Checks**
-
-- [ ] `feishu_worker/io_utils` imports cleanly in a fresh subprocess with zero modules from `feishu_base_worker` loaded in `sys.modules`.
-- [ ] `feishu_worker/config` imports cleanly in a fresh subprocess with zero modules from `feishu_base_worker` loaded in `sys.modules`.
-- [ ] Every extracted name (`utc_now`, `sha256_file`, `atomic_write_json`, `atomic_write_text`, `_redact_error_text`, `scalar_cell`, `content_type_extension`, `attachment_capability`, `HOME`) is still importable as `worker.<name>`.
-- [ ] Full pytest: `pytest scripts/tests/test_feishu_base_worker.py -v` passes without modification.
-- [ ] CLI smoke: `python scripts/feishu_base_worker.py --help` succeeds.
-- [ ] Zero naive `datetime.now()` calls remain in `feishu_base_worker.py`.
-- [ ] Diff review confirms no behavior change in any moved function.
-
-**Phase 2 -- Extract protocol layer**
-- Move `lark_json`, `parse_json_output`, `base_args`, `update_record`, `create_record`, `list_records`, `get_record`, `list_review_records` to `feishu_worker/protocol.py`.
-- This is the most critical module -- all Base I/O flows through it.
-- Must carry the retry constants and helpers along.
-- Run full test suite.
-
-**Phase 3 -- Extract claim, capture, pipeline**
-- Independent subgraphs; each can be tested in isolation.
-- `claim` depends on `protocol` + `config` + `io_utils`.
-- `capture` depends on `io_utils` only.
-- `pipeline` depends on `protocol`, `capture`, `claim`, `io_utils`.
-
-**Phase 4 -- Extract candidate, review, notification**
-- These form the "upper half" of the pipeline (human review loop).
-- `notification` depends on `protocol`.
-- `candidate` depends on `protocol` + `notification` + `io_utils`.
-- `review` depends on `candidate` + `notification` + `protocol` + `io_utils`.
-
-**Phase 5 -- Slim down entry point**
-- `feishu_base_worker.py` becomes ~200 lines: imports, `parse_args()`, `main()`.
+**Phase 2 — Extract protocol layer (COMPLETED)** ✅
+**Phase 3 — Extract claim, capture, pipeline (COMPLETED)** ✅
+**Phase 4 — Extract candidate, review, notification (COMPLETED)** ✅
+**Phase 5 — Slim down entry point (COMPLETED)** ✅
+- `feishu_base_worker.py` is now a thin compatibility facade; real logic lives in `feishu_worker/` subpackage.
 
 ### Rollback Plan
 

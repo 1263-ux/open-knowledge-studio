@@ -45,28 +45,33 @@ parent: 内部机制
 
 ```
 open-knowledge-studio/
-├── .agents/          # Agent skill 副本
-├── .claude/          # Claude Code skills
+├── .agents/          # Agent skill 副本（10 个，与 Claude 镜像一致）
+├── .claude/          # Claude Code skills（10 个）+ hooks + rules
 ├── .codex/           # Codex 本地配置、hooks
-├── cli/              # Python 包；提供 oks 与 oks-connector 入口
+├── cli/              # Python 包；提供 oks CLI（knowledge_studio）
 ├── docs/             # GitHub Pages 文档
 ├── drafts/           # 仓库内示例/工作草稿；知识实例中也有 drafts/
 ├── profiles/         # 画像、目标、配方
 ├── raw/              # Raw materials
-├── schemas/          # Raw/capture 协议 schema
-├── scripts/          # connector、extractors、worker、validator
+├── schemas/          # Raw/capture 协议 schema（与 cli/knowledge_studio/schemas/ 镜像一致）
+├── scripts/          # feishu_base_worker（兼容入口）+ feishu_worker/ 子包（模块化拆分后）
 ├── settings/         # 路由、输入源、衰减等配置
 ├── templates/        # Wiki / draft 模板
 ├── wiki/             # 策展知识
+├── providers/        # 17 个 Provider 定义（含 user_impact 元数据）
+├── capabilities/     # 能力动作目录（actions.yaml）
+├── recipes/          # Modality recipes（7 种）
+├── security/         # 凭证脱敏 + 敏感字段检测
 ├── _meta/            # frontmatter 与学习 schema
 ├── AGENTS.md         # Agent 操作规则
 ├── CONSTITUTION.md   # 记忆系统设计
+├── CHANGELOG.md      # 发布历史
 └── README.md
 ```
 
 运行时目录如 `.oks/`、`.codex-tmp/`、`output/`、`tmp/` 可能出现在本地工作树中，但它们是实验或运行产物，不是公开知识结构的核心层。
 
-**基础设施（非桶）**：`cli/`、`scripts/`、`schemas/`、`templates/`、`docs/` 位于顶层，但装的是代码、协议、模板或文档，不是知识本体。
+**基础设施（非桶）**：`cli/`、`scripts/`、`schemas/`、`templates/`、`providers/`、`capabilities/`、`recipes/`、`security/`、`docs/` 位于顶层，但装的是代码、协议、模板或文档，不是知识本体。
 
 ## 22 个知识域
 

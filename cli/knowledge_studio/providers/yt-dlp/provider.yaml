@@ -27,6 +27,15 @@ known_limits:
 
 last_validated: 2026-08-04
 
+user_impact:
+  install: "需要 pip install yt-dlp，部分平台需要 Cookie 配置"
+  disk: "yt-dlp 本身约 10 MB，下载的视频/音频额外占用"
+  runtime: "本地执行，下载速度取决于网络和平台限速"
+  execution: "local"
+  privacy: "下载请求发送至目标平台；本地文件不上传"
+  cost: "免费"
+  skip_effect: "平台视频无法下载，字幕和 metadata 可能无法获取"
+
 evidence:
   method: platform_subtitle
   locator_kind: timestamp

@@ -440,6 +440,10 @@ def capability_status(root: Path | None = None) -> dict[str, Any]:
         platforms = raw_p.get("platforms")
         if platforms and isinstance(platforms, list):
             entry["platforms"] = platforms
+        # Include user_impact if declared (Guided Decision UX)
+        user_impact = raw_p.get("user_impact")
+        if user_impact and isinstance(user_impact, dict):
+            entry["user_impact"] = user_impact
         # Include per-platform maturity if declared
         maturity_by_action = raw_p.get("maturity_by_action")
         if maturity_by_action and isinstance(maturity_by_action, dict):

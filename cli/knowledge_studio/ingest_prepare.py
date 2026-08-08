@@ -662,6 +662,7 @@ def _build_candidate_providers(
                         "status": p.get("status", "unknown"),
                         "capabilities": p.get("capabilities", []),
                         "known_limits": p.get("known_limits", []),
+                        "user_impact": p.get("user_impact", {}),
                     }
                     break
 

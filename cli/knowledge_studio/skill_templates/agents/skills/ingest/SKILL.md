@@ -631,6 +631,70 @@ When the current model lacks a modality:
    cannot see. Do not transcribe audio you cannot hear. Do not invent
    source text you cannot read.
 
+## Strategy-Aware Ingestion (Guided Decision UX v0.1)
+
+When a Provider is needed but not available, the Agent MUST follow the
+strategy configured by the user.  Read the current strategy:
+
+```bash
+oks config show   # check strategy field
+```
+
+### Strategy values
+
+| Strategy | Behavior |
+|----------|----------|
+| `lightweight` (default when unset) | Prefer existing capabilities. Don't install large components. Ask only when genuinely blocked. |
+| `quality` | Prefer best available extraction quality. Auto-use configured remote providers. Ask on install/fee/privacy impact. |
+| `privacy` | Prefer local processing. Avoid uploading content. Can accept larger local deps but explain before installing. |
+| `ask_each_time` | No fixed preference. Compare options with full impact and let user decide each time. |
+
+### When strategy is unset
+
+On first encounter of a capability gap that requires user decision:
+1. Explain briefly what's needed and why
+2. Present the four strategies in plain language:
+   - ① 轻量优先（推荐）：尽量用已有能力，不主动安装大型组件
+   - ② 效果优先：优先保证提取完整度
+   - ③ 本地隐私优先：优先本地处理，尽量避免上传
+   - ④ 每次由我决定：没有固定倾向，每次比较方案
+3. Ask user to pick one
+4. Save: `oks config set strategy <value>`
+5. Apply the chosen strategy to the current decision and all future ones
+
+### User-impact data
+
+When a Provider has `user_impact` in its definition, use it to inform
+the user.  `oks capability status --json` exposes this data.  Key fields:
+
+- `install` — what needs to be installed/configured
+- `disk` — estimated disk usage
+- `runtime` — runtime requirements (CPU/GPU, speed)
+- `execution` — `local` or `remote`
+- `privacy` — whether content is uploaded
+- `cost` — monetary cost
+- `skip_effect` — what happens if not enabled
+
+**Never invent numbers.** If `user_impact` says "未知" or a descriptive range,
+report it honestly. Don't guess a specific size.
+
+### Aggregated decision
+
+When the same task needs multiple missing capabilities:
+1. Judge which are truly necessary for this task
+2. Skip optional ones that aren't needed
+3. Present remaining needs as ONE aggregated message:
+   - What's needed and why
+   - Total resource impact
+   - Recommendation
+   - One decision point, not N sequential questions
+
+### Provider selection transparency
+
+- Agent selects Providers — user does NOT choose between RapidOCR/MinerU/Firecrawl
+- Agent explains its recommendation in plain language
+- User only decides: enable recommended capability / accept partial / use alternative
+
 ## Runtime Tool vs Registered Provider
 
 Two categories of evidence sources exist.  The distinction matters for

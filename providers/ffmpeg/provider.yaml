@@ -19,6 +19,15 @@ requirements:
 cost:
   estimated_per_call: 0
 
+user_impact:
+  install: "需要系统安装 ffmpeg 命令行工具"
+  disk: "ffmpeg 本身约 80–150 MB"
+  runtime: "本地执行，音视频处理 CPU 密集型"
+  execution: "local"
+  privacy: "原始文件不上传，全部本地处理"
+  cost: "免费"
+  skip_effect: "无法提取音频、转码或截取关键帧，视频处理受限"
+
 known_limits:
   - 关键帧提取缺少完整验收
   - 部分编解码器可能需要额外安装

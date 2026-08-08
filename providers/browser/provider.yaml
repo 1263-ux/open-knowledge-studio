@@ -28,3 +28,12 @@ known_limits:
 
 last_validated: null
 blocked_reason: Chrome Web Store 扩展页面显示"此商品无法购买或下载"
+
+user_impact:
+  install: "需要用户本地 Chrome 浏览器及对应 Profile 登录态"
+  disk: "无额外磁盘占用（使用用户已有浏览器）"
+  runtime: "依赖用户本地浏览器环境，不绕过 CAPTCHA、付费墙或 DRM"
+  execution: "local"
+  privacy: "使用用户本地浏览器会话，不上传至 OKS"
+  cost: "免费（使用用户自有浏览器）"
+  skip_effect: "需要浏览器登录态的页面内容可能无法获取；不绕过平台反爬、付费墙或 DRM"

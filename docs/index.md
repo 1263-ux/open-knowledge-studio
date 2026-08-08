@@ -33,20 +33,24 @@ has_children: true
 
 ## 当前架构与进度
 
-v0.4.0-dev（最小可分发 Beta）已完成：
+v0.4.0-dev（最小可分发 Beta）已完成，v0.4 Beta Final Engineering Closure 已收口：
 
 - **单 Wheel 包**: 仅 `knowledge_studio`，`oks_connector` 已移除
-- **17 个 Provider** + 25 个能力动作
-- **Raw Bundle v0.2** 严格验证管线（`oks raw-commit`，含 provenance 机械检查）
+- **17 个 Provider** + 25 个能力动作，11 个 Provider 含 `user_impact` 人类可读影响元数据
+- **Raw Bundle v0.2** 严格验证管线（`oks raw-commit`，含 provenance 机械检查 + Fragment ↔ Manifest 一致性校验）
 - **Agent 协议减负**: `ingest prepare` 预填充 evidence 槽位 + 返回 candidate_providers 短名单
 - **6 能力族首屏**: 文本 / 网页 / PDF / 图片 / 音视频 / 平台 — 不暴露 Provider ID
-- **技能单一事实源**（`skill_templates/`，构建时+运行时剥离）
-- **248 个测试**（248 通过）
+- **技能单一事实源**（`skill_templates/`，构建时+运行时剥离，Claude 与 Agents 技能镜像一致）
+- **Guided Decision UX**: 策略配置（lightweight/quality/privacy/ask_each_time）+ `user_impact` 元数据 + 技能模板中的 Strategy-Aware Ingestion 章节
+- **Feishu Pull Mode**: `oks feishu pending` 命令，零常驻进程、零 WebSocket、零 daemon
+- **ASR 语义修正**: `kind=transcript` + `method=asr_transcription` 合法，不再伪装成 subtitle
+- **547 个测试**（546 通过，1 个预存失败，0 回归）
 
 架构事实源和本轮工程记录见：
 
 - **[核心架构](architecture/oks-core-architecture.md)** — v0.4.0 当前主事实源
 - **[工程轮次 2-3](engineering-rounds-2-3.md)** — v0.3.0 合并后的架构加固与安全修复
+- **v0.4 Beta Final Engineering Closure** — 审计包 `D:\测试\审查测试\final-closure-audit\`（5 Gate 全部通过，547 测试，完整 E2E 闭环）
 
 多模态 Raw 协议的机器事实源位于本仓库 `schemas/`；Studio 只保留生命周期和调用入口。
 

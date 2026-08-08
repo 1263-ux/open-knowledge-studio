@@ -1,6 +1,6 @@
 # 飞书 E2E 状态
 
-日期：2026-07-29
+日期：2026-08-08（v0.4 Beta Final Closure 更新）
 
 状态：`partial`（部分通过）
 
@@ -18,6 +18,21 @@
 | `native_review_event_delivery` | `failed` | 在记录的限时窗口内，未收到任何原生审核事件。 |
 | `reconcile_review_recovery` | `passed` | 恢复机制可以补救遗漏的审核状态。 |
 | `feishu_e2e` | `partial` | 完整的实时事件链路未被证明。 |
+| `oks_feishu_pending` (NEW v0.4 Beta) | `verified_cli` | `oks feishu pending --json` 命令就位，CAPTURE_FIELDS 扩展至 13 字段。Pull Mode 零常驻进程、零 WebSocket、零 daemon。需真实 Base 做 Live 测试。 |
+
+## Pull Mode（v0.4 Beta 新增）
+
+`oks feishu pending` 提供零依赖的 Pull 模式采集入口：
+
+```
+白天：用户通过飞书表单提交 → 记录存储在飞书多维表格
+      ↓ (no daemon, no WebSocket, no background process)
+晚上：用户启动 Agent → oks feishu pending --json
+      ↓
+      获取待处理记录 → 逐条 ingest prepare → Provider → raw-commit
+```
+
+Pull Mode 是 Push Mode（实时事件监听）的补充，不是替代。不需要 daemon、WebSocket 或后台任务队列。
 
 ## 边界
 

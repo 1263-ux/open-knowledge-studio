@@ -8,6 +8,8 @@ provides:
     maturity: validated
   web.extract:
     maturity: validated
+  metadata.fetch:
+    maturity: validated
   web.screenshot:
     maturity: experimental
   document.text.extract:
@@ -27,3 +29,12 @@ known_limits:
   - 不支持需要登录态的平台
 
 last_validated: 2026-08-05
+
+user_impact:
+  install: "需要注册 Firecrawl 账号并获取 API Key"
+  disk: "无本地磁盘占用（远程服务）"
+  runtime: "远程执行，取决于 Firecrawl 服务响应速度"
+  execution: "remote"
+  privacy: "网页 URL 和抓取内容发送至 Firecrawl 服务器"
+  cost: "按服务商当前定价计费，通常有免费额度；请以 Firecrawl 官网为准"
+  skip_effect: "动态渲染页面（JS 重内容）可能无法获取完整正文"

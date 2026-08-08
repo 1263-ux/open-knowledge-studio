@@ -6,6 +6,8 @@
 
 Open Knowledge Studio is a file-based knowledge base system designed for use with Claude Code. It provides:
 
+**OKS 不是一个要求用户长期坐在里面写作、整理页面的笔记软件。它不试图替代 Obsidian、Notion、Roam 或用户已有的编辑器。OKS 负责的是：把用户已有的文件、网页、媒体、平台内容和主动提交的信息，经 Agent 提取、人工审核后，沉淀成可召回的文件系统知识。**
+
 - **4 cognitive buckets (profiles/, raw/, wiki/, drafts/) + 2 infrastructure layers (settings/, _meta/)**: profiles/ incl. recipes, goals
 - **Agent-Native ingestion pipeline**: Source → Provider → EvidenceFragment → EvidenceManifest → `oks raw-commit` → Raw Bundle v0.2 → Candidate → Human Review → Wiki
 - **6+1-factor recall engine**: token overlap + substring + topic trace + type boost + review bonus (failure lessons rank higher) + memory curve + optional goal boost (active goals lift on-scope pages; no-op without goals)

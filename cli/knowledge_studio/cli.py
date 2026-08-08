@@ -386,9 +386,38 @@ def feishu_auth():
 
 
 @feishu_app.command("form")
-def feishu_form(url: str = typer.Option(..., "--url", help="Feishu Base form URL to open in your browser")):
-    """Display the human submission form; authentication and submission stay in the user session."""
-    console.print(Panel.fit(f"[bold]Feishu intake form[/bold]\n{url}\n\nOpen it in your authenticated browser to submit a capture.", border_style="cyan"))
+def feishu_form(
+    url: str = typer.Option(None, "--url", help="Custom form URL to display"),
+    share_token: str = typer.Option(None, "--share-token", help="Feishu form share token (shrcnXXX) to construct a fillable URL"),
+):
+    """Display the fillable form URL. Use --share-token with the token from Base UI → Share."""
+    if share_token:
+        # Construct the correct fillable form URL
+        brand = os.environ.get("LARK_BRAND", "feishu")
+        domain = "feishu.cn" if brand == "feishu" else "larkoffice.com"
+        form_url = f"https://{domain}/share/base/form/{share_token}"
+        console.print(Panel.fit(
+            f"[bold]📋 填写表单链接[/bold]\n{form_url}\n\n"
+            "把这个链接发给用户即可填写，不需要登录 Base 编辑界面。",
+            border_style="green",
+        ))
+        return
+    if url:
+        console.print(Panel.fit(
+            f"[bold]Feishu intake form[/bold]\n{url}\n\n"
+            "Open it in your authenticated browser to submit a capture.",
+            border_style="cyan",
+        ))
+        return
+    # No URL or share token — show how to get the form share link
+    console.print(Panel.fit(
+        "[bold]获取填写表单链接[/bold]\n\n"
+        "1. 打开 Base → 左侧找到 \"OKS Daily Knowledge Intake\" 表单\n"
+        "2. 点表单右边的 ··· → 分享 → 复制链接\n"
+        "3. 然后运行: oks feishu form --share-token shrcnXXX\n\n"
+        "⚠️ 注意：不要用 table/view 链接，那个是编辑界面，填不了表单。",
+        border_style="yellow",
+    ))
 
 
 @feishu_app.command("submit")
@@ -410,6 +439,21 @@ def feishu_submit(
 def feishu_run_once(limit: int = typer.Option(100, "--limit")):
     """Process one pending Feishu Base capture through Raw and review states."""
     _run_feishu_worker("run-once", ["--limit", str(limit)])
+
+
+@feishu_app.command("pending")
+def feishu_pending(
+    limit: int = typer.Option(200, "--limit"),
+):
+    """List pending Inbox records from Feishu Base (Pull-mode entry point).
+
+    Returns JSON with record_id, content, thought, status, created,
+    and metadata for each pending record. The Agent filters records
+    by date as needed (e.g., "today's") client-side.
+
+    No daemon, no WebSocket, no background service needed.
+    """
+    _run_feishu_worker("pending", ["--limit", str(limit)])
 
 
 @feishu_app.command("publish-candidate")
@@ -1605,12 +1649,17 @@ def config_init(
 @config_app.command("show")
 def config_show():
     """Show current global configuration."""
-    from knowledge_studio.config import load_config, config_path
+    from knowledge_studio.config import load_config, config_path, VALID_STRATEGIES
 
     config = load_config()
+    strategy = config.get("strategy", "")
+    strategy_display = strategy if strategy else "(not set)"
+
     console.print(f"[dim]Config file: {config_path()}[/dim]\n")
     console.print(Panel.fit(
         f"[bold]Knowledge Base[/bold]\n  {config.get('knowledge_base_path', '(not set)')}\n\n"
+        f"[bold]Strategy[/bold]\n  {strategy_display}\n"
+        f"  Valid values: {', '.join(sorted(VALID_STRATEGIES))}\n\n"
         f"[dim]The core CLI stores no model credentials or handler configuration.[/dim]",
         border_style="cyan",
     ))
@@ -1641,6 +1690,11 @@ def config_set(
             )
         value = str(resolved)
         target[keys[-1]] = value
+    elif key == "strategy":
+        from knowledge_studio.config import set_strategy as _set_strategy
+        _set_strategy(value)
+        console.print(f"[green]Set:[/green] strategy = {value}")
+        return
     elif value.lower() in ("true", "false"):
         target[keys[-1]] = value.lower() == "true"
     elif value.isdigit():

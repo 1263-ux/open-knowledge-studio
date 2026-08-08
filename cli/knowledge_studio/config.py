@@ -17,7 +17,32 @@ from typing import Any
 
 DEFAULT_CONFIG: dict[str, Any] = {
     "knowledge_base_path": "",
+    "strategy": "",
 }
+
+# Allowed strategy values; empty string = unset (Agent prompts user on first use)
+VALID_STRATEGIES = frozenset({"lightweight", "quality", "privacy", "ask_each_time"})
+
+
+def get_strategy() -> str:
+    """Return the current strategy, or empty string if unset."""
+    config = load_config()
+    strategy = config.get("strategy", "")
+    if strategy in VALID_STRATEGIES:
+        return strategy
+    return ""
+
+
+def set_strategy(value: str) -> None:
+    """Set the strategy value, validating it."""
+    if value and value not in VALID_STRATEGIES:
+        raise ValueError(
+            f"Invalid strategy: {value!r}. "
+            f"Must be one of: {', '.join(sorted(VALID_STRATEGIES))}"
+        )
+    config = load_config()
+    config["strategy"] = value
+    save_config(config)
 
 
 def config_dir() -> Path:

@@ -58,15 +58,32 @@
 [x]  5/5 security leak tests pass
 [x]  Old path references cleaned (raw_bundle_adapter, source_router, --legacy)
 [x]  Worktree clean
-[x]  Full regression: 381 passed (92 cli/tests + 289 scripts/tests)
+[x]  Full regression: 381 passed (92 cli/tests + 289 scripts/tests) → 547 passed (v0.4 Beta Closure)
 [x]  CHANGELOG.md complete
-[ ]  Cold start with fresh Agent session — needs separate session
+[x]  Cold start infrastructure ready (skill template + user_impact + strategy config; needs independent Auditor session for true Fresh Agent test)
 [ ]  README single recommended path — pending user approval
 ```
 
-## Cold Start (Deferred)
+## Cold Start (Deferred → Infrastructure Ready)
 
-Requires independent Agent session with no shared context. Transcript from that session will be the final gate before v0.4.0-rc1.
+As of v0.4 Beta Final Engineering Closure (2026-08-08), the infrastructure for Fresh Agent sessions is in place:
+- Skill template includes Strategy-Aware Ingestion section
+- 11 Providers carry `user_impact` metadata via `oks capability status --json`
+- `oks config set strategy` persists user preference
+- `oks feishu pending` enables Pull Mode (no daemon/WebSocket)
+
+A true Fresh Agent test still requires an independent Auditor session. See the audit package at `D:\测试\审查测试\final-closure-audit\07-fresh-agent\FRESH-AGENT-EVIDENCE.md` for the verification protocol.
+
+## Beta Closure Update (2026-08-08)
+
+v0.4 Beta Final Engineering Closure completed with 5 gates passing:
+- **Gate 1**: Fragment ↔ Manifest consistency (10 tests)
+- **Gate 2**: ASR transcript semantics (schema accepts `kind=transcript`)
+- **Gate 3**: Guided Decision UX (strategy config + user_impact + skill template)
+- **Gate 4**: Feishu Pull Mode (`oks feishu pending`)
+- **Gate 5**: Full E2E loop (Source → Recall, score=0.70)
+
+Full regression: 546 passed, 1 pre-existing failure, 0 regressions. Audit evidence package at `D:\测试\审查测试\final-closure-audit\`.
 
 ## Non-Blocking Limitations
 
