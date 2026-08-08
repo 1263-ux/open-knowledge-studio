@@ -50,7 +50,7 @@ v0.4.0-dev（最小可分发 Beta）已完成，v0.4 Beta Final Engineering Clos
 
 - **[核心架构](architecture/oks-core-architecture.md)** — v0.4.0 当前主事实源
 - **[工程轮次 2-3](engineering-rounds-2-3.md)** — v0.3.0 合并后的架构加固与安全修复
-- **v0.4 Beta Final Engineering Closure** — 审计包 `D:\测试\审查测试\final-closure-audit\`（5 Gate 全部通过，547 测试，完整 E2E 闭环）
+- **v0.4 Beta Final Engineering Closure** — 5 Gate 全部通过，547 测试，完整 E2E 闭环，独立审计已完成
 
 多模态 Raw 协议的机器事实源位于本仓库 `schemas/`；Studio 只保留生命周期和调用入口。
 

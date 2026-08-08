@@ -2,7 +2,7 @@
 
 ## v0.4.0 (Unreleased — Beta Final Engineering Closure 2026-08-08)
 
-> v0.4 Beta Final Engineering Closure 完成：5 Gates 通过，547 tests（546 passed, 1 pre-existing），0 regressions。审计证据包：`D:\测试\审查测试\final-closure-audit\`。
+> v0.4 Beta Final Engineering Closure 完成：5 Gates 通过，547 tests（546 passed, 1 pre-existing），0 regressions。
 
 ### Breaking Changes
 

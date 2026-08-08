@@ -1,7 +1,6 @@
 # Open Knowledge Studio
 
 > **v0.4 Beta Final Engineering Closure** — 5 gates passed, 555 tests, 0 regressions.
-> Clean commit: `6bff406`. Full audit evidence at `D:\测试\审查测试\final-closure-audit\`.
 
 A file-based knowledge workspace for Claude Code and compatible Agents.
 OKS helps Agents turn sources into reviewed, traceable and recallable knowledge.
@@ -157,7 +156,6 @@ MIT
 ## 中文
 
 > **v0.4 Beta 最终工程收口** — 5 个验证 Gate 全部通过，555 项测试，0 回归。
-> 干净 Commit：`6bff406`。完整审计证据包见 `D:\测试\审查测试\final-closure-audit\`。
 
 Open Knowledge Studio 是一个面向 Claude Code 和兼容 Agent 的文件式知识工作区。
 

@@ -72,7 +72,7 @@ As of v0.4 Beta Final Engineering Closure (2026-08-08), the infrastructure for F
 - `oks config set strategy` persists user preference
 - `oks feishu pending` enables Pull Mode (no daemon/WebSocket)
 
-A true Fresh Agent test still requires an independent Auditor session. See the audit package at `D:\测试\审查测试\final-closure-audit\07-fresh-agent\FRESH-AGENT-EVIDENCE.md` for the verification protocol.
+A true Fresh Agent test still requires an independent Auditor session. The Fresh Agent verification protocol is documented in the audit evidence package.
 
 ## Beta Closure Update (2026-08-08)
 
@@ -83,7 +83,7 @@ v0.4 Beta Final Engineering Closure completed with 5 gates passing:
 - **Gate 4**: Feishu Pull Mode (`oks feishu pending`)
 - **Gate 5**: Full E2E loop (Source → Recall, score=0.70)
 
-Full regression: 546 passed, 1 pre-existing failure, 0 regressions. Audit evidence package at `D:\测试\审查测试\final-closure-audit\`.
+Full regression: 546 passed, 1 pre-existing failure, 0 regressions. Audit evidence package available to reviewers on request.
 
 ## Non-Blocking Limitations
 
