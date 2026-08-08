@@ -113,9 +113,9 @@ Do not build a new platform when existing Agent capabilities already do the job.
 ### Documentation
 
 * [Core Architecture](docs/architecture/oks-core-architecture.md)
-* [v0.4.0 RC Acceptance](docs/acceptance/v0.4.0-rc1/summary.md)
+* [Agent-Native Ingest Walkthrough](docs/ingest/agent-native-ingest-walkthrough.md)
+* [Protocol Objects](docs/ingest/protocol-objects.md)
 * [Security — Remote Governance](docs/security/remote-governance.md)
-* [Agent One-Prompt Installation](docs/deployment/agent-one-prompt-installation.md)
 
 ### Migration from v0.3.x
 
@@ -204,6 +204,6 @@ v0.4.0 已移除旧 extractor 链路：
 ### 详细文档
 
 * [核心架构](docs/architecture/oks-core-architecture.md)
-* [v0.4.0 RC 验收报告](docs/acceptance/v0.4.0-rc1/summary.md)
+* [Agent-Native Ingest 操作手册](docs/ingest/agent-native-ingest-walkthrough.md)
+* [协议对象关系](docs/ingest/protocol-objects.md)
 * [安全 — 远程脱敏治理](docs/security/remote-governance.md)
-* [Agent 一键部署与接管提示词](docs/deployment/agent-one-prompt-installation.md)

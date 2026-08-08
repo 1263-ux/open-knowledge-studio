@@ -528,10 +528,10 @@ def _build_capability_summary(
 # Each entry: (user_facing_label, category)
 # Categories: "document" | "web" | "media" | "social" | "platform"
 _USER_CAPABILITY_LABELS: dict[str, tuple[str, str]] = {
-    "pdf-lite": ("PDF 文本提取", "document"),
-    "markitdown": ("Office 文档提取", "document"),
-    "rapidocr": ("图片文字识别（OCR）", "document"),
-    "mineru": ("PDF 深度提取（含排版还原）", "document"),
+    "pdf-lite": ("PDF 文本提取", "pdf"),
+    "markitdown": ("Office 文档提取", "pdf"),
+    "mineru": ("PDF 深度提取（含排版还原）", "pdf"),
+    "rapidocr": ("图片文字识别（OCR）", "image"),
     "trafilatura": ("网页正文提取（静态页面）", "web"),
     "http-fetch": ("网页原始获取", "web"),
     "firecrawl": ("动态网页内容抓取", "web"),
@@ -540,7 +540,7 @@ _USER_CAPABILITY_LABELS: dict[str, tuple[str, str]] = {
     "ffmpeg": ("媒体格式转换", "media"),
     "local-asr": ("本地语音转写", "media"),
     "remote-asr": ("远程语音转写", "media"),
-    "mediacrawler": ("社交平台公开内容采集", "social"),
+    "mediacrawler": ("社交平台公开内容采集", "platform"),
     "agentkey": ("受限平台内容获取（知乎/微信/B站）", "platform"),
 }
 
@@ -612,43 +612,140 @@ def _derive_first_prompts(
     return prompts
 
 
+# ── R4-4: Category-level capability view ────────────────────────────
+
+# Six user-facing capability categories.  Provider names are hidden from
+# the default view — users see WHAT they can do, not WHICH providers exist.
+_CATEGORY_DEFINITIONS: dict[str, dict[str, Any]] = {
+    "text": {
+        "label": "文本与 Markdown",
+        "description": "Markdown / 纯文本直接读取，本地处理，无需额外依赖",
+        "always_available": True,
+    },
+    "web": {
+        "label": "网页读取",
+        "description": "网页抓取与正文提取，支持静态页面与动态渲染",
+    },
+    "pdf": {
+        "label": "PDF 文档处理",
+        "description": "PDF 文本提取、结构解析、扫描件 OCR",
+    },
+    "image": {
+        "label": "图片理解",
+        "description": "图片文字识别（OCR）与语义内容理解",
+    },
+    "media": {
+        "label": "音视频处理",
+        "description": "媒体下载、语音转写、字幕提取",
+    },
+    "platform": {
+        "label": "平台内容",
+        "description": "社交平台与受限平台内容获取",
+    },
+}
+
+
+def _category_status(
+    key: str, doctor_result: dict[str, Any] | None
+) -> str:
+    """Derive a simple status for a capability category.
+
+    Returns one of: "ready" (always-available or has working providers),
+    "available" (has providers, some may need config), "unavailable".
+    """
+    cat = _CATEGORY_DEFINITIONS.get(key, {})
+    if cat.get("always_available"):
+        return "ready"
+
+    if doctor_result is None:
+        return "unavailable"
+
+    # Check if any provider in this category has a useful status
+    # (aggregation is informal — we just check if anything exists)
+    provider_map = {p["id"]: p for p in doctor_result.get("providers", [])}
+
+    # Map category to its relevant providers via _USER_CAPABILITY_LABELS
+    relevant_pids = {
+        pid for pid, (label, cat_name) in _USER_CAPABILITY_LABELS.items()
+        if cat_name == key
+    }
+
+    has_ready = False
+    has_any = False
+    for pid in relevant_pids:
+        p = provider_map.get(pid, {})
+        status = p.get("status", "unavailable")
+        if status == "ready":
+            has_ready = True
+        if status not in ("unavailable",):
+            has_any = True
+
+    if has_ready:
+        return "ready"
+    elif has_any:
+        return "available"
+    return "unavailable"
+
+
+def _build_category_summary(
+    doctor_result: dict[str, Any] | None,
+) -> list[dict[str, Any]]:
+    """Return a simple capability category list for user-facing display.
+
+    No provider IDs, no counts, no weight/latency — just status + name +
+    description.
+    """
+    categories: list[dict[str, Any]] = []
+    for key, cat in _CATEGORY_DEFINITIONS.items():
+        status = _category_status(key, doctor_result)
+        categories.append({
+            "key": key,
+            "label": cat["label"],
+            "description": cat["description"],
+            "status": status,
+        })
+    return categories
+
+
+def _status_indicator(status: str) -> str:
+    """Return a display character for a category status."""
+    if status == "ready":
+        return "✓"
+    elif status == "available":
+        return "○"
+    else:
+        return "✗"
+
+
 def print_capability_summary(
     console: Console,
     doctor_result: dict[str, Any] | None,
 ) -> None:
     """Print a user-facing capability summary after ``oks init``.
 
-    Called from ``init()`` — capability-oriented output that tells users
-    WHAT they can do, not WHICH providers implement it. Internal provider
-    IDs are hidden from the default view; developer details are available
-    via ``oks capability doctor --verbose``.
+    Shows 6 capability categories — no provider IDs, no counts, no
+    weight/latency.  Provider details are available via
+    ``oks capability doctor --verbose``.
     """
-    summary = _build_capability_summary(doctor_result)
-    can_do, can_enable = _describe_ready_capabilities(summary)
+    categories = _build_category_summary(doctor_result)
 
     console.print(f"\n[bold]{t('init_ready')}[/bold]")
 
-    # ── Always-available capabilities ──
-    console.print(f"\n[bold green]{t('init_always_available')}[/bold green]")
-    console.print(f"  [green]✓[/green] {t('cap_markdown_text')}")
-    # Agent multimodal capability depends on the current model — not
-    # unconditionally available for text-only orchestrators.
-    console.print(f"  [dim]?[/dim] {t('cap_agent_multimodal')}")
-
-    # ── Currently available ──
-    if can_do:
-        console.print(f"\n[bold cyan]{t('init_can_do_now')}[/bold cyan]")
-        for c in sorted(can_do):
-            console.print(f"  [green]✓[/green] {c}")
-
-    # ── Can enable later ──
-    if can_enable:
-        console.print(f"\n[bold yellow]{t('init_can_enable')}[/bold yellow]")
-        for c in sorted(can_enable):
-            console.print(f"  [dim]○[/dim] {c}")
+    # ── Category list (6 rows, one per capability family) ──
+    if categories:
+        for cat in categories:
+            indicator = _status_indicator(cat["status"])
+            status_map = {"ready": "green", "available": "yellow", "unavailable": "red"}
+            color = status_map.get(cat["status"], "dim")
+            console.print(
+                f"  [{color}]{indicator}[/{color}] "
+                f"[bold]{cat['label']}[/bold]"
+            )
+            console.print(f"    {cat['description']}")
 
     # ── First-use prompts ──
-    prompts = _derive_first_prompts(can_do)
+    can_do_labels = [cat["label"] for cat in categories if cat["status"] in ("ready", "available")]
+    prompts = _derive_first_prompts(can_do_labels)
     if prompts:
         console.print(f"\n[bold]{t('init_first_prompt')}[/bold]")
         for prompt in prompts:

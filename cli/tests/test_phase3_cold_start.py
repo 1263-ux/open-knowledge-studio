@@ -340,7 +340,11 @@ def test_ingest_prepare_text_creates_valid_envelope(tmp_path):
 
 
 def test_ingest_prepare_non_text_creates_skeleton(tmp_path):
-    """oks ingest prepare for a .pdf file creates a skeleton (text_ready=False)."""
+    """oks ingest prepare for a .pdf file creates a skeleton (text_ready=False).
+
+    R4-5: evidence_records and steps are now pre-filled from the Recipe.
+    text, confidence are null — Agent fills after provider execution.
+    """
     from knowledge_studio.ingest_prepare import prepare_ingest
     import json
 
@@ -354,7 +358,19 @@ def test_ingest_prepare_non_text_creates_skeleton(tmp_path):
     man_path = tmp_path / ".oks" / "runs" / result["run_id"] / "manifest" / "evidence-manifest.json"
     manifest = json.loads(man_path.read_text(encoding="utf-8"))
     assert manifest["status"] == "partial"
-    assert manifest["evidence_records"] == []
+    # R4-5: evidence_records are pre-filled from recipe required_capabilities
+    assert len(manifest["evidence_records"]) >= 1, (
+        "Non-text evidence_records must be pre-filled from recipe"
+    )
+    for rec in manifest["evidence_records"]:
+        assert rec["text"] is None, "Pre-filled text must be None"
+        assert rec["confidence"] is None, "Pre-filled confidence must be None"
+        assert rec["evidence_id"].startswith("ev-")
+        assert rec["artifact_id"].startswith("art-")
+    assert len(manifest["steps"]) >= 1, "Steps must be pre-filled"
+    for step in manifest["steps"]:
+        assert step["provider"] is None, "Pre-filled provider must be None"
+        assert step["status"] == "pending"
 
     import shutil, stat
     def rm(p, f, e):
@@ -1929,3 +1945,668 @@ def test_completeness_by_complete_when_not_capability_count():
         assert "Do NOT mark the ingest as partial" in text or "Do NOT mark as missing" in text, (
             f"{host}/ingest/SKILL.md must forbid marking as partial when fallback succeeded"
         )
+
+
+# ══════════════════════════════════════════════════════════════════════
+# Gate 3A-M-R3: Evidence Provenance Integrity
+# ══════════════════════════════════════════════════════════════════════
+
+
+def test_provider_raw_output_persisted_in_work_dir():
+    """A. Provider raw output MUST be persisted to work/<provider>/
+    BEFORE any Agent semantic processing.
+
+    The SKILL.md must require saving raw output immediately after
+    Provider execution and before EvidenceFragment construction.
+    """
+    for host in ("claude", "agents"):
+        text = _read_skill_text(host)
+        # Must require saving raw output to work/<provider>/
+        assert "work/<provider>" in text, (
+            f"{host}/ingest/SKILL.md missing work/<provider>/ path"
+        )
+        # Must require persistence BEFORE semantic processing
+        assert "BEFORE any Agent semantic processing" in text, (
+            f"{host}/ingest/SKILL.md missing 'BEFORE any Agent semantic processing'"
+        )
+        # Raw output must be described as immutable evidence
+        assert "immutable evidence" in text, (
+            f"{host}/ingest/SKILL.md must describe raw output as 'immutable evidence'"
+        )
+
+
+def test_primary_evidence_must_come_from_persisted_raw_output():
+    """B. Evidence content MUST come from persisted Provider raw output,
+    not from Agent memory or reformulated content.
+
+    The SKILL.md must explicitly require that evidence text is
+    constructed FROM the persisted raw output.
+    """
+    for host in ("claude", "agents"):
+        text = _read_skill_text(host)
+        # Must say evidence text comes from persisted raw output
+        assert "MUST come from the persisted" in text or "from Agent memory" in text, (
+            f"{host}/ingest/SKILL.md must require evidence from persisted raw output"
+        )
+        assert "reformulated" in text, (
+            f"{host}/ingest/SKILL.md must forbid reformulated content"
+        )
+        # Constraint: primary evidence from persisted output
+        assert "construct primary evidence text from persisted Provider raw output" in text, (
+            f"{host}/ingest/SKILL.md missing constraint: construct from persisted raw output"
+        )
+
+
+def test_agent_rewrite_cannot_claim_mechanical_provenance():
+    """C. Agent-rewritten content MUST NOT be labeled mechanical or with
+    the original Provider as producer.
+
+    After summarization, reorganization, annotation, etc., the content
+    MUST be marked agent_observed with producer=agent-runtime.
+    """
+    for host in ("claude", "agents"):
+        text = _read_skill_text(host)
+        # Must forbid claiming mechanical for Agent-written content
+        assert "MUST NOT label Agent-rewritten" in text or (
+            "Agent-rewritten" in text and "mechanical" in text
+        ), (
+            f"{host}/ingest/SKILL.md must forbid labeling Agent rewrites as mechanical"
+        )
+        # Must require agent-runtime as producer for rewritten content
+        prohibited_ops = [
+            "Summarization",
+            "Reorganization",
+            "Deletion of semantic content",
+            "Translation",
+            "Adding explanation",
+            "Adding headers",
+            "Cross-paragraph merging",
+        ]
+        for op in prohibited_ops:
+            assert op in text, (
+                f"{host}/ingest/SKILL.md missing prohibited operation: {op}"
+            )
+        # The table must clearly separate allowed from prohibited
+        assert "Allowed — keeps `mechanical`" in text, (
+            f"{host}/ingest/SKILL.md missing mechanical-vs-agent_observed table"
+        )
+        assert "Prohibited — forces `agent_observed`" in text, (
+            f"{host}/ingest/SKILL.md missing prohibited column header"
+        )
+
+
+def test_agent_rewrite_must_create_separate_fragment():
+    """D. Agent-processed content MUST create a separate fragment with
+    agent-runtime as producer, preserving the original Provider fragment.
+
+    The derivation chain must be traceable through artifact_id.
+    """
+    for host in ("claude", "agents"):
+        text = _read_skill_text(host)
+        # Must require separate fragment for Agent-processed content
+        assert "separate" in text and "fragment" in text, (
+            f"{host}/ingest/SKILL.md must require separate fragment for Agent rewrite"
+        )
+        assert "agent-runtime" in text, (
+            f"{host}/ingest/SKILL.md missing agent-runtime producer reference"
+        )
+        # Must keep original Provider fragment intact
+        assert "Keep the original Provider fragment" in text, (
+            f"{host}/ingest/SKILL.md must say to keep original fragment intact"
+        )
+        # Derivation chain must be traceable
+        assert "derivation chain" in text or "traceable through" in text, (
+            f"{host}/ingest/SKILL.md must document derivation chain traceability"
+        )
+        # artifact_id as the link
+        assert "artifact_id" in text, (
+            f"{host}/ingest/SKILL.md must reference artifact_id for traceability"
+        )
+        # MUST constraint
+        assert "separate agent-runtime fragment" in text, (
+            f"{host}/ingest/SKILL.md missing MUST constraint for separate agent-runtime fragment"
+        )
+
+
+def test_illegal_provenance_blocks_complete():
+    """E. Provenance legality is a HARD prerequisite for status=complete.
+
+    If any evidence record's agent_judgment doesn't match the actual
+    origin of its text, the ingest is incomplete regardless of
+    complete_when satisfaction.
+    """
+    for host in ("claude", "agents"):
+        text = _read_skill_text(host)
+        # Provenance completeness prerequisites section must exist
+        assert "Provenance completeness prerequisites" in text, (
+            f"{host}/ingest/SKILL.md missing provenance completeness prerequisites"
+        )
+        # Provenance legality is a HARD prerequisite
+        assert "HARD prerequisite" in text, (
+            f"{host}/ingest/SKILL.md must say provenance legality is a HARD prerequisite"
+        )
+        # Illegal provenance blocks complete regardless of complete_when
+        assert "illegal provenance" in text or "provenance is illegal" in text, (
+            f"{host}/ingest/SKILL.md must mention illegal provenance"
+        )
+        # Must verify provenance before declaring complete
+        assert "verify provenance legality before declaring ingest status complete" in text, (
+            f"{host}/ingest/SKILL.md missing verify-provenance constraint"
+        )
+        # Three prerequisites must all be present
+        assert "Raw Provider output persisted" in text, (
+            f"{host}/ingest/SKILL.md missing prerequisite: raw output persisted"
+        )
+        assert "Provenance legal" in text, (
+            f"{host}/ingest/SKILL.md missing prerequisite: provenance legal"
+        )
+        # Must mention the specific violations
+        assert "NO record marked `mechanical` contains Agent-written" in text or (
+            "NO record" in text and "mechanical" in text and "Agent-written" in text
+        ), (
+            f"{host}/ingest/SKILL.md must list specific provenance violations"
+        )
+
+
+def test_cjk_sanitization_provenance_regression():
+    """F. CJK-adjacent sk- sanitization must still work (regression guard).
+
+    The sanitizer continues to redact credentials before Provider raw
+    output enters the Run Workspace.  Security sanitization is listed
+    as an allowed mechanical transform in the provenance table.
+    """
+    # Re-run the CJK redaction test from R1 to confirm no regression
+    from knowledge_studio.security.redaction import redact_text
+
+    cases = [
+        "密钥为sk-proj-abc123xyz789def456ghi012jkl345mno",
+        "API密钥：sk-c0b1f0123456789abcdef0123456789abcd",
+        "设置sk-proj-0123456789abcdef0123456789abcdef为环境变量",
+    ]
+    for text_input in cases:
+        result = redact_text(text_input)
+        assert "sk-" not in result, (
+            f"CJK-adjacent sk- key NOT redacted after R3 changes!\n"
+            f"  Input:  {text_input[:80]}\n"
+            f"  Output: {result[:80]}"
+        )
+        assert "***REDACTED***" in result
+
+    # Also verify: sanitization is documented as allowed mechanical in SKILL.md
+    for host in ("claude", "agents"):
+        text = _read_skill_text(host)
+        assert "Security sanitization" in text, (
+            f"{host}/ingest/SKILL.md missing sanitization in provenance table"
+        )
+        assert "API key redaction" in text or "API key" in text, (
+            f"{host}/ingest/SKILL.md missing API key redaction mention"
+        )
+        # Sanitize before saving must still be present
+        assert "sanitize before saving" in text, (
+            f"{host}/ingest/SKILL.md missing 'sanitize before saving' instruction"
+        )
+
+
+# ══════════════════════════════════════════════════════════════════════
+# Gate R4: Provenance Hardening + Capability Rationalization + Protocol
+# ══════════════════════════════════════════════════════════════════════
+
+
+# ── R4-1: Fail-closed provenance ────────────────────────────────────
+
+def test_fail_closed_provenance_in_skill():
+    """R4-1: SKILL.md must reject self-reported raw output saves.
+    'self-reported' + 'not sufficient' or 'not proof' must appear."""
+    for host in ("claude", "agents"):
+        text = _read_skill_text(host)
+        assert "self-reported" in text, (
+            f"{host}/ingest/SKILL.md must reject self-reported save"
+        )
+        assert "not sufficient" in text or "not proof" in text, (
+            f"{host}/ingest/SKILL.md must say self-reported is not sufficient/proof"
+        )
+        assert ">0 bytes" in text, (
+            f"{host}/ingest/SKILL.md must require >0 bytes file check"
+        )
+        # 4th provenance prerequisite must exist
+        assert "Raw output verified" in text, (
+            f"{host}/ingest/SKILL.md missing 4th prerequisite: Raw output verified"
+        )
+        # Fail-closed language
+        assert "Fail-closed" in text or "fail-closed" in text.lower(), (
+            f"{host}/ingest/SKILL.md must mention fail-closed principle"
+        )
+
+
+def test_raw_output_must_exist_before_evidence_construction():
+    """R4-1: Step 4 must require file existence verification before proceeding."""
+    for host in ("claude", "agents"):
+        text = _read_skill_text(host)
+        assert "verify the file exists" in text, (
+            f"{host}/ingest/SKILL.md must require file existence check in Step 4"
+        )
+        assert "MUST NOT proceed" in text, (
+            f"{host}/ingest/SKILL.md must forbid proceeding on write failure"
+        )
+        # Constraint about verification before complete
+        assert "MUST verify raw output file existence" in text, (
+            f"{host}/ingest/SKILL.md missing raw output verification constraint"
+        )
+
+
+# ── R4-2: Runtime Tool vs Registered Provider ───────────────────────
+
+def test_runtime_tool_vs_registered_provider_section():
+    """R4-2: SKILL.md must have a Runtime Tool vs Registered Provider section."""
+    for host in ("claude", "agents"):
+        text = _read_skill_text(host)
+        assert "Runtime Tool vs Registered Provider" in text, (
+            f"{host}/ingest/SKILL.md missing Runtime Tool vs Registered Provider section"
+        )
+        assert "Registered Provider" in text, (
+            f"{host}/ingest/SKILL.md must define Registered Provider category"
+        )
+        assert "Runtime Tool" in text, (
+            f"{host}/ingest/SKILL.md must define Runtime Tool category"
+        )
+        # Must explicitly list runtime tool examples
+        assert "curl" in text.lower(), (
+            f"{host}/ingest/SKILL.md must mention curl as Runtime Tool"
+        )
+        assert "playwright" in text.lower(), (
+            f"{host}/ingest/SKILL.md must mention playwright as Runtime Tool"
+        )
+
+
+def test_runtime_tool_impersonation_rules():
+    """R4-2: SKILL.md must forbid Runtime Tools impersonating Registered Providers."""
+    for host in ("claude", "agents"):
+        text = _read_skill_text(host)
+        # Impersonation rules
+        assert "MUST NOT label curl" in text or "MUST NOT claim" in text, (
+            f"{host}/ingest/SKILL.md missing impersonation rule for curl"
+        )
+        assert "MUST NOT claim" in text or "MUST NOT label" in text, (
+            f"{host}/ingest/SKILL.md missing impersonation rules"
+        )
+        # Runtime tool producer value
+        assert 'runtime-tool' in text, (
+            f"{host}/ingest/SKILL.md must reference runtime-tool producer value"
+        )
+        # Distinguish constraint
+        assert "MUST distinguish Runtime Tool" in text, (
+            f"{host}/ingest/SKILL.md missing distinguish Runtime Tool constraint"
+        )
+
+
+def test_producer_schema_is_object():
+    """R4-2: fragment schema producer must be an object (not flat enum).
+    This fixes the pre-existing bug where prepare_ingest outputs an object
+    but the schema expected a string enum."""
+    from importlib.resources import files
+    import json
+
+    schema_path = files("knowledge_studio.schemas").joinpath("evidence-fragment-v0.1.schema.json")
+    schema = json.loads(schema_path.read_text(encoding="utf-8"))
+    producer = schema["properties"]["producer"]
+    assert producer["type"] == "object", (
+        f"producer must be type=object, got {producer.get('type')}"
+    )
+    assert "provider" in producer.get("required", []), (
+        "producer object must require 'provider' field"
+    )
+    assert "tool" in producer.get("required", []), (
+        "producer object must require 'tool' field"
+    )
+    # provider field must allow 'agent-runtime', 'runtime-tool'
+    provider_prop = producer["properties"]["provider"]
+    # No enum restriction — free-form string
+    assert "enum" not in provider_prop, (
+        "producer.provider must not be restricted by enum — "
+        "must allow agent-runtime, runtime-tool, and any registered provider ID"
+    )
+
+
+# ── R4-3: Capability cost facts ─────────────────────────────────────
+
+def test_provider_yamls_no_r4_weight_fields():
+    """H1: R4 weight/latency/compute/privacy/cost_profile/platform_suitability
+    fields must NOT be present in any provider.yaml.  These were rolled back."""
+    from knowledge_studio.capability_commands import _scan_providers, _providers_root
+
+    providers = _scan_providers(_providers_root())
+    r4_fields = {"weight", "latency", "compute", "privacy",
+                 "cost_profile", "platform_suitability"}
+    present: list[str] = []
+    for p in providers:
+        pid = p.get("id", p.get("_dir", "unknown"))
+        for field in r4_fields:
+            if field in p:
+                present.append(f"{pid}: has {field}")
+    assert not present, (
+        f"R4 fields should have been rolled back:\n"
+        + "\n".join(f"  - {m}" for m in present)
+    )
+
+
+def test_capability_status_no_r4_cost_facts():
+    """H1: capability_status() must NOT include R4 cost fact fields."""
+    from knowledge_studio.capability_commands import capability_status
+
+    result = capability_status()
+    r4_fields = ("weight", "latency", "compute", "privacy", "cost_profile")
+    for p in result["providers"]:
+        for field in r4_fields:
+            assert field not in p, (
+                f"provider {p['id']} should not have R4 field '{field}'"
+            )
+
+
+def test_ingest_skill_does_not_reference_static_labels():
+    """H1: SKILL.md must NOT reference static weight/latency for provider selection."""
+    for host in ("claude", "agents"):
+        text = _read_skill_text(host)
+        assert "prefer lower weight" not in text, (
+            f"{host}/ingest/SKILL.md should not have static weight preference"
+        )
+        assert "prefer lower cost" not in text, (
+            f"{host}/ingest/SKILL.md should not have static cost preference"
+        )
+
+
+# ── H1-C: User-facing capability categories ─────────────────────────
+
+def test_category_summary_returns_6_categories():
+    """H1-C: _build_category_summary must return exactly 6 capability categories."""
+    from knowledge_studio.capability_commands import (
+        _build_category_summary, capability_doctor,
+    )
+
+    doctor = capability_doctor()
+    categories = _build_category_summary(doctor)
+    assert len(categories) == 6, (
+        f"Expected 6 categories, got {len(categories)}: "
+        f"{[c['key'] for c in categories]}"
+    )
+    expected_keys = {"text", "web", "pdf", "image", "media", "platform"}
+    actual_keys = {c["key"] for c in categories}
+    assert actual_keys == expected_keys, (
+        f"Category keys mismatch. Expected {expected_keys}, got {actual_keys}"
+    )
+    for cat in categories:
+        assert "label" in cat
+        assert "status" in cat
+        assert cat["status"] in ("ready", "available", "unavailable")
+        # Must NOT have weight/latency/count
+        assert "weight" not in cat, f"Category '{cat['key']}' should not have weight"
+        assert "latency" not in cat, f"Category '{cat['key']}' should not have latency"
+        assert "ready_count" not in cat, f"Category '{cat['key']}' should not have ready_count"
+
+
+def test_init_output_uses_categories_not_provider_ids():
+    """R4-4: default print_capability_summary must show category labels,
+    not internal provider IDs."""
+    from knowledge_studio.capability_commands import (
+        _build_category_summary, capability_doctor,
+    )
+
+    doctor = capability_doctor()
+    categories = _build_category_summary(doctor)
+
+    # Category labels must be Chinese user-facing names
+    for cat in categories:
+        label = cat["label"]
+        # Must be Chinese, not an internal ID
+        assert label != cat["key"], (
+            f"Category label '{label}' should be Chinese, not key '{cat['key']}'"
+        )
+        # Must not contain provider IDs
+        assert "pdf-lite" not in label.lower(), f"Category label '{label}' exposes provider ID"
+
+
+# ── R4-5: Pre-filled evidence skeleton ──────────────────────────────
+
+def test_ingest_prepare_prefills_evidence_slots_for_non_text():
+    """R4-5: Non-text ingest prepare must pre-fill evidence_records from recipe."""
+    from knowledge_studio.ingest_prepare import prepare_ingest
+    import json
+
+    # Test with PDF
+    f = Path(__file__).parent / "conftest.py"
+    if not f.exists():
+        import pytest
+        pytest.skip("conftest.py not found for test")
+
+    import tempfile
+    tmp = Path(tempfile.mkdtemp())
+    pdf = tmp / "test.pdf"
+    pdf.write_bytes(b"%PDF-1.4 mock")
+
+    result = prepare_ingest(str(pdf), kb_root=tmp)
+    assert result["text_ready"] is False
+
+    man_path = tmp / ".oks" / "runs" / result["run_id"] / "manifest" / "evidence-manifest.json"
+    manifest = json.loads(man_path.read_text(encoding="utf-8"))
+    records = manifest["evidence_records"]
+    steps = manifest["steps"]
+
+    # Must have pre-filled records and steps
+    assert len(records) >= 1, "Non-text must have pre-filled evidence_records"
+    assert len(steps) >= 1, "Non-text must have pre-filled steps"
+
+    # Each record must have all required fields with text/confidence null
+    for rec in records:
+        required_fields = ["evidence_id", "artifact_id", "kind", "method", "locator"]
+        for field in required_fields:
+            assert rec.get(field) is not None, f"Record missing required field: {field}"
+        assert rec.get("text") is None, "Pre-filled record text must be None (Agent fills)"
+        assert rec.get("confidence") is None, "Pre-filled record confidence must be None (Agent fills)"
+        assert rec.get("agent_judgment") is not None, "Pre-filled record must have default agent_judgment"
+
+    # Each step must have provider=None, status=pending
+    for step in steps:
+        assert step.get("provider") is None, "Pre-filled step provider must be None (Agent fills)"
+        assert step.get("status") == "pending", f"Pre-filled step status must be pending, got {step.get('status')}"
+
+    import shutil, stat
+    def rm(p, fn, ex): Path(p).chmod(stat.S_IWRITE); fn(p)
+    shutil.rmtree(tmp / ".oks", onexc=rm)
+
+
+def test_prefilled_skeleton_parses_recipe_correctly():
+    """R4-5: _parse_recipe_capabilities must extract correct capability IDs."""
+    from knowledge_studio.ingest_prepare import _parse_recipe_capabilities
+    from importlib.resources import files
+
+    # Test with known recipes — required capabilities only
+    for modality, expected_caps in [
+        ("pdf", ["document.text.extract"]),
+        ("web", ["web.fetch", "web.extract"]),
+        ("image", ["image.observe"]),
+    ]:
+        recipe_path = files("knowledge_studio.recipes").joinpath(f"{modality}.md")
+        if not recipe_path.is_file():
+            continue
+        recipe = recipe_path.read_text(encoding="utf-8")
+        caps = _parse_recipe_capabilities(recipe, "required_capabilities")
+        for expected in expected_caps:
+            assert expected in caps, (
+                f"{modality} recipe: missing required capability '{expected}' "
+                f"in parsed result: {caps}"
+            )
+        # Must not include optional capabilities
+        if "optional_capabilities" in recipe:
+            optional = _parse_recipe_capabilities(recipe, "optional_capabilities")
+            assert optional, f"{modality} must have optional capabilities"
+
+
+def test_capability_to_evidence_mappings_are_complete():
+    """R4-5: All 25 capability IDs in actions.yaml must have mappings."""
+    from knowledge_studio.ingest_prepare import (
+        _capability_to_kind, _capability_to_method,
+        _capability_to_locator_kind, _capability_default_judgment,
+        _capability_modality,
+    )
+    from importlib.resources import files
+
+    actions_yaml = files("knowledge_studio.capabilities").joinpath("actions.yaml")
+    text = actions_yaml.read_text(encoding="utf-8")
+
+    # Parse action IDs
+    action_ids: set[str] = set()
+    in_actions = False
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped == "actions:":
+            in_actions = True
+            continue
+        if in_actions:
+            if stripped and not line.startswith(" ") and not line.startswith("\t"):
+                break
+            if stripped and not stripped.startswith("#") and ":" in stripped:
+                aid = stripped.split(":")[0].strip()
+                if aid:
+                    action_ids.add(aid)
+
+    # Skip source.fetch (not a direct evidence capability in recipes)
+    for cap in action_ids:
+        if cap == "source.fetch":
+            continue
+        # Every action must have a kind, method, locator, judgment, and modality mapping
+        kind = _capability_to_kind(cap)
+        method = _capability_to_method(cap)
+        locator = _capability_to_locator_kind(cap)
+        judgment = _capability_default_judgment(cap)
+        modality = _capability_modality(cap)
+        assert kind, f"Capability '{cap}' has no kind mapping"
+        assert method, f"Capability '{cap}' has no method mapping"
+        assert locator, f"Capability '{cap}' has no locator mapping"
+        assert judgment, f"Capability '{cap}' has no judgment mapping"
+        assert modality, f"Capability '{cap}' has no modality mapping"
+
+
+# ══════════════════════════════════════════════════════════════════════
+# Gate H1: Evidence Integrity + Agent Contract + User UX
+# ══════════════════════════════════════════════════════════════════════
+
+
+# ── H1-A: Evidence provenance verification ──────────────────────────
+
+def test_registered_provider_without_work_output_rejected(monkeypatch, tmp_path):
+    """H1-A: status=complete with registered provider but no work/ output → rejected."""
+    import json, shutil, stat as _stat
+    from knowledge_studio.ingest_prepare import prepare_ingest
+    from knowledge_studio.raw_commit import raw_commit, CommitError
+
+    monkeypatch.setenv("OKS_ROOT", str(tmp_path))
+
+    f = tmp_path / "test.md"
+    f.write_text("# Test\nContent.", encoding="utf-8")
+
+    result = prepare_ingest(str(f), kb_root=tmp_path)
+    assert result["text_ready"] is True
+
+    # Manually change manifest to claim a registered provider
+    man_path = tmp_path / ".oks" / "runs" / result["run_id"] / "manifest" / "evidence-manifest.json"
+    manifest = json.loads(man_path.read_text(encoding="utf-8"))
+    manifest["status"] = "complete"
+    manifest["steps"] = [
+        {"capability": "web.fetch", "provider": "firecrawl",
+         "status": "succeeded", "reason": None}
+    ]
+    manifest["evidence_records"][0]["agent_judgment"] = "mechanical"
+    man_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    # No work/firecrawl/ directory exists → should be rejected
+    try:
+        raw_commit(result["manifest_dir"])
+        assert False, "Should have raised CommitError"
+    except CommitError as exc:
+        assert exc.code == "VALIDATION_FAILED"
+        error_codes = {e["code"] for e in exc.details.get("errors", [])}
+        assert "PROVENANCE_UNVERIFIABLE" in error_codes, (
+            f"Expected PROVENANCE_UNVERIFIABLE in errors, got {error_codes}"
+        )
+
+    shutil.rmtree(tmp_path / ".oks", ignore_errors=True)
+    shutil.rmtree(tmp_path / "raw", ignore_errors=True)
+
+
+def test_runtime_tool_no_work_output_accepted(monkeypatch, tmp_path):
+    """H1-A: runtime-tool provider does not need work/ output."""
+    import json, shutil, stat as _stat
+    from knowledge_studio.ingest_prepare import prepare_ingest
+    from knowledge_studio.raw_commit import raw_commit
+
+    monkeypatch.setenv("OKS_ROOT", str(tmp_path))
+
+    f = tmp_path / "test.md"
+    f.write_text("# Test\nContent.", encoding="utf-8")
+
+    result = prepare_ingest(str(f), kb_root=tmp_path)
+    assert result["text_ready"] is True
+
+    # Change step to claim runtime-tool (which is exempt from work/ check)
+    man_path = tmp_path / ".oks" / "runs" / result["run_id"] / "manifest" / "evidence-manifest.json"
+    manifest = json.loads(man_path.read_text(encoding="utf-8"))
+    manifest["steps"] = [
+        {"capability": "web.fetch", "provider": "runtime-tool",
+         "status": "degraded", "reason": "used curl as fallback"}
+    ]
+    man_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    # Should succeed — runtime-tool is exempt
+    commit_result = raw_commit(result["manifest_dir"])
+    assert commit_result["status"] == "committed"
+
+    shutil.rmtree(tmp_path / ".oks", ignore_errors=True)
+    shutil.rmtree(tmp_path / "raw", ignore_errors=True)
+
+
+# ── H1-B: Agent contract simplification ─────────────────────────────
+
+def test_ingest_prepare_returns_candidate_providers(tmp_path):
+    """H1-B: ingest prepare must return candidate_providers for non-text sources."""
+    from knowledge_studio.ingest_prepare import prepare_ingest
+
+    f = tmp_path / "test.pdf"
+    f.write_bytes(b"%PDF-1.4 mock")
+
+    result = prepare_ingest(str(f), kb_root=tmp_path)
+    assert result["text_ready"] is False
+    assert "candidate_providers" in result, (
+        "ingest prepare must return candidate_providers"
+    )
+    candidates = result["candidate_providers"]
+    assert isinstance(candidates, list), "candidate_providers must be a list"
+    # PDF recipe requires document.text.extract — there should be candidates
+    assert len(candidates) >= 1, (
+        f"Expected >=1 candidate providers for PDF, got {len(candidates)}"
+    )
+    for c in candidates:
+        assert "id" in c, f"candidate missing id: {c}"
+        assert "label" in c, f"candidate missing label: {c}"
+        assert "status" in c, f"candidate missing status: {c}"
+
+    import shutil
+    shutil.rmtree(tmp_path / ".oks", ignore_errors=True)
+
+
+def test_ingest_prepare_generates_work_output_for_text_ready(tmp_path):
+    """H1-A: text_ready sources must generate work/text-read/output.md."""
+    from knowledge_studio.ingest_prepare import prepare_ingest
+
+    f = tmp_path / "test.md"
+    f.write_text("# Test\nContent for provenance.", encoding="utf-8")
+
+    result = prepare_ingest(str(f), kb_root=tmp_path)
+    assert result["text_ready"] is True
+
+    # work/text-read/output.md must exist
+    work_output = tmp_path / ".oks" / "runs" / result["run_id"] / "work" / "text-read" / "output.md"
+    assert work_output.is_file(), f"work/text-read/output.md must exist at {work_output}"
+    content = work_output.read_text(encoding="utf-8")
+    assert "Content for provenance" in content
+
+    import shutil
+    shutil.rmtree(tmp_path / ".oks", ignore_errors=True)

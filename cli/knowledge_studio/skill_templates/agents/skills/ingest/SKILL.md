@@ -22,8 +22,22 @@ Run `oks ingest prepare <source>` to create the workspace and generate
 the protocol skeleton (source-envelope.json, evidence-manifest.json,
 artifacts/).  This command fills all deterministic fields — source_id,
 content_hash, schema_version, timestamps, artifact hashes — so the
-Agent only needs to supply evidence content.  For text sources the
-skeleton includes pre-filled evidence fragments.
+Agent only needs to supply evidence content.
+
+**For text sources** (text_ready=true): SourceEnvelope, EvidenceManifest,
+EvidenceFragment, and artifact are all pre-filled — skip to Step 6.
+
+**For non-text sources** (text_ready=false): The skeleton includes pre-filled
+evidence record slots for every required capability from the Recipe.
+Each slot has `evidence_id`, `artifact_id`, `kind`, `method`, and `locator`
+already filled — the Agent only fills `text`, `confidence`, and
+`agent_judgment` after executing providers.  Steps are also pre-filled with
+expected capabilities (provider and status left for Agent to fill).
+
+The output also includes `candidate_providers` — a shortlist of 2–4
+providers that cover the required capabilities.  The Agent selects from
+this shortlist rather than scanning all 17 providers.  Use
+`oks capability status --json` only when you need full provider details.
 
 DO NOT manually construct SourceEnvelope, EvidenceManifest, or
 EvidenceFragment JSON.  Use `oks schema show <name>` to inspect
@@ -111,6 +125,13 @@ capabilities — not one provider per capability.**
 Do not pursue optional capabilities at higher degradation levels —
 optional means optional.
 
+**When multiple providers satisfy the same capability**, `oks ingest prepare`
+returns a `candidate_providers` shortlist of 2–4 relevant providers covering
+the required capabilities.  The Agent selects from this shortlist based on
+availability, maturity, and the provider's declared limits — not a static
+weight/cost score.  For environments where privacy matters (sensitive
+internal documents), prefer providers that run locally.
+
 A single provider often satisfies multiple demands at once.  For example:
 - **Firecrawl** one execution → `web.fetch` + `web.extract` + `metadata.fetch` (3 capabilities, 1 call)
 - **Agent Runtime** one observation → `image.observe` + `layout.understand` + `chart.interpret` (3 capabilities, 1 observation)
@@ -123,10 +144,27 @@ EvidenceFragments — do NOT iterate per capability.
 
 ### For each chosen provider:
 
-1. Call the tool (Bash / MCP / API / Agent vision) **once**
-2. Save raw output to `.oks/runs/{run_id}/work/{provider}/`
-3. **For external providers: sanitize before saving.**  Run `oks security sanitize .oks/runs/{run_id}/work/{provider}/output.json` to strip API keys, bearer tokens, session cookies, and internal IPs from the raw output before it enters the Raw Bundle.
-4. Construct **one EvidenceFragment per satisfied capability** — not one per provider.  Get the fragment schema: `oks schema show evidence-fragment`
+1. Call the tool (Bash / MCP / API / Agent vision) **once**.
+2. **IMMEDIATELY persist the Provider's raw output** to
+   `.oks/runs/{run_id}/work/{provider}/output.<ext>`.
+   This MUST happen BEFORE any Agent semantic processing — at this point
+   the saved output is the Provider's original response, unmodified
+   except for security sanitization (step 3).  The persisted raw output
+   is immutable evidence of what the Provider actually produced.
+   **After writing, verify the file exists and has content (>0 bytes).**
+   If the write fails or the file is empty, the Agent MUST NOT proceed
+   with this provider's evidence — the raw output is the only proof
+   that the Provider actually produced something.  Self-reported "saved"
+   is not sufficient.
+3. **For external providers: sanitize before saving.**  Run
+   `oks security sanitize .oks/runs/{run_id}/work/{provider}/output.json`
+   to strip API keys, bearer tokens, session cookies, and internal IPs
+   from the raw output before it enters the Run Workspace.
+4. Only after the raw output is safely persisted: read it, understand it,
+   and construct **one EvidenceFragment per satisfied capability**.
+   The text content in each evidence record MUST come from the persisted
+   raw output, not from Agent memory or reformulated/reorganized content.
+   Get the fragment schema: `oks schema show evidence-fragment`
 
 ### Provider-specific evidence construction:
 
@@ -149,6 +187,50 @@ EvidenceFragments — do NOT iterate per capability.
   does not contain a providers/ directory.  Provider guides are served through the CLI.
 - Fragment per page OR one fragment covering all pages with `locator: {kind: "page", page: N}`
 - `producer.provider: "pdf-lite"`, `agent_judgment: "mechanical"`
+
+### Provenance Integrity: mechanical vs agent_observed
+
+Every evidence record carries two provenance signals at different levels:
+
+- **Fragment-level `producer`**: who produced the CONTENT in this fragment
+- **Record-level `agent_judgment`**: whether the text is a deterministic
+  transform of Provider output (`mechanical`) or Agent interpretation
+  (`agent_observed`)
+
+**`mechanical`** is ONLY for deterministic, non-semantic transforms of
+Provider output:
+
+| Allowed — keeps `mechanical` | Prohibited — forces `agent_observed` |
+|---|---|
+| Security sanitization (API key redaction) | Summarization |
+| Encoding normalization (latin1 → utf-8) | Reorganization / reordering |
+| Format extraction (JSON field → text) | Deletion of semantic content |
+| Newline normalization | Translation |
+| | Adding explanation, annotation, commentary |
+| | Adding headers, questions, "Key Insights" |
+| | Cross-paragraph merging or splitting |
+| | Any operation that changes meaning or structure |
+
+**When you perform ANY prohibited operation** on Provider output:
+
+1. Create a **separate** evidence fragment with:
+   - `producer.provider: "agent-runtime"`
+   - `agent_judgment: "agent_observed"`
+   - `method` describing the operation (e.g. `agent_reorganization`,
+     `agent_summary`, `agent_annotated_extraction`)
+   - `artifact_id` referencing the SAME Provider raw output artifact
+     that was persisted in step 2
+2. Keep the original Provider fragment **intact** — do not replace or
+   delete it.  The original fragment retains its original
+   `producer.provider` and `agent_judgment: "mechanical"`.
+3. The derivation chain is traceable through `artifact_id`:
+   - Provider raw output → `work/<provider>/output.<ext>` (artifact)
+   - Provider mechanical fragment → references same `artifact_id`
+   - Agent rewrite fragment → references same `artifact_id`, different
+     `method` and `agent_judgment`
+
+This preserves the audit trail: anyone can compare Agent-processed
+content against the persisted Provider raw output in `work/<provider>/`.
 
 ## Step 5: Coverage Check & Merge into EvidenceManifest
 
@@ -206,6 +288,38 @@ Record every step in `manifest.steps[]` including provider name, capabilities sa
 status, and reason for any fallback.
 
 **If ALL fragments failed — do NOT submit; report failure to user with actionable guidance.**
+
+### Provenance completeness prerequisites
+
+Before declaring `status: "complete"` in the EvidenceManifest, ALL of
+the following MUST be true:
+
+1. **Required Evidence satisfied** — all `complete_when` conditions met
+   (see complete_when coverage check below).
+2. **Raw Provider output persisted** — every Provider execution that
+   contributed evidence has its sanitized raw output saved in
+   `.oks/runs/{run_id}/work/{provider}/`.
+3. **Provenance legal** — every evidence record's `agent_judgment`
+   matches the actual origin of its text content:
+   - `mechanical` → text IS a deterministic transform of Provider output
+     (sanitization, encoding, format extraction, newline normalization)
+   - `agent_observed` → text contains Agent interpretation, and the
+     fragment's `producer` is `"agent-runtime"` (NOT the original
+     Provider)
+   - NO record marked `mechanical` contains Agent-written, reorganized,
+     summarized, annotated, or translated content
+   - NO record whose fragment `producer` is a Provider other than
+     `"agent-runtime"` contains content the Agent rewrote
+4. **Raw output verified** — every `work/<provider>/output.<ext>` file
+   claimed in the provenance chain actually exists on disk and has
+   content (>0 bytes).  Agent MUST check file existence and size before
+   declaring complete — self-reported "I saved it" is NOT proof.  If
+   the file is missing or empty, provenance is illegal and `status`
+   MUST be `"partial"` regardless of `complete_when` satisfaction.
+
+Provenance legality (prerequisites 3 and 4) is a HARD prerequisite — if
+provenance is illegal or unverifiable, the ingest is incomplete regardless
+of `complete_when` satisfaction.  Fail-closed: when in doubt, `status: "partial"`.
 
 ### Missing capability → Guided UX (NOT silent partial)
 
@@ -517,6 +631,45 @@ When the current model lacks a modality:
    cannot see. Do not transcribe audio you cannot hear. Do not invent
    source text you cannot read.
 
+## Runtime Tool vs Registered Provider
+
+Two categories of evidence sources exist.  The distinction matters for
+honest provenance — evidence MUST record which category produced it.
+
+### Registered Provider
+
+Declared in a `provider.yaml` file inside the OKS package.  Listed in
+`oks capability status`.  Has declared capabilities, known limits, costs,
+and maturity levels.  Examples: firecrawl, pdf-lite, rapidocr, agentkey.
+
+When using a Registered Provider:
+- `producer.provider`: the provider ID from `provider.yaml`
+- `producer.tool`: same as provider ID
+- Evidence inherits the provider's declared `agent_judgment` default
+
+### Runtime Tool
+
+Ad-hoc tool available in the current Agent runtime.  NOT declared in any
+`provider.yaml`.  No capability mapping, no known limits, no cost
+declaration.  Examples:
+- `curl` / `wget` — bash HTTP fetch
+- Playwright MCP (`browser_snapshot`, `browser_take_screenshot`)
+- Claude Code built-in browser / file reader
+- Any Bash command that produces evidence content
+
+When using a Runtime Tool:
+- `producer.provider`: `"runtime-tool"` (NOT a registered provider ID)
+- `producer.tool`: the actual tool name, e.g. `"curl"`, `"playwright"`, `"claude_browser"`
+- `method`: descriptive, e.g. `"curl_fetch"`, `"playwright_snapshot"`
+- `agent_judgment`: `"mechanical"` if output is used verbatim; `"agent_observed"` if Agent transforms it
+
+### Impersonation rules
+
+- `curl` fetching a URL is a Runtime Tool — it MUST NOT claim `producer.provider: "http-fetch"` or `"firecrawl"`
+- Playwright MCP is a Runtime Tool — it MUST NOT claim `producer.provider: "browser"`
+- Claude's native file reading is a Runtime Tool — it MUST NOT claim `producer.provider: "agent.vision"`
+- Runtime Tools CAN be used for evidence acquisition — just label them honestly
+
 ## Constraints
 
 - NEVER write to wiki/ directly — only drafts/
@@ -546,3 +699,12 @@ When the current model lacks a modality:
 - MUST provide a recommendation, not delegate implementation choices to user
 - MUST explain each gap in terms of user impact, not technical failure
 - MUST label all Agent-observed evidence as agent_observed, never as source text
+- MUST persist sanitized Provider raw output to work/<provider>/ BEFORE any Agent semantic processing — raw output is immutable evidence
+- MUST construct primary evidence text from persisted Provider raw output, not from Agent memory or reformulated content
+- MUST NOT label Agent-rewritten, reorganized, summarized, or annotated content as mechanical or with the original Provider as producer
+- MUST create a separate agent-runtime fragment for any evidence record derived from Agent transformation of Provider output
+- MUST verify provenance legality before declaring ingest status complete — illegal provenance blocks complete regardless of complete_when satisfaction
+- MUST verify raw output file existence and size before declaring complete — self-reported save is not proof.  Fail-closed: missing or empty work/<provider>/output.<ext> → status MUST be "partial".
+- MUST distinguish Runtime Tool from Registered Provider in evidence provenance
+- MUST NOT label curl/bash/playwright/claude-native output with a Registered Provider's producer ID
+- MUST use producer.provider: "runtime-tool" with descriptive tool name for ad-hoc tool output

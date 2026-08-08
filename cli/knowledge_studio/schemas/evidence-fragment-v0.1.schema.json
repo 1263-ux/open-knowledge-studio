@@ -28,12 +28,26 @@
       "minLength": 1
     },
     "producer": {
-      "description": "Which capability produced this fragment.",
-      "enum": [
-        "firecrawl", "agentkey", "pdf-lite", "mineru",
-        "rapidocr", "remote-asr", "browser",
-        "agent.vision", "agent.direct_read", "human"
-      ]
+      "description": "Who produced this fragment — runtime, registered provider, and tool.  'provider' is the Registered Provider ID (from provider.yaml), 'agent-runtime' for Agent-native observation, or 'runtime-tool' for ad-hoc tools (curl, playwright, etc.).  'tool' is the specific tool name.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider", "tool"],
+      "properties": {
+        "runtime": {
+          "description": "Runtime environment that orchestrated the producer.",
+          "type": "string"
+        },
+        "provider": {
+          "description": "Registered Provider ID (from provider.yaml) or 'agent-runtime' or 'runtime-tool'.",
+          "type": "string",
+          "minLength": 1
+        },
+        "tool": {
+          "description": "Specific tool name — provider ID for registered providers, actual tool name for runtime-tool (e.g. 'curl', 'playwright'), 'agent-runtime' for Agent-native.",
+          "type": "string",
+          "minLength": 1
+        }
+      }
     },
     "producer_version": {
       "description": "Version of the producer tool, if known.",

@@ -24,27 +24,24 @@ has_children: true
 
 ## 核心管线
 
-```
-raw/（人类收集的原始材料）
-  ↓ /ingest — Agent-Native 证据摄入
-  ↓ Source → Provider → EvidenceFragment → EvidenceManifest
-  ↓ oks raw-commit → Raw Bundle v0.2
-drafts/（中间态草稿）
-  ↓ /promote — 人工审查
-wiki/（策展知识，带衰减）
-  ↓ oks search / /query — 6+1 因子召回
-注入 Agent 上下文
-```
+<img src="assets/oks-pipeline.svg" alt="OKS 核心管线分为本地 Markdown 或纯文本的快速路径，以及其他 modality 的 Protocol 路径，最终汇合到 drafts、人工审查、wiki 和召回。" style="max-width:100%;height:auto;" />
+
+本地 `.md` / `.txt` 走快速路径，其他 modality 走 Protocol 路径；两者最终都必须经过 `drafts/` 和人工审查，才能进入 `wiki/` 并参与召回。
+
+> **详细操作手册**: [Agent-Native Ingest 操作手册](ingest/agent-native-ingest-walkthrough.md) — 从 URL 到 promote 的逐步指南，含常见错误和解决方法。
+> **协议对象说明**: [协议对象关系](ingest/protocol-objects.md) — SourceEnvelope / EvidenceFragment / EvidenceManifest / RawBundle 的层级关系和字段含义。
 
 ## 当前架构与进度
 
 v0.4.0-dev（最小可分发 Beta）已完成：
 
 - **单 Wheel 包**: 仅 `knowledge_studio`，`oks_connector` 已移除
-- **16 个 Provider** + 18 个能力动作
-- **Raw Bundle v0.2** 严格验证管线（`oks raw-commit`）
+- **17 个 Provider** + 25 个能力动作
+- **Raw Bundle v0.2** 严格验证管线（`oks raw-commit`，含 provenance 机械检查）
+- **Agent 协议减负**: `ingest prepare` 预填充 evidence 槽位 + 返回 candidate_providers 短名单
+- **6 能力族首屏**: 文本 / 网页 / PDF / 图片 / 音视频 / 平台 — 不暴露 Provider ID
 - **技能单一事实源**（`skill_templates/`，构建时+运行时剥离）
-- **426 个测试**（425 通过）
+- **248 个测试**（248 通过）
 
 架构事实源和本轮工程记录见：
 
@@ -84,6 +81,8 @@ oks search "your query"
 （pipx 本身：Ubuntu 用 `sudo apt install pipx`，macOS 用 `brew install pipx`，Windows 用 `py -m pip install --user pipx && py -m pipx ensurepath`。Ubuntu 24.04 / Homebrew Python 受 PEP 668 保护，直接 `pip install` 会报 externally-managed-environment；镜像滞后时加 `--pip-args="-i https://pypi.org/simple"`。）
 
 - **[快速开始](start-here.md)** — 最短可用路径：保存一条 → 搜索到它 → 验证工作
+- **[Agent-Native Ingest 操作手册](ingest/agent-native-ingest-walkthrough.md)** — URL/文件 → Provider → Evidence → Commit → Draft → Promote 完整实战
+- **[协议对象关系](ingest/protocol-objects.md)** — SourceEnvelope / Fragment / Manifest / Bundle 的层级和字段
 - **[理念](philosophy.md)** — 为什么说知识库就是你在训练的模型
 - **[每日循环](daily-loop.md)** — 把训练闭环变成每天都能跑的流程
 - **[自动驾驶](autonomous.md)** — 人类判断随自动化程度如何分级（L0→L5）

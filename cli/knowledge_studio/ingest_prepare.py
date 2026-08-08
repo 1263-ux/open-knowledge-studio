@@ -278,6 +278,56 @@ def prepare_ingest(source: str, kb_root: Path | None = None) -> dict[str, Any]:
                 f"文本已完整摄入，但 {len(_missing_assets)} 个本地图片资源不可访问。"
             )
 
+    # ── For non-text sources: pre-fill evidence record slots from Recipe ──
+    if not is_text and recipe:
+        required_caps = _parse_recipe_capabilities(recipe, "required_capabilities")
+        if required_caps:
+            prefill_records: list[dict[str, Any]] = []
+            prefill_steps: list[dict[str, Any]] = []
+            modality_counts: dict[str, int] = {}
+            for cap in required_caps:
+                ev_id = f"ev-{uuid.uuid4().hex[:12]}"
+                art_id = f"art-{uuid.uuid4().hex[:12]}"
+                kind = _capability_to_kind(cap)
+                method = _capability_to_method(cap)
+                locator_kind = _capability_to_locator_kind(cap)
+                agent_judgment = _capability_default_judgment(cap)
+                prefill_records.append({
+                    "evidence_id": ev_id,
+                    "artifact_id": art_id,
+                    "kind": kind,
+                    "method": method,
+                    "locator": {"kind": locator_kind},
+                    "text": None,
+                    "confidence": None,
+                    "agent_judgment": agent_judgment,
+                })
+                prefill_steps.append({
+                    "capability": cap,
+                    "provider": None,
+                    "status": "pending",
+                    "reason": None,
+                })
+                mod = _capability_modality(cap)
+                modality_counts[mod] = modality_counts.get(mod, 0) + 1
+
+            manifest["evidence_records"] = prefill_records
+            manifest["steps"] = prefill_steps
+            # Build modalities status from capability counts
+            prefill_modalities: dict[str, dict[str, Any]] = {}
+            for mod, count in modality_counts.items():
+                prefill_modalities[mod] = {
+                    "modality": mod,
+                    "status": "pending",
+                    "evidence_count": count,
+                    "error_code": None,
+                }
+            manifest["modalities"] = prefill_modalities
+            # Update fragment_refs to include all pre-filled record IDs
+            manifest["fragment_refs"] = [fragment_id]
+            # Update primary_artifact to pending state
+            manifest["primary_artifact"]["sha256"] = content_hash
+
     # ── Build evidence fragment skeleton ──
     fragment = {
         "schema_version": "oks-evidence-fragment/v0.1",
@@ -315,6 +365,17 @@ def prepare_ingest(source: str, kb_root: Path | None = None) -> dict[str, Any]:
     if is_text and source_bytes:
         files_generated.append(f"artifacts/{artifact_path}")
 
+    # ── For text_ready sources: persist work/ output for provenance check ──
+    if text_ready and source_bytes:
+        work_dir = runs_dir / "work" / "text-read"
+        work_dir.mkdir(parents=True, exist_ok=True)
+        _work_path = work_dir / "output.md"
+        _work_path.write_bytes(source_bytes)
+        _work_hash = _sha256(source_bytes).hexdigest()
+
+    # ── Build candidate providers (filtered from capability registry) ──
+    candidate_providers = _build_candidate_providers(recipe, modality)
+
     next_step = _next_step(text_ready, run_id)
 
     return {
@@ -333,6 +394,7 @@ def prepare_ingest(source: str, kb_root: Path | None = None) -> dict[str, Any]:
         "status": manifest.get("status", "complete"),
         "missing_assets": _missing_assets,
         "recipe": recipe,
+        "candidate_providers": candidate_providers,
         "next_step": next_step,
     }
 
@@ -411,7 +473,228 @@ def _next_step(text_ready: bool, run_id: str) -> str:
             "Then generate Candidate and proceed to /promote."
         )
     return (
-        "Protocol skeleton created.  Fill evidence_records in evidence-manifest.json "
-        "and add evidence content to artifacts/.  Then run: "
-        f"oks raw-commit .oks/runs/{run_id}/manifest/"
+        "Protocol skeleton created with evidence record slots pre-filled "
+        "from the Recipe.  Execute providers and fill `text`, `confidence`, "
+        "and `provider`/`status` for each pre-created record and step.  "
+        f"Then run: oks raw-commit .oks/runs/{run_id}/manifest/"
     )
+
+
+# ── R4-5: Recipe parsing and capability-to-evidence-field mapping ────
+
+
+def _parse_recipe_capabilities(recipe_text: str, section: str) -> list[str]:
+    """Parse capability IDs from a recipe markdown section.
+
+    Handles the indented YAML list format used in recipe markdown:
+        required_capabilities:
+          - document.text.extract
+          - metadata.fetch
+    """
+    caps: list[str] = []
+    in_section = False
+    for line in recipe_text.splitlines():
+        stripped = line.strip()
+        if stripped == f"{section}:":
+            in_section = True
+            continue
+        if in_section:
+            if stripped.startswith("- ") and not stripped.startswith("- -"):
+                cap = stripped[2:].strip()
+                if cap:
+                    caps.append(cap)
+            elif stripped and not stripped.startswith("-"):
+                # Next top-level key — exit the list
+                if not line.startswith(" ") and not line.startswith("\t"):
+                    break
+    return caps
+
+
+def _capability_to_kind(cap: str) -> str:
+    """Map a capability ID to a default evidence kind."""
+    mapping: dict[str, str] = {
+        "document.text.extract": "text_content",
+        "document.structure.extract": "structure",
+        "document.render": "page_image",
+        "web.fetch": "source_capture",
+        "web.extract": "text_content",
+        "web.screenshot": "screenshot",
+        "image.ocr": "ocr_result",
+        "image.observe": "observation",
+        "metadata.fetch": "metadata",
+        "media.download": "media_file",
+        "subtitle.fetch": "subtitle",
+        "speech.transcribe": "transcript",
+        "audio.extract": "audio_track",
+        "video.keyframes": "keyframe",
+        "media.transcode": "media_file",
+        "media.probe": "metadata",
+        "layout.understand": "observation",
+        "chart.interpret": "observation",
+        "evidence.cross_check": "cross_check",
+        "social.content.fetch": "text_content",
+        "social.search": "text_content",
+        "social.comments.fetch": "text_content",
+        "social.creator.fetch": "metadata",
+        "human.supply": "text_content",
+    }
+    return mapping.get(cap, "text_content")
+
+
+def _capability_to_method(cap: str) -> str:
+    """Map a capability ID to a default evidence method."""
+    mapping: dict[str, str] = {
+        "document.text.extract": "text_extraction",
+        "document.structure.extract": "structure_extraction",
+        "web.fetch": "http_fetch",
+        "web.extract": "html_extract",
+        "web.screenshot": "screenshot_capture",
+        "image.ocr": "ocr_engine",
+        "image.observe": "agent_multimodal_observation",
+        "metadata.fetch": "metadata_extraction",
+        "media.download": "media_download",
+        "subtitle.fetch": "subtitle_extraction",
+        "speech.transcribe": "asr_transcription",
+        "audio.extract": "audio_extraction",
+        "video.keyframes": "keyframe_extraction",
+        "media.transcode": "media_transcode",
+        "media.probe": "media_probe",
+        "layout.understand": "agent_layout_analysis",
+        "chart.interpret": "agent_chart_reading",
+        "evidence.cross_check": "agent_cross_check",
+        "social.content.fetch": "platform_content_fetch",
+        "social.search": "platform_search",
+        "social.comments.fetch": "platform_comments_fetch",
+        "social.creator.fetch": "platform_creator_fetch",
+        "human.supply": "human_supplied",
+    }
+    return mapping.get(cap, cap.replace(".", "_"))
+
+
+def _capability_to_locator_kind(cap: str) -> str:
+    """Map a capability ID to a default locator kind."""
+    mapping: dict[str, str] = {
+        "image.ocr": "bbox",
+        "web.screenshot": "page",
+        "subtitle.fetch": "timestamp",
+        "speech.transcribe": "timestamp",
+        "video.keyframes": "timestamp",
+        "audio.extract": "timestamp",
+    }
+    return mapping.get(cap, "document")
+
+
+def _capability_default_judgment(cap: str) -> str:
+    """Return the default agent_judgment for a capability."""
+    agent_observed_caps = {
+        "image.observe", "layout.understand", "chart.interpret",
+        "evidence.cross_check",
+    }
+    if cap in agent_observed_caps:
+        return "agent_observed"
+    if cap == "human.supply":
+        return "human_supplied"
+    return "mechanical"
+
+
+def _capability_modality(cap: str) -> str:
+    """Map a capability ID to a modality key for the manifest."""
+    for prefix, mod in [
+        ("document.", "text"),
+        ("web.", "text"),
+        ("image.", "image"),
+        ("layout.", "layout"),
+        ("speech.", "speech"),
+        ("audio.", "speech"),
+        ("video.", "video"),
+        ("subtitle.", "text"),
+        ("metadata.", "text"),
+        ("media.", "video"),
+        ("social.", "text"),
+        ("human.", "text"),
+        ("chart.", "layout"),
+        ("evidence.", "text"),
+    ]:
+        if cap.startswith(prefix):
+            return mod
+    return "text"
+
+
+def _build_candidate_providers(
+    recipe: str | None, modality: str
+) -> list[dict[str, Any]]:
+    """Return 2-4 candidate providers covering required capabilities.
+
+    Filters the full capability registry to only providers that can satisfy
+    at least one required capability for this modality's recipe.  Providers
+    are sorted by availability (ready first, then configurable, then
+    unavailable).
+
+    This reduces the Agent's decision space from 17 providers to 2-4
+    relevant ones — the Agent does not need to scan the full registry.
+    """
+    if not recipe:
+        return []
+
+    required_caps = _parse_recipe_capabilities(recipe, "required_capabilities")
+    if not required_caps:
+        return []
+
+    # Lazy import to avoid circular dependency
+    from knowledge_studio.capability_commands import capability_status
+
+    status = capability_status()
+
+    # Find providers that cover at least one required capability
+    candidates: dict[str, dict[str, Any]] = {}
+    for cap in required_caps:
+        provider_ids = status.get("by_action", {}).get(cap, [])
+        for pid in provider_ids:
+            if pid in candidates:
+                continue
+            # Find the full provider entry
+            for p in status.get("providers", []):
+                if p["id"] == pid:
+                    candidates[pid] = {
+                        "id": pid,
+                        "label": p.get("label", pid),
+                        "execution": p.get("execution", ""),
+                        "status": p.get("status", "unknown"),
+                        "capabilities": p.get("capabilities", []),
+                        "known_limits": p.get("known_limits", []),
+                    }
+                    break
+
+    # Sort: ready first, then runtime_only, then configurable, then unavailable
+    status_order = {"ready": 0, "runtime_only": 1, "not_configured": 2,
+                    "unavailable": 3, "blocked": 4, "experimental": 5}
+
+    sorted_candidates = sorted(
+        candidates.values(),
+        key=lambda p: status_order.get(p.get("status", "unknown"), 99),
+    )
+
+    # Return up to 4, but ensure all required capabilities are covered
+    # If a required cap has only 1 provider, it must be included
+    essential_ids: set[str] = set()
+    for cap in required_caps:
+        provider_ids = status.get("by_action", {}).get(cap, [])
+        ready_ids = [
+            pid for pid in provider_ids
+            if candidates.get(pid, {}).get("status") == "ready"
+        ]
+        if len(provider_ids) == 1:
+            essential_ids.add(provider_ids[0])
+        elif ready_ids:
+            # At least one ready provider per capability
+            essential_ids.add(ready_ids[0])
+        elif provider_ids:
+            essential_ids.add(provider_ids[0])
+
+    # Ensure essential providers come first, then fill to 4
+    result = [p for p in sorted_candidates if p["id"] in essential_ids]
+    for p in sorted_candidates:
+        if p["id"] not in essential_ids and len(result) < 4:
+            result.append(p)
+
+    return result

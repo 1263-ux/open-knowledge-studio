@@ -321,6 +321,81 @@ def _check_evidence_cross_ref(manifest: dict[str, Any]) -> None:
         )
 
 
+# Providers that do NOT produce external work/ output files.
+# text-read: pre-filled by ingest prepare, no external tool execution
+# agent-runtime: Agent's own multimodal observation, no external tool
+# runtime-tool: ad-hoc tools (curl, playwright), not registered providers
+# human: manually supplied by user
+_NO_WORK_OUTPUT_PROVIDERS = frozenset({
+    "text-read", "agent-runtime", "runtime-tool", "human",
+})
+
+
+def _verify_provenance_artifacts(
+    manifest: dict[str, Any], manifest_dir: str | Path
+) -> None:
+    """Verify registered providers have work/ output files.
+
+    When status is 'complete', every registered provider declared in
+    manifest.steps[] with status 'succeeded' or 'degraded' must have
+    corresponding work/<provider>/output.* files that exist and contain
+    content (>0 bytes).
+
+    This is a mechanical check — Agent self-reported "I saved it" is not
+    trusted.  If the work/ directory or output file is missing, the
+    evidence provenance is unverifiable and the commit is rejected.
+
+    Providers that don't produce external output (text-read, agent-runtime,
+    runtime-tool, human) are excluded from this check.
+    """
+    if manifest.get("status") != "complete":
+        return
+
+    work_dir = manifest_dir.parent / "work"
+    if not work_dir.is_dir():
+        # No work/ directory at all — but there may be no registered
+        # providers that need one.  Check steps first.
+        pass
+
+    missing: list[str] = []
+    empty: list[str] = []
+
+    for step in manifest.get("steps", []):
+        provider = step.get("provider", "")
+        if not provider or provider in _NO_WORK_OUTPUT_PROVIDERS:
+            continue
+        if step.get("status") not in ("succeeded", "degraded"):
+            continue
+
+        pdir = work_dir / provider
+        if not pdir.is_dir():
+            missing.append(provider)
+            continue
+
+        files = list(pdir.iterdir())
+        if not files:
+            empty.append(provider)
+            continue
+
+        has_content = any(
+            f.is_file() and f.stat().st_size > 0 for f in files
+        )
+        if not has_content:
+            empty.append(provider)
+
+    if missing or empty:
+        raise CommitError(
+            "PROVENANCE_UNVERIFIABLE",
+            "Manifest status is 'complete' but registered provider raw "
+            f"output is missing ({', '.join(missing) if missing else 'none'}) "
+            f"or empty ({', '.join(empty) if empty else 'none'}). "
+            f"Every registered provider must persist its raw output to "
+            f"work/<provider>/output.<ext> before declaring complete. "
+            f"Self-reported save is not proof.",
+            {"missing_work_dirs": missing, "empty_work_dirs": empty},
+        )
+
+
 def _check_locators(manifest: dict[str, Any]) -> list[str]:
     """Validate each evidence locator against the formal Locator Schema v0.1.
 
@@ -839,6 +914,11 @@ def raw_commit(
 
         try:
             _check_evidence_cross_ref(manifest)
+        except CommitError as exc:
+            gather.append(exc)
+
+        try:
+            _verify_provenance_artifacts(manifest, md)
         except CommitError as exc:
             gather.append(exc)
 
