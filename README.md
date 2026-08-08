@@ -1,5 +1,8 @@
 # Open Knowledge Studio
 
+> **v0.4 Beta Final Engineering Closure** — 5 gates passed, 555 tests, 0 regressions.
+> Clean commit: `6bff406`. Full audit evidence at `D:\测试\审查测试\final-closure-audit\`.
+
 A file-based knowledge workspace for Claude Code and compatible Agents.
 OKS helps Agents turn sources into reviewed, traceable and recallable knowledge.
 
@@ -80,15 +83,29 @@ oks lint
 ```text
 oks init             Create knowledge workspace
 oks skills-install   Materialize Agent skill templates
-oks raw-commit       Commit evidence bundle to Raw
-oks capability       List / doctor available Providers
+oks raw-commit       Commit evidence bundle to Raw (Fragment ↔ Manifest consistency enforced)
+oks capability       List / doctor / status available Providers (incl. user_impact metadata)
+oks config           Manage global config — including strategy (lightweight/quality/privacy/ask_each_time)
 oks drafts           Manage Candidate drafts
 oks wiki             Manage reviewed knowledge pages
 oks search           Keyword + recall search
 oks recall           Two-path episodic + knowledge recall
+oks feishu           Feishu pull-mode entry (oks feishu pending) + review workflow
 oks lint             Quality scan
 oks status           Overview dashboard
 ```
+
+### What's New in v0.4 Beta
+
+| Feature | Description |
+|---------|-------------|
+| **Fragment ↔ Manifest consistency** | 4 core fields validated (artifact_id, kind, method, agent_judgment); fail-closed on mismatch |
+| **ASR transcript semantics** | `kind=transcript` + `method=asr_transcription` now accepted by schema |
+| **Guided Decision UX** | Strategy config (`oks config set strategy`); 11 providers carry `user_impact` metadata; Strategy-Aware Ingestion in skill templates |
+| **Feishu Pull Mode** | `oks feishu pending` — zero daemon, zero WebSocket, zero background process |
+| **17 Providers** | 25 capability actions, 7 modality recipes; provider.yaml + SKILL.md per provider |
+
+**555 tests passed** (1 pre-existing env failure, 0 regressions).
 
 ### Optional Capabilities
 
@@ -139,10 +156,13 @@ MIT
 
 ## 中文
 
+> **v0.4 Beta 最终工程收口** — 5 个验证 Gate 全部通过，555 项测试，0 回归。
+> 干净 Commit：`6bff406`。完整审计证据包见 `D:\测试\审查测试\final-closure-audit\`。
+
 Open Knowledge Studio 是一个面向 Claude Code 和兼容 Agent 的文件式知识工作区。
 
 它让 Agent 把外部资料、项目经验、失败教训和人工判断沉淀成可追溯、可审核、可召回的长期知识，
-而不是每次新会话都重新解释上下文。
+而不是每次新会话都重新解释上下文。OKS 不试图替代 Obsidian、Notion、Roam 或用户已有的编辑器——它负责的是：把用户已有的文件、网页、媒体、平台内容，经 Agent 提取、人工审核后，沉淀成可召回的文件系统知识。
 
 ### 推荐主链（v0.4.0 起唯一路径）
 
