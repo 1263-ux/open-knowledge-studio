@@ -20,12 +20,18 @@ Convert a user-provided local video into a reviewable evidence bundle without ch
 
 ## Workflow
 
+The module ships as `oks_connector.media_ingest`. Invoke it as
+`python -m oks_connector.media_ingest` after `pipx install`, or as
+`python scripts/media_ingest.py` from a source checkout.
+
 1. Confirm the local video path, source URL, title, save reason, and whether the content is oral or screen-based.
-2. Install optional dependencies from `scripts/media_ingest_requirements.txt` when needed.
-3. Run `python scripts/media_ingest.py prepare ...`.
+2. Install optional dependencies when needed. `scripts/media_ingest_requirements.txt`
+   exists only in a source checkout — it is not packaged, so on an installed
+   copy read the imports the run reports as missing and install those.
+3. Run `python -m oks_connector.media_ingest prepare ...`.
 4. Show the user the generated candidate and quality report paths.
 5. Wait for explicit review approval.
-6. Run `python scripts/media_ingest.py approve <capture-id> --confirm-human-review --review-note "..."`.
+6. Run `python -m oks_connector.media_ingest approve <capture-id> --confirm-human-review --review-note "..."`.
 7. Hand the resulting `raw/misc/*.md` file to the existing `/ingest` skill.
 
 This local-video command is an experimental adapter, not the canonical multimodal pipeline. The canonical contract and capability manifests live in the independent `oks-connector` repository under `schemas/` and `capabilities/`.

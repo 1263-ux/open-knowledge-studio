@@ -91,7 +91,7 @@ open-knowledge-studio/
 ├── providers/        # 16 Provider definitions
 ├── recipes/          # Modality recipes (7 modalities)
 ├── security/         # Credential redaction + sensitive field detection
-├── cli/              # Python CLI tool (oks) + skill_templates/ (canonical skill source)
+├── cli/              # Python CLI tool (oks); packaged assets come from assets/
 ├── docs/             # GitHub Pages design documentation
 ├── CONSTITUTION.md   # Memory architecture design
 ├── CHANGELOG.md      # Release history

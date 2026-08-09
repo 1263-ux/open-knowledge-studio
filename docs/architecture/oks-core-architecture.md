@@ -28,7 +28,7 @@ flowchart TD
     AgentLayer["Agent 执行层\nClaude Code、Codex、OpenClaw、Shell Agent\n状态：混合"]:::external
     External["外部能力来源\nClaude Code Marketplace、OpenClaw Skill Hub、\n第三方提取器、模型 API\n状态：外部复用，不在 OKS 内重做"]:::external
     Components["可选能力组件\ndocument：已验证\npdf-lite / watch：已验证\npdf / formula：部分验证\nFeishu：部分验证"]:::partial
-    SkillInstall["技能安装\n10 Claude + 10 Agents skill\n单一事实源 skill_templates/\n构建时+运行时技能剥离\n状态：Phase 2A 已验证"]:::verified
+    SkillInstall["技能安装\n10 Claude + 10 Agents skill\n单一事实源 assets/\n构建时+运行时技能剥离\n状态：Phase 2A 已验证"]:::verified
 
     Feishu -. "仅作为采集、状态、审核界面" .-> Source
     Feishu -. "仅作为人工决策界面" .-> Review
@@ -65,7 +65,7 @@ OKS 的核心是可审计的知识生命周期：
 
 - Source、Provider、Raw Bundle、Candidate、Review、Wiki、Recall、Output、Evaluation 必须是分离状态；
 - Raw Bundle 通过 `oks raw-commit` 严格验证（12 Schema、fail-closed、原子提交）；
-- Skill 通过 `skill_templates/` 作为唯一事实源安装（`_install_skills()` 共享路径）；
+- Skill 通过 `assets/` 作为唯一事实源安装（`_materialize_assets()` 按 `_AGENT_TARGETS` 装配）；
 - Wiki 晋升前必须有人类明确批准；
 - CLI 必须提供 `search`、`recall`、`raw-commit`、`skills-install`、`capability` 等生命周期能力；
 - `failed`、`partial`、`skipped`、`environment_limited` 等状态必须保留。
@@ -84,7 +84,7 @@ Claude Code Marketplace、OpenClaw Skill Hub、浏览器工具、模型 API、OC
 |------|--------|--------|
 | Wheel 包 | `knowledge_studio` + `oks_connector` | 仅 `knowledge_studio` |
 | 摄入入口 | `oks-connector` CLI + `route_plan()` | `oks raw-commit` + Agent-Native `/ingest` |
-| Skill 安装源 | 仓库根 `.claude/skills/` → `_assets/` | `skill_templates/`（唯一 canonical 源） |
+| Skill 安装源 | 仓库根 `.claude/skills/` → `_assets/` | `assets/`（唯一 canonical 源） |
 | Schema 验证 | fail-open (`try/except: pass`) | fail-closed (`SCHEMA_VALIDATOR_UNAVAILABLE`) |
 | 提交方式 | 直接写入最终目录 | 暂存目录 → 验证 → 原子 `shutil.move` |
 | Provider 发现 | 扁平 JSON 文件 | 结构化 `providers/<id>/provider.yaml` |

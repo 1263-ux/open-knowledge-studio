@@ -80,7 +80,7 @@ open-knowledge-studio/
 ├── recipes/          # Modality recipes (text, pdf, office, image, web, audio, video)
 ├── providers/        # 16 Provider definitions (provider.yaml + SKILL.md)
 ├── security/         # Credential redaction + sensitive field detection
-├── cli/              # Python CLI tool (oks) + skill_templates/ (canonical skill source)
+├── cli/              # Python CLI tool (oks); packaged assets come from assets/
 ├── docs/             # GitHub Pages design documentation
 ├── CONSTITUTION.md   # Memory architecture design
 ├── CLAUDE.md         # Claude Code project instructions
