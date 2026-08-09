@@ -7,13 +7,13 @@ parent: 内部机制
 
 *六个核心因子 + 一个可选目标因子，为 wiki 页面评分，找到最相关知识。*
 
-使用六个核心因子（外加可选的 goal boost）对 wiki 页面评分，找到最相关的知识。引擎将语义搜索、关键词匹配和图谱关联融合在一次统一的评分过程中。
+使用六个核心因子（外加可选的 goal boost）对 wiki 页面评分，找到最相关的知识。引擎将词项匹配、关键词匹配和图谱关联融合在一次统一的评分过程中。
 
 ## 三种搜索模式合一
 
 | 模式 | 做什么 | 哪些因子 |
 |------|--------|----------|
-| **Semantic（语义）** | 按含义查找，不只是精确匹配 | Token overlap |
+| **Lexical（词项）** | 分词后按词项重叠打分 | Token overlap |
 | **Keyword（关键词）** | 精确匹配特定术语 | Substring match |
 | **Graph（图谱）** | 通过主题关联和类型加权查找 | Topic trace + type boost + review bonus |
 
@@ -43,7 +43,12 @@ jieba 分词将查询拆分为 token，统计出现在页面（标题+正文+标
 overlap = count(query_tokens 出现在 title+body+tags 中) × 0.3
 ```
 
-这是**语义层** — 搜索"design patterns"时能找到关于"architectural approaches"的页面，因为 token 重叠捕捉到了共享概念。
+这是**词项层** —— 匹配逐 token 字面进行。搜索"design patterns"不会命中只写
+"architectural approaches"的页面：两者没有共享 token。跨表述召回需要稠密嵌入，
+而 CLI 核心不调用 AI API（P4），因此不在此层实现。
+
+当前公式是无权重的命中计数：既不做 IDF（罕见词与常见词同等计分），也不做长度
+归一化（长页面天然更容易积累命中）。
 
 ### 2. Substring Match（+1.0 / +0.5）
 

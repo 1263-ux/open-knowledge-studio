@@ -268,6 +268,18 @@ wiki knowledge, like sleep consolidation in human memory.
 
 **Do not** auto-promote raw content to `wiki/` without human review.
 
+**Why entry needs a human but exit does not.** The two directions differ in
+blast radius, not in importance. Promotion *creates a claim* the system will
+then present as knowledge — an unreviewed falsehood propagates into every
+later answer and is hard to trace back. Decay only *stops surfacing* a page:
+`apply_decay` sets `status: dropped` in the frontmatter and never deletes the
+file, so the page remains in Git and returns via unarchive or `oks wiki pin`.
+Worst case it costs recall coverage; it cannot manufacture a false claim.
+
+This asymmetry holds only while archiving stays non-destructive and
+reversible. Any change that makes decay delete content, or that removes the
+path back, breaks the reasoning above and needs its own review.
+
 ### A4: Knowledge evolution and supersession
 
 When new wiki content relates to existing knowledge, four relationships

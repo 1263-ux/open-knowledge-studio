@@ -50,3 +50,28 @@ def test_evolve_no_duplicates(kb_root):
     evolve_knowledge()
     result2 = evolve_knowledge()
     assert result2["drafts"] == 0
+
+
+def test_decay_archives_without_deleting_anything(kb_root):
+    """A3 lets decay archive without review only because it destroys nothing.
+
+    Archiving flags the page and leaves the file in Git, so the worst case is
+    lost recall coverage, not lost knowledge. If decay ever deletes content,
+    the asymmetry with A3's human-review gate on promotion stops being
+    defensible.
+    """
+    from knowledge_studio.store import apply_decay, parse_wiki_file
+
+    page = kb_root / "wiki" / "computing" / "concepts" / "pattern-0.md"
+    # Force it under any sane archive threshold.
+    stale = page.read_text(encoding="utf-8").replace(
+        "created: '2026-01-15T00:00:00+00:00'", "created: '2019-01-01T00:00:00+00:00'"
+    ).replace("importance: 0.8", "importance: 0.01")
+    _atomic_write(page, stale)
+
+    apply_decay()
+
+    assert page.is_file(), "decay deleted a wiki page"
+    meta = parse_wiki_file(page)
+    assert meta is not None
+    assert "Content for pattern 0." in meta["body"], "decay destroyed the content"
