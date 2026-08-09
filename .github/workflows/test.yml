@@ -1,0 +1,87 @@
+name: test
+
+# Required checks for every PR. Each job exists because a real defect reached
+# main through a PR:
+#   - pytest: 37 tests shelled out to a globally installed `oks`, so a stale
+#     install made broken code look green and a clean clone went red.
+#   - package: removed skills reappeared in a "fresh" wheel, the connector was
+#     missing from sdists, and per-agent config was never shipped at all.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: test-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  pytest:
+    name: pytest (${{ matrix.os }}, py${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # CONSTITUTION P0: the runtime requires Python >= 3.12.
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python: ["3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Install the package from this checkout
+        # Editable, so `oks` on PATH and the imported modules are the same
+        # tree. A non-editable install would let a second copy diverge.
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ./cli
+          python -m pip install pytest requests
+
+      - name: Run the suite
+        run: python -m pytest -q
+
+  package:
+    name: wheel and sdist contents
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build from a clean checkout
+        # No prior build/ exists here, which is the point: the vendoring hooks
+        # must produce a complete tree without an incremental cache to lean on.
+        run: |
+          python -m pip install --upgrade pip build
+          python -m build --outdir dist ./cli
+
+      - name: Assert the build did not modify tracked files
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            git status --porcelain
+            echo "::error::the build modified tracked files — vendored output must stay gitignored"
+            exit 1
+          fi
+
+      - name: Assert the artifacts carry every required asset
+        run: python cli/scripts/check_dist.py dist
+
+      - name: Install the wheel into a clean environment and initialize a KB
+        # `oks init` reads packaged assets, so this fails if the wheel ships an
+        # incomplete _assets/ tree even when the source tree looks right.
+        # --no-set-default keeps the probe from rewriting ~/.oks/config.json,
+        # which would make this check mutate state it does not own.
+        run: |
+          python -m venv /tmp/probe
+          /tmp/probe/bin/python -m pip install --quiet dist/*.whl
+          /tmp/probe/bin/oks init /tmp/probe-kb --no-set-default
+          /tmp/probe/bin/oks --help > /dev/null

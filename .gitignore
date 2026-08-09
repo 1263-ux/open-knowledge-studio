@@ -45,9 +45,10 @@ cli/knowledge_studio/_assets/
 cli/oks_connector/
 
 # setuptools sdist/egg-info leaks copies of scripts/ into cli/scripts/ — only the
-# real build helper belongs to the repo.
+# real build helpers belong to the repo.
 cli/scripts/*
 !cli/scripts/bundle_assets.py
+!cli/scripts/check_dist.py
 
 # Logs
 *.log
