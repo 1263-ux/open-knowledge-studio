@@ -121,6 +121,7 @@ eval_app = typer.Typer(help="Offline recall evaluation and run comparison.")
 trace_app = typer.Typer(help="Append-only execution traces and feedback.")
 feishu_app = typer.Typer(help="Optional Feishu Base intake, review, and event-listening extension.")
 capability_app = typer.Typer(help="Optional modality capabilities; core dependencies stay lightweight.")
+ingest_app = typer.Typer(help="Agent-native ingestion preparation and execution.", no_args_is_help=True)
 app.add_typer(wiki_app, name="wiki")
 app.add_typer(drafts_app, name="drafts")
 app.add_typer(config_app, name="config")
@@ -129,6 +130,7 @@ app.add_typer(eval_app, name="eval")
 app.add_typer(trace_app, name="trace")
 app.add_typer(feishu_app, name="feishu")
 app.add_typer(capability_app, name="capability")
+app.add_typer(ingest_app, name="ingest")
 
 _CAPABILITIES = {
     "watch": {
@@ -245,6 +247,59 @@ def capability_install(
     console.print(f"[green]{t('capability_installed', name=name)}[/green]")
 
 
+@capability_app.command("status")
+def capability_status_cmd(
+    json_output: bool = typer.Option(True, "--json/--text", help="Output as JSON"),
+):
+    """Show the current capability catalog and local provider truth."""
+    from knowledge_studio.capability_commands import capability_status
+
+    result = capability_status()
+    if json_output:
+        _emit_json(result)
+        return
+
+    console.print(f"[bold]Overall:[/bold] {result['overall']}\n")
+    for action_name, action_info in sorted(result["actions"].items()):
+        provider_ids = result["by_action"].get(action_name, [])
+        providers = [
+            p for p in result["providers"] if p["id"] in provider_ids
+        ]
+        labels = ", ".join(
+            f"{p.get('label', p['id'])} [{p.get('status', 'unknown')}]"
+            for p in providers
+        )
+        console.print(f"[cyan]{action_info['label']}[/cyan] ({action_name})")
+        console.print(f"  {labels or '[dim]no provider[/dim]'}")
+
+
+@ingest_app.command("prepare")
+def ingest_prepare_cmd(
+    source: str = typer.Argument(..., help="Local file or URL to prepare for ingestion"),
+    kb_root: Optional[str] = typer.Option(
+        None, "--kb-root", help="Knowledge base root (default: OKS_ROOT or config)"
+    ),
+    json_output: bool = typer.Option(True, "--json/--text", help="Output as JSON"),
+):
+    """Create the Agent-native SourceEnvelope and EvidenceManifest skeleton."""
+    from knowledge_studio.ingest_prepare import prepare_ingest
+
+    root = Path(kb_root).expanduser().resolve() if kb_root else None
+    result = prepare_ingest(source, kb_root=root)
+    if json_output:
+        _emit_json(result)
+        return
+    console.print(Panel.fit(
+        f"[bold]Source:[/bold] {source}\n"
+        f"[bold]Modality:[/bold] {result['modality']}\n"
+        f"[bold]Manifest dir:[/bold] {result['manifest_dir']}\n\n"
+        + "\n".join(f"  [green]+[/green] {item}" for item in result["files_generated"])
+        + f"\n\n[bold cyan]{result['next_step']}[/bold cyan]",
+        title="Ingest Prepared",
+        border_style="green" if result.get("text_ready") else "yellow",
+    ))
+
+
 def _connector_install_hint() -> str:
     return ""  # no-op: connector is built into the monorepo
 
@@ -263,7 +318,7 @@ def _recommended_capability(source: str) -> str:
     return "watch"  # video, audio, and platform URLs all route to watch
 
 
-@app.command()
+@ingest_app.command("run")
 def ingest(
     source: str = typer.Argument(..., help="Local file or supported platform URL"),
     mode: str = typer.Option("quick", "--mode", help="quick or forensic"),

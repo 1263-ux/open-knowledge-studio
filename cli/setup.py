@@ -97,4 +97,8 @@ class sdist_with_assets(sdist):
         super().run()
 
 
+# Materialize generated package trees before setuptools validates the package
+# list.  This is required for a clean checkout, where cli/oks_connector and
+# knowledge_studio/_assets do not exist until the build hook vendors them.
+_sync_from_checkout()
 setup(cmdclass={"build_py": build_py_with_assets, "sdist": sdist_with_assets})
