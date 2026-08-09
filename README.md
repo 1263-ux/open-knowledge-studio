@@ -45,8 +45,8 @@ Provider never writes Raw directly. Recipe never hardcodes a specific Provider.
 Requirements: Python ≥ 3.12, Git, pipx.
 
 ```bash
-# Install
-pipx install open-knowledge-studio
+# Install the latest canonical main branch
+pipx install "git+https://github.com/1263-ux/claude-code-knowledge-studios.git@main#subdirectory=cli"
 oks --version
 
 # Create a workspace
@@ -182,7 +182,7 @@ Provider 不直接写 Raw。Recipe 不写死具体 Provider。
 ### 快速开始
 
 ```bash
-pipx install open-knowledge-studio
+pipx install "git+https://github.com/1263-ux/claude-code-knowledge-studios.git@main#subdirectory=cli"
 oks --version
 
 oks init ./my-knowledge-base

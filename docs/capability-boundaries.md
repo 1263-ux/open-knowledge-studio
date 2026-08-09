@@ -43,7 +43,7 @@ oks config set strategy ask_each_time   # 每次询问：没有固定倾向
 这是文档、PDF 和公开网页的低成本、可解释组合；不需要 API Key，也不会把源文件上传给远程服务。
 
 ```bash
-pipx install open-knowledge-studio
+pipx install "git+https://github.com/1263-ux/claude-code-knowledge-studios.git@main#subdirectory=cli"
 oks init my-knowledge-base
 cd my-knowledge-base
 oks skills-install

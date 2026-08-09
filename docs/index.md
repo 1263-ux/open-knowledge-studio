@@ -75,7 +75,7 @@ v0.4.0-dev（最小可分发 Beta）已完成，v0.4 Beta Final Engineering Clos
 ## 准备开始？
 
 ```bash
-pipx install open-knowledge-studio && pipx ensurepath
+pipx install "git+https://github.com/1263-ux/claude-code-knowledge-studios.git@main#subdirectory=cli" && pipx ensurepath
 oks init my-knowledge-base
 cd my-knowledge-base
 oks status

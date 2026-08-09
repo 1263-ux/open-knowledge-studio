@@ -339,7 +339,7 @@ OpenAlex API → 学术论文（完全免费、CC0）
 
 ```
 第 0 层：核心 CLI
-  pipx install open-knowledge-studio
+  pipx install "git+https://github.com/1263-ux/claude-code-knowledge-studios.git@main#subdirectory=cli"
   oks init my-knowledge-base
   oks skills-install
 
@@ -429,7 +429,7 @@ metadata:
 
 | 方案 | 适合用户 | 本地大小 | 上手难度 |
 |------|---------|---------|---------|
-| `pipx install open-knowledge-studio` + `pdf-lite` | 大多数本地文档用户 | 约 150MB 级（实测组合） | 低 |
+| `pipx install "git+https://github.com/1263-ux/claude-code-knowledge-studios.git@main#subdirectory=cli"` + `pdf-lite` | 大多数本地文档用户 | 约 150MB 级（实测组合） | 低 |
 | 加装 `document` | docx/pptx 等办公文档 | 约 280MB 级（实测组合） | 低 |
 | 加装 `watch` | 视频/音频、字幕、ASR | 按模型和 ffmpeg 增长 | 中 |
 | 加装 `pdf` / `formula` | 复杂 PDF、公式 OCR | 重型，按需安装 | 中-高 |
@@ -975,7 +975,7 @@ Firecrawl 和 AgentKey 是当前最值得优先推荐的两个远程 Provider：
 ### 12.2 用户最小安装路径
 
 ```bash
-pipx install open-knowledge-studio
+pipx install "git+https://github.com/1263-ux/claude-code-knowledge-studios.git@main#subdirectory=cli"
 oks init my-knowledge-base
 cd my-knowledge-base
 oks skills-install
