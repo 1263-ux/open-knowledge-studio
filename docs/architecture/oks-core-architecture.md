@@ -36,7 +36,7 @@ flowchart TD
     AgentLayer -. "调用 CLI 和 Skills" .-> Source
     External -. "提供工具、Skill、Provider" .-> AgentLayer
     Components -. "按需安装" .-> Providers
-    SkillInstall -. "oks init / skills-install" .-> AgentLayer
+    SkillInstall -. "oks init / init --upgrade" .-> AgentLayer
 
     classDef verified fill:#e8f5e9,stroke:#2e7d32,color:#1b5e20;
     classDef partial fill:#fff8e1,stroke:#f9a825,color:#5d4037;
@@ -67,7 +67,7 @@ OKS 的核心是可审计的知识生命周期：
 - Raw Bundle 通过 `oks raw-commit` 严格验证（12 Schema、fail-closed、原子提交）；
 - Skill 通过 `assets/` 作为唯一事实源安装（`_materialize_assets()` 按 `_AGENT_TARGETS` 装配）；
 - Wiki 晋升前必须有人类明确批准；
-- CLI 必须提供 `search`、`recall`、`raw-commit`、`skills-install`、`capability` 等生命周期能力；
+- CLI 必须提供 `search`、`recall`、`raw-commit`、`init --upgrade`、`capability` 等生命周期能力；
 - `failed`、`partial`、`skipped`、`environment_limited` 等状态必须保留。
 
 OKS 的核心声明不是”能提取所有媒体类型”，而是”知识可以经过可追溯、有人类门禁的闭环沉淀为可召回记忆”。
@@ -89,7 +89,7 @@ Claude Code Marketplace、OpenClaw Skill Hub、浏览器工具、模型 API、OC
 | 提交方式 | 直接写入最终目录 | 暂存目录 → 验证 → 原子 `shutil.move` |
 | Provider 发现 | 扁平 JSON 文件 | 结构化 `providers/<id>/provider.yaml` |
 | 测试 | ~380 | 547 (546 passed, 1 pre-existing) |
-| 技能安装可复现性 | 不可保证 | `oks init` ≡ `oks skills-install`（SHA256 一致） |
+| 技能安装可复现性 | 不可保证 | `oks init` ≡ `oks init --upgrade`（SHA256 一致） |
 | Evidence 一致性 | 无校验 | Fragment ↔ Manifest 4 核心字段校验，fail-closed |
 | ASR 语义 | transcript 伪装 subtitle | `kind=transcript` + `method=asr_transcription` 合法 |
 | 策略配置 | 无 | `oks config set strategy` — lightweight/quality/privacy/ask_each_time |

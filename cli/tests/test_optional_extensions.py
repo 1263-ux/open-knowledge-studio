@@ -319,8 +319,8 @@ def test_feishu_commands_honor_lark_cli_exe_override(monkeypatch, tmp_path):
     assert cli._resolve_lark_cli() == str(fake_cli.resolve())
 
 
-def _real_command_paths() -> set[str]:
-    """Every invocable `oks ...` path, derived from the Typer app itself.
+def _command_children() -> dict[str, set[str]]:
+    """Map each command path to its direct children, from the Typer app itself.
 
     Duck-typed on ``.commands`` rather than ``isinstance(x, click.Group)``:
     ``click`` is not guaranteed to be importable as a top-level module
@@ -328,42 +328,70 @@ def _real_command_paths() -> set[str]:
     """
     import typer
 
-    def walk(command, prefix: tuple[str, ...] = ()) -> set[str]:
-        children = getattr(command, "commands", None)
-        if not children:
-            return {" ".join(prefix)}
-        found: set[str] = set()
-        for name, sub in children.items():
-            found |= walk(sub, prefix + (name,))
-        return found
+    children: dict[str, set[str]] = {}
 
-    return walk(typer.main.get_command(cli.app))
+    def index(command, prefix: tuple[str, ...] = ()) -> None:
+        kids = getattr(command, "commands", None) or {}
+        children[" ".join(prefix)] = set(kids)
+        for name, sub in kids.items():
+            index(sub, prefix + (name,))
+
+    index(typer.main.get_command(cli.app))
+    return children
 
 
-def test_shipped_skills_only_cite_commands_that_exist():
-    """A skill that names a missing command sends the Agent down a dead end.
+def _names_a_missing_command(cited: str, children: dict[str, set[str]]) -> bool:
+    """True when *cited* walks into a subcommand the CLI does not define."""
+    import re
 
-    The ingest skill shipped six such names — `oks capability catalog`,
-    `oks capability doctor`, `oks capability guide`, `oks schema show` — and
-    nothing failed at build time.
+    plain_word = re.compile(r"[a-z][a-z0-9-]*\Z")
+    path: list[str] = []
+    for word in cited.split():
+        if not plain_word.fullmatch(word):
+            break  # a flag, placeholder or value — not a subcommand
+        key = " ".join(path)
+        if not children.get(key):
+            break  # reached a leaf; everything after is an argument
+        if word not in children[key]:
+            return True
+        path.append(word)
+    return not path
+
+
+def test_documented_commands_all_exist():
+    """Citing a missing command sends the reader or the Agent down a dead end.
+
+    Both halves failed silently before: the ingest skill named six commands that
+    never existed, and README's Quick Start told every new user to run
+    `oks skills-install`, which was never a command — hidden inside a fenced
+    bash block where an inline-backtick scan could not see it.
     """
     import re
 
-    real = _real_command_paths()
-    skills = Path(__file__).parents[2] / "assets" / "skills"
+    children = _command_children()
+    repo = Path(__file__).parents[2]
+    targets = [repo / "README.md", repo / "cli" / "README.md"]
+    targets += sorted((repo / "assets" / "skills").rglob("SKILL.md"))
+    # research/ and acceptance/ discuss designs and past runs on purpose,
+    # including commands that do not exist yet.
+    targets += [
+        doc for doc in sorted((repo / "docs").rglob("*.md"))
+        if not {"research", "acceptance", "archive"} & set(doc.parts)
+    ]
+
     unknown: list[str] = []
+    for doc in targets:
+        text = doc.read_text(encoding="utf-8")
+        cited = set(re.findall(r"`oks ([a-z][^`\n]*)`", text))
+        cited |= set(re.findall(r"^\s*oks ([a-z][^\n|#]*)", text, re.MULTILINE))
+        for citation in cited:
+            citation = citation.strip().strip("`\"'")
+            if citation and _names_a_missing_command(citation, children):
+                unknown.append(f"{doc.relative_to(repo)}: oks {citation[:60]}")
 
-    for skill in sorted(skills.rglob("SKILL.md")):
-        text = skill.read_text(encoding="utf-8")
-        for cited in re.findall(r"`oks ([a-z][a-z0-9 _-]*)`", text):
-            words = cited.split()
-            # Strip trailing arguments/flags until a real command path matches.
-            while words and " ".join(words) not in real:
-                words.pop()
-            if not words:
-                unknown.append(f"{skill.relative_to(skills)}: oks {cited}")
-
-    assert not unknown, "skills cite commands the CLI does not have:\n" + "\n".join(unknown)
+    assert not unknown, "documented commands the CLI does not have:\n" + "\n".join(
+        sorted(unknown)
+    )
 
 
 def test_bundled_schema_examples_validate_against_their_schema():

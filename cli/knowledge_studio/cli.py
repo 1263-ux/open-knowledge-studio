@@ -123,6 +123,7 @@ trace_app = typer.Typer(help="Append-only execution traces and feedback.")
 feishu_app = typer.Typer(help="Optional Feishu Base intake, review, and event-listening extension.")
 capability_app = typer.Typer(help="Optional modality capabilities; core dependencies stay lightweight.")
 schema_app = typer.Typer(help="Protocol document shapes an Agent must author.")
+security_app = typer.Typer(help="Credential redaction for provider raw output.")
 
 
 class _LegacyIngestGroup(typer.core.TyperGroup):
@@ -155,6 +156,7 @@ app.add_typer(trace_app, name="trace")
 app.add_typer(feishu_app, name="feishu")
 app.add_typer(capability_app, name="capability")
 app.add_typer(schema_app, name="schema")
+app.add_typer(security_app, name="security")
 app.add_typer(ingest_app, name="ingest")
 
 _CAPABILITIES = {
@@ -355,6 +357,51 @@ def schema_show_cmd(
         )
         raise typer.Exit(2)
     _emit_json(example)
+
+
+@security_app.command("sanitize")
+def security_sanitize_cmd(
+    path: str = typer.Argument(..., help="File to sanitize in place, e.g. work/<provider>/output.json"),
+    content_type: str = typer.Option(
+        "application/json", "--content-type", help="MIME hint for the payload"
+    ),
+):
+    """Strip credentials from a provider's raw output, in place.
+
+    The ingest skill requires this before external provider output enters the
+    Run Workspace: API keys, bearer tokens, session cookies and internal IPs
+    must not be committed into raw/.
+    """
+    from knowledge_studio.security.redaction import sanitize_remote_artifact
+    from knowledge_studio.security.sensitive_fields import REDACTED
+    from knowledge_studio.store import _atomic_write
+
+    target = Path(path).expanduser().resolve()
+    if not target.is_file():
+        console.print(f"[red]Not a file:[/red] {target}")
+        raise typer.Exit(2)
+
+    original = target.read_bytes()
+    sanitized = sanitize_remote_artifact(original, content_type=content_type)
+    if sanitized == original:
+        _emit_json({"path": str(target), "changed": False, "redaction_count": 0})
+        return
+
+    try:
+        text = sanitized.decode("utf-8")
+    except UnicodeDecodeError:
+        # Binary payloads are returned unchanged, so reaching here means the
+        # redactor produced bytes we cannot write as text — refuse rather than
+        # corrupt the evidence.
+        console.print(f"[red]Refusing to write non-UTF-8 output for:[/red] {target}")
+        raise typer.Exit(1)
+
+    _atomic_write(target, text)
+    _emit_json({
+        "path": str(target),
+        "changed": True,
+        "redaction_count": text.count(REDACTED),
+    })
 
 
 @ingest_app.command("prepare")

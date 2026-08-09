@@ -7,10 +7,10 @@ nav_order: 12
 
 这不是一张”功能愿望清单”，而是给使用者的选型说明：**现在应装什么、每类来源该走谁、哪些路径已经做过实验、哪些只能按 partial 或 experimental 对待。**
 
-本页以仓库的 `providers/*/provider.yaml`、`oks capability doctor --verbose`、`oks capability status --json`（含 `user_impact` 字段）和已完成的摄入实验为事实源。运行前先执行：
+本页以仓库的 `providers/*/provider.yaml`、`oks capability status --json`、`oks capability status --json`（含 `user_impact` 字段）和已完成的摄入实验为事实源。运行前先执行：
 
 ```bash
-oks capability doctor --verbose
+oks capability status --json
 ```
 
 它会按你的实际机器、环境变量和 MCP 配置报告哪些能力已经可用；本页的“推荐”不应覆盖该诊断结果。
@@ -46,13 +46,13 @@ oks config set strategy ask_each_time   # 每次询问：没有固定倾向
 pipx install "git+https://github.com/open-agent-power/open-knowledge-studio.git@main#subdirectory=cli"
 oks init my-knowledge-base
 cd my-knowledge-base
-oks skills-install
+oks init . --upgrade
 
 # 推荐的两项按需能力
 oks capability install pdf-lite --yes   # 文本型 PDF
 oks capability install document --yes   # DOCX / PPTX / XLSX / HTML
 
-oks capability doctor --verbose
+oks capability status --json
 ```
 
 开发仓库内安装时，将第一行替换为 `pipx install ./cli --force`。`oks capability install` 会把重依赖放进独立能力环境；不要为了“也许会用”一次性安装所有能力。

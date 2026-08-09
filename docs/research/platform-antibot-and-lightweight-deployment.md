@@ -43,7 +43,7 @@ oks capability install document --yes  # docx/pptx 等办公文档
 oks capability install watch --yes     # 视频/音频、字幕、ASR、OCR
 oks capability install pdf --yes       # MinerU 重型 PDF 能力
 oks capability install formula --yes   # 公式/复杂 OCR
-oks capability doctor --verbose
+oks capability status --json
 ```
 
 远程 Provider（Firecrawl、AgentKey、remote-asr 等）不通过 `oks capability install` 安装；它们需要用户自己的 API Key / OAuth / MCP 配置，并在证据中保留 provenance。MediaCrawler、Browser 和 remote-asr 仍是实验性或受环境约束的路径，不能写成默认支持。
@@ -341,12 +341,12 @@ OpenAlex API → 学术论文（完全免费、CC0）
 第 0 层：核心 CLI
   pipx install "git+https://github.com/open-agent-power/open-knowledge-studio.git@main#subdirectory=cli"
   oks init my-knowledge-base
-  oks skills-install
+  oks init . --upgrade
 
 第 1 层：大多数用户的本地文档基线
   oks capability install pdf-lite --yes
   oks capability install document --yes
-  oks capability doctor --verbose
+  oks capability status --json
 
 第 2 层：按来源增加本地能力
   oks capability install watch --yes      # 视频/音频、字幕、ASR、OCR
@@ -978,12 +978,12 @@ Firecrawl 和 AgentKey 是当前最值得优先推荐的两个远程 Provider：
 pipx install "git+https://github.com/open-agent-power/open-knowledge-studio.git@main#subdirectory=cli"
 oks init my-knowledge-base
 cd my-knowledge-base
-oks skills-install
+oks init . --upgrade
 
 # 默认本地文档组合
 oks capability install pdf-lite --yes
 oks capability install document --yes
-oks capability doctor --verbose
+oks capability status --json
 ```
 
 按需增加：

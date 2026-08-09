@@ -48,15 +48,12 @@ Requirements: Python ≥ 3.12, Git, pipx.
 
 ```bash
 # Install the latest canonical main branch
-pipx install "git+https://github.com/open-agent-power/open-knowledge-studio.git@main#subdirectory=cli"
+pipx install open-knowledge-studio
 oks --version
 
-# Create a workspace
+# Create a workspace (this also installs the Agent skills into it)
 oks init ./my-knowledge-base
 export OKS_ROOT=./my-knowledge-base
-
-# Install Agent skills into the workspace
-oks skills-install --force
 ```
 
 **Ingesting a source**: in a supported Agent Host (Claude Code, Codex), just say:
@@ -83,7 +80,6 @@ oks lint
 
 ```text
 oks init             Create knowledge workspace
-oks skills-install   Materialize Agent skill templates
 oks raw-commit       Commit evidence bundle to Raw (Fragment ↔ Manifest consistency enforced)
 oks capability       List / doctor / status available Providers (incl. user_impact metadata)
 oks config           Manage global config — including strategy (lightweight/quality/privacy/ask_each_time)
@@ -184,12 +180,12 @@ Provider 不直接写 Raw。Recipe 不写死具体 Provider。
 ### 快速开始
 
 ```bash
-pipx install "git+https://github.com/open-agent-power/open-knowledge-studio.git@main#subdirectory=cli"
+pipx install open-knowledge-studio
 oks --version
 
+# oks init 会同时把 Agent 技能装进该目录
 oks init ./my-knowledge-base
 export OKS_ROOT=./my-knowledge-base
-oks skills-install --force
 ```
 
 **收录来源**：在支持的 Agent Host（Claude Code / Codex）中说：
