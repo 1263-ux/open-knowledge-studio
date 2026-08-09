@@ -23,7 +23,7 @@ oks core
 ## 安装原则
 
 ```powershell
-pipx install "git+https://github.com/1263-ux/claude-code-knowledge-studios.git@main#subdirectory=cli"
+pipx install open-knowledge-studio
 oks init <knowledge-root>
 oks capability install watch
 ```

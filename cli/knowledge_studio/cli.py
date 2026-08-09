@@ -1550,7 +1550,7 @@ def init(
         console.print(
             "[yellow]No bundled assets found — skills/templates not materialized.[/yellow]\n"
             "  Reinstall the canonical main source with pipx, then retry:\n"
-            "  pipx install --force \"git+https://github.com/1263-ux/claude-code-knowledge-studios.git@main#subdirectory=cli\"\n"
+            "  pipx upgrade open-knowledge-studio\n"
             "  or run python cli/scripts/bundle_assets.py in the repo before installing."
         )
     else:
@@ -1755,7 +1755,7 @@ def hook_install(
             f"[red]Cannot install hook — bundled assets missing.[/red]\n"
             f"  {e}\n"
             f"  This happens when oks was installed from source without the asset bundle.\n"
-            f"  Fix: [bold]pipx install --force \"git+https://github.com/1263-ux/claude-code-knowledge-studios.git@main#subdirectory=cli\"[/bold],\n"
+            f"  Fix: [bold]pipx upgrade open-knowledge-studio[/bold],\n"
             f"  or run [bold]python cli/scripts/bundle_assets.py[/bold] in the repo before installing."
         )
         raise typer.Exit(1)

@@ -74,7 +74,7 @@ oks search "your query" --format json
 ## 准备开始？
 
 ```bash
-pipx install "git+https://github.com/1263-ux/claude-code-knowledge-studios.git@main#subdirectory=cli" && pipx ensurepath
+pipx install open-knowledge-studio && pipx ensurepath
 oks init my-knowledge-base
 cd my-knowledge-base
 oks status

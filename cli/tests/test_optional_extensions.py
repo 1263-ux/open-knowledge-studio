@@ -37,6 +37,37 @@ def test_handler_install_hints_point_at_real_channels():
         )
 
 
+def test_install_instructions_only_point_at_official_sources():
+    """Install entry points must never route users to a non-org repository.
+
+    This slipped in twice: a direct-URL dependency that PyPI rejects, and 17
+    places (README, wheel metadata, runtime hints) pointing at a personal repo
+    that lacked our security fixes and tracked a mutable @main ref.
+    """
+    repo_root = Path(__file__).parents[2]
+    targets = [
+        repo_root / "README.md",
+        repo_root / "CLAUDE.md",
+        repo_root / "AGENTS.md",
+        repo_root / "cli" / "README.md",
+        repo_root / "cli" / "pyproject.toml",
+        repo_root / "cli" / "knowledge_studio" / "cli.py",
+        *(repo_root / "docs").glob("*.md"),
+    ]
+    keywords = ("pipx install", "pipx upgrade", "pip install", "Homepage", "Repository")
+    offenders: list[str] = []
+    for path in targets:
+        if not path.is_file() or "archive" in path.parts:
+            continue
+        for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            if "github.com/" not in line or "github.com/open-agent-power/" in line:
+                continue
+            if any(word in line for word in keywords):
+                offenders.append(f"{path.relative_to(repo_root)}:{lineno}: {line.strip()}")
+
+    assert not offenders, "install entry points must stay on official sources:\n" + "\n".join(offenders)
+
+
 def test_ingest_missing_connector_shows_explicit_action(monkeypatch):
     monkeypatch.setattr(cli, "_connector_command", lambda: None)
 
