@@ -251,7 +251,33 @@ def default_ingest_output(source: str) -> Path:
     slug = re.sub(r"[^a-zA-Z0-9._-]+", "-", label).strip("-._").lower() or "source"
     digest = hashlib.sha256(identity.encode("utf-8")).hexdigest()[:8]
     timestamp = f"{datetime.now():%Y%m%d-%H%M%S-%f}-{uuid.uuid4().hex[:8]}"
-    return (Path.cwd() / "raw" / f"{timestamp}-{slug[:64]}-{digest}").resolve()
+    return (default_raw_root() / f"{timestamp}-{slug[:64]}-{digest}").resolve()
+
+
+def default_raw_root() -> Path:
+    """Resolve the active KB raw/ directory for connector-managed ingest.
+
+    Mirrors ``knowledge_studio.config.get_kb_root`` exactly — OKS_ROOT, then
+    ``~/.oks/config.json``, then cwd. Reimplemented rather than imported: the
+    connector also runs as a standalone console script and must not pull in
+    review or Wiki behavior. Diverging from that order would let `oks ingest`
+    write into one knowledge base while `oks recall` reads another.
+    """
+    env_root = os.environ.get("OKS_ROOT")
+    if env_root:
+        return Path(env_root).expanduser().resolve() / "raw"
+
+    config_path = Path.home() / ".oks" / "config.json"
+    if config_path.is_file():
+        try:
+            config = json.loads(config_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            config = {}
+        kb_path = config.get("knowledge_base_path")
+        if kb_path:
+            return Path(kb_path).expanduser().resolve() / "raw"
+
+    return (Path.cwd() / "raw").resolve()
 
 
 def _extractor_python(extractor: str) -> Path:
