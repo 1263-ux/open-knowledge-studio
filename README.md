@@ -28,7 +28,7 @@ Prerequisites: Python ≥ 3.12, git. Claude Code (or a compatible agent) is opti
 but required for the skills-driven workflow — the CLI alone covers the full loop.
 
 ```bash
-pipx install open-knowledge-studio && pipx ensurepath   # 1. install the CLI (core + connector)
+pipx install "git+https://github.com/1263-ux/claude-code-knowledge-studios.git@main#subdirectory=cli" && pipx ensurepath   # 1. install the canonical CLI source
 oks init my-knowledge-base          # 2. scaffold your instance
 cd my-knowledge-base
 oks status                          # 3. use it
@@ -78,9 +78,9 @@ missing. Feishu Base is an optional extension: `oks feishu auth`,
 
 Troubleshooting:
 - Run `oks --version` to confirm the install landed on your PATH.
-- If your mirror lags behind PyPI: `pipx install open-knowledge-studio --pip-args="-i https://pypi.org/simple"`.
+- To update the canonical source cleanly: `pipx install --force "git+https://github.com/1263-ux/claude-code-knowledge-studios.git@main#subdirectory=cli"`.
 
-Prefer a plain venv? `python3 -m venv ~/.oks-venv && ~/.oks-venv/bin/pip install open-knowledge-studio`
+Prefer a plain venv? `python3 -m venv ~/.oks-venv && ~/.oks-venv/bin/pip install "git+https://github.com/1263-ux/claude-code-knowledge-studios.git@main#subdirectory=cli"`
 
 `oks init` materializes the shareable layer (Claude Code skills, templates, schema,
 settings) and a git-tracked memory instance — no repo clone required. v0.4 ships the
@@ -118,7 +118,7 @@ Open Knowledge Studio 是一个为 Claude Code 设计的文件式知识库系统
 （`/ingest`、`/query`、`/promote`）依赖它——纯 CLI 覆盖搜索/召回/wiki CRUD。
 
 ```bash
-pipx install open-knowledge-studio && pipx ensurepath   # 1. 安装 CLI
+pipx install "git+https://github.com/1263-ux/claude-code-knowledge-studios.git@main#subdirectory=cli" && pipx ensurepath   # 1. 安装主线 CLI
 oks init my-knowledge-base          # 2. 初始化你的知识库实例
 cd my-knowledge-base
 oks status                          # 3. 开始使用
@@ -144,9 +144,9 @@ oks raw-commit <manifest-dir> --output my-knowledge-base/raw/<slug>
 
 排障：
 - 运行 `oks --version` 确认安装已生效、命令在 PATH 上。
-- 镜像同步滞后时：`pipx install open-knowledge-studio --pip-args="-i https://pypi.org/simple"`。
+- 更新主线源码时：`pipx install --force "git+https://github.com/1263-ux/claude-code-knowledge-studios.git@main#subdirectory=cli"`。
 
-习惯传统 venv？`python3 -m venv ~/.oks-venv && ~/.oks-venv/bin/pip install open-knowledge-studio`
+习惯传统 venv？`python3 -m venv ~/.oks-venv && ~/.oks-venv/bin/pip install "git+https://github.com/1263-ux/claude-code-knowledge-studios.git@main#subdirectory=cli"`
 
 `oks init` 会物化可共享层（Claude Code 技能、模板、schema、配置）并生成一个用 git
 跟踪记忆的实例——无需 clone 本仓库。v0.4 会同时物化 Agent-native `/ingest` Skill

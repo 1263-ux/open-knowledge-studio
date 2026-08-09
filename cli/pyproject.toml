@@ -57,8 +57,8 @@ formula = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/open-agent-power/open-knowledge-studio"
-Repository = "https://github.com/open-agent-power/open-knowledge-studio"
+Homepage = "https://github.com/1263-ux/claude-code-knowledge-studios"
+Repository = "https://github.com/1263-ux/claude-code-knowledge-studios"
 Documentation = "https://open-agent-power.github.io/open-knowledge-studio/"
 
 [project.scripts]
