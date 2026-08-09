@@ -121,7 +121,24 @@ eval_app = typer.Typer(help="Offline recall evaluation and run comparison.")
 trace_app = typer.Typer(help="Append-only execution traces and feedback.")
 feishu_app = typer.Typer(help="Optional Feishu Base intake, review, and event-listening extension.")
 capability_app = typer.Typer(help="Optional modality capabilities; core dependencies stay lightweight.")
-ingest_app = typer.Typer(help="Agent-native ingestion preparation and execution.", no_args_is_help=True)
+
+
+class _LegacyIngestGroup(typer.core.TyperGroup):
+    """Keep ``oks ingest <source>`` working beside ``oks ingest prepare``."""
+
+    def _click_resolve_command(self, ctx, args):
+        if args and self.get_command(ctx, args[0]) is None:
+            legacy_command = self.get_command(ctx, "run")
+            if legacy_command is not None:
+                return "run", legacy_command, args
+        return super()._click_resolve_command(ctx, args)
+
+
+ingest_app = typer.Typer(
+    help="Agent-native ingestion preparation and execution.",
+    no_args_is_help=True,
+    cls=_LegacyIngestGroup,
+)
 app.add_typer(wiki_app, name="wiki")
 app.add_typer(drafts_app, name="drafts")
 app.add_typer(config_app, name="config")
