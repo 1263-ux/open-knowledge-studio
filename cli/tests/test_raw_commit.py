@@ -1043,3 +1043,31 @@ def test_failed_overwrite_keeps_the_previous_bundle(monkeypatch):
     assert (output / "bundle.json").is_file(), (
         "the previous bundle was destroyed by a failed overwrite"
     )
+
+
+def test_partial_step_must_also_persist_its_output():
+    """A verified bypass: every step declared ``partial`` skipped the check.
+
+    The manifest still carried evidence text, so fabricated content committed
+    with no provider output anywhere on disk.
+    """
+    run_root, art = _make_run("t-prov-partial-step-")
+    m, _ = _make_manifest(
+        art, "x.txt", "data", _EVIDENCE, steps=_step("pdf-lite", status="partial")
+    )
+
+    r = _run_commit(m, run_root / "out")
+    assert r.returncode != 0
+    assert "PROVENANCE_UNVERIFIABLE" in r.stdout, r.stdout[:400]
+
+
+@pytest.mark.parametrize("status", ["failed", "skipped"])
+def test_failed_and_skipped_steps_stay_exempt(status):
+    """Those two genuinely produce nothing, so demanding output would be wrong."""
+    run_root, art = _make_run(f"t-prov-{status}-")
+    m, _ = _make_manifest(
+        art, "x.txt", "data", _EVIDENCE, steps=_step("pdf-lite", status=status)
+    )
+
+    r = _run_commit(m, run_root / "out")
+    assert r.returncode == 0, r.stdout[:400]

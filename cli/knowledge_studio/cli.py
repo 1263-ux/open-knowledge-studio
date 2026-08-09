@@ -333,7 +333,9 @@ def capability_guide_cmd(
         )
         raise typer.Exit(2)
 
-    console.print(guide.read_text(encoding="utf-8"))
+    # Rich reads square brackets as style tags and silently drops them, which
+    # mangles footnote markers and Markdown links inside a provider guide.
+    console.print(guide.read_text(encoding="utf-8"), markup=False)
 
 
 @schema_app.command("show")
@@ -383,24 +385,24 @@ def security_sanitize_cmd(
 
     original = target.read_bytes()
     sanitized = sanitize_remote_artifact(original, content_type=content_type)
-    if sanitized == original:
+    text = sanitized.decode("utf-8", errors="replace")
+    redaction_count = text.count(REDACTED) - original.decode(
+        "utf-8", errors="replace"
+    ).count(REDACTED)
+
+    # Only write when a credential was actually removed. The redactor
+    # re-serializes JSON with indent=2, so writing unconditionally would
+    # reformat a provider's raw output that had nothing to redact — P3 requires
+    # that output be preserved at maximum fidelity.
+    if redaction_count <= 0:
         _emit_json({"path": str(target), "changed": False, "redaction_count": 0})
         return
-
-    try:
-        text = sanitized.decode("utf-8")
-    except UnicodeDecodeError:
-        # Binary payloads are returned unchanged, so reaching here means the
-        # redactor produced bytes we cannot write as text — refuse rather than
-        # corrupt the evidence.
-        console.print(f"[red]Refusing to write non-UTF-8 output for:[/red] {target}")
-        raise typer.Exit(1)
 
     _atomic_write(target, text)
     _emit_json({
         "path": str(target),
         "changed": True,
-        "redaction_count": text.count(REDACTED),
+        "redaction_count": redaction_count,
     })
 
 
@@ -1192,6 +1194,20 @@ def wiki_archive(slug: str = typer.Argument(help="Page slug to archive")):
     """Archive a wiki page."""
     if store.archive_page(slug):
         console.print(f"[green]Archived:[/green] {slug}")
+    else:
+        console.print(f"[red]Not found:[/red] {slug}")
+        raise typer.Exit(1)
+
+
+@wiki_app.command("unarchive")
+def wiki_unarchive(slug: str = typer.Argument(help="Page slug to bring back into recall")):
+    """Bring an archived page back — the return path A3 depends on.
+
+    Restores to `provisional`, not `active`: leaving the archive is not a human
+    review.
+    """
+    if store.unarchive_page(slug):
+        console.print(f"[green]Unarchived (provisional):[/green] {slug}")
     else:
         console.print(f"[red]Not found:[/red] {slug}")
         raise typer.Exit(1)

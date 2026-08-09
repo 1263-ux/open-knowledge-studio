@@ -257,15 +257,20 @@ def default_ingest_output(source: str) -> Path:
 def default_raw_root() -> Path:
     """Resolve the active KB raw/ directory for connector-managed ingest.
 
-    Mirrors ``knowledge_studio.config.get_kb_root`` exactly — OKS_ROOT, then
-    ``~/.oks/config.json``, then cwd. Reimplemented rather than imported: the
-    connector also runs as a standalone console script and must not pull in
-    review or Wiki behavior. Diverging from that order would let `oks ingest`
-    write into one knowledge base while `oks recall` reads another.
+    Mirrors ``knowledge_studio.config.get_kb_root``: OKS_ROOT, then a cwd that
+    is itself a knowledge base, then ``~/.oks/config.json``, then cwd.
+    Reimplemented rather than imported because the connector also runs as a
+    standalone console script and must not pull in review or Wiki behavior —
+    so any change to that resolver has to be mirrored here, or `oks ingest`
+    writes into one knowledge base while `oks recall` reads another.
     """
     env_root = os.environ.get("OKS_ROOT")
     if env_root:
         return Path(env_root).expanduser().resolve() / "raw"
+
+    cwd = Path.cwd()
+    if (cwd / "wiki").is_dir():
+        return cwd.resolve() / "raw"
 
     config_path = Path.home() / ".oks" / "config.json"
     if config_path.is_file():
@@ -277,7 +282,7 @@ def default_raw_root() -> Path:
         if kb_path:
             return Path(kb_path).expanduser().resolve() / "raw"
 
-    return (Path.cwd() / "raw").resolve()
+    return (cwd / "raw").resolve()
 
 
 def _extractor_python(extractor: str) -> Path:

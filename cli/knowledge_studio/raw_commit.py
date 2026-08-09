@@ -455,7 +455,11 @@ _NO_WORK_OUTPUT_PROVIDERS = frozenset({"agent-runtime", "human"})
 # arbitrary filesystem probe that satisfies the gate.
 _PROVIDER_ID_RE = re.compile(r"[a-z0-9][a-z0-9._-]*\Z")
 
-_VERIFIED_STEP_STATUSES = ("succeeded", "degraded")
+# A step that ran a provider must show its output, whatever it achieved.
+# Only `failed` and `skipped` genuinely produce nothing. Leaving `partial` out
+# was a verified bypass: declaring every step partial skipped the work/ check
+# while evidence_records carried fabricated text, and the commit succeeded.
+_VERIFIED_STEP_STATUSES = ("succeeded", "degraded", "partial")
 
 
 def _verify_provenance_artifacts(

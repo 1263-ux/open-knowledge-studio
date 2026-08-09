@@ -538,6 +538,25 @@ def archive_page(slug: str) -> bool:
     return dropped and archived
 
 
+def unarchive_page(slug: str) -> bool:
+    """Bring an archived page back into recall.
+
+    CONSTITUTION A3 permits decay to archive without human review only because
+    archiving is reversible. It is only reversible if this exists:
+    ``compute_score`` returns 0.0 for ``status: dropped`` and recall filters it
+    out, so without this the sole way back was editing the Markdown by hand.
+
+    Returns to ``provisional``, not ``active`` — leaving the archive is not a
+    human review, so the page must not gain active standing on the way out.
+    """
+    f = _find_file_by_slug(slug)
+    if not f:
+        return False
+    restored = _update_frontmatter_field(f, "status", "provisional")
+    unarchived = _update_frontmatter_field(f, "archived", False)
+    return restored and unarchived
+
+
 def list_drafts() -> list[dict]:
     dd = drafts_dir()
     if not dd.exists():

@@ -535,3 +535,51 @@ def test_episodic_gate_does_not_match_inside_longer_words():
     assert _matches_query(content, "rust", {"rust"})
     # A whole-query substring is still deliberately accepted.
     assert _matches_query(content, "algorithms and golang", set())
+
+
+def test_recall_exposes_human_reviewed_at(kb_root):
+    """The /query label rule keys ``[verified]`` off this field.
+
+    It was written into frontmatter but never surfaced in the recall hit, so an
+    Agent had no way to tell an approved page from an unreviewed one.
+    """
+    from knowledge_studio.recall import recall_knowledge
+    from knowledge_studio.store import write_wiki_page
+
+    write_wiki_page(
+        title="Reviewed Zebra Page",
+        content="zebraword content that a human approved",
+        area="computing",
+        human_reviewed=True,
+    )
+
+    hits = recall_knowledge("zebraword", limit=5)
+    assert hits, "the page should be recalled"
+    assert hits[0]["human_reviewed_at"], hits[0]
+
+
+def test_archived_page_can_come_back(kb_root):
+    """A3 allows unreviewed auto-archiving only because it is reversible."""
+    from knowledge_studio.recall import recall_knowledge
+    from knowledge_studio.store import archive_page, get_wiki_page, unarchive_page, write_wiki_page
+
+    page = write_wiki_page(
+        title="Zebraword Strategy",
+        content="zebraword body",
+        wiki_type="strategies",
+        area="computing",
+    )
+    slug = page.stem
+
+    assert archive_page(slug)
+    assert not [h for h in recall_knowledge("zebraword", limit=5) if h["slug"] == slug], (
+        "an archived page must not be recalled"
+    )
+
+    assert unarchive_page(slug), "there must be a way back"
+    meta = get_wiki_page(slug)
+    assert meta["status"] == "provisional", "leaving the archive is not a review"
+    assert meta["archived"] is False
+    assert [h for h in recall_knowledge("zebraword", limit=5) if h["slug"] == slug], (
+        "the restored page is still unreachable"
+    )

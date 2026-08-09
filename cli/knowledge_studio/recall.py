@@ -398,6 +398,10 @@ def _recall_knowledge_with_context(
             "body_preview": item.get("body", "")[:MAX_BODY_PREVIEW],
             "tags": item.get("tags", ""),
             "has_traces": bool(item.get("traces")),
+            # The /query skill derives [verified] from one of two recorded
+            # facts: trace evidence, or a human review. Both must be visible
+            # here or the label rule cannot be applied.
+            "human_reviewed_at": item.get("human_reviewed_at", ""),
             "relates_to": item.get("relates_to", ""),
             "relationship": item.get("relationship", ""),
         }

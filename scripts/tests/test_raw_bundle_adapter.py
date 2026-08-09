@@ -121,14 +121,20 @@ def test_default_ingest_output_uses_oks_root_raw(tmp_path, monkeypatch):
     assert output.parent == (kb / "raw").resolve()
 
 
-def test_default_ingest_output_follows_the_configured_active_kb(tmp_path, monkeypatch):
-    """The connector must resolve the same root as ``config.get_kb_root``.
+def test_default_ingest_output_agrees_with_get_kb_root(tmp_path, monkeypatch):
+    """The connector and the core must resolve the same knowledge base.
 
-    Preferring a cwd that merely contains ``wiki/`` would make `oks ingest`
-    write into one knowledge base while `oks recall` reads another — and this
-    source repository contains ``wiki/`` itself, so every run from a checkout
-    would land there.
+    They are two implementations of one contract: the connector cannot import
+    ``knowledge_studio`` (it also runs standalone), so drift is only caught
+    here. Asserting a hardcoded expectation is what let them diverge before —
+    compare against the real resolver instead.
     """
+    import importlib.util
+
+    config_py = MODULE_PATH.parents[1] / "cli" / "knowledge_studio" / "config.py"
+    if not config_py.is_file():
+        pytest.skip("core package not present in this checkout")
+
     configured = tmp_path / "configured"
     current = tmp_path / "current"
     (configured / "wiki").mkdir(parents=True)
@@ -143,9 +149,18 @@ def test_default_ingest_output_follows_the_configured_active_kb(tmp_path, monkey
     monkeypatch.setattr(adapter.Path, "home", lambda: tmp_path / "home")
     monkeypatch.chdir(current)
 
-    output = adapter.default_ingest_output("note.txt")
+    spec = importlib.util.spec_from_file_location("_oks_config", config_py)
+    assert spec and spec.loader
+    core_config = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(core_config)
+    monkeypatch.setattr(core_config.Path, "home", lambda: tmp_path / "home")
 
-    assert output.parent == (configured / "raw").resolve()
+    core_root = core_config.get_kb_root().resolve()
+    connector_root = adapter.default_ingest_output("note.txt").parent
+
+    assert connector_root == (core_root / "raw"), (
+        f"connector resolved {connector_root}, core resolved {core_root / 'raw'}"
+    )
 
 
 def test_default_ingest_output_falls_back_to_cwd_without_config(tmp_path, monkeypatch):
