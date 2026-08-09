@@ -53,6 +53,15 @@ SEARCH_RESPONSE_SCHEMA = "search-response/v1"
 # digests (see distiller.write_digest).
 _NON_RECALLABLE_RAW_SUBDIRS = ("executions", ".logs")
 
+# A2 requires every injected item to carry a source label. Episodic hits used to
+# arrive unlabelled, and raw/ is the one channel that holds third-party text an
+# agent must never take instructions from.
+_EPISODIC_SOURCE_LABELS = {
+    "raw": "[untrusted-source]",
+    "trace": "[provenance]",
+    "profile": "[user-declared]",
+}
+
 
 def _resolve_goal_context(
     goal: str | None = None,
@@ -281,6 +290,11 @@ def recall_episodic(
     for rank, (_, item) in enumerate(results[:limit], start=1):
         item["schema_version"] = RECALL_HIT_SCHEMA
         item["channel"] = "episodic"
+        # Default to untrusted: an unrecognised episodic type is third-party
+        # text until proven otherwise, never trusted memory.
+        item["source_label"] = _EPISODIC_SOURCE_LABELS.get(
+            item.get("type", ""), "[untrusted-source]"
+        )
         item["rank"] = rank
         ranked.append(item)
     return ranked

@@ -305,7 +305,13 @@ def _update_frontmatter_field(file_path: Path, field: str, value) -> bool:
     return True
 
 
-def _reinforce_confidence(slug: str) -> None:
+def _reinforce_on_reconfirmation(slug: str) -> None:
+    """Raise confidence when the same knowledge is independently re-derived.
+
+    Only the duplicate-fingerprint path in :func:`write_wiki_page` calls this:
+    arriving at an existing page again from new material is evidence about the
+    content. Reading a page is not — see :func:`record_access`.
+    """
     f = _find_file_by_slug(slug)
     if not f:
         return
@@ -316,10 +322,6 @@ def _reinforce_confidence(slug: str) -> None:
     new_conf = min(1.0, current + 0.1 * (1 - current))
     if new_conf != current:
         _update_frontmatter_field(f, "confidence", round(new_conf, 4))
-    access_counts = _load_access_counts()
-    if access_counts.get(slug, 0) >= 3:
-        if meta.get("status", "active") == "provisional":
-            _update_frontmatter_field(f, "status", "active")
 
 
 def list_wiki_pages(config: dict | None = None) -> list[dict]:
@@ -368,10 +370,15 @@ def get_wiki_page(slug: str) -> dict | None:
 
 
 def record_access(slug: str) -> None:
+    """Count a use. Deliberately does not touch confidence or status.
+
+    Usage feeds ranking via ``compute_score``'s access_bonus. Letting it also
+    raise confidence or promote provisional pages would mean a page nobody
+    reviewed gets injected as ``[verified]`` after three reads.
+    """
     counts = _load_access_counts()
     counts[slug] = counts.get(slug, 0) + 1
     _save_access_counts(counts)
-    _reinforce_confidence(slug)
 
 
 def make_slug(title: str, fallback: str = "untitled") -> str:
@@ -396,6 +403,7 @@ def write_wiki_page(
     relationship: str | None = None,
     human_note: str | None = None,
     slug_hint: str | None = None,
+    human_reviewed: bool = False,
 ) -> Path:
     if not re.fullmatch(r"[a-z][a-z0-9-]*", area):
         raise ValueError(
@@ -406,7 +414,7 @@ def write_wiki_page(
     fp_index = _load_fingerprint_index()
     existing_slug = fp_index.get(fp)
     if existing_slug:
-        _reinforce_confidence(existing_slug)
+        _reinforce_on_reconfirmation(existing_slug)
         existing = _find_file_by_slug(existing_slug)
         if existing:
             return existing
@@ -453,7 +461,7 @@ def write_wiki_page(
         "title": title,
         "type": wiki_type[:-3] + "y" if wiki_type.endswith("ies") else wiki_type.rstrip("s"),
         "area": area,
-        "status": "provisional",
+        "status": "active" if human_reviewed else "provisional",
         "source_type": source_type,
         "importance": importance,
         "confidence": 0.8,
@@ -465,6 +473,8 @@ def write_wiki_page(
     }
     if options:
         frontmatter["options"] = options
+    if human_reviewed:
+        frontmatter["human_reviewed_at"] = now.isoformat()
     if traces:
         frontmatter["traces"] = traces
     if review:
@@ -610,6 +620,9 @@ def promote_draft(
         review=meta.get("review") if isinstance(meta.get("review"), dict) else None,
         human_note=human_note,
         slug_hint=slug_hint,
+        # A3: reaching here means a human approved the draft. Recording it is
+        # what lets recall label the page [verified] honestly.
+        human_reviewed=True,
         # A4: carry the declared relationship through, otherwise the superseded
         # page stays active and both versions get recalled side by side.
         supersedes=meta.get("supersedes"),
