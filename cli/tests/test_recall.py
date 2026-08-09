@@ -501,3 +501,37 @@ def test_episodic_hits_carry_an_a2_source_label(kb_root):
     assert raw_hits and all(
         h["source_label"] == "[untrusted-source]" for h in raw_hits
     ), raw_hits
+
+
+def test_token_overlap_does_not_match_inside_longer_words():
+    """`token in searchable` counted "go" as a hit inside "golang"/"algorithms"."""
+    from knowledge_studio.recall import _compute_relevance_components
+
+    context = {
+        "mode": "legacy", "requested": "legacy",
+        "goals": [], "domains": set(), "keywords": set(),
+    }
+    page = {
+        "title": "algorithms in rust",
+        "body": "rust and algorithms and golang",
+        "tags": "",
+        "type": "concept",
+        "score": 0,
+    }
+
+    spurious = _compute_relevance_components(page, "go", {"go"}, None, context)
+    assert spurious["token_overlap_count"] == 0, spurious["reasons"]
+
+    real = _compute_relevance_components(page, "rust", {"rust"}, None, context)
+    assert real["token_overlap_count"] == 1, real["reasons"]
+
+
+def test_episodic_gate_does_not_match_inside_longer_words():
+    """The gate decides what reaches the context, so a false hit is injection."""
+    from knowledge_studio.recall import _matches_query
+
+    content = "rust and algorithms and golang"
+    assert not _matches_query(content, "go", {"go"})
+    assert _matches_query(content, "rust", {"rust"})
+    # A whole-query substring is still deliberately accepted.
+    assert _matches_query(content, "algorithms and golang", set())

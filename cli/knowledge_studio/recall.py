@@ -484,7 +484,11 @@ def _compute_relevance_components(
         tags = str(tags_raw).lower()
 
     searchable = f"{title} {body} {tags}"
-    overlap_count = sum(1 for token in query_tokens if token in searchable)
+    # Token overlap must compare tokens, not substrings: `token in searchable`
+    # counted "go" as a hit inside "golang" and "algorithms". Substring intent
+    # is already covered by the dedicated title/body substring factor below.
+    page_tokens = _tokenize(searchable)
+    overlap_count = len(query_tokens & page_tokens)
     token_overlap = overlap_count * 0.3
     if overlap_count:
         reasons.append(f"token-overlap:{overlap_count}")
@@ -597,10 +601,16 @@ def _compute_relevance_components(
 
 
 def _matches_query(content: str, query_lower: str, query_tokens: set[str]) -> bool:
+    """Decide whether an episodic file is a candidate at all.
+
+    Token comparison is on tokens, not substrings: `token in content` let "go"
+    match "algorithms" and pulled unrelated files into the agent's context. The
+    whole-query substring branch is deliberate — it catches exact phrases.
+    """
     if query_lower and len(query_lower) > 3 and query_lower in content:
         return True
     if query_tokens:
-        return any(token in content for token in query_tokens)
+        return bool(query_tokens & _tokenize(content))
     return bool(query_lower and query_lower in content)
 
 
