@@ -164,6 +164,89 @@ def test_probe_rejects_non_http_and_private_targets():
         raise AssertionError("private target was accepted")
 
 
+class FakeRedirectResponse:
+    def __init__(self, status, location=None):
+        self.status_code = status
+        self.headers = {} if location is None else {"Location": location}
+        self.closed = False
+
+    def close(self):
+        self.closed = True
+
+
+def test_safe_redirect_chain_validates_every_hop():
+    hops = [
+        FakeRedirectResponse(302, "http://127.0.0.1:8080/admin"),
+        FakeRedirectResponse(200),
+    ]
+    seen = []
+
+    def get(target):
+        seen.append(target)
+        return hops[len(seen) - 1]
+
+    with pytest.raises(network_module.ProbeError) as exc:
+        network_module.safe_redirect_chain("https://example.com/start", get)
+
+    assert exc.value.code == "INVALID_URL"
+    assert seen == ["https://example.com/start"], "private hop was requested"
+    assert hops[0].closed, "intermediate redirect response was not closed"
+
+
+def test_safe_redirect_chain_rejects_redirect_without_location():
+    response = FakeRedirectResponse(302)
+
+    with pytest.raises(network_module.ProbeError) as exc:
+        network_module.safe_redirect_chain(
+            "https://example.com/start", lambda _target: response
+        )
+
+    assert exc.value.code == "INVALID_REDIRECT"
+    assert response.closed
+
+
+def test_safe_redirect_chain_stops_at_redirect_limit():
+    counter = {"n": 0}
+
+    def get(_target):
+        counter["n"] += 1
+        return FakeRedirectResponse(302, f"https://example.com/hop{counter['n']}")
+
+    with pytest.raises(network_module.ProbeError) as exc:
+        network_module.safe_redirect_chain(
+            "https://example.com/start", get, max_redirects=3
+        )
+
+    assert exc.value.code == "REDIRECT_LOOP"
+    assert counter["n"] == 4
+
+
+def test_web_extractor_is_importable_when_run_as_a_script(monkeypatch, tmp_path):
+    """``{python} {web_adapter} <url>`` puts scripts/extractors/ on sys.path[0].
+
+    A bare top-level ``from network import ...`` then raises
+    ModuleNotFoundError, which breaks the whole web.trafilatura capability.
+    """
+    import runpy
+    import types
+
+    trafilatura = types.ModuleType("trafilatura")
+    trafilatura.extract = lambda *_a, **_k: ""
+    metadata = types.ModuleType("trafilatura.metadata")
+    metadata.extract_metadata = lambda *_a, **_k: None
+    monkeypatch.setitem(sys.modules, "trafilatura", trafilatura)
+    monkeypatch.setitem(sys.modules, "trafilatura.metadata", metadata)
+
+    web_path = Path(__file__).parents[1] / "extractors" / "web.py"
+    monkeypatch.setattr(sys, "argv", ["web.py", "--help"])
+    monkeypatch.syspath_prepend(str(tmp_path))
+    monkeypatch.syspath_prepend(str(web_path.parent))
+
+    with pytest.raises(SystemExit) as exc:
+        runpy.run_path(str(web_path), run_name="__main__")
+    assert exc.value.code == 0
+
+
 def test_probe_public_html_emits_fetch_receipt():
     body = (
         "<html><body><article>"

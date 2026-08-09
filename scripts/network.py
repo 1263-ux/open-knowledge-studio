@@ -159,6 +159,53 @@ def _error_receipt(
     }
 
 
+def safe_redirect_chain(
+    source: str,
+    get: Any,
+    *,
+    max_redirects: int = 5,
+) -> tuple[Any, str, list[dict[str, str]]]:
+    """Follow redirects manually, validating every hop against SSRF.
+
+    ``requests.get(url, allow_redirects=True)`` only ever sees the first URL, so
+    a public host that 302s to ``127.0.0.1`` walks straight past
+    :func:`assert_public_network_target`. This validates each hop instead.
+
+    *get* is injected (typically ``requests.get`` bound with headers and timeout,
+    with redirects disabled) so this module keeps its urllib-only dependencies.
+
+    Returns ``(final_response, final_url, hops)``. Intermediate 3xx responses are
+    closed before moving on, and a 3xx without ``Location`` is an error rather
+    than a silently returned redirect body.
+    """
+    url = normalize_public_http_url(source)
+    assert_public_network_target(url)
+    hops: list[dict[str, str]] = []
+
+    for _ in range(max_redirects + 1):
+        response = get(url)
+        if response.status_code not in {301, 302, 303, 307, 308}:
+            return response, url, hops
+
+        status = response.status_code
+        location = response.headers.get("Location")
+        try:
+            if not location:
+                raise ProbeError(
+                    "INVALID_REDIRECT",
+                    f"HTTP {status} without a Location header",
+                )
+            target = normalize_public_http_url(urljoin(url, location))
+            assert_public_network_target(target)
+        finally:
+            response.close()
+
+        hops.append({"status": str(status), "from": url, "to": target})
+        url = target
+
+    raise ProbeError("REDIRECT_LOOP", "redirect limit exceeded")
+
+
 def probe_url(
     source: str,
     *,

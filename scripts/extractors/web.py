@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -14,10 +15,14 @@ import requests
 from trafilatura import extract
 from trafilatura.metadata import extract_metadata
 
-from network import (
-    assert_public_network_target,
-    normalize_public_http_url,
-)
+# This file is also executed as a script (the web.trafilatura capability runs
+# `{python} {web_adapter} ...`), and then sys.path[0] is scripts/extractors/,
+# where the top-level `network` module is not importable.
+_SCRIPTS_DIR = str(Path(__file__).resolve().parent.parent)
+if _SCRIPTS_DIR not in sys.path:
+    sys.path.insert(0, _SCRIPTS_DIR)
+
+from network import safe_redirect_chain
 
 
 SCHEMA_VERSION = "raw-multimodal/v0.1"
@@ -82,16 +87,9 @@ def package_web(
     assets = output / "assets"
     assets.mkdir(parents=True)
 
-    # Keep this legacy requests-based extractor behind the same public-target
-    # and redirect checks used by the connector's network boundary.  Requests'
-    # default redirect handling is disabled so a public URL cannot silently
-    # redirect the worker into a private or link-local address.
-    current_url = normalize_public_http_url(url)
-    assert_public_network_target(current_url)
-    response = None
-    for _ in range(6):
-        response = requests.get(
-            current_url,
+    def _get(target: str) -> requests.Response:
+        return requests.get(
+            target,
             headers={
                 "User-Agent": (
                     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -101,18 +99,11 @@ def package_web(
             timeout=45,
             allow_redirects=False,
         )
-        if not 300 <= response.status_code < 400:
-            break
-        location = response.headers.get("Location")
-        response.close()
-        if not location:
-            raise RuntimeError("web response redirect has no Location header")
-        current_url = normalize_public_http_url(urljoin(current_url, location))
-        assert_public_network_target(current_url)
-    else:
-        raise RuntimeError("web response redirect limit exceeded")
 
-    assert response is not None
+    # Every hop is validated. requests' own redirect handling never re-checks
+    # the target, so a public host that 302s to 127.0.0.1 would otherwise reach
+    # the internal network.
+    response, url, _hops = safe_redirect_chain(url, _get)
     response.raise_for_status()
     html = response.text
     (assets / "page.html").write_text(html, encoding="utf-8")
