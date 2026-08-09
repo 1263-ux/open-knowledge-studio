@@ -444,77 +444,98 @@ def _check_fragment_manifest_consistency(
     return warnings
 
 
-# Providers that do NOT produce external work/ output files.
-# text-read: pre-filled by ingest prepare, no external tool execution
-# agent-runtime: Agent's own multimodal observation, no external tool
-# runtime-tool: ad-hoc tools (curl, playwright), not registered providers
-# human: manually supplied by user
-_NO_WORK_OUTPUT_PROVIDERS = frozenset({
-    "text-read", "agent-runtime", "runtime-tool", "human",
-})
+# Providers that run no external tool and therefore have no raw output to
+# persist.  Everything else — including ad-hoc tools labelled ``runtime-tool``
+# (curl, playwright) and ``text-read`` (whose output ``ingest prepare`` writes
+# to work/text-read/output.md) — must leave its raw output on disk.
+_NO_WORK_OUTPUT_PROVIDERS = frozenset({"agent-runtime", "human"})
+
+# A provider id is a registry identifier, never a path fragment.  Without this,
+# ``provider: ".."`` or ``provider: "/etc"`` turns work_dir / provider into an
+# arbitrary filesystem probe that satisfies the gate.
+_PROVIDER_ID_RE = re.compile(r"[a-z0-9][a-z0-9._-]*\Z")
+
+_VERIFIED_STEP_STATUSES = ("succeeded", "degraded")
 
 
 def _verify_provenance_artifacts(
     manifest: dict[str, Any], manifest_dir: str | Path
 ) -> None:
-    """Verify registered providers have work/ output files.
+    """Verify every step claiming success persisted its raw output.
 
-    When status is 'complete', every registered provider declared in
-    manifest.steps[] with status 'succeeded' or 'degraded' must have
-    corresponding work/<provider>/output.* files that exist and contain
-    content (>0 bytes).
+    Each ``manifest.steps[]`` entry with status ``succeeded`` or ``degraded``
+    must have a ``work/<provider>/output.*`` file that exists and is non-empty.
 
-    This is a mechanical check — Agent self-reported "I saved it" is not
-    trusted.  If the work/ directory or output file is missing, the
-    evidence provenance is unverifiable and the commit is rejected.
-
-    Providers that don't produce external output (text-read, agent-runtime,
-    runtime-tool, human) are excluded from this check.
+    This is a mechanical check — an Agent's self-reported "I saved it" is not
+    trusted.  It deliberately runs for ``partial`` manifests too: ``partial``
+    describes overall evidence coverage, not whether an individual succeeded
+    step is verifiable.
     """
-    if manifest.get("status") != "complete":
-        return
+    steps = manifest.get("steps")
+    if not isinstance(steps, list) or not steps:
+        raise CommitError(
+            "PROVENANCE_STEPS_MISSING",
+            "evidence-manifest.json has no steps[]. A committed manifest must "
+            "record every Provider attempt and its outcome; without it the "
+            "provenance of the evidence cannot be verified.",
+        )
 
-    work_dir = manifest_dir.parent / "work"
-    if not work_dir.is_dir():
-        # No work/ directory at all — but there may be no registered
-        # providers that need one.  Check steps first.
-        pass
+    work_dir = Path(manifest_dir).parent / "work"
+    work_root = work_dir.resolve()
 
     missing: list[str] = []
     empty: list[str] = []
+    illegal: list[dict[str, Any]] = []
 
-    for step in manifest.get("steps", []):
-        provider = step.get("provider", "")
-        if not provider or provider in _NO_WORK_OUTPUT_PROVIDERS:
+    for index, step in enumerate(steps):
+        if step.get("status") not in _VERIFIED_STEP_STATUSES:
             continue
-        if step.get("status") not in ("succeeded", "degraded"):
+
+        provider = step.get("provider")
+        if not isinstance(provider, str) or not _PROVIDER_ID_RE.fullmatch(provider):
+            illegal.append({"step_index": index, "provider": provider})
+            continue
+
+        if provider in _NO_WORK_OUTPUT_PROVIDERS:
             continue
 
         pdir = work_dir / provider
+        try:
+            pdir.resolve().relative_to(work_root)
+        except ValueError:
+            illegal.append({"step_index": index, "provider": provider})
+            continue
+
         if not pdir.is_dir():
             missing.append(provider)
             continue
 
-        files = list(pdir.iterdir())
-        if not files:
+        outputs = [
+            f for f in pdir.iterdir()
+            if f.is_file() and f.name.startswith("output.")
+        ]
+        if not outputs:
+            missing.append(provider)
+        elif not any(f.stat().st_size > 0 for f in outputs):
             empty.append(provider)
-            continue
 
-        has_content = any(
-            f.is_file() and f.stat().st_size > 0 for f in files
+    if illegal:
+        raise CommitError(
+            "INVALID_PROVIDER_ID",
+            f"{len(illegal)} step(s) declare a provider that is not a legal "
+            f"registry identifier. A provider id is not a path.",
+            {"illegal_steps": illegal},
         )
-        if not has_content:
-            empty.append(provider)
 
     if missing or empty:
         raise CommitError(
             "PROVENANCE_UNVERIFIABLE",
-            "Manifest status is 'complete' but registered provider raw "
-            f"output is missing ({', '.join(missing) if missing else 'none'}) "
+            "Registered provider raw output is missing "
+            f"({', '.join(missing) if missing else 'none'}) "
             f"or empty ({', '.join(empty) if empty else 'none'}). "
-            f"Every registered provider must persist its raw output to "
-            f"work/<provider>/output.<ext> before declaring complete. "
-            f"Self-reported save is not proof.",
+            f"Every provider that reports success must persist its raw output "
+            f"to work/<provider>/output.<ext> before the evidence can be "
+            f"committed. Self-reported save is not proof.",
             {"missing_work_dirs": missing, "empty_work_dirs": empty},
         )
 
@@ -1094,10 +1115,9 @@ def raw_commit(
             f"Use --overwrite to replace.",
         )
 
-    if output.exists() and overwrite:
-        shutil.rmtree(output)
-
     # ── Step 8: Assemble Raw Bundle v0.2 ──
+    # An existing bundle is replaced by _assemble_bundle only after staging
+    # is fully validated, so a failed overwrite leaves the old bundle intact.
     bundle_path = _assemble_bundle(envelope, manifest, md, output)
 
     return {

@@ -30,6 +30,18 @@ def _sha_file(path: Path) -> str:
 
 _MEDIA_TYPE_UNSET = object()
 
+# A hand-built fixture runs no external tool, so its one step is the Agent's
+# own observation.  Tests that exercise the work/<provider>/output.* check pass
+# their own steps.
+_AGENT_RUNTIME_STEPS = [
+    {
+        "capability": "document.text.extract",
+        "provider": "agent-runtime",
+        "status": "succeeded",
+        "reason": None,
+    }
+]
+
 
 def _make_manifest(
     art_dir: Path,
@@ -40,6 +52,7 @@ def _make_manifest(
     fragment_evidence: list[dict] | None = None,
     create_fragment: bool = True,
     media_type: str | None | object = _MEDIA_TYPE_UNSET,
+    steps: list[dict] | None = None,
 ) -> tuple[Path, str]:
     """Build a minimal Agent-submitted manifest directory.
 
@@ -109,6 +122,7 @@ def _make_manifest(
                 },
                 "provenance": {"agent": {"runtime": "test"}},
                 "failure_disposition": "none",
+                "steps": _AGENT_RUNTIME_STEPS if steps is None else steps,
             }
         )
     )
@@ -435,6 +449,7 @@ def test_artifact_kind_maps_to_derived_kind(art_kind, expected):
                                     "evidence_count": 1}},
             "provenance": {"agent": {"runtime": "test"}},
             "failure_disposition": "none",
+            "steps": _AGENT_RUNTIME_STEPS,
         })
     )
     r = _run_commit(base, base / "out")
@@ -870,4 +885,161 @@ def test_asr_transcript_kind_accepted():
     )
     assert "subtitle_extraction" not in evidence_lines, (
         "ASR transcript must NOT be renamed to subtitle_extraction"
+    )
+
+
+# ── A3: provenance gate (each case was a verified bypass) ────────────
+
+def _make_run(prefix: str) -> tuple[Path, Path]:
+    """Build the real run workspace layout.
+
+    The gate resolves work/ as ``manifest_dir.parent / "work"``, so the
+    manifest must live one level below the run root::
+
+        <run>/manifest/{evidence-manifest.json,artifacts/,fragments/}
+        <run>/work/<provider>/output.*
+
+    Returns ``(run_root, artifacts_dir)``.
+    """
+    run_root = Path(tempfile.mkdtemp(prefix=prefix))
+    art = run_root / "manifest" / "artifacts"
+    art.mkdir(parents=True)
+    return run_root, art
+
+
+_EVIDENCE = [{
+    "evidence_id": "e1",
+    "artifact_id": "x.txt",
+    "kind": "text",
+    "method": "read",
+    "locator": {"kind": "document"},
+    "agent_judgment": "mechanical",
+}]
+
+
+def _step(provider, status="succeeded", capability="document.text.extract"):
+    return [{
+        "capability": capability,
+        "provider": provider,
+        "status": status,
+        "reason": None,
+    }]
+
+
+def test_manifest_without_steps_is_rejected():
+    """No steps[] means no execution trace, so nothing can be verified.
+
+    The manifest schema does not list ``steps`` in ``required``, so omitting it
+    used to skip the whole provenance gate.
+    """
+    run_root, art = _make_run("t-prov-nosteps-")
+    m, _ = _make_manifest(art, "x.txt", "data", _EVIDENCE, steps=[])
+
+    r = _run_commit(m, run_root / "out")
+    assert r.returncode != 0
+    assert "PROVENANCE_STEPS_MISSING" in r.stdout, r.stdout[:400]
+
+
+def test_partial_status_still_verifies_succeeded_steps():
+    """``partial`` describes evidence coverage, not step verifiability.
+
+    Returning early on any non-``complete`` status let an Agent claim a
+    succeeded provider step while persisting nothing.
+    """
+    run_root, art = _make_run("t-prov-partial-")
+    m, _ = _make_manifest(art, "x.txt", "data", _EVIDENCE, steps=_step("pdf-lite"))
+    manifest_path = m / "evidence-manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["status"] = "partial"
+    manifest["failure_disposition"] = "needs_user_action"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    r = _run_commit(m, run_root / "out")
+    assert r.returncode != 0
+    assert "PROVENANCE_UNVERIFIABLE" in r.stdout, r.stdout[:400]
+
+
+def test_runtime_tool_step_must_persist_its_output():
+    """Ad-hoc tools (curl, playwright) do produce output — they are not exempt.
+
+    ``runtime-tool`` was on the exemption list while the shipped ingest skill
+    instructs Agents to label curl output exactly that way.
+    """
+    run_root, art = _make_run("t-prov-runtime-")
+    m, _ = _make_manifest(
+        art, "x.txt", "data", _EVIDENCE, steps=_step("runtime-tool")
+    )
+
+    r = _run_commit(m, run_root / "out")
+    assert r.returncode != 0
+    assert "PROVENANCE_UNVERIFIABLE" in r.stdout, r.stdout[:400]
+
+
+@pytest.mark.parametrize("provider", ["..", "/etc", "../../etc", "PdfLite", ".hidden"])
+def test_provider_id_cannot_be_a_path(provider):
+    """``work_dir / provider`` turned a provider id into a filesystem probe."""
+    run_root, art = _make_run("t-prov-path-")
+    m, _ = _make_manifest(art, "x.txt", "data", _EVIDENCE, steps=_step(provider))
+
+    r = _run_commit(m, run_root / "out")
+    assert r.returncode != 0
+    assert "INVALID_PROVIDER_ID" in r.stdout, r.stdout[:400]
+
+
+def test_arbitrary_file_does_not_satisfy_the_output_check():
+    """Any non-empty file used to pass; only ``output.*`` is the raw output."""
+    run_root, art = _make_run("t-prov-decoy-")
+    m, _ = _make_manifest(art, "x.txt", "data", _EVIDENCE, steps=_step("pdf-lite"))
+    decoy = run_root / "work" / "pdf-lite"
+    decoy.mkdir(parents=True)
+    (decoy / "notes.txt").write_text("x", encoding="utf-8")
+
+    r = _run_commit(m, run_root / "out")
+    assert r.returncode != 0
+    assert "PROVENANCE_UNVERIFIABLE" in r.stdout, r.stdout[:400]
+
+
+def test_provider_with_persisted_output_commits():
+    run_root, art = _make_run("t-prov-ok-")
+    m, _ = _make_manifest(art, "x.txt", "data", _EVIDENCE, steps=_step("pdf-lite"))
+    work = run_root / "work" / "pdf-lite"
+    work.mkdir(parents=True)
+    (work / "output.md").write_text("extracted\n", encoding="utf-8")
+
+    r = _run_commit(m, run_root / "out")
+    assert r.returncode == 0, r.stdout[:400]
+
+
+def test_empty_output_file_is_rejected():
+    run_root, art = _make_run("t-prov-empty-")
+    m, _ = _make_manifest(art, "x.txt", "data", _EVIDENCE, steps=_step("pdf-lite"))
+    work = run_root / "work" / "pdf-lite"
+    work.mkdir(parents=True)
+    (work / "output.md").write_bytes(b"")
+
+    r = _run_commit(m, run_root / "out")
+    assert r.returncode != 0
+    assert "PROVENANCE_UNVERIFIABLE" in r.stdout, r.stdout[:400]
+
+
+def test_failed_overwrite_keeps_the_previous_bundle(monkeypatch):
+    """``--overwrite`` deleted the old bundle before assembly even started."""
+    from knowledge_studio import raw_commit as rc
+
+    run_root, art = _make_run("t-overwrite-")
+    m, _ = _make_manifest(art, "x.txt", "data", _EVIDENCE)
+    output = run_root / "out"
+    output.mkdir()
+    (output / "bundle.json").write_text('{"previous": true}', encoding="utf-8")
+
+    def _boom(*_args, **_kwargs):
+        raise rc.CommitError("MISSING_BUNDLE_FILE", "assembly failed")
+
+    monkeypatch.setattr(rc, "_assemble_bundle", _boom)
+
+    with pytest.raises(rc.CommitError):
+        rc.raw_commit(m, output=output, overwrite=True)
+
+    assert (output / "bundle.json").is_file(), (
+        "the previous bundle was destroyed by a failed overwrite"
     )
