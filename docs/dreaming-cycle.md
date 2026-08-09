@@ -119,8 +119,8 @@ oks drafts promote <slug>
 ## 下一步
 
 * **[每日循环](daily-loop.md)**：Dreaming 在每天的训练闭环里处于哪一步
-* **[Memories](memories.md)**：提升后的 memory 长什么样
-* **[Raw Materials](raw-materials.md)**：蒸馏前的 raw material 长什么样
+* **[记忆模型](memory-model.md)**：提升后的 memory 长什么样
+* **[Raw 多模态协议](raw-multimodal-standard.md)**：蒸馏前的 raw material 长什么样
 * **[Decay System](decay-system.md)**：memory 评分如何随时间变化
 * **[Architecture](architecture.md)**：认知桶结构
 

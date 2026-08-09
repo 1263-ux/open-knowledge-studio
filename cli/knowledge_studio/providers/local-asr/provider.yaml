@@ -1,0 +1,32 @@
+id: local-asr
+execution: managed
+label: 本地语音识别
+description: 使用 faster-whisper 在本地进行语音转文字。不依赖远程 API，数据不出本机。
+
+provides:
+  speech.transcribe:
+    maturity: validated
+
+requirements:
+  python_package: faster-whisper
+  env: [OKS_WATCH_PYTHON]
+
+cost:
+  estimated_per_call: 0
+
+known_limits:
+  - 12 秒短音频已验证通过
+  - 长音频因网络环境受限未测试
+  - 首次运行需下载模型（~1-3 GB）
+  - 中文识别准确率依赖模型质量
+
+last_validated: 2026-08-04
+
+user_impact:
+  install: "首次运行需下载 faster-whisper 模型"
+  disk: "模型约 1–3 GB，取决于所选模型大小"
+  runtime: "CPU 可运行，长音频处理较慢；GPU 可显著加速"
+  execution: "local"
+  privacy: "原始音频不上传，全部本地处理"
+  cost: "免费"
+  skip_effect: "无字幕视频的语音内容无法转为文字，只能得到 metadata"

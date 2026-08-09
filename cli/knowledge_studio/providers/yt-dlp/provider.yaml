@@ -1,0 +1,42 @@
+id: yt-dlp
+execution: managed
+label: yt-dlp
+description: 视频/音频下载与元数据提取。支持 Bilibili、YouTube、Douyin 等平台。字幕获取需 Cookie 认证。
+
+provides:
+  media.download:
+    maturity: validated
+  subtitle.fetch:
+    maturity: validated
+  metadata.fetch:
+    maturity: stable
+
+requirements:
+  command: yt-dlp
+  optional_commands: [ffmpeg]
+  credentials: [browser_cookies]
+
+cost:
+  estimated_per_call: 0
+
+known_limits:
+  - Bilibili 字幕需 Cookie (历史 7/10 成功率)
+  - YouTube 在中国网络可能不可达
+  - 平台反爬行为可能变化
+  - 长视频下载时间和存储成本高
+
+last_validated: 2026-08-04
+
+user_impact:
+  install: "需要 pip install yt-dlp，部分平台需要 Cookie 配置"
+  disk: "yt-dlp 本身约 10 MB，下载的视频/音频额外占用"
+  runtime: "本地执行，下载速度取决于网络和平台限速"
+  execution: "local"
+  privacy: "下载请求发送至目标平台；本地文件不上传"
+  cost: "免费"
+  skip_effect: "平台视频无法下载，字幕和 metadata 可能无法获取"
+
+evidence:
+  method: platform_subtitle
+  locator_kind: timestamp
+  agent_judgment: mechanical

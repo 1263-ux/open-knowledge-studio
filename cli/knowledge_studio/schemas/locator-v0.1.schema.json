@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-knowledge-studio.local/schemas/locator-v0.1.json",
+  "title": "OKS Evidence Locator v0.1",
+  "description": "Minimal structural contract for evidence locators. Each evidence record in a Raw Bundle carries a locator that pinpoints where the evidence came from inside an artifact.",
+  "type": "object",
+  "minProperties": 1,
+  "additionalProperties": false,
+  "required": ["kind"],
+  "properties": {
+    "kind": {"enum": ["page", "bbox", "timestamp", "dom", "document", "custom"]},
+    "page": {"type": "integer", "minimum": 1},
+    "total_pages": {"type": "integer", "minimum": 1},
+    "region": {"type": "string"},
+    "bbox": {
+      "type": "array", "minItems": 4, "maxItems": 4,
+      "items": {"type": "number", "minimum": 0}
+    },
+    "bbox_page": {"type": "integer", "minimum": 1},
+    "start_ms": {"type": "number", "minimum": 0},
+    "end_ms": {"type": "number", "minimum": 0},
+    "text_hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "xpath_fragment": {"type": "string"},
+    "dom_snapshot_index": {"type": "integer", "minimum": 0},
+    "document_section": {"type": "string"},
+    "custom_label": {"type": "string"}
+  },
+  "allOf": [
+    {"if": {"required": ["kind"], "properties": {"kind": {"const": "page"}}}, "then": {"required": ["page"]}},
+    {"if": {"required": ["kind"], "properties": {"kind": {"const": "bbox"}}}, "then": {"required": ["bbox"]}},
+    {"if": {"required": ["kind"], "properties": {"kind": {"const": "timestamp"}}}, "then": {"required": ["start_ms", "end_ms"]}},
+    {"if": {"required": ["kind"], "properties": {"kind": {"const": "dom"}}}, "then": {"required": ["xpath_fragment"]}},
+    {"if": {"required": ["kind"], "properties": {"kind": {"const": "custom"}}}, "then": {"required": ["custom_label"]}}
+  ]
+}
+

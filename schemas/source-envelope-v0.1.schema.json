@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-knowledge-studio.local/schemas/source-envelope-v0.1.json",
+  "title": "OKS Source Envelope v0.1",
+  "description": "An Agent submits a SourceEnvelope to tell OKS 'I have captured a source'. The envelope identifies the source, who captured it, when, and a content hash for deduplication. It does NOT contain the evidence itself 鈥?evidence is declared in the EvidenceManifest.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "source_id",
+    "source_uri",
+    "source_modality",
+    "access_mode",
+    "captured_at",
+    "captured_by",
+    "content_hash",
+    "evidence_manifest_ref"
+  ],
+  "properties": {
+    "schema_version": {"const": "oks-source-envelope/v0.1"},
+    "source_id": {"type": "string", "minLength": 1},
+    "source_uri": {"type": "string", "minLength": 1},
+    "source_modality": {
+      "enum": ["pdf", "office", "image", "video", "audio", "web", "text"]
+    },
+    "access_mode": {
+      "enum": ["local_file", "public_url", "authenticated_remote", "user_browser", "manual"]
+    },
+    "captured_at": {"type": "string", "format": "date-time"},
+    "captured_by": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["runtime"],
+      "properties": {
+        "runtime": {"type": "string", "minLength": 1},
+        "model": {"type": ["string", "null"]},
+        "skill": {"type": ["string", "null"]}
+      }
+    },
+    "content_hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "title": {"type": ["string", "null"]},
+    "user_note": {"type": ["string", "null"]},
+    "evidence_manifest_ref": {"type": "string", "minLength": 1},
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "remote_processing": {"enum": ["allow", "deny", "ask"]},
+        "sensitivity": {"enum": ["public", "internal", "private"]}
+      }
+    }
+  }
+}
+

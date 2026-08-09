@@ -1,0 +1,39 @@
+id: browser
+execution: managed
+label: 浏览器
+description: 通过 Chrome CDP (DevTools Protocol) 连接用户已登录的浏览器，复用 Cookie、扩展和 TLS 指纹，获取受保护网页的 DOM 和截图。不安装 Playwright 或 Chromium。
+
+provides:
+  web.fetch:
+    maturity: experimental
+  web.extract:
+    maturity: experimental
+  web.screenshot:
+    maturity: experimental
+  image.observe:
+    maturity: experimental
+
+requirements:
+  command: chrome
+  credentials: [browser_profile]
+
+cost:
+  estimated_per_call: 0
+
+known_limits:
+  - 需要用户已登录的 Chrome Default profile
+  - Chrome Web Store 扩展当前不可用（阻塞）
+  - 不绕过 CAPTCHA、付费墙或 DRM
+  - 不安装 Playwright / Chromium / Browserbase
+
+last_validated: null
+blocked_reason: Chrome Web Store 扩展页面显示"此商品无法购买或下载"
+
+user_impact:
+  install: "需要用户本地 Chrome 浏览器及对应 Profile 登录态"
+  disk: "无额外磁盘占用（使用用户已有浏览器）"
+  runtime: "依赖用户本地浏览器环境，不绕过 CAPTCHA、付费墙或 DRM"
+  execution: "local"
+  privacy: "使用用户本地浏览器会话，不上传至 OKS"
+  cost: "免费（使用用户自有浏览器）"
+  skip_effect: "需要浏览器登录态的页面内容可能无法获取；不绕过平台反爬、付费墙或 DRM"

@@ -32,7 +32,7 @@ A strong workflow: save the source into `raw/`, then distill the parts worth kee
 ## Quick Start
 
 ```bash
-pipx install open-knowledge-studio && pipx ensurepath
+pipx install "git+https://github.com/1263-ux/claude-code-knowledge-studios.git@main#subdirectory=cli" && pipx ensurepath
 oks init my-knowledge-base
 cd my-knowledge-base
 oks status

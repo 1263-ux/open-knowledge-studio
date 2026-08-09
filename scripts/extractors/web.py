@@ -14,6 +14,11 @@ import requests
 from trafilatura import extract
 from trafilatura.metadata import extract_metadata
 
+from network import (
+    assert_public_network_target,
+    normalize_public_http_url,
+)
+
 
 SCHEMA_VERSION = "raw-multimodal/v0.1"
 
@@ -77,17 +82,37 @@ def package_web(
     assets = output / "assets"
     assets.mkdir(parents=True)
 
-    response = requests.get(
-        url,
-        headers={
-            "User-Agent": (
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 Chrome/126 Safari/537.36"
-            )
-        },
-        timeout=45,
-        allow_redirects=True,
-    )
+    # Keep this legacy requests-based extractor behind the same public-target
+    # and redirect checks used by the connector's network boundary.  Requests'
+    # default redirect handling is disabled so a public URL cannot silently
+    # redirect the worker into a private or link-local address.
+    current_url = normalize_public_http_url(url)
+    assert_public_network_target(current_url)
+    response = None
+    for _ in range(6):
+        response = requests.get(
+            current_url,
+            headers={
+                "User-Agent": (
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 Chrome/126 Safari/537.36"
+                )
+            },
+            timeout=45,
+            allow_redirects=False,
+        )
+        if not 300 <= response.status_code < 400:
+            break
+        location = response.headers.get("Location")
+        response.close()
+        if not location:
+            raise RuntimeError("web response redirect has no Location header")
+        current_url = normalize_public_http_url(urljoin(current_url, location))
+        assert_public_network_target(current_url)
+    else:
+        raise RuntimeError("web response redirect limit exceeded")
+
+    assert response is not None
     response.raise_for_status()
     html = response.text
     (assets / "page.html").write_text(html, encoding="utf-8")

@@ -21,6 +21,8 @@ from rich.markup import escape
 
 from knowledge_studio import store
 from knowledge_studio.i18n import t
+from knowledge_studio.raw_commit import CommitError as _CommitError
+from knowledge_studio.raw_commit import raw_commit as _raw_commit
 from knowledge_studio.recall import (
     RECALL_RESPONSE_SCHEMA,
     SEARCH_RESPONSE_SCHEMA,
@@ -119,6 +121,24 @@ eval_app = typer.Typer(help="Offline recall evaluation and run comparison.")
 trace_app = typer.Typer(help="Append-only execution traces and feedback.")
 feishu_app = typer.Typer(help="Optional Feishu Base intake, review, and event-listening extension.")
 capability_app = typer.Typer(help="Optional modality capabilities; core dependencies stay lightweight.")
+
+
+class _LegacyIngestGroup(typer.core.TyperGroup):
+    """Keep ``oks ingest <source>`` working beside ``oks ingest prepare``."""
+
+    def _click_resolve_command(self, ctx, args):
+        if args and self.get_command(ctx, args[0]) is None:
+            legacy_command = self.get_command(ctx, "run")
+            if legacy_command is not None:
+                return "run", legacy_command, args
+        return super()._click_resolve_command(ctx, args)
+
+
+ingest_app = typer.Typer(
+    help="Agent-native ingestion preparation and execution.",
+    no_args_is_help=True,
+    cls=_LegacyIngestGroup,
+)
 app.add_typer(wiki_app, name="wiki")
 app.add_typer(drafts_app, name="drafts")
 app.add_typer(config_app, name="config")
@@ -127,6 +147,7 @@ app.add_typer(eval_app, name="eval")
 app.add_typer(trace_app, name="trace")
 app.add_typer(feishu_app, name="feishu")
 app.add_typer(capability_app, name="capability")
+app.add_typer(ingest_app, name="ingest")
 
 _CAPABILITIES = {
     "watch": {
@@ -243,6 +264,59 @@ def capability_install(
     console.print(f"[green]{t('capability_installed', name=name)}[/green]")
 
 
+@capability_app.command("status")
+def capability_status_cmd(
+    json_output: bool = typer.Option(True, "--json/--text", help="Output as JSON"),
+):
+    """Show the current capability catalog and local provider truth."""
+    from knowledge_studio.capability_commands import capability_status
+
+    result = capability_status()
+    if json_output:
+        _emit_json(result)
+        return
+
+    console.print(f"[bold]Overall:[/bold] {result['overall']}\n")
+    for action_name, action_info in sorted(result["actions"].items()):
+        provider_ids = result["by_action"].get(action_name, [])
+        providers = [
+            p for p in result["providers"] if p["id"] in provider_ids
+        ]
+        labels = ", ".join(
+            f"{p.get('label', p['id'])} [{p.get('status', 'unknown')}]"
+            for p in providers
+        )
+        console.print(f"[cyan]{action_info['label']}[/cyan] ({action_name})")
+        console.print(f"  {labels or '[dim]no provider[/dim]'}")
+
+
+@ingest_app.command("prepare")
+def ingest_prepare_cmd(
+    source: str = typer.Argument(..., help="Local file or URL to prepare for ingestion"),
+    kb_root: Optional[str] = typer.Option(
+        None, "--kb-root", help="Knowledge base root (default: OKS_ROOT or config)"
+    ),
+    json_output: bool = typer.Option(True, "--json/--text", help="Output as JSON"),
+):
+    """Create the Agent-native SourceEnvelope and EvidenceManifest skeleton."""
+    from knowledge_studio.ingest_prepare import prepare_ingest
+
+    root = Path(kb_root).expanduser().resolve() if kb_root else None
+    result = prepare_ingest(source, kb_root=root)
+    if json_output:
+        _emit_json(result)
+        return
+    console.print(Panel.fit(
+        f"[bold]Source:[/bold] {source}\n"
+        f"[bold]Modality:[/bold] {result['modality']}\n"
+        f"[bold]Manifest dir:[/bold] {result['manifest_dir']}\n\n"
+        + "\n".join(f"  [green]+[/green] {item}" for item in result["files_generated"])
+        + f"\n\n[bold cyan]{result['next_step']}[/bold cyan]",
+        title="Ingest Prepared",
+        border_style="green" if result.get("text_ready") else "yellow",
+    ))
+
+
 def _connector_install_hint() -> str:
     return ""  # no-op: connector is built into the monorepo
 
@@ -261,7 +335,7 @@ def _recommended_capability(source: str) -> str:
     return "watch"  # video, audio, and platform URLs all route to watch
 
 
-@app.command()
+@ingest_app.command("run")
 def ingest(
     source: str = typer.Argument(..., help="Local file or supported platform URL"),
     mode: str = typer.Option("quick", "--mode", help="quick or forensic"),
@@ -338,6 +412,48 @@ def ingest(
     if exit_code == 0:
         print(t("ingest_done_hint"), file=sys.stderr)
     raise typer.Exit(exit_code)
+
+
+@app.command(name="raw-commit")
+def raw_commit_cmd(
+    manifest_dir: Path = typer.Argument(
+        ...,
+        exists=True,
+        file_okay=False,
+        dir_okay=True,
+        readable=True,
+        help="Agent-submitted manifest directory containing source-envelope.json, evidence-manifest.json, and artifacts/.",
+    ),
+    output: Optional[Path] = typer.Option(
+        None,
+        "--output",
+        "-o",
+        help="Destination directory for the assembled Raw Bundle.",
+    ),
+    overwrite: bool = typer.Option(
+        False,
+        "--overwrite",
+        help="Replace an existing Raw Bundle destination.",
+    ),
+):
+    """Validate an Agent manifest and assemble a Raw Bundle v0.2."""
+    try:
+        result = _raw_commit(
+            manifest_dir,
+            output=output,
+            overwrite=overwrite,
+        )
+    except _CommitError as exc:
+        error: dict[str, object] = {
+            "code": exc.code,
+            "message": exc.message,
+        }
+        if exc.details:
+            error["details"] = exc.details
+        _emit_json({"status": "rejected", "error": error})
+        raise typer.Exit(1)
+
+    _emit_json(result)
 
 
 def _extractor_env_for(capability: str) -> str:
@@ -451,6 +567,21 @@ def feishu_reconcile_review(
 def feishu_listen(max_events: int = typer.Option(1, "--max-events"), timeout: str = typer.Option("5m", "--timeout")):
     """Consume bounded Feishu review replies; use an external scheduler for continuous service."""
     _run_feishu_worker("listen-reviews", ["--max-events", str(max_events), "--timeout", timeout])
+
+
+@feishu_app.command("pending")
+def feishu_pending(
+    limit: int = typer.Option(200, "--limit"),
+):
+    """List pending Inbox records from Feishu Base (Pull-mode entry point).
+
+    Returns JSON with record_id, content, thought, status, created,
+    and metadata for each pending record. The Agent filters records
+    by date client-side.
+
+    No daemon, no WebSocket, no background service needed.
+    """
+    _run_feishu_worker("pending", ["--limit", str(limit)])
 
 
 @feishu_app.command("setup")
@@ -1185,12 +1316,17 @@ def config_init(
 @config_app.command("show")
 def config_show():
     """Show current global configuration."""
-    from knowledge_studio.config import load_config, config_path
+    from knowledge_studio.config import load_config, config_path, VALID_STRATEGIES
 
     config = load_config()
+    strategy = config.get("strategy", "")
+    strategy_display = strategy if strategy else "(not set)"
+
     console.print(f"[dim]Config file: {config_path()}[/dim]\n")
     console.print(Panel.fit(
         f"[bold]Knowledge Base[/bold]\n  {config.get('knowledge_base_path', '(not set)')}\n\n"
+        f"[bold]Strategy[/bold]\n  {strategy_display}\n"
+        f"  Valid values: {', '.join(sorted(VALID_STRATEGIES))}\n\n"
         f"[dim]The core CLI stores no model credentials or handler configuration.[/dim]",
         border_style="cyan",
     ))
@@ -1221,6 +1357,11 @@ def config_set(
             )
         value = str(resolved)
         target[keys[-1]] = value
+    elif key == "strategy":
+        from knowledge_studio.config import set_strategy as _set_strategy
+        _set_strategy(value)
+        console.print(f"[green]Set:[/green] strategy = {value}")
+        return
     elif value.lower() in ("true", "false"):
         target[keys[-1]] = value.lower() == "true"
     elif value.isdigit():
@@ -1403,7 +1544,8 @@ def init(
     if base is None:
         console.print(
             "[yellow]No bundled assets found — skills/templates not materialized.[/yellow]\n"
-            "  Source installs lack the asset bundle. Fix: pip install open-knowledge-studio,\n"
+            "  Reinstall the canonical main source with pipx, then retry:\n"
+            "  pipx install --force \"git+https://github.com/1263-ux/claude-code-knowledge-studios.git@main#subdirectory=cli\"\n"
             "  or run python cli/scripts/bundle_assets.py in the repo before installing."
         )
     else:
@@ -1608,7 +1750,7 @@ def hook_install(
             f"[red]Cannot install hook — bundled assets missing.[/red]\n"
             f"  {e}\n"
             f"  This happens when oks was installed from source without the asset bundle.\n"
-            f"  Fix: [bold]pip install open-knowledge-studio[/bold] (PyPI wheel includes assets),\n"
+            f"  Fix: [bold]pipx install --force \"git+https://github.com/1263-ux/claude-code-knowledge-studios.git@main#subdirectory=cli\"[/bold],\n"
             f"  or run [bold]python cli/scripts/bundle_assets.py[/bold] in the repo before installing."
         )
         raise typer.Exit(1)

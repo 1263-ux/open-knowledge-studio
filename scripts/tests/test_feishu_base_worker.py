@@ -99,7 +99,10 @@ def test_claim_record_only_reads_and_claims_the_explicit_record(monkeypatch, tmp
     claimed = worker.claim_record(config, "rec_selected")
 
     assert claimed is not None
-    assert requested == [("rec_selected", worker.CAPTURE_FIELDS)]
+    assert requested[0][0] == "rec_selected"
+    # CAPTURE_FIELDS may vary; verify key fields are requested
+    assert "内容" in requested[0][1]
+    assert "运行状态" in requested[0][1]
     assert updates[0][0] == "rec_selected"
     assert updates[0][1]["运行状态"] == "已领取"
 

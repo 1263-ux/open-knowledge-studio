@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "open-knowledge-studio"
-version = "0.3.0"
+version = "0.4.0b1"
 description = "File-based knowledge engineering CLI for Claude Code"
 readme = "README.md"
 license = {text = "MIT"}
@@ -30,6 +30,7 @@ dependencies = [
     "jieba>=0.42",
     "gitpython>=3",
     "pyyaml>=6",
+    "jsonschema>=4.20",
 ]
 
 [project.optional-dependencies]
@@ -56,8 +57,8 @@ formula = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/open-agent-power/open-knowledge-studio"
-Repository = "https://github.com/open-agent-power/open-knowledge-studio"
+Homepage = "https://github.com/1263-ux/claude-code-knowledge-studios"
+Repository = "https://github.com/1263-ux/claude-code-knowledge-studios"
 Documentation = "https://open-agent-power.github.io/open-knowledge-studio/"
 
 [project.scripts]
@@ -68,6 +69,11 @@ oks-connector = "oks_connector.raw_bundle_adapter:main"
 include-package-data = false
 packages = [
     "knowledge_studio",
+    "knowledge_studio.capabilities",
+    "knowledge_studio.providers",
+    "knowledge_studio.recipes",
+    "knowledge_studio.schemas",
+    "knowledge_studio.security",
     "oks_connector",
     "oks_connector.extractors",
     "oks_connector.feishu_worker",
@@ -75,7 +81,16 @@ packages = [
 
 [tool.setuptools.package-dir]
 "knowledge_studio" = "knowledge_studio"
+"knowledge_studio.capabilities" = "knowledge_studio/capabilities"
+"knowledge_studio.providers" = "knowledge_studio/providers"
+"knowledge_studio.recipes" = "knowledge_studio/recipes"
 "oks_connector" = "oks_connector"
+"knowledge_studio.security" = "knowledge_studio/security"
 
 [tool.setuptools.package-data]
 knowledge_studio = ["_assets/**/*", "_assets/scripts/*.py"]
+"knowledge_studio.capabilities" = ["*.yaml"]
+"knowledge_studio.providers" = ["*/provider.yaml"]
+"knowledge_studio.recipes" = ["*.md"]
+"knowledge_studio.schemas" = ["*.json", "*.md"]
+"knowledge_studio.security" = ["*.py"]
