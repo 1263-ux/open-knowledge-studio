@@ -1,3 +1,5 @@
+![Open Knowledge Studio logo](assets/oks-logo.jpg)
+
 # Open Knowledge Studio
 
 > **v0.4 Beta Final Engineering Closure** — 5 gates passed, 555 tests, 0 regressions.
