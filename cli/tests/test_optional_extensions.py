@@ -320,17 +320,22 @@ def test_feishu_commands_honor_lark_cli_exe_override(monkeypatch, tmp_path):
 
 
 def _real_command_paths() -> set[str]:
-    """Every invocable `oks ...` path, derived from the Typer app itself."""
-    import click
+    """Every invocable `oks ...` path, derived from the Typer app itself.
+
+    Duck-typed on ``.commands`` rather than ``isinstance(x, click.Group)``:
+    ``click`` is not guaranteed to be importable as a top-level module
+    alongside Typer, and CI proved it is not.
+    """
     import typer
 
     def walk(command, prefix: tuple[str, ...] = ()) -> set[str]:
-        if isinstance(command, click.Group):
-            found: set[str] = set()
-            for name, sub in command.commands.items():
-                found |= walk(sub, prefix + (name,))
-            return found
-        return {" ".join(prefix)}
+        children = getattr(command, "commands", None)
+        if not children:
+            return {" ".join(prefix)}
+        found: set[str] = set()
+        for name, sub in children.items():
+            found |= walk(sub, prefix + (name,))
+        return found
 
     return walk(typer.main.get_command(cli.app))
 
