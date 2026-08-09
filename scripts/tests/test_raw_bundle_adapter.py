@@ -401,6 +401,22 @@ def test_document_extra_declares_docx_and_pptx_dependencies():
     assert "markitdown[docx,pptx]" in requirements.lower()
 
 
+def test_markitdown_text_reads_utf8_plain_text(tmp_path):
+    """Plain text must be decoded as UTF-8, not the platform default.
+
+    Needs the optional ``document`` extra; the core install stays lightweight
+    by design, so skip rather than fail when it is absent.
+    """
+    pytest.importorskip("markitdown")
+
+    source = tmp_path / "chapter.txt"
+    source.write_text("Chapter 20\nMental labour: caf\u00e9.\n", encoding="utf-8")
+
+    text = markitdown_module.markitdown_text(source, None)
+
+    assert "Mental labour: caf\u00e9." in text
+
+
 def test_pdf_extra_declares_pipeline_backend_dependencies():
     pyproject = MODULE_PATH.parents[1] / "cli" / "pyproject.toml"
     config = tomllib.loads(pyproject.read_text(encoding="utf-8"))
