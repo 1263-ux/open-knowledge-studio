@@ -102,8 +102,8 @@ This returns:
 - Each provider's execution type, known limits, and platform metadata
 
 You now have everything needed to select providers.  Do NOT also run
-`oks capability catalog` or `oks capability doctor` — `status` is the
-single source of truth.
+`oks capability list` — it only describes install boundaries; `status` is
+the single source of truth for what is actually available.
 
 ### 3c. Select Minimum Sufficient Provider Set
 
@@ -531,7 +531,7 @@ These principles MUST be followed in every ingest session:
 |-------|-------|
 | "AgentKey 未配置。是否切换 MediaCrawler Provider？" | "这个页面需要登录态才能完整读取。我可以：1. 使用浏览器登录状态继续 2. 只收录公开内容。推荐 1。" |
 | "RapidOCR capability unavailable." | "这张图片是文字截图。我可以直接使用当前视觉能力识别，也可以安装本地 OCR 后再处理。这次只有一张图片，推荐直接识别。" |
-| "请运行 oks capability catalog。" | "让我确认一下当前可以使用的处理能力……" (Agent runs it internally) |
+| "请运行 oks capability status。" | "让我确认一下当前可以使用的处理能力……" (Agent runs it internally) |
 
 ### 2. Proactive gap discovery
 
@@ -562,7 +562,7 @@ When presenting options, always recommend one. Don't dump a list of choices.
 
 - **Level 0 (default)**: Task → Progress → Result → Missing → Choices → Review
 - **Level 1 (user asks "why this way?")**: "因为页面是动态渲染的，直接获取拿不到正文，所以使用了远程抓取。"
-- **Level 2 (user runs `oks capability doctor --verbose`)**: Full technical matrix — provider IDs, availability, checks
+- **Level 2 (user runs `oks capability status --json`)**: Full technical matrix — provider IDs, availability, checks
 
 ## Graceful Degradation
 

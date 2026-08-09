@@ -278,54 +278,27 @@ def prepare_ingest(source: str, kb_root: Path | None = None) -> dict[str, Any]:
                 f"文本已完整摄入，但 {len(_missing_assets)} 个本地图片资源不可访问。"
             )
 
-    # ── For non-text sources: pre-fill evidence record slots from Recipe ──
+    # ── For non-text sources: record the capability plan, not fake results ──
     if not is_text and recipe:
         required_caps = _parse_recipe_capabilities(recipe, "required_capabilities")
         if required_caps:
-            prefill_records: list[dict[str, Any]] = []
-            prefill_steps: list[dict[str, Any]] = []
-            modality_counts: dict[str, int] = {}
-            for cap in required_caps:
-                ev_id = f"ev-{uuid.uuid4().hex[:12]}"
-                art_id = f"art-{uuid.uuid4().hex[:12]}"
-                kind = _capability_to_kind(cap)
-                method = _capability_to_method(cap)
-                locator_kind = _capability_to_locator_kind(cap)
-                agent_judgment = _capability_default_judgment(cap)
-                prefill_records.append({
-                    "evidence_id": ev_id,
-                    "artifact_id": art_id,
-                    "kind": kind,
-                    "method": method,
-                    "locator": {"kind": locator_kind},
-                    "text": None,
-                    "confidence": None,
-                    "agent_judgment": agent_judgment,
-                })
-                prefill_steps.append({
+            # steps[], modalities{} and evidence_records[] describe what ran, and
+            # the schema constrains only that shape. Pre-filling them with
+            # provider: null / status: "pending" / locator-less records made every
+            # non-text prepare emit a manifest that violated the schema 7 ways —
+            # a skeleton raw-commit could never accept. The plan goes in notes,
+            # which the schema leaves free-form.
+            manifest["notes"]["planned_capabilities"] = [
+                {
                     "capability": cap,
-                    "provider": None,
-                    "status": "pending",
-                    "reason": None,
-                })
-                mod = _capability_modality(cap)
-                modality_counts[mod] = modality_counts.get(mod, 0) + 1
-
-            manifest["evidence_records"] = prefill_records
-            manifest["steps"] = prefill_steps
-            # Build modalities status from capability counts
-            prefill_modalities: dict[str, dict[str, Any]] = {}
-            for mod, count in modality_counts.items():
-                prefill_modalities[mod] = {
-                    "modality": mod,
-                    "status": "pending",
-                    "evidence_count": count,
-                    "error_code": None,
+                    "modality": _capability_modality(cap),
+                    "expected_kind": _capability_to_kind(cap),
+                    "expected_method": _capability_to_method(cap),
+                    "expected_locator_kind": _capability_to_locator_kind(cap),
+                    "default_agent_judgment": _capability_default_judgment(cap),
                 }
-            manifest["modalities"] = prefill_modalities
-            # Update fragment_refs to include all pre-filled record IDs
-            manifest["fragment_refs"] = [fragment_id]
-            # Update primary_artifact to pending state
+                for cap in required_caps
+            ]
             manifest["primary_artifact"]["sha256"] = content_hash
 
     # ── Build evidence fragment skeleton ──
@@ -473,9 +446,11 @@ def _next_step(text_ready: bool, run_id: str) -> str:
             "Then generate Candidate and proceed to /promote."
         )
     return (
-        "Protocol skeleton created with evidence record slots pre-filled "
-        "from the Recipe.  Execute providers and fill `text`, `confidence`, "
-        "and `provider`/`status` for each pre-created record and step.  "
+        "Protocol skeleton created. `notes.planned_capabilities` lists the "
+        "capabilities to cover; evidence_records, steps and modalities are "
+        "empty on purpose — author one real entry per provider you actually "
+        "run, and persist each provider's raw output to "
+        "work/<provider>/output.<ext>.  "
         f"Then run: oks raw-commit .oks/runs/{run_id}/manifest/"
     )
 

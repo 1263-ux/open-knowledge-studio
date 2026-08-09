@@ -7,6 +7,7 @@ from __future__ import annotations
 import importlib.util
 import json
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -121,6 +122,7 @@ eval_app = typer.Typer(help="Offline recall evaluation and run comparison.")
 trace_app = typer.Typer(help="Append-only execution traces and feedback.")
 feishu_app = typer.Typer(help="Optional Feishu Base intake, review, and event-listening extension.")
 capability_app = typer.Typer(help="Optional modality capabilities; core dependencies stay lightweight.")
+schema_app = typer.Typer(help="Protocol document shapes an Agent must author.")
 
 
 class _LegacyIngestGroup(typer.core.TyperGroup):
@@ -152,6 +154,7 @@ app.add_typer(eval_app, name="eval")
 app.add_typer(trace_app, name="trace")
 app.add_typer(feishu_app, name="feishu")
 app.add_typer(capability_app, name="capability")
+app.add_typer(schema_app, name="schema")
 app.add_typer(ingest_app, name="ingest")
 
 _CAPABILITIES = {
@@ -297,6 +300,61 @@ def capability_status_cmd(
         )
         console.print(f"[cyan]{action_info['label']}[/cyan] ({action_name})")
         console.print(f"  {labels or '[dim]no provider[/dim]'}")
+
+
+@capability_app.command("guide")
+def capability_guide_cmd(
+    provider: str = typer.Argument(..., help="Provider id, e.g. pdf-lite"),
+):
+    """Print a provider's execution guide.
+
+    The ingest skill points Agents here instead of reading ``providers/`` from
+    disk: a user's knowledge base has no such directory, the guides ship inside
+    the package.
+    """
+    from importlib.resources import files as _pkg_files
+
+    if not re.fullmatch(r"[a-z0-9][a-z0-9._-]*", provider):
+        console.print(f"[red]Invalid provider id:[/red] {provider!r}")
+        raise typer.Exit(2)
+
+    root = _pkg_files("knowledge_studio.providers")
+    guide = root / provider / "SKILL.md"
+    if not guide.is_file():
+        available = sorted(
+            entry.name for entry in root.iterdir()
+            if entry.is_dir() and (entry / "SKILL.md").is_file()
+        )
+        console.print(
+            f"[red]No guide for provider {provider!r}.[/red]\n"
+            f"Available: {', '.join(available) or 'none'}"
+        )
+        raise typer.Exit(2)
+
+    console.print(guide.read_text(encoding="utf-8"))
+
+
+@schema_app.command("show")
+def schema_show_cmd(
+    name: str = typer.Argument(
+        ..., help="Protocol document name, e.g. evidence-manifest"
+    ),
+):
+    """Print a validated example of a protocol document.
+
+    Agents author these documents by hand, so they need the exact shape rather
+    than prose about it.
+    """
+    from knowledge_studio.schema_examples import get_example, list_schema_names
+
+    example = get_example(name)
+    if example is None:
+        console.print(
+            f"[red]Unknown schema {name!r}.[/red]\n"
+            f"Available: {', '.join(list_schema_names())}"
+        )
+        raise typer.Exit(2)
+    _emit_json(example)
 
 
 @ingest_app.command("prepare")

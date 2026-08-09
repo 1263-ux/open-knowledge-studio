@@ -127,6 +127,10 @@
       "type": "array",
       "items": {"type": "string"}
     },
+    "agent_notes": {
+      "description": "Free-text note from the Agent about how this fragment was produced. Written by `oks ingest prepare`; never a substitute for the mechanical fields above.",
+      "type": ["string", "null"]
+    },
     "cost": {
       "type": ["object", "null"],
       "additionalProperties": false,

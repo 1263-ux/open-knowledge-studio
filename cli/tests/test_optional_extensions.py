@@ -317,3 +317,74 @@ def test_feishu_commands_honor_lark_cli_exe_override(monkeypatch, tmp_path):
     monkeypatch.setattr(cli.shutil, "which", lambda _name: None)
 
     assert cli._resolve_lark_cli() == str(fake_cli.resolve())
+
+
+def _real_command_paths() -> set[str]:
+    """Every invocable `oks ...` path, derived from the Typer app itself."""
+    import click
+    import typer
+
+    def walk(command, prefix: tuple[str, ...] = ()) -> set[str]:
+        if isinstance(command, click.Group):
+            found: set[str] = set()
+            for name, sub in command.commands.items():
+                found |= walk(sub, prefix + (name,))
+            return found
+        return {" ".join(prefix)}
+
+    return walk(typer.main.get_command(cli.app))
+
+
+def test_shipped_skills_only_cite_commands_that_exist():
+    """A skill that names a missing command sends the Agent down a dead end.
+
+    The ingest skill shipped six such names — `oks capability catalog`,
+    `oks capability doctor`, `oks capability guide`, `oks schema show` — and
+    nothing failed at build time.
+    """
+    import re
+
+    real = _real_command_paths()
+    skills = Path(__file__).parents[2] / "assets" / "skills"
+    unknown: list[str] = []
+
+    for skill in sorted(skills.rglob("SKILL.md")):
+        text = skill.read_text(encoding="utf-8")
+        for cited in re.findall(r"`oks ([a-z][a-z0-9 _-]*)`", text):
+            words = cited.split()
+            # Strip trailing arguments/flags until a real command path matches.
+            while words and " ".join(words) not in real:
+                words.pop()
+            if not words:
+                unknown.append(f"{skill.relative_to(skills)}: oks {cited}")
+
+    assert not unknown, "skills cite commands the CLI does not have:\n" + "\n".join(unknown)
+
+
+def test_bundled_schema_examples_validate_against_their_schema():
+    """`oks schema show` teaches Agents the shape — it must be a valid shape."""
+    from jsonschema import Draft202012Validator
+
+    from knowledge_studio import schema_examples
+    from knowledge_studio.raw_commit import _build_registry, _load_schema
+
+    schema_files = {
+        "source-envelope": "source-envelope-v0.1.schema.json",
+        "evidence-manifest": "evidence-manifest-v0.1.schema.json",
+        "evidence-fragment": "evidence-fragment-v0.1.schema.json",
+        "locator": "locator-v0.1.schema.json",
+        "raw-bundle": "raw-bundle-v0.2.schema.json",
+    }
+    assert set(schema_examples.list_schema_names()) == set(schema_files), (
+        "every bundled example needs a schema to check it against"
+    )
+
+    registry = _build_registry()
+    kwargs = {"registry": registry} if registry is not None else {}
+    problems: list[str] = []
+    for name, schema_file in schema_files.items():
+        validator = Draft202012Validator(_load_schema(schema_file), **kwargs)
+        for error in validator.iter_errors(schema_examples.get_example(name)):
+            problems.append(f"{name}{error.json_path[1:]}: {error.message}")
+
+    assert not problems, "invalid protocol examples:\n" + "\n".join(problems)

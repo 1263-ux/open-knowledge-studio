@@ -141,17 +141,51 @@ def locator() -> dict[str, Any]:
 
 
 def raw_bundle() -> dict[str, Any]:
+    """Mirror the document ``_assemble_bundle`` writes to ``bundle.json``."""
     return {
-        "schema_version": "oks-raw-bundle/v0.2",
+        "schema_version": "raw-multimodal/v0.2",
         "bundle_id": f"bundle:{_SAMPLE_HASH[:16]}",
-        "source_id": _SAMPLE_ID,
-        "source_hash": _SAMPLE_HASH,
-        "generated_at": _SAMPLE_TS,
-        "run_id": f"run-{uuid.uuid4().hex[:12]}",
-        "source_envelope": source_envelope(),
-        "evidence_manifest": evidence_manifest(),
-        "evidence_count": 1,
-        "artifact_count": 1,
+        "capture_id": _SAMPLE_ID,
+        "content_hash": _SAMPLE_HASH,
+        "recipe_version": "oks-agent-native-ingest/v0.1",
+        "processing_status": "complete",
+        "files": {
+            "manifest": "bundle.json",
+            "content": "content.md",
+            "evidence": "evidence.jsonl",
+            "quality_report": "quality-report.json",
+            "processing_runs": "processing-runs.jsonl",
+            "source_dir": "source/",
+            "assets_dir": "assets/",
+            "derived_dir": "derived/",
+        },
+        "sources": [
+            {
+                "entity_id": _SAMPLE_ARTIFACT_ID,
+                "path": "source/content.md",
+                "sha256": _SAMPLE_HASH,
+                "media_type": "text/markdown",
+                "snapshot_kind": "content",
+                "content_hash_status": "verified",
+                "primary_source": True,
+            }
+        ],
+        "derived": [],
+        "provenance": {
+            "entities": [{"id": _SAMPLE_ARTIFACT_ID, "kind": "primary_text"}],
+            "activities": [
+                {"id": f"run-{uuid.uuid4().hex[:12]}", "kind": "ingest", "ended_at": _SAMPLE_TS}
+            ],
+            "agents": [{"id": "claude-code", "kind": "agent-runtime"}],
+            "relations": [
+                {
+                    "type": "wasGeneratedBy",
+                    "subject": _SAMPLE_ARTIFACT_ID,
+                    "object": _SAMPLE_MANIFEST_ID,
+                }
+            ],
+        },
+        "warnings": [],
     }
 
 

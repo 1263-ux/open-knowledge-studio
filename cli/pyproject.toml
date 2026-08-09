@@ -91,7 +91,7 @@ packages = [
 [tool.setuptools.package-data]
 knowledge_studio = ["_assets/**/*", "_assets/scripts/*.py"]
 "knowledge_studio.capabilities" = ["*.yaml"]
-"knowledge_studio.providers" = ["*/provider.yaml"]
+"knowledge_studio.providers" = ["*/provider.yaml", "*/SKILL.md", "*/normalize.py"]
 "knowledge_studio.recipes" = ["*.md"]
 "knowledge_studio.schemas" = ["*.json", "*.md"]
 "knowledge_studio.security" = ["*.py"]
