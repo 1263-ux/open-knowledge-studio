@@ -99,8 +99,8 @@ as knowledge. Config and schema do not decay and are not recalled by relevance.
 | Cognitive | `raw/` | Original records, date-based by source | None | Keyword + freshness (rglob any structure) |
 | Cognitive | `wiki/` | Curated knowledge (from raw via Dreaming) | Type-specific λ | 6+1-factor relevance + curve |
 | Cognitive | `drafts/` | Dreaming candidates (raw → wiki intermediate) | None | N/A (human review) |
-| Config | `settings/` | Runtime knobs: handlers.json, input-sources.json, raw-tools | None | Direct read (agent reads routing table at runtime) |
-| Schema | `_meta/` | Data-shape contracts: frontmatter-schema, learning-schema | None | Applied on read; CI-enforced |
+| Config | `settings/` | Runtime knobs: input-sources.json, raw-tools | None | Direct read |
+| Schema | `_meta/` | Data-shape contracts: raw-evidence-schema | None | Applied on read |
 
 `settings/` answers *"what should happen"* (config, changes per deployment);
 `_meta/` answers *"what shape is valid"* (schema, versioned, CI-gated). Both
@@ -108,25 +108,10 @@ are git-synced (P1) and sit at top level alongside the cognitive buckets, but
 neither is "memory" in the cognitive sense — do not treat them as recallable
 knowledge.
 
-**Directory structure:** The following two views are intentionally different.
-`assets/` is the repository's tracked template source. The second tree is the
-materialized layout created inside an initialized OKS instance.
+**Directory structure:**
 
 ```
-Repository: open-knowledge-studio/
-├── assets/                       # Template source shipped by the repository
-│   ├── profiles/
-│   ├── settings/
-│   ├── _meta/
-│   ├── skills/
-│   ├── hooks/
-│   ├── rules/
-│   └── templates/
-└── cli/                          # The API-free `oks` core
-```
-
-```text
-OKS instance: <knowledge-base>/
+open-knowledge-studio/
 ├── profiles/                     # ① Portraits
 │   ├── team.md
 │   ├── users/{id}.md
@@ -146,11 +131,9 @@ OKS instance: <knowledge-base>/
 ├── drafts/                       # ④ Dreaming candidates
 │   └── {slug}.md
 ├── settings/                     # ⑤ Config layer
-│   ├── handlers.json             # 3-level tool registry
-│   └── input-sources.json        # Scheduled intake sources
+│   ├── input-sources.json        # Scheduled intake sources
 └── _meta/                        # ⑥ Schema layer
-    ├── frontmatter-schema.md     # wiki/ frontmatter contract
-    └── learning-schema.json      # CI-enforced learning schema
+    └── raw-evidence-schema.md    # raw/ evidence shape contract
 ```
 
 **Infrastructure (not buckets):** `cli/` (the API-free `oks` core),

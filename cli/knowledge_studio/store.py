@@ -20,10 +20,6 @@ import yaml
 
 _logger = logging.getLogger(__name__)
 
-# area is used as a directory name under wiki/, so it must never contain path
-# separators or traversal segments.
-_AREA_RE = re.compile(r"[a-z][a-z0-9-]*")
-
 DECAY_LAMBDA: dict[str, float] = {
     "concept": 0.0,
     "strategy": 0.014,
@@ -401,13 +397,10 @@ def write_wiki_page(
     human_note: str | None = None,
     slug_hint: str | None = None,
 ) -> Path:
-    # area becomes a directory name under wiki/, so an unvalidated value lets
-    # `--area "../../outside"` escape the knowledge base entirely. wiki_type is
-    # already whitelisted by callers; area was the remaining hole.
-    if not _AREA_RE.fullmatch(area or ""):
+    if not re.fullmatch(r"[a-z][a-z0-9-]*", area):
         raise ValueError(
-            f"Invalid area {area!r}: use lowercase letters, digits and hyphens "
-            "(e.g. computing, product-design)"
+            f"Invalid area name: {area!r}. "
+            "Area must be a lowercase identifier (letters, digits, hyphens only)."
         )
     fp = _fingerprint(content)
     fp_index = _load_fingerprint_index()
@@ -573,15 +566,18 @@ def promote_draft(
 
     meta = parse_wiki_file(draft_path)
     if not meta:
-        meta = {}
-    # A human already said no. Feishu's reject writes status=rejected and keeps
-    # the draft on disk, so without this gate `oks drafts promote` would walk
-    # right past the A3 human-review boundary.
-    if meta.get("status") == "rejected":
         raise ValueError(
-            f"Draft {slug} was rejected by a human review; it cannot be promoted"
+            f"Draft '{slug}' has no valid YAML frontmatter. "
+            f"Drafts must start with '---' and contain title, type, and area fields."
         )
+    if meta.get("status") == "rejected":
+        raise ValueError(f"Draft '{slug}' was explicitly rejected and cannot be promoted.")
     body = meta.get("body", "")
+    if not body.strip():
+        raise ValueError(
+            f"Draft '{slug}' has empty body. "
+            f"Refusing to promote a draft with no content — check Candidate generation."
+        )
 
     final_title = title or meta.get("title", slug)
     requested_type = wiki_type or meta.get("draft_type", "concept")

@@ -171,6 +171,10 @@ _CAPABILITIES = {
         "purpose": "Office, HTML, and text extraction",
         "deps": ["markitdown[docx,pptx]==0.1.6"],
     },
+    "pdf-lite": {
+        "purpose": "Lightweight text-layer PDF extraction",
+        "deps": ["pymupdf4llm==0.0.27", "pymupdf==1.28.0"],
+    },
     "pdf": {
         "purpose": "MinerU PDF layout and asset evidence",
         "deps": ["mineru[pipeline]==3.4.4", "six==1.17.0"],
@@ -331,10 +335,15 @@ def _connector_command() -> str | None:
     return "built-in" if _connector_available else None
 
 
+# Both extract from PDFs: pdf-lite reads the text layer, pdf runs MinerU for
+# layout and asset evidence. Guards must accept either, not the literal "pdf".
+_PDF_CAPABILITIES = frozenset({"pdf-lite", "pdf"})
+
+
 def _recommended_capability(source: str) -> str:
     suffix = Path(source.split("?", 1)[0]).suffix.lower()
     if suffix == ".pdf":
-        return "pdf"
+        return "pdf-lite"
     if suffix in {".docx", ".pptx", ".xlsx", ".html", ".htm", ".md", ".txt", ".csv"}:
         return "document"
     return "watch"  # video, audio, and platform URLs all route to watch
@@ -376,7 +385,7 @@ def ingest(
 
     # ── formula-secondary requires both pdf and formula capabilities ──
     if formula_secondary:
-        if needed != "pdf":
+        if needed not in _PDF_CAPABILITIES:
             console.print(Panel.fit(
                 "[bold yellow]--formula-secondary 仅对 PDF 文件有效[/bold yellow]\n\n"
                 "当前来源不是 PDF 文件，已忽略 --formula-secondary 选项。",
@@ -398,7 +407,7 @@ def ingest(
         cli_args.extend(["--timeout-seconds", str(timeout_seconds)])
     if progress:
         cli_args.append("--progress")
-    if formula_secondary and needed == "pdf":
+    if formula_secondary and needed in _PDF_CAPABILITIES:
         cli_args.append("--formula-secondary")
         cli_args.extend(["--formula-max-regions", str(formula_max_regions)])
     try:
@@ -1121,12 +1130,14 @@ def drafts_list():
     table.add_column("Drafted", max_width=12)
 
     for d in drafts:
+        # YAML turns an unquoted `drafted_at: 2026-08-09` into a datetime.date,
+        # which Rich refuses to render — one dated draft broke the whole list.
         table.add_row(
-            d["slug"],
-            d.get("title", d["slug"]),
-            d.get("draft_type", ""),
-            d.get("draft_area", ""),
-            d.get("drafted_at", ""),
+            str(d["slug"]),
+            str(d.get("title", d["slug"])),
+            str(d.get("draft_type", "")),
+            str(d.get("draft_area", "")),
+            str(d.get("drafted_at", "")),
         )
 
     console.print(table)

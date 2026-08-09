@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://open-knowledge-studio.local/schemas/evidence-manifest-v0.1.json",
   "title": "OKS Evidence Manifest v0.1",
-  "description": "The final evidence declaration that an Agent submits to oks raw commit. The Agent collects one or more EvidenceFragments from individual tools, judges overall completeness, merges them, and produces this Manifest. It is submitted alongside a SourceEnvelope and the referenced artifact files. OKS core validates structural integrity, cross-references, artifact existence, hash matching, and locator legality 鈥?then assembles a Raw Bundle v0.2.",
+  "description": "The final evidence declaration that an Agent submits to oks raw commit. The Agent collects one or more EvidenceFragments from individual tools, judges overall completeness, merges them, and produces this Manifest. It is submitted alongside a SourceEnvelope and the referenced artifact files. OKS core validates structural integrity, cross-references, artifact existence, hash matching, and locator legality — then assembles a Raw Bundle v0.2.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -29,7 +29,7 @@
       "minLength": 1
     },
     "status": {
-      "description": "Agent's judgment of overall evidence completeness. 'complete' means evidence is sufficient to proceed to Candidate. 'partial' means the Agent has done its best but evidence is incomplete. There is no 'failed' status 鈥?if all fragments fail, the Agent should not submit a Manifest.",
+      "description": "Agent's judgment of overall evidence completeness. 'complete' means evidence is sufficient to proceed to Candidate. 'partial' means the Agent has done its best but evidence is incomplete. There is no 'failed' status — if all fragments fail, the Agent should not submit a Manifest.",
       "enum": ["complete", "partial"]
     },
     "fragment_refs": {

@@ -8,7 +8,7 @@ a file-based knowledge base that turns raw material into a recallable, self-deca
 ## Install
 
 ```bash
-pipx install open-knowledge-studio && pipx ensurepath
+pipx install "git+https://github.com/open-agent-power/open-knowledge-studio.git@main#subdirectory=cli" && pipx ensurepath
 ```
 
 We recommend pipx because modern Linux (Ubuntu 24.04+) and macOS Homebrew Pythons are
@@ -41,7 +41,7 @@ orchestrate the pipeline around it.
 ## Quick start
 
 ```bash
-pipx install open-knowledge-studio && pipx ensurepath   # 1. install the CLI
+pipx install "git+https://github.com/open-agent-power/open-knowledge-studio.git@main#subdirectory=cli" && pipx ensurepath   # 1. install the CLI
 oks init my-knowledge-base          # 2. scaffold an instance (skills + buckets)
 cd my-knowledge-base
 oks status                          # 3. use it

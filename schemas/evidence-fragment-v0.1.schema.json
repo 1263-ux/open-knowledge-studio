@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://open-knowledge-studio.local/schemas/evidence-fragment-v0.1.json",
   "title": "OKS Evidence Fragment v0.1",
-  "description": "A single tool's contribution to evidence acquisition. Each external capability (Firecrawl, AgentKey, pdf-lite, Agent vision) produces one EvidenceFragment. The Agent collects multiple fragments and merges them into a single EvidenceManifest before calling oks raw commit. Fragment status is three-valued: succeeded, partial, failed 鈥?the Agent judges overall completeness when merging.",
+  "description": "A single tool's contribution to evidence acquisition. Each external capability (Firecrawl, AgentKey, pdf-lite, Agent vision) produces one EvidenceFragment. The Agent collects multiple fragments and merges them into a single EvidenceManifest before calling oks raw commit. Fragment status is three-valued: succeeded, partial, failed — the Agent judges overall completeness when merging.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -28,7 +28,7 @@
       "minLength": 1
     },
     "producer": {
-      "description": "Who produced this fragment 鈥?runtime, registered provider, and tool.  'provider' is the Registered Provider ID (from provider.yaml), 'agent-runtime' for Agent-native observation, or 'runtime-tool' for ad-hoc tools (curl, playwright, etc.).  'tool' is the specific tool name.",
+      "description": "Who produced this fragment — runtime, registered provider, and tool.  'provider' is the Registered Provider ID (from provider.yaml), 'agent-runtime' for Agent-native observation, or 'runtime-tool' for ad-hoc tools (curl, playwright, etc.).  'tool' is the specific tool name.",
       "type": "object",
       "additionalProperties": false,
       "required": ["provider", "tool"],
@@ -43,7 +43,7 @@
           "minLength": 1
         },
         "tool": {
-          "description": "Specific tool name 鈥?provider ID for registered providers, actual tool name for runtime-tool (e.g. 'curl', 'playwright'), 'agent-runtime' for Agent-native.",
+          "description": "Specific tool name — provider ID for registered providers, actual tool name for runtime-tool (e.g. 'curl', 'playwright'), 'agent-runtime' for Agent-native.",
           "type": "string",
           "minLength": 1
         }

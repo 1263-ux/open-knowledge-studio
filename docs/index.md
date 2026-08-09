@@ -3,7 +3,7 @@ title: 概述
 nav_order: 1
 has_children: true
 ---
-# Open Knowledge Studio v0.4 Beta
+# Open Knowledge Studio
 
 > 你的知识库就是你的模型——你每天都在训练它。
 
@@ -17,49 +17,50 @@ has_children: true
 |------|--------|----------|
 | **理念** | 知识库即模型，你每天用反馈训练它，人人都是标注师 | [理念 →](philosophy.md) |
 | **每日循环** | 收集 → 入料 → 分级 → 审查 → 沉淀 → 召回的训练闭环 | [每日循环 →](daily-loop.md) |
-| **Memory** | 从原始材料蒸馏出的持久知识——一个 concept、strategy 或 anti-pattern | [记忆模型 →](memory-model.md) |
-| **Raw Material** | 蒸馏前的入料层——文章、论文、仓库笔记、对话 | [Raw 协议 →](raw-multimodal-standard.md) |
+| **Memory** | 从原始材料蒸馏出的持久知识——一个 concept、strategy 或 anti-pattern | [Wiki →](wiki.md) |
+| **Raw Material** | 蒸馏前的入料层——文章、论文、仓库笔记、对话 | [Raw 标准 →](raw-multimodal-standard.md) |
 | **召回引擎** | 6+1 因子评分找到最相关知识：token overlap + substring + topic trace + type boost + 审查加分 + memory curve | [召回引擎 →](recall-engine.md) |
 | **Dreaming 循环** | 人工审查的知识演化：raw → AI 蒸馏 → drafts → 人工审查 → wiki | [Dreaming 循环 →](dreaming-cycle.md) |
 
 ## 核心管线
 
-```
-用户提供 Source
-  ├─ 本地 .md/.txt → oks ingest prepare → text_ready=true → oks raw-commit
-  │                                      → Raw Bundle v0.2 → Agent Candidate
-  └─ URL/非文本 → Recipe + candidate_providers → Agent 选择 Provider
-                                             → Evidence → oks raw-commit
-                                             → Raw Bundle v0.2 → Agent Candidate
-                                                    ↓
-                                           drafts/ → 人工 promote → wiki/
-                                                    ↓
-                                      oks search / oks recall → Agent 上下文
-```
+<img src="assets/oks-pipeline.svg" alt="OKS 核心管线分为本地 Markdown 或纯文本的快速路径，以及其他 modality 的 Protocol 路径，最终汇合到 drafts、人工审查、wiki 和召回。" style="max-width:100%;height:auto;" />
 
-本地文本走快速路径，不需要 Provider 执行；URL、PDF、音视频和图片走协议路径。两条路径都必须经过 Raw Bundle 和人工审查边界，Raw 不会自动进入 Wiki。
+本地 `.md` / `.txt` 走快速路径，其他 modality 走 Protocol 路径；两者最终都必须经过 `drafts/` 和人工审查，才能进入 `wiki/` 并参与召回。
 
-## Agent-native ingest 入口
+> **详细操作手册**: [Agent-Native Ingest 操作手册](ingest/agent-native-ingest-walkthrough.md) — 从 URL 到 promote 的逐步指南，含常见错误和解决方法。
+> **协议对象说明**: [协议对象关系](ingest/protocol-objects.md) — SourceEnvelope / EvidenceFragment / EvidenceManifest / RawBundle 的层级关系和字段含义。
 
-```bash
-oks ingest prepare <source> --kb-root <instance>
-oks capability status --json
-oks raw-commit <manifest-dir> --output <instance>/raw/<slug>
-oks drafts promote <slug>
-oks search "your query" --format json
-```
+## 当前架构与进度
 
-`prepare` 负责确定性字段和协议骨架；Agent 负责读取 Recipe、查看 capability truth、选择 Provider、填写 Evidence；`raw-commit` 只做机械验证和 Raw Bundle 组装。详见[能力架构](capability-architecture.md)与 [Raw 多模态协议](raw-multimodal-standard.md)。
+v0.4.0-dev（最小可分发 Beta）已完成，v0.4 Beta Final Engineering Closure 已收口：
 
-## 当前 v0.4 Beta 实现
+- **单 Wheel 包**: 仅 `knowledge_studio`，`oks_connector` 已移除
+- **17 个 Provider** + 25 个能力动作，11 个 Provider 含 `user_impact` 人类可读影响元数据
+- **Raw Bundle v0.2** 严格验证管线（`oks raw-commit`，含 provenance 机械检查 + Fragment ↔ Manifest 一致性校验）
+- **Agent 协议减负**: `ingest prepare` 预填充 evidence 槽位 + 返回 candidate_providers 短名单
+- **6 能力族首屏**: 文本 / 网页 / PDF / 图片 / 音视频 / 平台 — 不暴露 Provider ID
+- **技能单一事实源**（`skill_templates/`，构建时+运行时剥离，Claude 与 Agents 技能镜像一致）
+- **Guided Decision UX**: 策略配置（lightweight/quality/privacy/ask_each_time）+ `user_impact` 元数据 + 技能模板中的 Strategy-Aware Ingestion 章节
+- **Feishu Pull Mode**: `oks feishu pending` 命令，零常驻进程、零 WebSocket、零 daemon
+- **ASR 语义修正**: `kind=transcript` + `method=asr_transcription` 合法，不再伪装成 subtitle
+- **547 个测试**（546 通过，1 个预存失败，0 回归）
 
-当前实现包含 Agent-native ingest、Capability truth、Raw Bundle v0.2、可选 Provider、Feishu pull-mode 和 clean wheel 打包路径。协议 schema 的 source、runtime package 和 materialized instance copy 保持同版本语义，不把旧工程验收快照当作当前架构事实源。
+架构事实源和本轮工程记录见：
+
+- **[核心架构](architecture/oks-core-architecture.md)** — v0.4.0 当前主事实源
+- **[工程轮次 2-3](engineering-rounds-2-3.md)** — v0.3.0 合并后的架构加固与安全修复
+- **v0.4 Beta Final Engineering Closure** — 5 Gate 全部通过，547 测试，完整 E2E 闭环，独立审计已完成
+
+多模态 Raw 协议的机器事实源位于本仓库 `schemas/`；Studio 只保留生命周期和调用入口。
 
 ## 架构总览
 
-<img src="assets/architecture-overview.svg" alt="Architecture Overview" style="max-width:100%;height:auto;" />
+当前主架构图以核心知识闭环为准，并显式区分已验证、部分验证、尚未验证、人工门禁和外部能力来源：
 
-<img src="assets/pipeline.svg" alt="Pipeline" style="max-width:100%;height:auto;" />
+[OKS Core Architecture](architecture/oks-core-architecture.md)
+
+旧 SVG 主架构图已移除，避免把“设计存在”误读成“真实环境已全部验收通过”。
 
 ## 独特之处
 
@@ -74,7 +75,7 @@ oks search "your query" --format json
 ## 准备开始？
 
 ```bash
-pipx install open-knowledge-studio && pipx ensurepath
+pipx install "git+https://github.com/open-agent-power/open-knowledge-studio.git@main#subdirectory=cli" && pipx ensurepath
 oks init my-knowledge-base
 cd my-knowledge-base
 oks status
@@ -84,13 +85,14 @@ oks search "your query"
 （pipx 本身：Ubuntu 用 `sudo apt install pipx`，macOS 用 `brew install pipx`，Windows 用 `py -m pip install --user pipx && py -m pipx ensurepath`。Ubuntu 24.04 / Homebrew Python 受 PEP 668 保护，直接 `pip install` 会报 externally-managed-environment；镜像滞后时加 `--pip-args="-i https://pypi.org/simple"`。）
 
 - **[快速开始](start-here.md)** — 最短可用路径：保存一条 → 搜索到它 → 验证工作
+- **[Agent-Native Ingest 操作手册](ingest/agent-native-ingest-walkthrough.md)** — URL/文件 → Provider → Evidence → Commit → Draft → Promote 完整实战
+- **[协议对象关系](ingest/protocol-objects.md)** — SourceEnvelope / Fragment / Manifest / Bundle 的层级和字段
 - **[理念](philosophy.md)** — 为什么说知识库就是你在训练的模型
 - **[每日循环](daily-loop.md)** — 把训练闭环变成每天都能跑的流程
 - **[自动驾驶](autonomous.md)** — 人类判断随自动化程度如何分级（L0→L5）
 - **[案例](cases.md)** — 托管你的简历 / GitHub / 科研，看循环怎么落地
-- **[记忆模型](memory-model.md)** — wiki 页面结构、类型和搜索
-- **[Raw 多模态协议](raw-multimodal-standard.md)** — Source、Evidence、Bundle 和不变量
-- **[能力架构](capability-architecture.md)** — Provider、安装边界和能力状态
+- **[使用你的知识](wiki.md)** — wiki 页面结构、类型和搜索
+- **[Raw Materials](raw-multimodal-standard.md)** — 原始材料、证据和 Raw Bundle 边界
 
 ---
 

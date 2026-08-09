@@ -14,7 +14,7 @@ Open Knowledge Studio 最容易理解的方式是一个循环：
 * 让 Agent 用它
 
 {: .note }
-本页是这个循环的最短路径。**前置条件**：Python ≥ 3.12、git；Claude Code（或兼容 Agent）为可选，但 `/ingest`、`/query` 等技能依赖它——没有 Agent 时走下文标注的"纯 CLI 路径"。安装：`pipx install open-knowledge-studio && pipx ensurepath && oks init my-knowledge-base && cd my-knowledge-base`（pipx 本身：Ubuntu 用 `sudo apt install pipx`，macOS 用 `brew install pipx`，Windows 用 `py -m pip install --user pipx && py -m pipx ensurepath`；Ubuntu 24.04 / Homebrew Python 受 PEP 668 保护，直接 `pip install` 会报 externally-managed-environment）。
+本页是这个循环的最短路径。**前置条件**：Python ≥ 3.12、git；Claude Code（或兼容 Agent）为可选，但 `/ingest`、`/query` 等技能依赖它——没有 Agent 时走下文标注的"纯 CLI 路径"。安装：`pipx install "git+https://github.com/open-agent-power/open-knowledge-studio.git@main#subdirectory=cli" && pipx ensurepath && oks init my-knowledge-base && cd my-knowledge-base`（pipx 本身：Ubuntu 用 `sudo apt install pipx`，macOS 用 `brew install pipx`，Windows 用 `py -m pip install --user pipx && py -m pipx ensurepath`；Ubuntu 24.04 / Homebrew Python 受 PEP 668 保护，直接 `pip install` 会报 externally-managed-environment）。
 
 ## Studio 是什么
 
@@ -28,37 +28,24 @@ Open Knowledge Studio 最容易理解的方式是一个循环：
 
 ## 第一个循环
 
-### Step 1: 准备一个 Source
+### Step 1: 保存一条真实知识
 
-先准备一个普通 Markdown/TXT 文件，或一个需要 Provider 处理的 URL。推荐让 Agent 从协议入口开始，而不是手工创建 Raw JSON：
-
-```bash
-oks ingest prepare ./my-first-note.md --kb-root <你的实例目录>
-```
-
-本地文本会返回 `text_ready=true`，协议骨架和原始内容已经预填充；URL、PDF、音视频和图片会额外返回 Recipe 与 `candidate_providers`。
-
-### Step 2: Agent 读取协议并完成 Evidence
-
-在 Claude Code 或兼容 Agent 中运行 `/ingest`。Agent 应读取 shipped Skill，先查看 Recipe 和当前能力状态：
+写一条你想保留的真实内容：一个决策、一个工作洞察、一个你反复使用的模式。放进 `raw/` 目录（`oks init` 只创建空的 `raw/`，日期子目录需自建）：
 
 ```bash
-oks capability status --json
+cd <你的实例目录>   # 例如 my-knowledge-base，以下命令都在实例目录内执行
+mkdir -p raw/$(date +%Y/%m/%d)/misc
+cat > raw/$(date +%Y/%m/%d)/misc/my-first-note.md << 'EOF'
+## Decision: Use Typer for CLI
+
+We chose Typer over Click because Typer has native type hint support
+and integrates with Rich for terminal formatting.
+EOF
 ```
 
-Agent 对非文本 Source 选择最小 Provider 集合，保存 Provider 原始输出，填写 evidence text、confidence 和 `agent_judgment`，然后提交 manifest。文本 Source 可以直接进入下一步。
+### Step 2: 蒸馏为草稿
 
-### Step 3: 机械提交 Raw Bundle
-
-```bash
-oks raw-commit <manifest-dir> --output <你的实例目录>/raw/my-first-note
-```
-
-`raw-commit` 会验证 schema、artifact hash、fragment 引用和 provenance；它不会总结内容，也不会自动写入 Wiki。
-
-### Step 4: 生成 Candidate 并人工审查
-
-Agent 读取 `evidence.jsonl` 和 `content.md`，用自己的话写入 `drafts/<slug>.md`。这一步才是 Candidate，不要把未经判断的 Raw 当作知识。
+raw → drafts 的 A/B/C 分级蒸馏由 **Claude Code 的 `/ingest` 技能**完成（AI 判断质量分级）——在 Agent 会话中运行 `/ingest`，系统扫描 `raw/`，将 A 级材料写入 `drafts/`。CLI 的 `oks distill --dry-run` 只预览维护循环统计，**不做**这个蒸馏。
 
 {: .note }
 **纯 CLI 路径**（没有 Claude Code 时）：跳过 drafts，直接把知识写成 wiki 页，然后跳到 Step 4——
@@ -68,7 +55,7 @@ oks wiki create --title "CLI framework decision" --type strategy --area computin
   --content "Chose Typer over Click: native type hints + Rich integration."
 ```
 
-### Step 5: 提升到 wiki
+### Step 3: 提升到 wiki
 
 审查草稿并提升：
 
@@ -80,7 +67,7 @@ oks drafts promote <slug> # 提升到 wiki/
 
 或用 `/promote` 技能交互式审查。
 
-### Step 6: 确认搜索能找到它
+### Step 4: 确认搜索能找到它
 
 ```bash
 cd <你的实例目录>
@@ -96,7 +83,7 @@ Agent 技能预配置在 `.claude/skills/`。核心技能：
 | 技能 | 使用场景 |
 |------|----------|
 | `/query <问题>` | 提问 — Studio 召回相关 wiki 页面并注入上下文 |
-| `/ingest` | Agent-native 摄入：prepare → Recipe/Capability → Evidence → Raw → Candidate |
+| `/ingest` | 多模态摄入：三级路由 → raw/ → A/B/C 分级 |
 | `/promote` | 审查 drafts 并提升到 wiki |
 | `/status` | 查看知识库概览 |
 
@@ -112,9 +99,8 @@ Agent 会召回你刚提升的 wiki 页面，并带引用回答。
 
 以下每一条你都应该能回答"是"：
 
-* 我用 `oks ingest prepare` 生成了协议 workspace
-* 我完成了 Evidence 并通过 `oks raw-commit`
-* 我把 Candidate 写入了 `drafts/` 中的草稿
+* 我在 `raw/` 保存了一条原始材料
+* 我把它蒸馏为 `drafts/` 中的草稿
 * 我把草稿提升到了 `wiki/`
 * 我用 `oks search` 搜索到了它
 * 在 Agent 会话中，`/query` 召回了我的知识
@@ -158,9 +144,8 @@ oks recall "your topic"
 
 ## 下一步
 
-* [记忆模型](memory-model.md) — wiki 页面结构、类型和搜索
-* [Raw 多模态协议](raw-multimodal-standard.md) — 原始材料、Evidence 和导入格式
-* [能力架构](capability-architecture.md) — Provider 与按需安装边界
+* [Memories](wiki.md) — wiki 页面结构、类型和搜索
+* [Raw Materials](raw-multimodal-standard.md) — 原始材料、协议标准和 Raw Bundle 格式
 * [架构设计](architecture.md) — 认知桶结构和记忆生命周期
 * [召回引擎](recall-engine.md) — 6+1 因子评分算法
 * [Dreaming 循环](dreaming-cycle.md) — 知识演化管线
