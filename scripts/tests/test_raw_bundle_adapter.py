@@ -107,6 +107,48 @@ assert _VAL_SPEC and _VAL_SPEC.loader
 validator_module = importlib.util.module_from_spec(_VAL_SPEC)
 _VAL_SPEC.loader.exec_module(validator_module)
 
+CAPABILITY_PATH = Path(__file__).parents[1] / "capability_check.py"
+_CAPABILITY_SPEC = importlib.util.spec_from_file_location(
+    "scripts_capability_check", CAPABILITY_PATH
+)
+assert _CAPABILITY_SPEC and _CAPABILITY_SPEC.loader
+capability_module = importlib.util.module_from_spec(_CAPABILITY_SPEC)
+_CAPABILITY_SPEC.loader.exec_module(capability_module)
+
+
+def test_capability_env_python_must_import_required_module(tmp_path, monkeypatch):
+    fake_python = tmp_path / ("python.exe" if os.name == "nt" else "python")
+    fake_python.write_text("", encoding="utf-8")
+    monkeypatch.setenv("OKS_DOCUMENT_PYTHON", str(fake_python))
+    monkeypatch.setattr(capability_module.importlib.util, "find_spec", lambda _module: None)
+    monkeypatch.setattr(
+        capability_module.subprocess,
+        "run",
+        lambda *_args, **_kwargs: SimpleNamespace(returncode=1),
+    )
+
+    assert capability_module.is_capability_available("document") == (False, None)
+
+
+def test_capability_env_python_is_available_after_import_probe(tmp_path, monkeypatch):
+    fake_python = tmp_path / ("python.exe" if os.name == "nt" else "python")
+    fake_python.write_text("", encoding="utf-8")
+    monkeypatch.setenv("OKS_PDF_LITE_PYTHON", str(fake_python))
+    monkeypatch.setattr(capability_module.importlib.util, "find_spec", lambda _module: None)
+    commands = []
+
+    def successful_import(command, **_kwargs):
+        commands.append(command)
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(capability_module.subprocess, "run", successful_import)
+
+    assert capability_module.is_capability_available("pdf-lite") == (
+        True,
+        fake_python.absolute(),
+    )
+    assert commands == [[str(fake_python.absolute()), "-c", "import pymupdf4llm"]]
+
 
 def test_default_ingest_output_uses_oks_root_raw(tmp_path, monkeypatch):
     kb = tmp_path / "kb"
