@@ -3,7 +3,7 @@ title: 概述
 nav_order: 1
 has_children: true
 ---
-# Open Knowledge Studio
+# Open Knowledge Studio v0.4 Beta
 
 > 你的知识库就是你的模型——你每天都在训练它。
 
@@ -17,31 +17,43 @@ has_children: true
 |------|--------|----------|
 | **理念** | 知识库即模型，你每天用反馈训练它，人人都是标注师 | [理念 →](philosophy.md) |
 | **每日循环** | 收集 → 入料 → 分级 → 审查 → 沉淀 → 召回的训练闭环 | [每日循环 →](daily-loop.md) |
-| **Memory** | 从原始材料蒸馏出的持久知识——一个 concept、strategy 或 anti-pattern | [Memories →](memories.md) |
-| **Raw Material** | 蒸馏前的入料层——文章、论文、仓库笔记、对话 | [Raw Materials →](raw-materials.md) |
+| **Memory** | 从原始材料蒸馏出的持久知识——一个 concept、strategy 或 anti-pattern | [记忆模型 →](memory-model.md) |
+| **Raw Material** | 蒸馏前的入料层——文章、论文、仓库笔记、对话 | [Raw 协议 →](raw-multimodal-standard.md) |
 | **召回引擎** | 6+1 因子评分找到最相关知识：token overlap + substring + topic trace + type boost + 审查加分 + memory curve | [召回引擎 →](recall-engine.md) |
 | **Dreaming 循环** | 人工审查的知识演化：raw → AI 蒸馏 → drafts → 人工审查 → wiki | [Dreaming 循环 →](dreaming-cycle.md) |
 
 ## 核心管线
 
 ```
-raw/（人类收集的原始材料）
-  ↓ /ingest — 三级路由 → A/B/C 分级
-drafts/（中间态草稿）
-  ↓ /promote — 人工审查
-wiki/（策展知识，带衰减）
-  ↓ oks search / /query — 6+1 因子召回
-注入 Agent 上下文
+用户提供 Source
+  ├─ 本地 .md/.txt → oks ingest prepare → text_ready=true → oks raw-commit
+  │                                      → Raw Bundle v0.2 → Agent Candidate
+  └─ URL/非文本 → Recipe + candidate_providers → Agent 选择 Provider
+                                             → Evidence → oks raw-commit
+                                             → Raw Bundle v0.2 → Agent Candidate
+                                                    ↓
+                                           drafts/ → 人工 promote → wiki/
+                                                    ↓
+                                      oks search / oks recall → Agent 上下文
 ```
 
-## 当前真实 POC
+本地文本走快速路径，不需要 Provider 执行；URL、PDF、音视频和图片走协议路径。两条路径都必须经过 Raw Bundle 和人工审查边界，Raw 不会自动进入 Wiki。
 
-Studio 当前以飞书多维表格作为 Capture、状态与人工审核控制面，真实运行证据和待办集中在两份文档中：
+## Agent-native ingest 入口
 
-- **[自进化学习主 Loop](core-learning-loop-poc.md)** — 当前唯一实施清单与验收门；
-- **[阶段历史与验收简报](phase-history-summary.md)** — Capture → Raw → Candidate → 个人审核 → Wiki → Recall 的真实结果与限制。
+```bash
+oks ingest prepare <source> --kb-root <instance>
+oks capability status --json
+oks raw-commit <manifest-dir> --output <instance>/raw/<slug>
+oks drafts promote <slug>
+oks search "your query" --format json
+```
 
-多模态 Raw 协议的机器事实源位于独立 `oks-connector` 仓库的 `schemas/` 与 `capabilities/`；Studio 只保留生命周期和调用入口，不复制第二套 Schema。
+`prepare` 负责确定性字段和协议骨架；Agent 负责读取 Recipe、查看 capability truth、选择 Provider、填写 Evidence；`raw-commit` 只做机械验证和 Raw Bundle 组装。详见[能力架构](capability-architecture.md)与 [Raw 多模态协议](raw-multimodal-standard.md)。
+
+## 当前 v0.4 Beta 实现
+
+当前实现包含 Agent-native ingest、Capability truth、Raw Bundle v0.2、可选 Provider、Feishu pull-mode 和 clean wheel 打包路径。协议 schema 的 source、runtime package 和 materialized instance copy 保持同版本语义，不把旧工程验收快照当作当前架构事实源。
 
 ## 架构总览
 
@@ -76,8 +88,9 @@ oks search "your query"
 - **[每日循环](daily-loop.md)** — 把训练闭环变成每天都能跑的流程
 - **[自动驾驶](autonomous.md)** — 人类判断随自动化程度如何分级（L0→L5）
 - **[案例](cases.md)** — 托管你的简历 / GitHub / 科研，看循环怎么落地
-- **[使用你的知识](memories.md)** — wiki 页面结构、类型和搜索
-- **[Raw Materials](raw-materials.md)** — 原始材料、A/B/C 分级、蒸馏工作流
+- **[记忆模型](memory-model.md)** — wiki 页面结构、类型和搜索
+- **[Raw 多模态协议](raw-multimodal-standard.md)** — Source、Evidence、Bundle 和不变量
+- **[能力架构](capability-architecture.md)** — Provider、安装边界和能力状态
 
 ---
 

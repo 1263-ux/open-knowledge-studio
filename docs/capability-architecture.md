@@ -1,4 +1,4 @@
-# 可组合能力架构
+# 可组合能力架构（v0.4 Beta）
 
 ## 目标
 
@@ -6,8 +6,9 @@ Open Knowledge Studio 的核心包只提供知识库初始化、配置、生命�
 
 ```text
 oks core
-  ├─ oks ingest <source>           orchestration entry point
-  ├─ oks capability install <name> explicit component selection
+  ├─ oks ingest prepare <source>   protocol workspace and Recipe
+  ├─ oks capability status --json  current action/provider truth
+  ├─ oks raw-commit <manifest-dir> mechanical Raw Bundle validation
   ├─ oks-connector                 independent mechanical extraction CLI
   │    ├─ document                 Office / HTML / text
   │    ├─ pdf                      MinerU layout evidence
@@ -24,7 +25,6 @@ oks core
 ```powershell
 pipx install open-knowledge-studio
 oks init <knowledge-root>
-oks capability install connector
 oks capability install watch
 ```
 
@@ -32,19 +32,20 @@ oks capability install watch
 
 | Capability | 独立 CLI / Provider | 用户选择后安装 | 主要输入 |
 |---|---|---|---|
-| connector | `oks-connector` | `oks-connector` | URL 与本地文件路由 |
-| watch | `oks-connector watch` | `oks-connector[watch]` | 视频、音频、平台 URL |
-| document | `oks-connector markitdown` | `oks-connector[document]` | DOCX/PPTX/XLSX/HTML/文本 |
-| pdf | `oks-connector mineru` | `oks-connector[pdf]` | PDF |
-| formula | `formula_candidates.py` | `oks-connector[formula]` | 公式图片候选 |
+| watch | `oks-connector watch` | `oks capability install watch` | 视频、音频、平台 URL |
+| document | `oks-connector markitdown` | `oks capability install document` | DOCX/PPTX/XLSX/HTML/文本 |
+| pdf | `oks-connector mineru` | `oks capability install pdf` | PDF |
+| formula | `formula_candidates.py` | `oks capability install formula` | 公式图片候选 |
 | feishu | `oks feishu` + Worker | 用户批准的 `lark-cli` | 私有 Base、表单、消息审核 |
+
+`oks capability status --json` 是当前状态入口。它会区分 `ready`、`not_configured`、`unavailable`、`blocked` 和 `experimental`；`issues_found` 表示可选能力存在缺口，不表示核心文本 ingest 失败。
 
 ## 统一生命周期
 
-无飞书时，用户将 URL 或文件传给 `oks ingest`；有飞书时，表单和 `oks feishu submit` 都进入同一 Worker 状态机。两条路径都必须保留：
+无飞书时，用户或 Agent 从 `oks ingest prepare` 开始；有飞书时，表单和 `oks feishu submit` 都进入同一 Worker 状态机。两条路径都必须保留：
 
 ```text
-Capture → Processing Run → Raw Bundle → Candidate → human review → Wiki → wiki use
+Source → Recipe/Capability → Evidence → Raw Bundle → Candidate → human review → Wiki → recall
 ```
 
 Connector 仅负责机械获取与证据。AI 可以生成 Candidate，但不能绕过人工审核提升到 Wiki。`partial`、`failed`、`skipped` 必须保留在 Run 和 Raw 中。

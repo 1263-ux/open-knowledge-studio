@@ -1,7 +1,7 @@
-# Open Knowledge Studio
+# Open Knowledge Studio v0.4 Beta
 
 > A file-based knowledge engineering workspace for Claude Code.
-> Core pipeline: **raw → wiki → recall**.
+> Core pipeline: **Source → Evidence → Raw Bundle → Candidate → review → wiki → recall**.
 
 [English](#english) | [中文](#中文)
 
@@ -36,13 +36,19 @@ oks search "git branch"             # (empty on a fresh instance — add knowled
 oks recall "git branch" --goal none --format json --explain  # reproducible, inspectable output
 oks eval recall eval/datasets/team-v1.yaml --output eval/runs/baseline.json
 
+# v0.4 Agent-native ingest
+oks ingest prepare ./source.md --kb-root my-knowledge-base
+oks capability status --json
+oks raw-commit <manifest-dir> --output my-knowledge-base/raw/<slug>
+# Agent writes a Candidate to drafts/, then a human reviews and promotes it.
+
 # 按需安装能力
 oks capability install watch     # 视频/音频提取
 oks capability install document  # Office/HTML 提取
 oks capability install pdf       # PDF 提取
 
-# 采集（Agent 或用户直接调用）
-oks ingest "https://www.youtube.com/watch?v=..." --mode quick --progress
+# 采集（协议路径；Agent 根据 Recipe 选择 Provider）
+oks ingest prepare "https://www.youtube.com/watch?v=..." --kb-root my-knowledge-base
 
 # 飞书（可选组件）
 oks feishu setup                 # 自动创建 Base + 表 + 表单
@@ -52,14 +58,17 @@ oks feishu listen                # 监听审核回复
 ```
 
 `oks-connector` 已内置，不再需要 `pipx inject`。重型依赖（faster-whisper、MinerU、PaddleOCR）
-通过 `oks capability install` 按需安装，每次安装前提示用户确认。
+通过 `oks capability install` 按需安装，每次安装前提示用户确认。v0.4 的 Agent-native 流程由
+`oks ingest prepare` 生成 Recipe 和协议骨架；Provider 原始输出必须保存在 workspace，之后由
+`oks raw-commit` 做 provenance 机械校验。
 
 The connector is included in the package; `oks ingest` checks the required
 optional capability and prints the exact installation command when it is
 missing. Feishu Base is an optional extension: `oks feishu auth`,
 `oks feishu form --url <form-url>`, `oks feishu run-once`, and bounded
-`oks feishu listen` retain user-controlled login and review. See
-`docs/handoff-cli-feishu-loop-20260724.md` for setup and operational boundaries.
+`oks feishu listen` retain user-controlled login and review. See the
+[capability architecture](docs/capability-architecture.md) and
+[raw multimodal protocol](docs/raw-multimodal-standard.md) for setup and operational boundaries.
 
 | OS | Get pipx | Note |
 |----|----------|------|
@@ -74,7 +83,8 @@ Troubleshooting:
 Prefer a plain venv? `python3 -m venv ~/.oks-venv && ~/.oks-venv/bin/pip install open-knowledge-studio`
 
 `oks init` materializes the shareable layer (Claude Code skills, templates, schema,
-settings) and a git-tracked memory instance — no repo clone required. This repo is
+settings) and a git-tracked memory instance — no repo clone required. v0.4 ships the
+Agent-native `/ingest` Skill together with the protocol flow. This repo is
 the **code/template** source; your knowledge lives in the instance you create.
 
 ### Architecture
@@ -115,6 +125,12 @@ oks status                          # 3. 开始使用
 oks search "git branch"             # （新实例为空——先写入知识再搜）
 oks recall "git branch" --goal none --format json --explain  # 可复现、可解释输出
 oks eval recall eval/datasets/team-v1.yaml --output eval/runs/baseline.json
+
+# v0.4 Agent-native 摄入
+oks ingest prepare ./source.md --kb-root my-knowledge-base
+oks capability status --json
+oks raw-commit <manifest-dir> --output my-knowledge-base/raw/<slug>
+# Agent 写入 Candidate 到 drafts/，再由人工审查并 promote。
 ```
 
 为什么用 pipx？新版系统的 Python 普遍启用 PEP 668「外部管理」保护，直接
@@ -133,7 +149,8 @@ oks eval recall eval/datasets/team-v1.yaml --output eval/runs/baseline.json
 习惯传统 venv？`python3 -m venv ~/.oks-venv && ~/.oks-venv/bin/pip install open-knowledge-studio`
 
 `oks init` 会物化可共享层（Claude Code 技能、模板、schema、配置）并生成一个用 git
-跟踪记忆的实例——无需 clone 本仓库。本仓库是**代码/模板**源，你的知识存在你创建的实例里。
+跟踪记忆的实例——无需 clone 本仓库。v0.4 会同时物化 Agent-native `/ingest` Skill
+和协议模板。本仓库是**代码/模板**源，你的知识存在你创建的实例里。
 
 ### 设计文档
 
