@@ -640,7 +640,7 @@ def _assemble_bundle(
         #   1. media_type (explicit)
         #   2. artifact kind  (primary_text → text)
         #   3. file extension  (common text formats)
-        media_type = primary.get("media_type", "")
+        media_type = primary.get("media_type") or ""
         art_kind = primary.get("kind", "")
         ext = primary["path"].rsplit(".", 1)[-1].lower() if "." in primary["path"] else ""
         _TEXT_EXTENSIONS: frozenset[str] = frozenset({
