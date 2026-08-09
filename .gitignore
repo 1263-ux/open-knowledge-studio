@@ -68,7 +68,11 @@ tmp/pdfs/
 
 # Temporary run artifacts — acceptance scripts, experiments, scratch
 tmp/
-experiments/
+experiments/*
+!experiments/product-validation-feedback/
+!experiments/product-validation-feedback/**
+experiments/product-validation-feedback/**/__pycache__/
+experiments/product-validation-feedback/**/*.py[cod]
 home=D#/
 
 # Wiki content (local only — do not push to remote)
