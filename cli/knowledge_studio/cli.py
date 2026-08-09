@@ -1494,9 +1494,12 @@ def _materialize_assets(root: Path, base: Path, overwrite: bool) -> list[str]:
 @app.command()
 def init(
     path: str = typer.Argument(..., help="Target directory for the new knowledge instance"),
-    set_default: bool = typer.Option(
-        True, "--set-default/--no-set-default",
-        help="Register this folder as the active KB in ~/.oks/config.json",
+    set_default: Optional[bool] = typer.Option(
+        None, "--set-default/--no-set-default",
+        help=(
+            "Register this folder as the active KB in ~/.oks/config.json. "
+            "Default: only when no active KB is registered yet"
+        ),
     ),
     git: bool = typer.Option(
         True, "--git/--no-git", help="Run `git init` in the instance folder",
@@ -1514,8 +1517,8 @@ def init(
 
     Creates the bucket structure and a .gitignore that TRACKS your memory
     (wiki/, drafts/, profiles/) while ignoring only per-machine state (.oks/).
-    By default points ~/.oks/config.json at the new folder so `oks` targets it
-    from anywhere.
+    Points ~/.oks/config.json at the new folder only when no active KB is
+    registered yet; pass --set-default to switch an existing one.
     """
     root = Path(path).expanduser().resolve()
 
@@ -1578,10 +1581,21 @@ def init(
         except (subprocess.CalledProcessError, FileNotFoundError) as e:
             console.print(f"[yellow]Skipped git init:[/yellow] {e}")
 
-    if set_default:
-        from knowledge_studio.config import init_config
-        init_config(str(root))
-        console.print(f"[green]Active KB set:[/green] {root}")
+    if set_default is not False:
+        from knowledge_studio.config import init_config, load_config
+
+        current = load_config().get("knowledge_base_path")
+        adopting = set_default is True or not current
+        if adopting:
+            init_config(str(root))
+            console.print(f"[green]Active KB set:[/green] {root}")
+        elif Path(current).resolve() != root:
+            # Replacing this silently loses the old path for good, and every
+            # later `oks ingest` / `oks wiki create` would write here instead.
+            console.print(
+                f"[yellow]Active KB left unchanged:[/yellow] {current}\n"
+                f"  to switch: [bold]oks init {root} --set-default[/bold]"
+            )
 
     console.print(
         f"\n[bold]{t('init_ready')}[/bold]\n"

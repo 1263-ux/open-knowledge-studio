@@ -1,6 +1,8 @@
 """Tests for `oks init` — instance scaffolding + asset materialization."""
+import json
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
 from knowledge_studio.cli import app
@@ -197,3 +199,59 @@ def test_init_rerun_on_existing_kb_is_idempotent(tmp_path):
     # target now contains wiki/ → treated as an existing KB, no --force needed
     result = runner.invoke(app, ["init", str(target), "--no-git", "--no-set-default"])
     assert result.exit_code == 0, result.output
+
+
+# ── active KB pointer ────────────────────────────────────────────────
+
+@pytest.fixture
+def _isolated_config(tmp_path, monkeypatch):
+    """Point ~/.oks at a temp dir so these tests cannot touch the real config."""
+    import knowledge_studio.config as _cfg
+
+    home = tmp_path / "home" / ".oks"
+    home.mkdir(parents=True)
+    monkeypatch.setattr(_cfg, "config_dir", lambda: home)
+    return home / "config.json"
+
+
+def test_init_does_not_silently_repoint_an_existing_active_kb(_isolated_config, tmp_path):
+    """A throwaway instance must not hijack where the user's memory is written.
+
+    Overwriting knowledge_base_path loses the old path for good, and every
+    later `oks ingest` / `oks wiki create` would land in the scratch folder.
+    """
+    real_kb = tmp_path / "real"
+    result = runner.invoke(app, ["init", str(real_kb), "--no-git", "--set-default"])
+    assert result.exit_code == 0, result.output
+
+    scratch = tmp_path / "scratch"
+    result = runner.invoke(app, ["init", str(scratch), "--no-git"])
+    assert result.exit_code == 0, result.output
+
+    config = json.loads(_isolated_config.read_text(encoding="utf-8"))
+    assert config["knowledge_base_path"] == str(real_kb.resolve()), (
+        f"active KB was silently repointed: {config['knowledge_base_path']}"
+    )
+    assert "--set-default" in result.output, (
+        f"the user was not told how to switch:\n{result.output}"
+    )
+
+
+def test_init_set_default_still_switches_explicitly(_isolated_config, tmp_path):
+    first = tmp_path / "first"
+    second = tmp_path / "second"
+    runner.invoke(app, ["init", str(first), "--no-git", "--set-default"])
+    result = runner.invoke(app, ["init", str(second), "--no-git", "--set-default"])
+    assert result.exit_code == 0, result.output
+
+    config = json.loads(_isolated_config.read_text(encoding="utf-8"))
+    assert config["knowledge_base_path"] == str(second.resolve())
+
+
+def test_init_adopts_when_no_active_kb_is_registered(_isolated_config, tmp_path):
+    target = tmp_path / "first-ever"
+    result = runner.invoke(app, ["init", str(target), "--no-git"])
+    assert result.exit_code == 0, result.output
+
+    config = json.loads(_isolated_config.read_text(encoding="utf-8"))
+    assert config["knowledge_base_path"] == str(target.resolve())
