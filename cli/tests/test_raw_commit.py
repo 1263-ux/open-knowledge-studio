@@ -153,14 +153,32 @@ def _make_manifest(
     return m, ph
 
 
-def _run_commit(manifest_dir: Path, output: Path) -> subprocess.CompletedProcess:
-    return subprocess.run(
-        ["oks", "raw-commit", str(manifest_dir), "-o", str(output)],
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
+class _CommitResult:
+    """Mimic CompletedProcess so existing returncode/stdout/stderr asserts hold."""
+
+    def __init__(self, returncode: int, stdout: str, stderr: str) -> None:
+        self.returncode = returncode
+        self.stdout = stdout
+        self.stderr = stderr
+
+
+def _run_commit(manifest_dir: Path, output: Path) -> _CommitResult:
+    """Invoke the package under test, never a globally installed `oks`.
+
+    Shelling out to `oks` on PATH validated whatever binary happened to be
+    installed: 37 tests failed on a clean clone, and a stale install could make
+    broken code look green.
+    """
+    from typer.testing import CliRunner
+
+    from knowledge_studio.cli import app
+
+    result = CliRunner().invoke(
+        app, ["raw-commit", str(manifest_dir), "-o", str(output)]
     )
+    stdout = result.output or ""
+    stderr = "" if result.exception is None else f"{result.exception}"
+    return _CommitResult(result.exit_code, stdout, stderr)
 
 
 # ── 1. derived field ─────────────────────────────────────────────────

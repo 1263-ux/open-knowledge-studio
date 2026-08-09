@@ -124,14 +124,19 @@ capability_app = typer.Typer(help="Optional modality capabilities; core dependen
 
 
 class _LegacyIngestGroup(typer.core.TyperGroup):
-    """Keep ``oks ingest <source>`` working beside ``oks ingest prepare``."""
+    """Keep ``oks ingest <source>`` working beside ``oks ingest prepare``.
 
-    def _click_resolve_command(self, ctx, args):
+    ``resolve_command`` is click's real hook. An earlier attempt overrode
+    ``_click_resolve_command``, which exists on neither click.Group nor
+    TyperGroup, so it never ran and ``oks ingest <source>`` exited 2.
+    """
+
+    def resolve_command(self, ctx, args):
         if args and self.get_command(ctx, args[0]) is None:
             legacy_command = self.get_command(ctx, "run")
             if legacy_command is not None:
                 return "run", legacy_command, args
-        return super()._click_resolve_command(ctx, args)
+        return super().resolve_command(ctx, args)
 
 
 ingest_app = typer.Typer(
