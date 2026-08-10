@@ -1,4 +1,8 @@
+import hashlib
+import json
 from pathlib import Path
+
+import pytest
 
 from knowledge_studio import store
 
@@ -41,6 +45,73 @@ The reviewed body is preserved as the Wiki page content.
     assert page["review"]["lesson"] == "accepted in Base"
     assert Path(page["file_path"]).parent.name == "strategies"
     assert not draft.exists()
+
+
+def test_reject_draft_preserves_append_only_review_receipt(monkeypatch, tmp_path):
+    monkeypatch.setenv("OKS_ROOT", str(tmp_path))
+    draft = tmp_path / "drafts" / "not-worth-keeping.md"
+    draft.parent.mkdir()
+    draft_content = """---
+title: Not worth keeping
+status: draft
+---
+
+This candidate was rejected.
+"""
+    draft.write_text(draft_content, encoding="utf-8")
+
+    receipt_path = store.reject_draft("not-worth-keeping")
+
+    assert not draft.exists()
+    assert receipt_path.parent == tmp_path / "drafts" / "rejected"
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    assert receipt["decision"] == "rejected"
+    assert receipt["draft_slug"] == "not-worth-keeping"
+    assert receipt["draft_title"] == "Not worth keeping"
+    assert receipt["draft_sha256"] == hashlib.sha256(draft_content.encode()).hexdigest()
+    assert "draft_content" not in receipt
+
+
+def test_reject_draft_creates_a_new_receipt_for_repeated_slug(monkeypatch, tmp_path):
+    monkeypatch.setenv("OKS_ROOT", str(tmp_path))
+    drafts = tmp_path / "drafts"
+    drafts.mkdir()
+
+    (drafts / "repeat.md").write_text("---\ntitle: First\n---\nfirst", encoding="utf-8")
+    first = store.reject_draft("repeat")
+    (drafts / "repeat.md").write_text("---\ntitle: Second\n---\nsecond", encoding="utf-8")
+    second = store.reject_draft("repeat")
+
+    assert first != second
+    assert first.exists()
+    assert second.exists()
+
+
+@pytest.mark.parametrize("slug", ["../wiki/keep", "..\\wiki\\keep", ".", ""])
+def test_draft_actions_reject_path_traversal(monkeypatch, tmp_path, slug):
+    monkeypatch.setenv("OKS_ROOT", str(tmp_path))
+
+    with pytest.raises(ValueError, match="Invalid draft slug"):
+        store.reject_draft(slug)
+    with pytest.raises(ValueError, match="Invalid draft slug"):
+        store.promote_draft(slug)
+
+
+def test_reject_keeps_draft_when_receipt_write_fails(monkeypatch, tmp_path):
+    monkeypatch.setenv("OKS_ROOT", str(tmp_path))
+    draft = tmp_path / "drafts" / "keep-on-failure.md"
+    draft.parent.mkdir()
+    draft.write_text("---\ntitle: Keep on failure\n---\nbody", encoding="utf-8")
+
+    def fail_write(*args, **kwargs):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(store, "_atomic_write", fail_write)
+
+    with pytest.raises(OSError, match="disk full"):
+        store.reject_draft("keep-on-failure")
+
+    assert draft.exists()
 
 
 def test_promote_draft_marks_the_superseded_page(monkeypatch, tmp_path):

@@ -13,6 +13,7 @@ import math
 import os
 import re
 import tempfile
+import uuid
 from datetime import UTC, date, datetime
 from pathlib import Path
 
@@ -604,6 +605,12 @@ def list_drafts() -> list[dict]:
     return drafts
 
 
+def _draft_path(slug: str) -> Path:
+    if not slug or slug in {".", ".."} or "/" in slug or "\\" in slug:
+        raise ValueError(f"Invalid draft slug: {slug!r}")
+    return drafts_dir() / f"{slug}.md"
+
+
 def promote_draft(
     slug: str,
     title: str | None = None,
@@ -612,8 +619,7 @@ def promote_draft(
     tags: list[str] | None = None,
     slug_hint: str | None = None,
 ) -> str:
-    dd = drafts_dir()
-    draft_path = dd / f"{slug}.md"
+    draft_path = _draft_path(slug)
     if not draft_path.exists():
         raise FileNotFoundError(f"Draft not found: {slug}")
 
@@ -677,12 +683,31 @@ def promote_draft(
     return path.stem
 
 
-def reject_draft(slug: str) -> None:
+def reject_draft(slug: str) -> Path:
     dd = drafts_dir()
-    draft_path = dd / f"{slug}.md"
+    draft_path = _draft_path(slug)
     if not draft_path.exists():
         raise FileNotFoundError(f"Draft not found: {slug}")
+
+    draft_content = draft_path.read_text(encoding="utf-8")
+    draft_meta = parse_wiki_file(draft_path) or {}
+    decided_at = datetime.now(UTC).isoformat()
+    receipt = {
+        "decision": "rejected",
+        "decided_at": decided_at,
+        "draft_slug": slug,
+        "draft_title": draft_meta.get("title", slug),
+        "draft_path": str(draft_path.relative_to(repo_root())),
+        "draft_sha256": hashlib.sha256(draft_content.encode("utf-8")).hexdigest(),
+    }
+    receipt_name = (
+        f"{datetime.now(UTC).strftime('%Y%m%dT%H%M%S%fZ')}-"
+        f"{slug}-{uuid.uuid4().hex[:12]}.json"
+    )
+    receipt_path = dd / "rejected" / receipt_name
+    _atomic_write(receipt_path, json.dumps(receipt, ensure_ascii=False, indent=2) + "\n")
     draft_path.unlink()
+    return receipt_path
 
 
 def wiki_digest(config: dict | None = None) -> dict:
