@@ -42,7 +42,7 @@ Agent-Native Ingest 路径涉及四个协议对象和一个产物。本文说明
   "content_hash": "sha256...",
   "evidence_manifest_ref": "manifest-abc123",
   "title": "Example Page",
-  "policy": {"remote_processing": "allow", "sensitivity": "internal"}
+  "policy": {"remote_processing": "ask", "sensitivity": "internal"}
 }
 ```
 

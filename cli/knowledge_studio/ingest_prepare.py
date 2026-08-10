@@ -124,8 +124,6 @@ def prepare_ingest(source: str, kb_root: Path | None = None) -> dict[str, Any]:
     source_id = f"src-{uuid.uuid4().hex[:12]}"
     captured_at = datetime.now(timezone.utc).isoformat()
     is_text = modality == "text" and access_mode == "local_file"
-    is_remote = access_mode == "public_url"
-
     # ── Read and hash (local files only) ──
     source_bytes = b""
     content_hash = ""
@@ -174,7 +172,10 @@ def prepare_ingest(source: str, kb_root: Path | None = None) -> dict[str, Any]:
         "title": _title_from_source(source),
         "user_note": None,
         "policy": {
-            "remote_processing": "allow" if is_remote else "deny",
+            # A reachable URL is not consent to send its content to a third-party
+            # Provider. The Agent must resolve "ask" with the user before any
+            # remote processing; local and manual sources remain local-only.
+            "remote_processing": "ask" if access_mode == "public_url" else "deny",
             "sensitivity": "internal",
         },
     }
