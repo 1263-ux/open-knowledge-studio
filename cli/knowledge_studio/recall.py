@@ -439,7 +439,10 @@ def _tokenize(text: str) -> set[str]:
         raw_words = text.split()
 
     tokens = set()
-    _strip_chars = ".,!?;:\"'()[]{}，。！？；：''""（）【】"
+    # Markdown punctuation must go: the jieba-less fallback only splits on
+    # whitespace, so `**git**` and `` `oks` `` would survive as tokens that can
+    # never match a clean query token now that both sides are tokenized.
+    _strip_chars = ".,!?;:\"'()[]{}*_`~#>，。！？；：''""（）【】"
     for word in raw_words:
         word = word.strip(_strip_chars)
         if len(word) < 2 or word in stopwords:

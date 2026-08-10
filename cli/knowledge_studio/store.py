@@ -387,6 +387,35 @@ def make_slug(title: str, fallback: str = "untitled") -> str:
     return slug or fallback
 
 
+def _apply_relationship(relates_to: str, relationship: str, new_slug: str) -> None:
+    """Record an A4 relationship on the older page.
+
+    Skips a self-referential target: after fingerprint dedup the "new" page can
+    be the very page the draft declared it supersedes, and a page cannot
+    supersede itself.
+    """
+    if not relates_to or not relationship or relates_to == new_slug:
+        return
+    old_file = _find_file_by_slug(relates_to)
+    if not old_file:
+        return
+    if relationship == "supersedes":
+        _update_frontmatter_field(old_file, "status", "superseded")
+        _update_frontmatter_field(old_file, "superseded_by", new_slug)
+    elif relationship == "enriches":
+        _update_frontmatter_field(old_file, "enriched_by", new_slug)
+    elif relationship == "confirms":
+        old_meta = parse_wiki_file(old_file)
+        if old_meta:
+            current_conf = old_meta.get("confidence", 0.8)
+            new_conf = min(1.0, current_conf + 0.1)
+            _update_frontmatter_field(old_file, "confidence", round(new_conf, 4))
+        _update_frontmatter_field(old_file, "confirmed_by", new_slug)
+    elif relationship == "challenges":
+        _update_frontmatter_field(old_file, "status", "stale")
+        _update_frontmatter_field(old_file, "challenged_by", new_slug)
+
+
 def write_wiki_page(
     title: str,
     content: str,
@@ -414,9 +443,21 @@ def write_wiki_page(
     fp_index = _load_fingerprint_index()
     existing_slug = fp_index.get(fp)
     if existing_slug:
-        _reinforce_on_reconfirmation(existing_slug)
         existing = _find_file_by_slug(existing_slug)
         if existing:
+            # Dedup must not swallow what the caller newly established. A human
+            # approving a draft whose body matches an existing page used to lose
+            # the review, the active status and the declared A4 relationship —
+            # and promote_draft then deleted the draft, so it was unrecoverable.
+            _reinforce_on_reconfirmation(existing_slug)
+            if human_reviewed:
+                _update_frontmatter_field(
+                    existing, "human_reviewed_at", datetime.now(UTC).isoformat()
+                )
+                _update_frontmatter_field(existing, "status", "active")
+            if supersedes and not relates_to:
+                relates_to, relationship = supersedes, "supersedes"
+            _apply_relationship(relates_to or "", relationship or "", existing_slug)
             return existing
 
     wd = wiki_dir()
@@ -438,24 +479,7 @@ def write_wiki_page(
         relates_to = supersedes
         relationship = "supersedes"
 
-    if relates_to and relationship:
-        old_file = _find_file_by_slug(relates_to)
-        if old_file:
-            if relationship == "supersedes":
-                _update_frontmatter_field(old_file, "status", "superseded")
-                _update_frontmatter_field(old_file, "superseded_by", slug)
-            elif relationship == "enriches":
-                _update_frontmatter_field(old_file, "enriched_by", slug)
-            elif relationship == "confirms":
-                old_meta = parse_wiki_file(old_file)
-                if old_meta:
-                    current_conf = old_meta.get("confidence", 0.8)
-                    new_conf = min(1.0, current_conf + 0.1)
-                    _update_frontmatter_field(old_file, "confidence", round(new_conf, 4))
-                _update_frontmatter_field(old_file, "confirmed_by", slug)
-            elif relationship == "challenges":
-                _update_frontmatter_field(old_file, "status", "stale")
-                _update_frontmatter_field(old_file, "challenged_by", slug)
+    _apply_relationship(relates_to or "", relationship or "", slug)
 
     frontmatter: dict = {
         "title": title,

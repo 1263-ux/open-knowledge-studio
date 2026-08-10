@@ -104,3 +104,70 @@ Reviewed knowledge.
 
     assert slug.endswith("-feishu-review-return-provenance")
     assert store.get_wiki_page(slug)["title"] == "飞书个人审核回程的可追溯门禁"
+
+
+def _write_draft(root: Path, name: str, body: str, **fields) -> None:
+    import yaml
+
+    meta = {
+        "title": fields.pop("title", name),
+        "draft_type": "concept",
+        "draft_area": "computing",
+        "status": "pending",
+        **fields,
+    }
+    drafts = root / "drafts"
+    drafts.mkdir(exist_ok=True)
+    front = yaml.dump(meta, allow_unicode=True, sort_keys=False)
+    (drafts / f"{name}.md").write_text(f"---\n{front}---\n\n{body}\n", encoding="utf-8")
+
+
+def test_dedup_hit_still_records_the_human_review(monkeypatch, tmp_path):
+    """Promoting a body-identical draft used to silently discard the approval.
+
+    write_wiki_page returned the existing page early, so human_reviewed_at was
+    never written and status stayed provisional — then promote_draft deleted the
+    draft, making the lost review unrecoverable, with no error reported.
+    """
+    monkeypatch.setenv("OKS_ROOT", str(tmp_path))
+    body = "Cache invalidation must be explicit."
+    existing = store.write_wiki_page(
+        title="Old Note", content=body, area="computing"
+    )
+    assert store.get_wiki_page(existing.stem)["status"] == "provisional"
+
+    _write_draft(
+        tmp_path, "d1", body,
+        title="Reviewed Note",
+        supersedes=existing.stem,
+        relationship="supersedes",
+    )
+    slug = store.promote_draft("d1")
+
+    page = store.get_wiki_page(slug)
+    assert page["human_reviewed_at"], "the human review was discarded"
+    assert page["status"] == "active"
+    # The dedup target IS the page it declared it supersedes — a page cannot
+    # supersede itself.
+    assert page.get("superseded_by") in (None, "")
+
+
+def test_dedup_hit_still_applies_the_declared_relationship(monkeypatch, tmp_path):
+    monkeypatch.setenv("OKS_ROOT", str(tmp_path))
+    body = "Cache invalidation must be explicit."
+    store.write_wiki_page(title="Old Note", content=body, area="computing")
+    other = store.write_wiki_page(
+        title="Other", content="a completely different body", area="computing"
+    )
+
+    _write_draft(
+        tmp_path, "d2", body,
+        title="Duplicate Body",
+        supersedes=other.stem,
+        relationship="supersedes",
+    )
+    store.promote_draft("d2")
+
+    superseded = store.get_wiki_page(other.stem)
+    assert superseded["status"] == "superseded", "A4 relationship was dropped"
+    assert superseded["superseded_by"]
