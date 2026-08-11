@@ -1,3 +1,9 @@
+---
+title: 远程处理与凭证治理
+parent: 参考
+nav_order: 8
+---
+
 # Remote Governance & Credential Security
 
 Status: **implemented (module)** — pending live audit

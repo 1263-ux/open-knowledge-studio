@@ -81,7 +81,8 @@ open-knowledge-studio/
 ├── providers/        # 16 Provider definitions (provider.yaml + SKILL.md)
 ├── security/         # Credential redaction + sensitive field detection
 ├── cli/              # Python CLI tool (oks); packaged assets come from assets/
-├── docs/             # GitHub Pages design documentation
+├── docs/             # GitHub Pages site — every .md here is a published page
+├── records/          # Process records (acceptance, archive, research) — never in docs/
 ├── CONSTITUTION.md   # Memory architecture design
 ├── CLAUDE.md         # Claude Code project instructions
 ├── CHANGELOG.md      # Release history

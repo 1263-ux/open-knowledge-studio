@@ -1,3 +1,9 @@
+---
+title: Kimi K3 深度分析
+parent: 案例
+nav_order: 4
+---
+
 # Kimi K3 深度分析
 
 日期：2026-07-30

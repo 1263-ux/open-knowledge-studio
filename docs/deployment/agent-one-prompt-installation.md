@@ -1,3 +1,9 @@
+---
+title: 一键部署提示词
+parent: 参考
+nav_order: 7
+---
+
 # OKS Agent 一键部署与项目接管提示词
 
 日期：2026-07-30
@@ -209,4 +215,4 @@ awaiting_human_review
 
 证据：
 
-* `docs/acceptance/clean-server-deployment-report.md`
+* `records/acceptance/clean-server-deployment-report.md`

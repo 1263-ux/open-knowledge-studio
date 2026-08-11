@@ -51,6 +51,12 @@ aux_links:
 
 footer_content: 'Copyright &copy; 2026 Open Knowledge Studio. <a href="https://github.com/open-agent-power/open-knowledge-studio/blob/main/LICENSE">MIT License</a>.'
 
+# Everything under docs/ is a published page. Process records — acceptance
+# evidence, archived snapshots, research notes — live in the top-level
+# `records/` directory, not here. Physical separation instead of an exclude
+# list: a list still leaves them in the site directory for the next person to
+# add to.
+
 # 所有页面默认套 just-the-docs 的 default layout（左侧导航 + 侧边栏）
 defaults:
   - scope:

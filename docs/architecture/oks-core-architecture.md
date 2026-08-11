@@ -1,3 +1,9 @@
+---
+title: OKS 核心架构
+parent: 内部机制
+nav_order: 20
+---
+
 # OKS 核心架构
 
 日期：2026-08-08（v0.4 Beta Final Engineering Closure 更新）
@@ -88,7 +94,7 @@ Claude Code Marketplace、OpenClaw Skill Hub、浏览器工具、模型 API、OC
 | Schema 验证 | fail-open (`try/except: pass`) | fail-closed (`SCHEMA_VALIDATOR_UNAVAILABLE`) |
 | 提交方式 | 直接写入最终目录 | 暂存目录 → 验证 → 原子 `shutil.move` |
 | Provider 发现 | 扁平 JSON 文件 | 结构化 `providers/<id>/provider.yaml` |
-| 测试 | ~380 | 547 (546 passed, 1 pre-existing) |
+| 测试 | ~380 | 全部通过，且三平台 × Python 3.12/3.13 的 CI 为 PR 合并门禁 |
 | 技能安装可复现性 | 不可保证 | `oks init` ≡ `oks init --upgrade`（SHA256 一致） |
 | Evidence 一致性 | 无校验 | Fragment ↔ Manifest 4 核心字段校验，fail-closed |
 | ASR 语义 | transcript 伪装 subtitle | `kind=transcript` + `method=asr_transcription` 合法 |
@@ -100,7 +106,7 @@ Claude Code Marketplace、OpenClaw Skill Hub、浏览器工具、模型 API、OC
 
 | 能力 | 当前状态 | 证据 |
 |---|---|---|
-| 轻量文本核心闭环 | `已验证但有发现` | `docs/acceptance/clean-server-deployment-report.md` |
+| 轻量文本核心闭环 | `已验证但有发现` | `records/acceptance/clean-server-deployment-report.md` |
 | Raw Bundle v0.2 验证管线 | `已验证` | Gate RC-PROTOCOL-01 + Phase 2A 审计 |
 | Fragment ↔ Manifest 一致性 | `已验证` | v0.4 Beta Closure Gate 1 — 10 项专用测试 |
 | ASR transcript 语义 | `已验证` | v0.4 Beta Closure Gate 2 — Schema 已接受 `kind=transcript` |
@@ -111,7 +117,7 @@ Claude Code Marketplace、OpenClaw Skill Hub、浏览器工具、模型 API、OC
 | pdf-lite / watch | `已验证` | Provider 验收报告 |
 | 完整 E2E 闭环 | `已验证` | v0.4 Beta Closure Gate 5 — Source → Recall 全链路 |
 | Agent 最终回答 locator 纪律 | `部分验证` | B 组质量提升，但首次未满足严格 locator 阈值 |
-| 飞书控制面 | `部分验证` | `docs/acceptance/feishu-e2e-status.md` |
+| 飞书控制面 | `部分验证` | `records/acceptance/feishu-e2e-status.md` |
 | pdf / formula | `部分验证 / 有产品问题` | 组件验收报告与后续修复清单 |
 | 冷启动 E2E | `部分验证` | 基础设施就位；需独立 Auditor 在干净会话中执行 |
 

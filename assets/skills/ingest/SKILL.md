@@ -409,7 +409,7 @@ MUST write `.oks/runs/{run_id}/result.json` before reporting to user.
   "missing": [],
   "reasons": [],
   "impact": [],
-  "remote_processing": false,
+  "remote_processing_used": false,
   "cost": 0,
   "latency_ms": 6200,
   "bundle_id": "bundle:2789f4ff",

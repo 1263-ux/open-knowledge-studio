@@ -44,13 +44,17 @@ v0.4.0-dev（最小可分发 Beta）已完成，v0.4 Beta Final Engineering Clos
 - **Guided Decision UX**: 策略配置（lightweight/quality/privacy/ask_each_time）+ `user_impact` 元数据 + 技能模板中的 Strategy-Aware Ingestion 章节
 - **Feishu Pull Mode**: `oks feishu pending` 命令，零常驻进程、零 WebSocket、零 daemon
 - **ASR 语义修正**: `kind=transcript` + `method=asr_transcription` 合法，不再伪装成 subtitle
-- **547 个测试**（546 通过，1 个预存失败，0 回归）
+- **测试全绿**（三平台 × Python 3.12/3.13 的 CI 为合并门禁，实时数量见仓库 CI）
 
-架构事实源和本轮工程记录见：
+架构事实源见：
 
 - **[核心架构](architecture/oks-core-architecture.md)** — v0.4.0 当前主事实源
-- **[工程轮次 2-3](engineering-rounds-2-3.md)** — v0.3.0 合并后的架构加固与安全修复
-- **v0.4 Beta Final Engineering Closure** — 5 Gate 全部通过，547 测试，完整 E2E 闭环，独立审计已完成
+
+历史工程记录（v0.3.0 合并后的架构加固、各版本验收证据）保留在仓库
+[`records/archive/`](https://github.com/open-agent-power/open-knowledge-studio/tree/main/records/archive)
+与
+[`records/acceptance/`](https://github.com/open-agent-power/open-knowledge-studio/tree/main/records/acceptance)，
+不收入本站 —— 它们是特定时间点的过程记录，不是使用文档。
 
 多模态 Raw 协议的机器事实源位于本仓库 `schemas/`；Studio 只保留生命周期和调用入口。
 

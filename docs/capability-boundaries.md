@@ -190,7 +190,7 @@ oks capability install feishu --yes
 - [核心架构](architecture/oks-core-architecture.md)
 - [Agent-Native Ingest 操作手册](ingest/agent-native-ingest-walkthrough.md)
 - [Kimi K3 深度分析](cases/kimi-k3-deep-analysis.md)
-- [平台反爬、轻量化部署与用户交互研究](research/platform-antibot-and-lightweight-deployment.md)
+- [平台反爬、轻量化部署与用户交互研究](https://github.com/open-agent-power/open-knowledge-studio/blob/main/records/research/platform-antibot-and-lightweight-deployment.md)（仓库内研究笔记，未收入本站）
 - [远程脱敏治理](security/remote-governance.md)
 
 ---

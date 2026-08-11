@@ -92,7 +92,8 @@ open-knowledge-studio/
 ├── recipes/          # Modality recipes (7 modalities)
 ├── security/         # Credential redaction + sensitive field detection
 ├── cli/              # Python CLI tool (oks); packaged assets come from assets/
-├── docs/             # GitHub Pages design documentation
+├── docs/             # GitHub Pages site — every .md here is a published page
+├── records/          # Process records (acceptance, archive, research) — never in docs/
 ├── CONSTITUTION.md   # Memory architecture design
 ├── CHANGELOG.md      # Release history
 └── CLAUDE.md         # This file
