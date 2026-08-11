@@ -1281,12 +1281,16 @@ def drafts_promote(slug: str = typer.Argument(help="Draft slug to promote")):
 
 @drafts_app.command("reject")
 def drafts_reject(slug: str = typer.Argument(help="Draft slug to reject")):
-    """Delete a draft proposal."""
+    """Reject a draft proposal and preserve an append-only review receipt."""
     try:
-        store.reject_draft(slug)
+        receipt = store.reject_draft(slug)
         console.print(f"[green]Rejected:[/green] {slug}")
+        console.print(f"[dim]Review receipt: {receipt}[/dim]")
     except FileNotFoundError:
         console.print(f"[red]Draft not found:[/red] {slug}")
+        raise typer.Exit(1)
+    except ValueError as e:
+        console.print(f"[red]{e}[/red]")
         raise typer.Exit(1)
 
 
