@@ -29,8 +29,8 @@ Every SourceEnvelope carries a `policy.remote_processing` field with one of:
 | Value | Meaning | Default for |
 |-------|---------|-------------|
 | `deny` | No remote calls; local-only processing | `local_file` sources |
-| `allow` | Remote calls permitted for public URLs | `public_url` sources |
-| `ask` | Prompt user before each remote call | `authenticated_remote` sources |
+| `allow` | Remote calls explicitly permitted | User or Agent decision |
+| `ask` | Prompt before remote processing | `public_url` sources |
 
 Agent MUST respect this policy. A Provider's `probe.py` should check the policy
 before attempting remote calls.
