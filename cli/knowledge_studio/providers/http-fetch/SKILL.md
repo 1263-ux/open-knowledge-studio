@@ -43,9 +43,10 @@ Retrieves raw web resources (HTML, PDF, Office files, etc.).
 - Never forward credentials, cookies, or auth tokens
 - Respect `robots.txt` and rate-limit responses
 
-## Legacy Note
+## Runtime Boundary
 
-The `network.py` module (from which `fetch_url` was previously imported)
-was a legacy connector that shipped with `oks_connector`.  It has been
-permanently removed from the wheel in v0.4.0.  Use your agent runtime's
-built-in HTTP tools instead.
+The wheel still carries the connector's internal `network.py` implementation
+for `oks-connector` compatibility, including its SSRF and redirect checks. It
+is not a public Agent-facing Python API. Agents should use the active runtime
+HTTP capability or another declared Provider instead of importing
+`fetch_url()` directly.
