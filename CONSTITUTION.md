@@ -82,6 +82,87 @@ Without Feishu, `oks ingest` and the CLI loop work independently.
 system operations and recall scoring. External tools (L1/L2) may use AI
 APIs independently.
 
+### P6: What ships must match what is documented
+
+Every command, path, and capability named in a README, a doc page, or a
+shipped Skill must exist in the installed package. A test derives the real
+command tree from the CLI and checks every `oks ...` citation against it;
+bundled protocol examples are validated against their own schema; the wheel's
+contents are checked against the source tree.
+
+*Why:* five separate cases reached users — `oks skills-install` was step three
+of README's Quick Start and never existed; `oks capability guide` and
+`oks schema show` were instructed by the ingest Skill while the data shipped
+but the commands did not; `oks security sanitize` was required for credential
+stripping with the implementation present and no entry point; `/media-ingest`
+told users to run a path that only exists in a source checkout. None of these
+failed at build time.
+
+### P7: Gates fail closed
+
+A validation gate rejects what it cannot verify. It must not pass on absent
+evidence, and every exemption in a gate carries a written reason for why that
+case genuinely produces nothing to check.
+
+*Why:* the `raw-commit` provenance gate had seven reachable bypasses —
+omitting `steps` entirely, declaring `status: partial`, naming the provider
+`..` or `/etc`, labelling the step `runtime-tool` (which the shipped Skill told
+Agents to use for curl), and dropping any arbitrarily named non-empty file into
+`work/`. Each let fabricated evidence commit with no provider output on disk.
+
+### P8: One contract, one implementation
+
+Two implementations of the same contract must not exist. Where a second is
+unavoidable — the connector runs standalone and cannot import
+`knowledge_studio` — a test must drive both from one scenario and assert they
+agree. Asserting a hardcoded expectation on each side is what lets them drift.
+
+*Why:* `default_raw_root` and `config.get_kb_root` both resolve the active
+knowledge base. They silently diverged, so `oks ingest` wrote into one KB while
+`oks recall` read another.
+
+### P9: Trust cannot be self-produced
+
+Anything that raises confidence, promotes state, or produces a trust label must
+be anchored in a fact from outside the system: trace evidence, a human review,
+or the same knowledge independently re-derived.
+
+Usage is a legitimate signal — of **relevance**, not of **truth**. It may
+influence ranking (the `access_count` term in the memory curve) and must never
+produce a label. A wrong page that is easy to find gets used often; repetition
+makes it more visible, not more correct, and the loop is self-reinforcing:
+injected more → used more → looks more credible → injected first.
+
+"Was read" is not evidence. "Was used and a human judged the outcome" is — that
+arrives through review and trace feedback, which is why a human's negative
+verdict carries the largest recall bonus in the engine.
+
+*Why:* reading a page three times promoted it from `provisional` to `active`,
+and `/query` labels active pages `[verified]` as human-reviewed. Knowledge
+nobody had reviewed was injected as verified, and every read also raised its
+confidence.
+
+### P10: Deletion is explicit
+
+Removing content is a commit's stated subject, never a side effect of one about
+something else. The same applies to a merge that resolves conflicts by
+discarding the other side.
+
+*Why:* seven files under `docs/archive/` disappeared inside a commit titled
+"close v0.4 beta release blockers". A fork-sync PR would have reverted the
+provenance gate, the SSRF hardening, and the install source in the same way,
+under a title about syncing.
+
+### P11: Do not write numbers that rot
+
+Documentation states invariants and points at commands. Counts that change —
+tests, pages, files, providers — belong in CI output or a live command, not in
+prose.
+
+*Why:* the docs landing page advertised "547 tests (546 passed, 1
+pre-existing)". The count was stale and the pre-existing failure no longer
+existed.
+
 ---
 
 ## Architecture Invariants
@@ -129,7 +210,8 @@ open-knowledge-studio/
 ├── wiki/                         # ③ Curated knowledge
 │   └── {domain}/{type}/{slug}.md  # concepts/ | strategies/ | anti-patterns/
 ├── drafts/                       # ④ Dreaming candidates
-│   └── {slug}.md
+│   ├── {slug}.md
+│   └── rejected/{ts}-{slug}.json # Review receipts — a human "no" is a decision
 ├── settings/                     # ⑤ Config layer
 │   ├── input-sources.json        # Scheduled intake sources
 └── _meta/                        # ⑥ Schema layer
@@ -137,7 +219,14 @@ open-knowledge-studio/
 ```
 
 **Infrastructure (not buckets):** `cli/` (the API-free `oks` core),
-`templates/`, and `docs/` live at top level but hold code/docs, not knowledge.
+`templates/`, `docs/`, and `records/` live at top level but hold code, docs, or
+process records — not knowledge.
+
+`docs/` is the published GitHub Pages site: Jekyll publishes **every** `.md`
+under it. Process records — acceptance evidence, archived snapshots, research
+notes — belong in `records/`, never in `docs/`. Directory separation, not an
+`exclude` list: a list still leaves them in the site directory for the next
+person to add to.
 
 **Memory curve scoring** (wiki/):
 
@@ -147,8 +236,14 @@ score = importance × e^(-λ × days_old) + 0.5 × ln(1 + access_count) + pin_bo
 
 Type-specific decay λ: concept=0.0 (no decay), strategy=0.014, anti-pattern=0.010.
 
-**Lifecycle:** Provisional → Active (access_count ≥ 3) → Dropped
-(archived when score < threshold).
+The `access_count` term above is a **ranking** input only. Usage says a page
+keeps being relevant; it says nothing about whether the page is true. It must
+never move a page's state or raise its confidence — see P9.
+
+**Lifecycle:** Provisional → Active (human review, recorded as
+`human_reviewed_at`) → Dropped (score below threshold, or `oks wiki archive`).
+`oks wiki unarchive` returns a dropped page to Provisional — leaving the
+archive is not a review, so it does not regain Active.
 
 **Memory lifecycle** (Observe → Write → Store → Retrieve → Inject → Forget):
 
@@ -326,6 +421,22 @@ fsync after replace is required for crash safety.
 Invariant-level changes must be recorded here so they are traceable without
 archaeology through 20k-line diffs.
 
+- **2026-08-11 — P6–P11 added; A1 lifecycle corrected**: six failure modes that
+  recurred through review and merges are now written invariants — delivery
+  matches documentation (P6), gates fail closed (P7), one contract one
+  implementation (P8), trust cannot be self-produced (P9), deletion is explicit
+  (P10), no numbers that rot (P11). Each carries the evidence that produced it,
+  because a rule whose reason is forgotten gets deleted by whoever next finds it
+  inconvenient.
+  A1's lifecycle line still read `Provisional → Active (access_count ≥ 3)` —
+  it was prescribing exactly what A2 forbids, since `/query` labels active pages
+  `[verified]`. Corrected to human review recorded as `human_reviewed_at`, with
+  `access_count` explicitly a ranking input only. Discussed with the maintainer,
+  who raised the right objection — that heavy use should count for something —
+  and the answer is in P9: usage ranks, it never labels.
+  A1 also now registers `drafts/rejected/` (rejection receipts) and `records/`,
+  and states that `docs/` is the published site so process records never live
+  there.
 - **2026-07-31 — P5 reversed** (oks-connector integration): P5 previously
   forbade `oks ingest <input>` internal dispatch and in-CLI modality
   detection. It now defines `oks ingest` as the orchestration entry point
