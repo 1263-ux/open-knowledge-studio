@@ -42,7 +42,7 @@ v0.4.0 已发布到 PyPI（`pipx install open-knowledge-studio`）。本轮收�
 - **6 能力族首屏**: 文本 / 网页 / PDF / 图片 / 音视频 / 平台 — 不暴露 Provider ID
 - **打包单一事实源**（`assets/`，`_AGENT_TARGETS` 清单装配 `.claude` / `.codex` / `.agents`）
 - **Guided Decision UX**: 策略配置（lightweight/quality/privacy/ask_each_time）+ `user_impact` 元数据 + 技能模板中的 Strategy-Aware Ingestion 章节
-- **Feishu Pull Mode**: `oks feishu pending` 命令，零常驻进程、零 WebSocket、零 daemon
+- **飞书集成**: 参考实现见 `examples/feishu-loop/`（已从核心迁出为示例）
 - **ASR 语义修正**: `kind=transcript` + `method=asr_transcription` 合法，不再伪装成 subtitle
 - **测试全绿**（三平台 × Python 3.12/3.13 的 CI 为合并门禁，实时数量见仓库 CI）
 

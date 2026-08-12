@@ -35,8 +35,8 @@ keywords:
 
 ## Key Results
 
-- [ ] `oks feishu setup` 建好 Base，表单能在手机上提交
-- [ ] `oks feishu run-once` 能把一条待办跑完（认领 → 采集 → Raw 就绪）
+- [ ] `python examples/feishu-loop/code/feishu_setup.py` 建好 Base，表单能在手机上提交
+- [ ] `python examples/feishu-loop/code/feishu_base_worker.py run-once` 能把一条待办跑完（认领 → 采集 → Raw 就绪）
 - [ ] 收到候选通知后能在飞书回复完成审核，wiki 里出现对应页面
 - [ ] 一周内提交 10 条以上，其中 5 条以上晋升为 wiki 页
 - [ ] 至少一次退回（`reject` 或 `edit`）——**能退回才说明审核是真的**

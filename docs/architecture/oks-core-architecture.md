@@ -100,7 +100,7 @@ Claude Code Marketplace、OpenClaw Skill Hub、浏览器工具、模型 API、OC
 | ASR 语义 | transcript 伪装 subtitle | `kind=transcript` + `method=asr_transcription` 合法 |
 | 策略配置 | 无 | `oks config set strategy` — lightweight/quality/privacy/ask_each_time |
 | Provider 影响元数据 | Agent 无法获取 | Provider 携带 `user_impact`，通过 `oks capability status --json` 暴露 |
-| 飞书采集 | 仅实时事件模式 | 新增 Pull Mode — `oks feishu pending`，零常驻进程 |
+| 飞书采集 | 仅实时事件模式 | Pull Mode 参考实现见 `examples/feishu-loop/`（已从核心迁出） |
 
 ## 当前证据
 
@@ -111,7 +111,7 @@ Claude Code Marketplace、OpenClaw Skill Hub、浏览器工具、模型 API、OC
 | Fragment ↔ Manifest 一致性 | `已验证` | v0.4 Beta Closure Gate 1 — 10 项专用测试 |
 | ASR transcript 语义 | `已验证` | v0.4 Beta Closure Gate 2 — Schema 已接受 `kind=transcript` |
 | Guided Decision UX | `已验证（基础设施层）` | v0.4 Beta Closure Gate 3 — 策略配置 + user_impact + 技能模板 |
-| Feishu Pull Mode | `已验证（命令行层）` | v0.4 Beta Closure Gate 4 — `oks feishu pending` 就位 |
+| Feishu 集成 | `已迁出核心` | v0.4 验证后迁至 `examples/feishu-loop/` 作参考实现 |
 | Skill 安装闭合 | `已验证` | Phase 2A 外部 Wheel 安装验证 |
 | `document` 能力 | `已验证` | 远端干净服务器 document 安装与 ingest |
 | pdf-lite / watch | `已验证` | Provider 验收报告 |

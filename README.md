@@ -85,7 +85,6 @@ oks config           Manage global config — including strategy (lightweight/qu
 oks drafts           Manage Candidate drafts
 oks wiki             Manage reviewed knowledge pages
 oks recall           Two-path episodic + knowledge recall (--knowledge-only, --type)
-oks feishu           Feishu pull-mode entry (oks feishu pending) + review workflow
 oks lint             Quality scan
 oks status           Overview dashboard
 ```
@@ -97,7 +96,7 @@ oks status           Overview dashboard
 | **Fragment ↔ Manifest consistency** | 4 core fields validated (artifact_id, kind, method, agent_judgment); fail-closed on mismatch |
 | **ASR transcript semantics** | `kind=transcript` + `method=asr_transcription` now accepted by schema |
 | **Guided Decision UX** | Strategy config (`oks config set strategy`); 11 providers carry `user_impact` metadata; Strategy-Aware Ingestion in skill templates |
-| **Feishu Pull Mode** | `oks feishu pending` — zero daemon, zero WebSocket, zero background process |
+| **Feishu 集成** | 参考实现见 `examples/feishu-loop/`（已从核心迁出） |
 | **17 Providers** | 25 capability actions, 7 modality recipes; provider.yaml + SKILL.md per provider |
 
 **555 tests passed** (1 pre-existing env failure, 0 regressions).
@@ -113,7 +112,6 @@ OKS keeps the core lightweight. Heavy capabilities are installed on demand.
 | `pdf` | Full PDF extraction (MinerU, ~300 MB) |
 | `watch` | Video, audio, subtitle and OCR extraction |
 | `formula` | PaddleOCR formula candidates |
-| `feishu` | Feishu Base / form / review workflow |
 
 ### Agent Philosophy
 

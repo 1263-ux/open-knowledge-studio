@@ -141,9 +141,8 @@ oks capability install <name> [--yes]
 oks capability catalog [--json/--text] [--verbose]
 oks capability doctor [--json/--text] [--verbose]
 
-# Feishu
-oks feishu auth | form --url <url> | submit <content> | run-once | listen
-oks feishu setup [--base-token] [--table-id] [--base-name] [--table-name] [--repair-schema] [--yes]
+# Feishu (参考实现，已从核心迁出 → examples/feishu-loop/)
+# 不再随 oks CLI 分发；见 examples/feishu-loop/code/ 的 feishu_base_worker.py / feishu_setup.py
 
 # Hooks (opt-in auto-recall)
 oks hook install [--editor claude|qoder|both] [--path DIR]

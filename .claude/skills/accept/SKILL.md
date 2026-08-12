@@ -73,9 +73,9 @@ export OKS_FEISHU_BASE_TOKEN='...'
 export OKS_FEISHU_TABLE_ID='...'
 ```
 
-Use a new Base created by `oks feishu setup`, submit the public text fixture,
+Use a new Base created by `python examples/feishu-loop/code/feishu_setup.py`, submit the public text fixture,
 run one bounded worker pass, generate a Candidate from the Raw Bundle, and use
-bounded `oks feishu listen` while the designated reviewer sends an approval.
+bounded `python examples/feishu-loop/code/feishu_base_worker.py listen-reviews` while the designated reviewer sends an approval.
 Verify promotion and recall. Record only redacted identifiers. Do not delete the
 new Base automatically: report its identifier and wait for human confirmation.
 

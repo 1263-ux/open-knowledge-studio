@@ -25,11 +25,6 @@ from setuptools.command.sdist import sdist
 _CONNECTOR_IGNORE = shutil.ignore_patterns("test_*.py", "tests", "__pycache__", "*.pyc")
 _ASSET_IGNORE = shutil.ignore_patterns("__pycache__", "*.pyc")
 
-# `oks feishu` resolves the worker from _assets/scripts/ (see cli.py), so it is
-# vendored alongside the template tree.
-_SCRIPT_ASSETS = ("feishu_base_worker.py", "feishu_setup.py")
-
-
 def _repo_root() -> Path:
     return Path(__file__).resolve().parent.parent
 
@@ -56,12 +51,9 @@ def _vendor_assets() -> None:
         shutil.rmtree(dest_root)
     shutil.copytree(source, dest_root, ignore=_ASSET_IGNORE)
 
-    scripts_dest = dest_root / "scripts"
-    scripts_dest.mkdir(parents=True, exist_ok=True)
-    for name in _SCRIPT_ASSETS:
-        script = repo_root / "scripts" / name
-        if script.is_file():
-            shutil.copy2(script, scripts_dest / name)
+    # Feishu intake moved to examples/feishu-loop/code/ as a reference script;
+    # the CLI no longer ships a feishu command group, so _assets/scripts/ is
+    # not created anymore.
 
 
 def _purge_stale_build_copies(*relative: str) -> None:

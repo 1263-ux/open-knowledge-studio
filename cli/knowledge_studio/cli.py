@@ -119,7 +119,7 @@ config_app = typer.Typer(help="Global configuration (~/.oks/config.json).")
 hook_app = typer.Typer(help="Optional editor hooks (opt-in auto-recall injection).")
 eval_app = typer.Typer(help="Offline recall evaluation and run comparison.")
 trace_app = typer.Typer(help="Append-only execution traces and feedback.")
-feishu_app = typer.Typer(help="Optional Feishu Base intake, review, and event-listening extension.")
+
 capability_app = typer.Typer(help="Optional modality capabilities; core dependencies stay lightweight.")
 schema_app = typer.Typer(help="Protocol document shapes an Agent must author.")
 security_app = typer.Typer(help="Credential redaction for provider raw output.")
@@ -152,7 +152,7 @@ app.add_typer(config_app, name="config")
 app.add_typer(hook_app, name="hook")
 app.add_typer(eval_app, name="eval")
 app.add_typer(trace_app, name="trace")
-app.add_typer(feishu_app, name="feishu")
+
 app.add_typer(capability_app, name="capability")
 app.add_typer(schema_app, name="schema")
 app.add_typer(security_app, name="security")
@@ -194,10 +194,6 @@ _CAPABILITIES = {
             "ftfy==6.3.1",
         ],
     },
-    "feishu": {
-        "purpose": "Private Base, form, bot review, and bounded listening",
-        "deps": ["requests==2.34.2", "trafilatura==2.1.0"],
-    },
 }
 
 
@@ -209,7 +205,7 @@ def capability_list():
     table.add_column("Purpose")
     table.add_column("Install")
     for name, info in _CAPABILITIES.items():
-        install = "user-managed lark-cli" if name == "feishu" else f"oks capability install {name}"
+        install = f"oks capability install {name}"
         table.add_row(name, info["purpose"], install)
     console.print(table)
 
@@ -223,7 +219,7 @@ def _capability_already_installed(name: str) -> bool:
 
 @capability_app.command("install")
 def capability_install(
-    name: str = typer.Argument(..., help="watch, document, pdf, formula, or feishu"),
+    name: str = typer.Argument(..., help="watch, document, pdf, or formula"),
     yes: bool = typer.Option(False, "--yes", help="Execute the displayed installation command"),
 ):
     """Show or explicitly install one optional capability (heavy dependencies)."""
@@ -231,28 +227,6 @@ def capability_install(
     if info is None:
         raise typer.BadParameter(f"unknown capability: {name}; run `oks capability list`")
     purpose = info["purpose"]
-
-    if name == "feishu":
-        deps = info["deps"]
-        cmd = [sys.executable, "-m", "pip", "install"] + deps
-        message = (
-            f"[bold]{t('feishu_private')}[/bold]\n\n"
-            f"Web intake dependencies:\n{' '.join(cmd)}"
-        )
-        if not yes:
-            console.print(Panel.fit(
-                f"{message}\n\nRe-run with --yes to install the web intake dependencies.",
-                title=t("user_managed_capability"), border_style="cyan",
-            ))
-            return
-        console.print(f"[yellow]{t('capability_installing', name=name)}[/yellow]")
-        result = subprocess.run(cmd)
-        if result.returncode != 0:
-            console.print(f"[bold red]{t('capability_failed', name=name, code=result.returncode)}[/bold red]")
-            raise typer.Exit(result.returncode)
-        console.print(f"[green]{t('capability_installed', name=name)}[/green]")
-        console.print(Panel.fit(message, title=t("user_managed_capability"), border_style="cyan"))
-        return
 
     if _capability_already_installed(name):
         console.print(f"[green]{t('capability_already', name=name)}[/green]")
@@ -579,162 +553,6 @@ def raw_commit_cmd(
 def _extractor_env_for(capability: str) -> str:
     return {"watch": "OKS_WATCH_PYTHON", "document": "OKS_DOCUMENT_PYTHON",
             "pdf": "OKS_MINERU_PYTHON", "formula": "OKS_FORMULA_PYTHON"}.get(capability, "")
-
-
-def _feishu_worker_path() -> Path | None:
-    configured = __import__("os").environ.get("OKS_FEISHU_WORKER")
-    candidates = [Path(configured).expanduser()] if configured else []
-    candidates.append(Path(__file__).resolve().parent / "_assets" / "scripts" / "feishu_base_worker.py")
-    for parent in Path(__file__).resolve().parents:
-        candidates.append(parent / "scripts" / "feishu_base_worker.py")
-    return next((path.resolve() for path in candidates if path.is_file()), None)
-
-
-def _run_feishu_worker(command: str, extra: list[str]) -> None:
-    worker = _feishu_worker_path()
-    if worker is None:
-        console.print(Panel.fit(
-            "[bold red]Feishu extension worker is not installed[/bold red]\n\n"
-            "Set OKS_FEISHU_WORKER to the reviewed feishu_base_worker.py path. "
-            "This extension deliberately does not create a hidden Feishu client or bypass login.",
-            title="Action required",
-            border_style="red",
-        ))
-        raise typer.Exit(2)
-    raise typer.Exit(subprocess.run([sys.executable, str(worker), command, *extra]).returncode)
-
-
-def _resolve_lark_cli() -> str | None:
-    """Reuse the connector's shared resolver (LARK_CLI_EXE, Windows .cmd, npm)."""
-    try:
-        from oks_connector._lark_cli import resolve_lark_cli
-    except ImportError:
-        try:
-            from _lark_cli import resolve_lark_cli
-        except ImportError:
-            return shutil.which("lark-cli") or shutil.which("lark-cli.exe")
-    try:
-        return str(resolve_lark_cli())
-    except RuntimeError:
-        return None
-
-
-@feishu_app.command("auth")
-def feishu_auth():
-    """Show the configured Lark CLI authentication state; login remains user-controlled."""
-    lark = _resolve_lark_cli()
-    if lark is None:
-        console.print("[bold red]lark-cli is not installed.[/bold red] Install and authenticate it before Feishu actions.")
-        raise typer.Exit(2)
-    raise typer.Exit(subprocess.run([lark, "auth", "status"]).returncode)
-
-
-@feishu_app.command("form")
-def feishu_form(url: str = typer.Option(..., "--url", help="Feishu Base form URL to open in your browser")):
-    """Display the human submission form; authentication and submission stay in the user session."""
-    console.print(Panel.fit(f"[bold]Feishu intake form[/bold]\n{url}\n\nOpen it in your authenticated browser to submit a capture.", border_style="cyan"))
-
-
-@feishu_app.command("submit")
-def feishu_submit(
-    content: str = typer.Argument(..., help="Capture text or URL"),
-    thought: str = typer.Option("", "--thought", help="Optional user context"),
-    rating: Optional[str] = typer.Option(None, "--rating", help="Optional A/B/C rating"),
-):
-    """Submit one capture to an authenticated Feishu Base without opening the form."""
-    if rating is not None and rating not in {"A", "B", "C"}:
-        raise typer.BadParameter("--rating must be A, B, or C")
-    extra = [content, "--thought", thought]
-    if rating is not None:
-        extra.extend(["--rating", rating])
-    _run_feishu_worker("enqueue", extra)
-
-
-@feishu_app.command("run-once")
-def feishu_run_once(limit: int = typer.Option(100, "--limit")):
-    """Process one pending Feishu Base capture through Raw and review states."""
-    _run_feishu_worker("run-once", ["--limit", str(limit)])
-
-
-@feishu_app.command("publish-candidate")
-def feishu_publish_candidate(
-    record_id: str = typer.Option(..., "--record-id", help="Feishu Base record ID"),
-    candidate_file: str = typer.Option(..., "--candidate-file", help="Agent-authored candidate Markdown file"),
-):
-    """Publish a Candidate to one processed Base record for human review."""
-    _run_feishu_worker("publish-candidate", ["--record-id", record_id, "--candidate-file", candidate_file])
-
-
-@feishu_app.command("review-once")
-def feishu_review_once(limit: int = typer.Option(100, "--limit")):
-    """Apply one bounded Base review action and promote approved Candidate content."""
-    _run_feishu_worker("review-once", ["--limit", str(limit)])
-
-
-@feishu_app.command("reconcile-review")
-def feishu_reconcile_review(
-    prompt_message_id: str = typer.Option(..., "--prompt-message-id", help="Candidate review prompt message ID"),
-    reply_message_id: str = typer.Option(..., "--reply-message-id", help="Human review reply message ID"),
-):
-    """Recover one review reply that was missed by the bounded event listener."""
-    _run_feishu_worker(
-        "reconcile-review",
-        ["--prompt-message-id", prompt_message_id, "--reply-message-id", reply_message_id],
-    )
-
-
-@feishu_app.command("listen")
-def feishu_listen(max_events: int = typer.Option(1, "--max-events"), timeout: str = typer.Option("5m", "--timeout")):
-    """Consume bounded Feishu review replies; use an external scheduler for continuous service."""
-    _run_feishu_worker("listen-reviews", ["--max-events", str(max_events), "--timeout", timeout])
-
-
-@feishu_app.command("pending")
-def feishu_pending(
-    limit: int = typer.Option(200, "--limit"),
-):
-    """List pending Inbox records from Feishu Base (Pull-mode entry point).
-
-    Returns JSON with record_id, content, thought, status, created,
-    and metadata for each pending record. The Agent filters records
-    by date client-side.
-
-    No daemon, no WebSocket, no background service needed.
-    """
-    _run_feishu_worker("pending", ["--limit", str(limit)])
-
-
-@feishu_app.command("setup")
-def feishu_setup(
-    base_token: Optional[str] = typer.Option(None, "--base-token", help="已有 Base token（跳过创建）"),
-    base_name: str = typer.Option("Open Knowledge Studio", "--base-name"),
-    table_name: str = typer.Option("每日知识采集", "--table-name"),
-    show_credentials: bool = typer.Option(False, "--show-credentials", help="显示完整 Base token（仅限受控终端）"),
-):
-    """自动创建飞书 Base、采集表和表单。需要 lark-cli 已认证。"""
-    lark = _resolve_lark_cli()
-    if lark is None:
-        console.print("[bold red]lark-cli 未安装。[/bold red]")
-        raise typer.Exit(2)
-    worker = _feishu_worker_path()
-    if worker is None:
-        console.print("[bold red]找不到 worker 脚本。[/bold red]")
-        raise typer.Exit(2)
-    setup_script = worker.parent / "feishu_setup.py"
-    if not setup_script.is_file():
-        module = importlib.util.find_spec("feishu_setup")
-        if module and module.origin:
-            setup_script = Path(module.origin)
-    if not setup_script.is_file():
-        console.print(f"[bold red]找不到: {setup_script}[/bold red]")
-        raise typer.Exit(2)
-    cmd = [sys.executable, str(setup_script)]
-    if base_token:
-        cmd.extend(["--base-token", base_token])
-    cmd.extend(["--base-name", base_name, "--table-name", table_name])
-    if show_credentials:
-        cmd.append("--show-credentials")
-    raise typer.Exit(subprocess.run(cmd).returncode)
 
 
 # ── Recall ───────────────────────────────────────────────────────

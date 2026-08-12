@@ -77,7 +77,6 @@ packages = [
     "knowledge_studio.security",
     "oks_connector",
     "oks_connector.extractors",
-    "oks_connector.feishu_worker",
 ]
 
 [tool.setuptools.package-dir]
@@ -89,7 +88,7 @@ packages = [
 "knowledge_studio.security" = "knowledge_studio/security"
 
 [tool.setuptools.package-data]
-knowledge_studio = ["_assets/**/*", "_assets/scripts/*.py"]
+knowledge_studio = ["_assets/**/*"]
 "knowledge_studio.capabilities" = ["*.yaml"]
 "knowledge_studio.providers" = ["*/provider.yaml", "*/SKILL.md", "*/normalize.py"]
 "knowledge_studio.recipes" = ["*.md"]

@@ -46,7 +46,6 @@ def test_both_build_paths_vendor_assets_verbatim():
     }
     for name, source in sources.items():
         assert 'repo_root / "assets"' in source, f"{name} must copy from assets/"
-        assert "_SCRIPT_ASSETS" in source, f"{name} must vendor the feishu worker scripts"
         assert "_MAP = [" not in source, f"{name} still uses the retired per-dir map"
 
 

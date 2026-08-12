@@ -3,8 +3,11 @@
 把飞书当 OKS 的「日常控制面」——手机提交、异步采集、IM 里审核。
 本文是可照做的操作流程；配套示例 goal 见 [`goal.md`](goal.md)。
 
-> **飞书是可选组件。** 不配置它，`oks ingest` + `oks drafts promote` 的
-> CLI 路径完整可用。本案例的价值在于展示「人在环」如何降到手机上一句话。
+> **飞书是可选组件，且已从 OKS CLI 核心迁出。** 自 v0.5 起，飞书集成作为
+> 参考脚本位于 [`code/`](code/)（`feishu_base_worker.py` / `feishu_setup.py` /
+> `feishu_worker/` 包），不再随 `oks` 命令分发。不配置它，`oks ingest` +
+> `oks drafts promote` 的 CLI 路径完整可用。本案例的价值在于展示「人在环」
+> 如何降到手机上一句话。脚本的安装与子命令清单见 [`code/README.md`](code/README.md)。
 
 ## 它解决什么
 
@@ -20,24 +23,25 @@
 
 ```bash
 # 1. lark-cli 已安装并认证（OKS 不代管你的飞书凭据）
-oks feishu auth
+lark-cli auth
+# 找不到时用 LARK_CLI_EXE 指定绝对路径（Windows 上尤其有用）
 
-# 2. 提取能力按需安装
+# 2. 提取能力按需安装（这些仍是 oks 核心能力）
 oks capability install watch --yes      # 视频/音频
 oks capability install document --yes   # Office/HTML
 oks capability install pdf --yes        # PDF
 ```
 
-`lark-cli` 找不到时用 `LARK_CLI_EXE` 指定绝对路径（Windows 上尤其有用）。
+以下命令均从 `examples/feishu-loop/` 目录运行，使 `code/` 在相对路径可达。
 
 ## 一次性配置
 
 ```bash
-oks feishu setup                        # 自动创建 Base + 采集表 + 表单
+python code/feishu_setup.py             # 自动创建 Base + 采集表 + 表单
 ```
 
-`setup` 会打印 Base token 与表单地址，默认**脱敏输出**；需要完整凭据时加
-`--show-credentials`（只在你信任的终端里用）。
+`feishu_setup.py` 会打印 Base token 与表单地址，默认**脱敏输出**；需要完整
+凭据时加 `--show-credentials`（只在你信任的终端里用）。
 
 把凭据写进环境变量，worker 从这里读：
 
@@ -56,7 +60,7 @@ export OKS_FEISHU_REVIEW_USER_ID="<你的飞书 user id>"   # 接收审核通知
 手机填表单即可。命令行等价写法：
 
 ```bash
-oks feishu submit "https://www.youtube.com/watch?v=..." --thought "为什么想存这个"
+python code/feishu_base_worker.py enqueue "https://www.youtube.com/watch?v=..." --thought "为什么想存这个"
 ```
 
 `--thought` 是给未来的自己看的：**当时为什么觉得它值得存**。
@@ -65,7 +69,7 @@ oks feishu submit "https://www.youtube.com/watch?v=..." --thought "为什么想�
 ### 2. 采集（worker 跑一条）
 
 ```bash
-oks feishu run-once
+python code/feishu_base_worker.py run-once
 ```
 
 一次处理一条待办：认领记录 → 探测来源 → 路由到提取器 → 产出 Raw Bundle →
@@ -80,7 +84,7 @@ Agent 读 `raw/index.json` 找到就绪的 Bundle，读 `digest.md` 了解内容
 用自己的话写成候选（不是复制原文），然后：
 
 ```bash
-oks feishu publish-candidate --record <record-id>
+python code/feishu_base_worker.py publish-candidate --record <record-id>
 ```
 
 候选会推送到你的飞书。
@@ -101,21 +105,21 @@ oks feishu publish-candidate --record <record-id>
 拉取并应用审核结果：
 
 ```bash
-oks feishu listen --max-events 1        # 消费一条审核回复
-oks feishu review-once                  # 应用审核动作并晋升已接受的候选
+python code/feishu_base_worker.py listen-reviews --max-events 1 --timeout 5m
+python code/feishu_base_worker.py review-once          # 应用审核动作并晋升已接受的候选
 ```
 
 漏掉的回复可以补：
 
 ```bash
-oks feishu reconcile-review --record <record-id>
+python code/feishu_base_worker.py reconcile-review --record <record-id>
 ```
 
 ## 状态机速查
 
 worker 在 Base 的「运行状态」字段流转，全部取值定义在
-`scripts/feishu_worker/states.py`（单一事实源，`oks feishu setup`
-建表时的选项由它生成）：
+[`code/feishu_worker/states.py`](code/feishu_worker/states.py)（单一事实源，
+`feishu_setup.py` 建表时的选项由它生成）：
 
 ```
 待处理 → 已领取 → 探测中 → Raw就绪 → 候选待审 → 已晋升
@@ -138,11 +142,12 @@ worker 在 Base 的「运行状态」字段流转，全部取值定义在
   宪章 A3 的硬约束，飞书路径不例外。
 - **worker 不做知识判断。** 它执行的是**你已经做出的判断**（那句「通过」），
   自己不评估内容好坏、不改写、不分级。
-- **没有内置调度器。** `run-once` / `listen` 都是有界的一次性操作，
+- **没有内置调度器。** `run-once` / `listen-reviews` 都是有界的一次性操作，
   连续运行靠外部调度器——这样你随时能停，也能看清每一步做了什么。
 
 ## 相关
 
+- 参考脚本说明：[`code/README.md`](code/README.md)
 - 示例 goal：[`goal.md`](goal.md)
 - 多模态采集协议：[`docs/raw-multimodal-standard.md`](../../docs/raw-multimodal-standard.md)
 - 能力架构：[`docs/capability-architecture.md`](../../docs/capability-architecture.md)
