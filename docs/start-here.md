@@ -14,7 +14,7 @@ Open Knowledge Studio 最容易理解的方式是一个循环：
 * 让 Agent 用它
 
 {: .note }
-本页是这个循环的最短路径。**前置条件**：Python ≥ 3.12、git；Claude Code（或兼容 Agent）为可选，但 `/ingest`、`/query` 等技能依赖它——没有 Agent 时走下文标注的"纯 CLI 路径"。安装：`pipx install "git+https://github.com/open-agent-power/open-knowledge-studio.git@main#subdirectory=cli" && pipx ensurepath && oks init my-knowledge-base && cd my-knowledge-base`（pipx 本身：Ubuntu 用 `sudo apt install pipx`，macOS 用 `brew install pipx`，Windows 用 `py -m pip install --user pipx && py -m pipx ensurepath`；Ubuntu 24.04 / Homebrew Python 受 PEP 668 保护，直接 `pip install` 会报 externally-managed-environment）。
+本页是这个循环的最短路径。**前置条件**：Python ≥ 3.12、git；Claude Code（或兼容 Agent）为可选，但 `/ingest`、`/query` 等技能依赖它——没有 Agent 时走下文标注的"纯 CLI 路径"。安装：`pipx install open-knowledge-studio && pipx ensurepath && oks init my-knowledge-base && cd my-knowledge-base`（pipx 本身：Ubuntu 用 `sudo apt install pipx`，macOS 用 `brew install pipx`，Windows 用 `py -m pip install --user pipx && py -m pipx ensurepath`；Ubuntu 24.04 / Homebrew Python 受 PEP 668 保护，直接 `pip install` 会报 externally-managed-environment）。
 
 ## Studio 是什么
 

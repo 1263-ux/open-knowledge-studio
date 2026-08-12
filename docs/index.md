@@ -33,10 +33,10 @@ has_children: true
 
 ## 当前架构与进度
 
-v0.4.0-dev（最小可分发 Beta）已完成，v0.4 Beta Final Engineering Closure 已收口：
+v0.4.0 已发布到 PyPI（`pipx install open-knowledge-studio`）。本轮收口内容：
 
 - **单 Wheel 包**: 仅 `knowledge_studio`，`oks_connector` 已移除
-- **17 个 Provider** + 25 个能力动作，11 个 Provider 含 `user_impact` 人类可读影响元数据
+- **17 个 Provider** + 25 个能力动作，其中 10 个含 `user_impact` 人类可读影响元数据（实时清单：`oks capability status --json`）
 - **Raw Bundle v0.2** 严格验证管线（`oks raw-commit`，含 provenance 机械检查 + Fragment ↔ Manifest 一致性校验）
 - **Agent 协议减负**: `ingest prepare` 预填充 evidence 槽位 + 返回 candidate_providers 短名单
 - **6 能力族首屏**: 文本 / 网页 / PDF / 图片 / 音视频 / 平台 — 不暴露 Provider ID
@@ -79,7 +79,7 @@ v0.4.0-dev（最小可分发 Beta）已完成，v0.4 Beta Final Engineering Clos
 ## 准备开始？
 
 ```bash
-pipx install "git+https://github.com/open-agent-power/open-knowledge-studio.git@main#subdirectory=cli" && pipx ensurepath
+pipx install open-knowledge-studio && pipx ensurepath
 oks init my-knowledge-base
 cd my-knowledge-base
 oks status

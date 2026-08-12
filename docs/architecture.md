@@ -14,7 +14,7 @@ parent: 内部机制
 | **是什么** | 原始文章、论文、仓库笔记或对话 | 持久的结论，经过蒸馏和策划 |
 | **谁写入** | 人类收集，LLM 只读 | LLM 通过 Dreaming 写入，人类审批 |
 | **衰减** | 无 — raw materials 永久保留 | 类型特定 λ — 知识随时间衰减 |
-| **召回** | 关键词 + 新鲜度 | 6 因子相关性 + 记忆曲线 |
+| **召回** | 关键词 + 新鲜度 | 6+1 因子相关性 + 记忆曲线 |
 | **优势** | 日期 + 来源分类、A/B/C 分级、指纹去重 | 22 域结构、衰减 tier、4 种知识关系 |
 | **何时用** | 需要完整历史或精确来源 | 需要模式、决策或教训 |
 
@@ -95,8 +95,8 @@ Observe → Write → Store → Retrieve → Inject → Forget
 ## Wiki 页面生命周期
 
 ```
-Provisional → Active（access_count ≥ 3）→ Dropped（score < threshold）
-                                         → Superseded（被新页面替代）
+Provisional → Active（人工审阅，记录 human_reviewed_at）→ Dropped（score < 归档阈值）
+                                                        → Superseded（被新页面替代）
 ```
 
 ### 知识演化关系
@@ -123,7 +123,7 @@ Provisional → Active（access_count ≥ 3）→ Dropped（score < threshold）
 
 ## 下一步
 
-* **[召回引擎](recall-engine.md)**：6 因子评分算法
+* **[召回引擎](recall-engine.md)**：6+1 因子评分算法
 * **[记忆模型](memory-model.md)**：六型记忆与注入顺序
 * **[Dreaming 循环](dreaming-cycle.md)**：知识演化管线
 

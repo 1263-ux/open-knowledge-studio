@@ -48,22 +48,33 @@ Concept 不衰减是因为 "什么是 REST API" 这类知识不会过时。Strat
 ## 生命周期
 
 ```
-Provisional → Active（access_count ≥ 3）→ Dropped（score < threshold）
+Provisional → Active（人工审阅，记录为 human_reviewed_at）→ Dropped（score < 归档阈值，或 oks wiki archive）
 ```
 
-- **Provisional** — 新创建的页面，尚未被足够访问
-- **Active** — 被访问 3 次以上，成为正式知识
-- **Dropped** — 分数低于归档阈值，被标记为 dropped
+- **Provisional** — 尚未经人工审阅。`oks wiki create` 直接写出的页面停在这里
+- **Active** — 人工审阅通过（`oks drafts promote` 晋升），frontmatter 带 `human_reviewed_at`
+- **Dropped** — 分数低于归档阈值或被显式归档；`oks wiki unarchive` 可拉回 Provisional
 
-## 访问增强
+访问次数**不改变状态**。它只进入记忆曲线影响排序 —— 被读得多说明相关，不说明正确
+（CONSTITUTION P9）。
 
-每次页面被**显式使用**时（`oks wiki use <slug>`；召回/搜索只读、不计数），confidence 提升：
+## 访问计数
+
+每次页面被**显式使用**时（`oks wiki use <slug>`；召回与搜索只读、不计数），
+`access_count` +1。它只进入记忆曲线的 `0.5 × ln(1 + access_count)` 项，
+**只影响排序**。
+
+使用量不改变 `confidence`，也不改变 `status`。被读得多说明这页持续相关，
+不说明它正确；让重复本身抬高可信度会形成自我强化回路 —— 越常被注入 → 越常被用
+→ 越显得可信 → 越优先注入。见 CONSTITUTION P9。
+
+confidence 只在**同一份知识被独立重新推导出来**时提升（指纹命中既有页面）：
 
 ```python
 new_confidence = min(1.0, current + 0.1 × (1 - current))
 ```
 
-这意味着被频繁查询的知识会越来越"自信" — confidence 逐渐趋近 1.0 但永远不会达到。这是对有用知识的正反馈：越常被使用，越不容易被遗忘。
+那是关于内容的真实证据；"被读过"不是。
 
 ## 配置
 
@@ -78,10 +89,25 @@ new_confidence = min(1.0, current + 0.1 × (1 - current))
 
 源码：`cli/knowledge_studio/store.py`（`DECAY_LAMBDA` + 默认 config）
 
+## 归档是可逆的
+
+```bash
+oks wiki archive <slug>    # 置 status: dropped，退出召回
+oks wiki unarchive <slug>  # 拉回 Provisional，重新进入召回
+```
+
+归档**不删除任何文件** —— 它只改 frontmatter 的 `status`，页面留在 Git 里。
+
+这一点是 A3 的前提：衰减可以在无人审查的情况下自动归档，**只因为它可逆且不破坏**。
+晋升是"制造一条断言"，未经审阅的错误会渗进之后每一个回答；归档只是"停止呈现"，
+最坏代价是召回覆盖变窄，不会凭空造出损失。一旦衰减变成破坏性操作，这条推理即失效。
+
+`unarchive` 恢复为 `Provisional` 而非 `Active` —— 离开归档不是一次人工审阅。
+
 ## 下一步
 
 * **[知识库指标](metrics.md)**：`avg_score` 如何进入四维报告卡
-* **[召回引擎](recall-engine.md)**：记忆曲线如何作为第六因子影响召回
+* **[召回引擎](recall-engine.md)**：记忆曲线如何作为第 6 个因子影响召回
 * **[Dreaming 循环](dreaming-cycle.md)**：衰减在演化循环中的位置
 * **[架构设计](architecture.md)**：认知桶结构
 

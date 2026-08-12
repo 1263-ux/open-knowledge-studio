@@ -19,7 +19,7 @@ parent: 参考
 ## 代码事实
 
 - `recall.py` 的 `recall_knowledge(query, ..., scope=None)`：`scope` 为空时遍历
-  **全部** wiki 页面做 6 因子打分；传入某个 `area` 时，在**打分前**只保留该
+  **全部** wiki 页面做 6+1 因子打分；传入某个 `area` 时，在**打分前**只保留该
   域的候选（软过滤，非硬隔离）。默认 `None` = 全局。
 - `area`（知识域）是页面的一个字段：默认只影响归类与返回；仅当你显式 `--scope`
   时才用它收窄检索范围。
@@ -35,7 +35,7 @@ parent: 参考
 ## 用法：可选软 scope
 
 ```bash
-oks search "缓存失效" --scope backend    # 只在 backend 域内做 6 因子召回
+oks search "缓存失效" --scope backend    # 只在 backend 域内做 6+1 因子召回
 oks search "缓存失效"                     # 默认全局，跨域联想
 oks recall "缓存失效" --scope backend     # 双路召回：知识路按域收窄，raw 路仍全局
 ```

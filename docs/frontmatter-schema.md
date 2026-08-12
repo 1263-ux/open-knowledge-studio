@@ -34,12 +34,24 @@ review:
   lesson: ""
 relates_to: "older-page"
 relationship: confirms         # supersedes | enriches | confirms | challenges
+human_reviewed_at: "2026-08-11T09:00:00Z"   # 仅晋升时写入，见下
+human_note: "人工摄入时的批注"               # draft 的 source_note 逐字带过来
 ---
 ```
 
-`title`、`type`、`area` 是必填身份字段。`access_count`、记忆分数、tier 和质量分数由 CLI 在读取时计算，不写回 frontmatter。
+`title`、`type`、`area` 是必填身份字段。`access_count`、记忆分数、tier 和质量分数由
+CLI 在读取时计算，不写回 frontmatter。
 
-关系约束：`relationship` 必须和 `relates_to` 同时存在；`status: superseded` 必须填写 `superseded_by`；`traces` 必须是对象列表且不得保存密钥、Token、Cookie 等凭据。
+**`human_reviewed_at`**：只由 `oks drafts promote` 写入（人工审阅通过），同时把
+`status` 置为 `active`。它是 `[verified]` 标签唯一合法的人工来源；`oks wiki create`
+直接写出的页面没有这个字段，停在 `provisional`。访问次数永不产生它 —— CONSTITUTION P9。
+
+**关系反向字段**：`_apply_relationship` 会在**被指向的旧页**上写入
+`superseded_by` / `enriched_by` / `confirmed_by` / `challenged_by`，并相应把旧页
+`status` 置为 `superseded`（supersedes）或 `stale`（challenges）。
+
+关系约束：`relationship` 必须和 `relates_to` 同时存在；`status: superseded` 必须填写
+`superseded_by`；`traces` 必须是对象列表且不得保存密钥、Token、Cookie 等凭据。
 
 ## Draft
 

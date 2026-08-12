@@ -34,7 +34,7 @@ flowchart TD
     AgentLayer["Agent 执行层\nClaude Code、Codex、OpenClaw、Shell Agent\n状态：混合"]:::external
     External["外部能力来源\nClaude Code Marketplace、OpenClaw Skill Hub、\n第三方提取器、模型 API\n状态：外部复用，不在 OKS 内重做"]:::external
     Components["可选能力组件\ndocument：已验证\npdf-lite / watch：已验证\npdf / formula：部分验证\nFeishu：部分验证"]:::partial
-    SkillInstall["技能安装\n10 Claude + 10 Agents skill\n单一事实源 assets/\n构建时+运行时技能剥离\n状态：Phase 2A 已验证"]:::verified
+    SkillInstall["技能安装\nClaude 与 Agents 技能镜像一致\n单一事实源 assets/\n构建时+运行时技能剥离\n状态：Phase 2A 已验证"]:::verified
 
     Feishu -. "仅作为采集、状态、审核界面" .-> Source
     Feishu -. "仅作为人工决策界面" .-> Review
@@ -94,12 +94,12 @@ Claude Code Marketplace、OpenClaw Skill Hub、浏览器工具、模型 API、OC
 | Schema 验证 | fail-open (`try/except: pass`) | fail-closed (`SCHEMA_VALIDATOR_UNAVAILABLE`) |
 | 提交方式 | 直接写入最终目录 | 暂存目录 → 验证 → 原子 `shutil.move` |
 | Provider 发现 | 扁平 JSON 文件 | 结构化 `providers/<id>/provider.yaml` |
-| 测试 | ~380 | 全部通过，且三平台 × Python 3.12/3.13 的 CI 为 PR 合并门禁 |
+| 测试 | 无跨平台门禁 | 全部通过，且三平台 × Python 3.12/3.13 的 CI 为 PR 合并门禁 |
 | 技能安装可复现性 | 不可保证 | `oks init` ≡ `oks init --upgrade`（SHA256 一致） |
 | Evidence 一致性 | 无校验 | Fragment ↔ Manifest 4 核心字段校验，fail-closed |
 | ASR 语义 | transcript 伪装 subtitle | `kind=transcript` + `method=asr_transcription` 合法 |
 | 策略配置 | 无 | `oks config set strategy` — lightweight/quality/privacy/ask_each_time |
-| Provider 影响元数据 | Agent 无法获取 | 11 个 Provider 含 `user_impact`，通过 `oks capability status --json` 暴露 |
+| Provider 影响元数据 | Agent 无法获取 | Provider 携带 `user_impact`，通过 `oks capability status --json` 暴露 |
 | 飞书采集 | 仅实时事件模式 | 新增 Pull Mode — `oks feishu pending`，零常驻进程 |
 
 ## 当前证据

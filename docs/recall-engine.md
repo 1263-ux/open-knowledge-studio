@@ -156,8 +156,10 @@ oks wiki use <slug>
 ```
 
 > 召回与搜索是**只读**的：一次查询不算一次使用，不会改动 access_count 或页面状态。
-> 只有 `oks wiki use <slug>`（在真正注入/采用某页时调用）才 +1，从而驱动记忆曲线与
-> provisional→active 晋级。这样记忆热度反映的是“真被用上”，而非“被搜过几次”。
+> 只有 `oks wiki use <slug>`（在真正注入/采用某页时调用）才 +1，从而驱动记忆曲线。
+> 这样记忆热度反映的是“真被用上”，而非“被搜过几次”。
+>
+> 访问次数**不推动状态晋级**：Provisional → Active 只由人工审阅产生（CONSTITUTION P9）。
 
 ## 可解释输出
 
@@ -189,7 +191,7 @@ final_score = typed_base
 源码：`cli/knowledge_studio/recall.py`
 
 核心函数：
-- `recall_episodic(query)` — 按关键词 + 新鲜度搜索 raw/，跳过 `raw/executions/`（执行轨迹是溯源证据，不参与召回）
+- `recall_episodic(query)` — 按关键词 + 新鲜度搜索 raw/，跳过 `raw/executions/ 与 raw/.logs/`（执行轨迹是溯源证据，不参与召回）
 - `recall_knowledge(query, topic_id)` — 通过 6+1 因子评分所有 wiki/ 页面
 - `recall(query, topic_id)` — 合并双路
 

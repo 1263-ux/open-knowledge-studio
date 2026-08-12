@@ -7,7 +7,7 @@ nav_order: 12
 
 这不是一张”功能愿望清单”，而是给使用者的选型说明：**现在应装什么、每类来源该走谁、哪些路径已经做过实验、哪些只能按 partial 或 experimental 对待。**
 
-本页以仓库的 `providers/*/provider.yaml`、`oks capability status --json`、`oks capability status --json`（含 `user_impact` 字段）和已完成的摄入实验为事实源。运行前先执行：
+本页以包内的 `knowledge_studio/providers/*/provider.yaml`、`oks capability status --json`、`oks capability status --json`（含 `user_impact` 字段）和已完成的摄入实验为事实源。运行前先执行：
 
 ```bash
 oks capability status --json
@@ -43,7 +43,7 @@ oks config set strategy ask_each_time   # 每次询问：没有固定倾向
 这是文档、PDF 和公开网页的低成本、可解释组合；不需要 API Key，也不会把源文件上传给远程服务。
 
 ```bash
-pipx install "git+https://github.com/open-agent-power/open-knowledge-studio.git@main#subdirectory=cli"
+pipx install open-knowledge-studio
 oks init my-knowledge-base
 cd my-knowledge-base
 oks init . --upgrade

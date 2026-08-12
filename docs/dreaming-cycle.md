@@ -48,7 +48,7 @@ A 级候选写入 `drafts/{slug}.md`，带 draft frontmatter。每个 draft 是�
 
 - **Accept（接受）** — 提升到 `wiki/{domain}/{type}/`
 - **Revise（修改）** — 编辑 draft 后重新审查
-- **Reject（拒绝）** — 丢弃 draft
+- **Reject（拒绝）** — 移出待审队列，并留下审阅回执（人的一次否决是一个决策）
 
 **核心不变量**：绝不未经人工审查将 raw 提升到 wiki（CONSTITUTION.md A3）。
 
@@ -57,10 +57,17 @@ A 级候选写入 `drafts/{slug}.md`，带 draft frontmatter。每个 draft 是�
 ```bash
 oks drafts list           # 查看所有候选
 oks drafts promote <slug> # 提升到 wiki
-oks drafts reject <slug>  # 丢弃
+oks drafts reject <slug>  # 移出队列 + 写审阅回执
 ```
 
-提升时，draft 的 frontmatter 被最终确定，页面移动到 `wiki/{domain}/{type}/{slug}.md`。
+**提升**：页面写入 `wiki/{domain}/{type}/{slug}.md`，`status` 置为 `active`，并记录
+`human_reviewed_at` —— 这个时间戳是 `[verified]` 标签唯一合法的人工来源
+（CONSTITUTION P9）。draft 声明的 `supersedes` / `relates_to` 关系同时生效。
+
+**拒绝**：先原子写出回执 `drafts/rejected/{时间戳}-{slug}-{uuid}.json`（含
+`decision`、`decided_at`、`draft_slug`、`draft_sha256`），**成功后**才移除 draft。
+回执不保存被拒正文 —— 只留指纹，避免多一份数据留存面。写回执失败则 draft 保持原样，
+不会出现"决策丢了、草稿也没了"。
 
 ### 6. Apply Decay（应用衰减）
 

@@ -7,7 +7,6 @@ nav_order: 8
 # Remote Governance & Credential Security
 
 Status: **implemented (module)** — pending live audit
-Version: 0.4.0
 
 ## Purpose
 
@@ -137,7 +136,7 @@ was called. This provides a verifiable audit trail.
 
 ## 8. Verification
 
-Run `python tmp/security_leak_test.py` to verify the redaction module catches all
+Run `python -m pytest cli/tests/test_security.py` to verify the redaction module catches all
 known credential patterns. This test:
 
 1. Validates all HTTP header redactions

@@ -186,16 +186,20 @@ oks raw-commit .oks/runs/<run_id>/manifest/
 ```yaml
 ---
 title: "页面标题"
-type: concept
-area: computing
+draft_type: concept            # concept | strategy | anti-pattern
+draft_area: computing          # 目标知识域
 importance: 0.7
 confidence: 0.5
 created: "2026-08-07"
 tags: "web, example"
-status: provisional
+status: pending
 source_type: agent-ingest
 ---
 ```
+
+**字段名必须是 `draft_type` / `draft_area`**，不是 `type` / `area`。`oks drafts promote`
+只读前者；写成 `type: strategy, area: science` 会**静默**落到
+`wiki/computing/concepts/`（回退默认值），没有任何报错。
 
 **重要**：Candidate 是一个 Markdown 文件，不是 OKS 协议对象。不要跑 `oks schema show candidate`。
 
