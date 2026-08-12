@@ -73,7 +73,7 @@ oks drafts promote <slug> # 提升到 wiki/
 
 ```bash
 cd <你的实例目录>
-oks search "CLI framework decision"
+oks recall "CLI framework decision" --knowledge-only
 ```
 
 如果搜索结果反映了你刚保存的内容，循环就跑通了。
@@ -104,17 +104,17 @@ Agent 会召回你刚提升的 wiki 页面，并带引用回答。
 * 我在 `raw/` 保存了一条原始材料
 * 我把它蒸馏为 `drafts/` 中的草稿
 * 我把草稿提升到了 `wiki/`
-* 我用 `oks search` 搜索到了它
+* 我用 `oks recall` 召回到了它
 * 在 Agent 会话中，`/query` 召回了我的知识
 
 如果任何一条是"否"，查看下面的验证步骤。
 
 ## 验证
 
-### 搜索是否工作
+### 知识单路是否工作
 
 ```bash
-oks search "your topic"
+oks recall "your topic" --knowledge-only
 ```
 
 应该返回 `wiki/` 中的结果，带相关性分数。

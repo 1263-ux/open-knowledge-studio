@@ -26,7 +26,6 @@ from knowledge_studio.raw_commit import CommitError as _CommitError
 from knowledge_studio.raw_commit import raw_commit as _raw_commit
 from knowledge_studio.recall import (
     RECALL_RESPONSE_SCHEMA,
-    SEARCH_RESPONSE_SCHEMA,
     describe_goal_selection,
     recall,
     recall_episodic,
@@ -738,77 +737,7 @@ def feishu_setup(
     raise typer.Exit(subprocess.run(cmd).returncode)
 
 
-# ── Search / Recall ──────────────────────────────────────────────
-
-@app.command()
-def search(
-    query: str = typer.Argument(help="Search query"),
-    limit: int = typer.Option(5, "--limit", "-n", help="Max results"),
-    scope: Optional[str] = typer.Option(None, "--scope", "--domain", "-d", help="Soft scope: narrow to one area (opt-in, not a hard partition)"),
-    type_filter: Optional[str] = typer.Option(None, "--type", "-t", help="Filter by type"),
-    goal: str = typer.Option("active", "--goal", help="Goal mode: active | none | <goal-slug>"),
-    output_format: str = typer.Option("table", "--format", help="Output format: table | json"),
-    explain: bool = typer.Option(False, "--explain", help="Include score components and match reasons"),
-):
-    """Search wiki pages using the 6+1-factor recall engine (read-only)."""
-    output_format = _validate_output_format(output_format)
-    try:
-        results = recall_knowledge(
-            query=query,
-            limit=limit,
-            scope=scope,
-            goal=goal,
-            explain=explain,
-            type_filter=type_filter,
-        )
-        goal_context = describe_goal_selection(goal)
-    except ValueError as e:
-        console.print(f"[red]{e}[/red]")
-        raise typer.Exit(2)
-
-    if output_format == "json":
-        _emit_json({
-            "schema_version": SEARCH_RESPONSE_SCHEMA,
-            "query": query,
-            "scope": scope,
-            "limit": limit,
-            "type_filter": type_filter,
-            "goal": goal_context,
-            "result_count": len(results),
-            "knowledge": results,
-        })
-        return
-
-    if not results:
-        console.print("[dim]No results found.[/dim]")
-        return
-
-    table = Table(show_header=True, header_style="bold cyan")
-    table.add_column("Slug", style="dim", max_width=30)
-    table.add_column("Title", max_width=40)
-    table.add_column("Type", max_width=12)
-    table.add_column("Area", max_width=12)
-    table.add_column("Score", justify="right", max_width=8)
-    table.add_column("Relevance", justify="right", max_width=10)
-    if explain:
-        table.add_column("Why", max_width=50)
-
-    for r in results:
-        row = [
-            r["slug"],
-            r["title"],
-            r.get("type", ""),
-            r.get("area", ""),
-            f"{r.get('score', 0):.2f}",
-            f"{r.get('relevance', 0):.2f}",
-        ]
-        if explain:
-            row.append(", ".join(r.get("reasons", [])))
-        table.add_row(*row)
-
-    console.print(table)
-    console.print(f"\n[dim]{len(results)} result(s) from wiki/[/dim]")
-
+# ── Recall ───────────────────────────────────────────────────────
 
 @app.command(name="recall")
 def recall_cmd(
@@ -821,8 +750,14 @@ def recall_cmd(
     explain: bool = typer.Option(False, "--explain", help="Include score components and match reasons"),
     user: Optional[str] = typer.Option(None, "--user", envvar="OKS_USER", help="Current user id; required to recall your own profiles/users/<id>/ (A2 scope)"),
     project: Optional[str] = typer.Option(None, "--project", envvar="OKS_PROJECT", help="Current project slug; required to recall profiles/projects/<slug> (A2 scope)"),
+    type_filter: Optional[str] = typer.Option(None, "--type", "-t", help="Restrict the knowledge path to one wiki type"),
+    knowledge_only: bool = typer.Option(False, "--knowledge-only", help="Skip the episodic path — only wiki/ results, no raw/ source material"),
 ):
-    """Two-path recall: episodic (raw/) + knowledge (wiki/)."""
+    """Two-path recall: episodic (raw/) + knowledge (wiki/).
+
+    `--knowledge-only` drops the episodic path for a wiki-only view; `--type`
+    narrows the knowledge path to one wiki type before ranking and `--limit`.
+    """
     output_format = _validate_output_format(output_format)
     try:
         result = recall(
@@ -834,6 +769,8 @@ def recall_cmd(
             explain=explain,
             user_id=user,
             project_slug=project,
+            type_filter=type_filter,
+            knowledge_only=knowledge_only,
         )
     except ValueError as e:
         console.print(f"[red]{e}[/red]")

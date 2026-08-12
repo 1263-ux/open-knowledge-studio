@@ -215,11 +215,10 @@ oks drafts promote <slug>    # 提升到 wiki/
 ### Step 7: 验证召回
 
 ```bash
-oks search "关键词"
 oks recall "关键词"
 ```
 
-确认新知识能被搜到。
+确认新知识能被召回。
 
 ---
 

@@ -83,7 +83,7 @@ pipx install open-knowledge-studio && pipx ensurepath
 oks init my-knowledge-base
 cd my-knowledge-base
 oks status
-oks search "your query"
+oks recall "your query"
 ```
 
 （pipx 本身：Ubuntu 用 `sudo apt install pipx`，macOS 用 `brew install pipx`，Windows 用 `py -m pip install --user pipx && py -m pipx ensurepath`。Ubuntu 24.04 / Homebrew Python 受 PEP 668 保护，直接 `pip install` 会报 externally-managed-environment；镜像滞后时加 `--pip-args="-i https://pypi.org/simple"`。）

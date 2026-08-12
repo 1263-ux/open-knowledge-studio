@@ -1,7 +1,7 @@
 ---
 title: Kimi K3 深度分析
 parent: 案例
-nav_order: 4
+nav_order: 5
 ---
 
 # Kimi K3 深度分析

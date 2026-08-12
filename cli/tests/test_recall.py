@@ -257,18 +257,18 @@ def test_recall_cli_emits_machine_readable_json(kb_root):
     assert payload["knowledge"][0]["score_components"]
 
 
-def test_search_cli_rejects_unknown_goal(kb_root):
+def test_recall_cli_rejects_unknown_goal(kb_root):
     from typer.testing import CliRunner
 
     from knowledge_studio.cli import app
 
-    result = CliRunner().invoke(app, ["search", "deployment", "--goal", "missing"])
+    result = CliRunner().invoke(app, ["recall", "deployment", "--goal", "missing"])
 
     assert result.exit_code == 2
     assert "Goal not found: missing" in result.output
 
 
-def test_search_cli_json_filters_type_before_limit(kb_root):
+def test_recall_cli_json_filters_type_before_limit(kb_root):
     from typer.testing import CliRunner
 
     from knowledge_studio.cli import app
@@ -276,8 +276,9 @@ def test_search_cli_json_filters_type_before_limit(kb_root):
     result = CliRunner().invoke(
         app,
         [
-            "search",
+            "recall",
             "deployment",
+            "--knowledge-only",
             "--type",
             "strategy",
             "--limit",
@@ -291,8 +292,9 @@ def test_search_cli_json_filters_type_before_limit(kb_root):
 
     assert result.exit_code == 0, result.output
     payload = json.loads(result.stdout)
-    assert payload["schema_version"] == "search-response/v1"
-    assert payload["result_count"] == 1
+    assert payload["schema_version"] == "recall-response/v1"
+    assert payload["episodic"] == []
+    assert len(payload["knowledge"]) == 1
     assert payload["knowledge"][0]["slug"] == "docker-deployment"
     assert payload["knowledge"][0]["rank"] == 1
 

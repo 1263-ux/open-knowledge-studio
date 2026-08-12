@@ -78,6 +78,7 @@ OKS 核心**不内置调度器/执行器**。配方（`profiles/recipes/{slug}.m
 * **[托管你的简历](case-resume.md)**
 * **[托管你的 GitHub](case-github.md)**
 * **[托管你的科研](case-research.md)**
+* **[托管你的学习](case-learning.md)**
 
 ## 接下来读哪里
 

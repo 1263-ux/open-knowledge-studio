@@ -13,7 +13,7 @@ Open Knowledge Studio is a file-based knowledge base system designed for use wit
 - **18 capability actions**: source.fetch, web.fetch, document.text.extract, image.ocr, speech.transcribe, etc.
 - **Dreaming cycle**: raw → AI distill → drafts → human review → wiki
 - **Decay system**: memory curve scoring with type-specific λ, tier classification (hot/warm/cold/evictable)
-- **CLI tool (`oks`)**: 46 commands across 8 Typer groups — search, recall, raw-commit, ingest, init, skills-install, wiki CRUD, drafts, distill, lint, status, metrics, capability, feishu, trace, eval, hook, config
+- **CLI tool (`oks`)**: recall, raw-commit, ingest, init, skills-install, wiki CRUD, drafts, distill, lint, status, metrics, capability, schema, security, feishu, trace, eval, hook, config (run `oks --help` for the authoritative list)
 
 ## Raw Material vs Memory — The Core Distinction
 
@@ -35,7 +35,7 @@ pipx install open-knowledge-studio && pipx ensurepath   # PyPI
 oks init my-knowledge-base
 cd my-knowledge-base
 oks status
-oks search "git branch"
+oks recall "git branch"
 ```
 
 ## Core Pipeline
@@ -48,7 +48,7 @@ raw/ (human-collected or tool-processed materials)
 drafts/ (intermediate proposals)
   ↓ /promote skill — human review
 wiki/ (curated knowledge, with decay)
-  ↓ oks search / /query skill — 6+1-factor recall
+  ↓ oks recall / /query skill — 6+1-factor recall
 injected into Claude Code context
 ```
 
@@ -118,9 +118,8 @@ oks skills-install [--force]
 # Raw ingestion
 oks raw-commit <manifest-dir> [--output/-o <dir>] [--overwrite] [--json/--text]
 
-# Search & recall
-oks search <query> [--limit 5] [--domain computing] [--type strategy] [--goal active|none|SLUG] [--format table|json] [--explain]
-oks recall <query> [--topic-id ID] [--limit 5] [--goal active|none|SLUG] [--format table|json] [--explain]
+# Recall (the single retrieval entry — Agent-facing, injected via hook)
+oks recall <query> [--topic-id ID] [--limit 5] [--scope AREA] [--type strategy] [--knowledge-only] [--goal active|none|SLUG] [--format table|json] [--explain]
 
 # Wiki
 oks wiki list [--domain] [--type] [--status active]

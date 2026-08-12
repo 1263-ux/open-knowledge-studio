@@ -38,7 +38,7 @@ parent: 案例
 ## 召回复用
 
 ```bash
-oks search "方法X 局限 反例"
+oks recall "方法X 局限 反例"
 oks recall "你的研究问题" --topic-id <方向>
 ```
 

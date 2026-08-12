@@ -49,7 +49,7 @@ open-knowledge-studio 是一个面向 Claude Code 的知识工程仓库，提供
 ## CLI 命令（`oks`）
 
 ```bash
-oks search <query>          # 搜索/召回
+oks recall <query>          # 召回（Agent 面向，hook 注入）
 oks wiki list/get/create    # 知识管理
 oks drafts list/promote     # 草稿工作流
 oks distill                 # 蒸馏

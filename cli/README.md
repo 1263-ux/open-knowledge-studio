@@ -45,8 +45,8 @@ pipx install "git+https://github.com/open-agent-power/open-knowledge-studio.git@
 oks init my-knowledge-base          # 2. scaffold an instance (skills + buckets)
 cd my-knowledge-base
 oks status                          # 3. use it
-oks search "git branch"
-oks search "deployment" --type strategy --format json
+oks recall "git branch" --knowledge-only
+oks recall "deployment" --knowledge-only --type strategy --format json
 oks recall "git branch" --goal none --format json --explain
 oks eval recall eval/datasets/team-v1.yaml --output eval/runs/baseline.json
 oks trace start memory-goal --run-id demo-001
@@ -56,9 +56,9 @@ Use `--goal active` (default) to merge active goals, `--goal <slug>` for one
 reproducible goal, or `--goal none` for a no-goal baseline. `--explain` exposes
 score components without changing ranking.
 
-Machine-readable output uses `search-response/v1` for `oks search`,
-`recall-response/v1` for `oks recall`, and `recall-hit/v1` for individual
-hits. Search type filtering happens before ranking and `--limit`.
+Machine-readable output uses `recall-response/v1` for `oks recall` and
+`recall-hit/v1` for individual hits. `--type` filtering happens before ranking
+and `--limit`; `--knowledge-only` drops the episodic path.
 
 `oks eval` is offline and read-only. `oks trace` writes append-only execution
 events under `raw/executions/`; generated Wiki/Skill proposals stay under

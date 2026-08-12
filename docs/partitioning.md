@@ -35,14 +35,13 @@ parent: 参考
 ## 用法：可选软 scope
 
 ```bash
-oks search "缓存失效" --scope backend    # 只在 backend 域内做 6+1 因子召回
-oks search "缓存失效"                     # 默认全局，跨域联想
+oks recall "缓存失效" --knowledge-only --scope backend  # 只在 backend 域内做 6+1 因子召回
+oks recall "缓存失效" --knowledge-only                  # 默认全局，跨域联想
 oks recall "缓存失效" --scope backend     # 双路召回：知识路按域收窄，raw 路仍全局
 ```
 
 `--scope` 复用已有的 `area` 字段，**不新增任何存储结构**，也不改变默认行为——
 它只是把"这次我想聚焦某域"变成一个显式、可解释、可省略的查询参数。
-（`search` 兼容旧的 `--domain` / `-d` 别名。）
 
 ## 为什么不引入硬 Space
 

@@ -45,7 +45,6 @@ DEFAULT_RECALL_LIMIT = 5
 MAX_BODY_PREVIEW = 200
 RECALL_HIT_SCHEMA = "recall-hit/v1"
 RECALL_RESPONSE_SCHEMA = "recall-response/v1"
-SEARCH_RESPONSE_SCHEMA = "search-response/v1"
 
 # Subdirectories of raw/ that hold records rather than human-collected material.
 # CONSTITUTION P3: recalling them would feed an agent its own output back as
@@ -131,13 +130,20 @@ def recall(
     explain: bool = False,
     user_id: str | None = None,
     project_slug: str | None = None,
+    type_filter: str | None = None,
+    knowledge_only: bool = False,
 ) -> dict[str, Any]:
-    """Two-path recall: episodic (search) + knowledge (stability).
+    """Two-path recall: episodic (raw/ + profiles/) + knowledge (wiki/).
 
     scope narrows the knowledge path (wiki area). user_id / project_slug name
     the current identity so the episodic path may include those private
     profiles; without them A2 scope filtering excludes every user/project
     profile rather than leaking one.
+
+    type_filter restricts the knowledge path to one wiki type. knowledge_only
+    drops the episodic path — someone querying `wiki/` directly does not want
+    raw source material mixed in. Both default to the previous behaviour, so
+    existing callers including the auto-recall hook are unaffected.
     """
     goal_context = _resolve_goal_context(goal, goal_boost=goal_boost)
     return {
@@ -153,7 +159,7 @@ def recall(
             "domains": sorted(goal_context["domains"]),
             "keywords": sorted(goal_context["keywords"]),
         },
-        "episodic": recall_episodic(
+        "episodic": [] if knowledge_only else recall_episodic(
             query=query, topic_id=topic_id, limit=limit,
             user_id=user_id, project_slug=project_slug,
         ),
@@ -164,6 +170,7 @@ def recall(
             scope=scope,
             goal_context=goal_context,
             explain=explain,
+            type_filter=type_filter,
         ),
     }
 

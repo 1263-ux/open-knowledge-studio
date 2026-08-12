@@ -71,7 +71,6 @@ After human review:
 
 ```bash
 oks drafts promote <slug>
-oks search "agent memory"
 oks recall "how should agent memory be managed?"
 oks lint
 ```
@@ -85,8 +84,7 @@ oks capability       List / doctor / status available Providers (incl. user_impa
 oks config           Manage global config — including strategy (lightweight/quality/privacy/ask_each_time)
 oks drafts           Manage Candidate drafts
 oks wiki             Manage reviewed knowledge pages
-oks search           Keyword + recall search
-oks recall           Two-path episodic + knowledge recall
+oks recall           Two-path episodic + knowledge recall (--knowledge-only, --type)
 oks feishu           Feishu pull-mode entry (oks feishu pending) + review workflow
 oks lint             Quality scan
 oks status           Overview dashboard
@@ -202,7 +200,6 @@ Agent 读取 `/ingest` Skill、检查能力、选择 Provider、采集证据、�
 
 ```bash
 oks drafts promote <slug>
-oks search "agent memory"
 oks recall "how should agent memory be managed?"
 oks lint
 ```

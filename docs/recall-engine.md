@@ -140,7 +140,7 @@ if relevance > 0 and (goal_domains or goal_keywords):
 
 ```bash
 # 仅 Knowledge（wiki 页面）
-oks search "authentication" --limit 5
+oks recall "authentication" --knowledge-only --limit 5
 
 # 双路：Episodic（raw/）+ Knowledge（wiki/）
 oks recall "authentication" --limit 5
@@ -181,10 +181,9 @@ final_score = typed_base
             + goal_keyword
 ```
 
-`oks recall` 的 JSON 响应版本为 `recall-response/v1`，`oks search` 为
-`search-response/v1`，单条结果版本为 `recall-hit/v1`。`search --type` 会在
-排序和 `--limit` 之前过滤，避免 Top-N 截断后出现假空结果。JSON 直接写到
-标准输出，不带 Rich 颜色或表格字符。
+`oks recall` 的 JSON 响应版本为 `recall-response/v1`，单条结果版本为
+`recall-hit/v1`。`recall --type` 会在排序和 `--limit` 之前过滤，避免 Top-N
+截断后出现假空结果。JSON 直接写到标准输出，不带 Rich 颜色或表格字符。
 
 ## 实现
 

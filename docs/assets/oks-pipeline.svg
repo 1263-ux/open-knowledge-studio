@@ -66,7 +66,7 @@
       <text x="600" y="1161" text-anchor="middle" font-size="14" font-weight="700" fill="#5d4037">/promote 人工审查 → wiki/</text>
       <text x="600" y="1181" text-anchor="middle" font-size="12" fill="#795548">Human review 是知识进入 Wiki 的门</text>
       <rect x="380" y="1235" width="440" height="58" rx="8" fill="#eceff1" stroke="#78909c" stroke-width="1.5"/>
-      <text x="600" y="1261" text-anchor="middle" font-size="14" font-weight="700" fill="#37474f">oks search / /query 召回</text>
+      <text x="600" y="1261" text-anchor="middle" font-size="14" font-weight="700" fill="#37474f">oks recall / /query 召回</text>
       <text x="600" y="1281" text-anchor="middle" font-size="12" fill="#546e7a">注入 Agent 上下文</text>
     </g>
 
