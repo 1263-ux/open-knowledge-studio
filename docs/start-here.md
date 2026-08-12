@@ -45,7 +45,9 @@ EOF
 
 ### Step 2: 蒸馏为草稿
 
-raw → drafts 的 A/B/C 分级蒸馏由 **Claude Code 的 `/ingest` 技能**完成（AI 判断质量分级）——在 Agent 会话中运行 `/ingest`，系统扫描 `raw/`，将 A 级材料写入 `drafts/`。CLI 的 `oks distill --dry-run` 只预览维护循环统计，**不做**这个蒸馏。
+raw → drafts 的 A/B/C 分级由 **`/ingest` 技能**完成：每收录一个来源，Agent 在证据落盘后按相关性 / 质量 / 新颖性评一次级 —— A 级写出 `drafts/` 候选，B/C 只在 `result.json` 记下判断与理由，Raw Bundle 一律保留。
+
+分级是 Agent 的判断，CLI 核心不评估内容质量（P4）；它只决定**值不值得起草**，不决定能否进 wiki —— 那仍要过 `/promote` 的人工审阅（A3）。CLI 的 `oks distill --dry-run` 只预览维护循环统计，**不做**这个分级。
 
 {: .note }
 **纯 CLI 路径**（没有 Claude Code 时）：跳过 drafts，直接把知识写成 wiki 页，然后跳到 Step 4——
@@ -83,7 +85,7 @@ Agent 技能预配置在 `.claude/skills/`。核心技能：
 | 技能 | 使用场景 |
 |------|----------|
 | `/query <问题>` | 提问 — Studio 召回相关 wiki 页面并注入上下文 |
-| `/ingest` | 多模态摄入：三级路由 → raw/ → A/B/C 分级 |
+| `/ingest` | 多模态摄入：Provider 取证 → raw/ → A/B/C 分级 → A 级写 drafts/ |
 | `/promote` | 审查 drafts 并提升到 wiki |
 | `/status` | 查看知识库概览 |
 

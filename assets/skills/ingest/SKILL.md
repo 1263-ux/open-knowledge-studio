@@ -367,24 +367,45 @@ Run: `oks raw-commit .oks/runs/{run_id}/manifest/ --output raw/{date}/{source}/{
 
 On success: bundle_id returned.  On rejection: read error_code, do NOT retry blindly.
 
-## Step 7: AgentObservation → Candidate
+## Step 7: Grade → AgentObservation → Candidate
 
 1. Read the Raw Bundle's `evidence.jsonl`
 2. Create AgentObservation — each claim references `artifact_id + locator`
    from evidence.  `supported` claims have direct evidence; `uncertain` are
    Agent inference needing human verification.
-3. Write Candidate to `drafts/{slug}.md` with valid YAML frontmatter:
+3. **Grade the material A / B / C.** This is your judgment, not the CLI's —
+   `oks` never judges content quality (P4):
+
+   | Grade | Meaning | Action |
+   |-------|---------|--------|
+   | **A** | Carries a reusable judgment or conclusion, and the evidence supports it | Write a Candidate |
+   | **B** | Has value but is incomplete — thin evidence, or too situation-specific to reuse | No Candidate. Record why in `result.json`; the Raw Bundle stays for later |
+   | **C** | Noise, a duplicate of existing knowledge, or a bare list of facts carrying no judgment | No Candidate. Record the reason |
+
+   Grading decides **whether something is worth drafting** — nothing more. It
+   never promotes: every Candidate still passes human review via `/promote`
+   (A3). Never delete a Raw Bundle because you graded it C — the grade is your
+   opinion, the evidence is the record.
+
+4. For grade A, write the Candidate to `drafts/{slug}.md` with valid YAML
+   frontmatter:
    ```yaml
    title: "Human-readable title"
-   type: concept
-   area: computing
+   draft_type: concept       # concept | strategy | anti-pattern
+   draft_area: computing     # target knowledge domain
    importance: 0.7
    confidence: 0.5
    created: "YYYY-MM-DD"
    tags: "comma, separated"
-   status: provisional
+   status: pending
    source_type: agent-ingest
+   intake_grade: A
    ```
+
+   **The field names must be `draft_type` and `draft_area`.** `oks drafts
+   promote` reads only those; writing `type:` / `area:` falls back to
+   `concept` / `computing`, so a strategy about science lands silently in
+   `wiki/computing/concepts/` with no error.
 
    **Important:** Candidate is a draft Markdown document written to `drafts/{slug}.md`.
    Candidate is NOT an OKS protocol schema object.
@@ -413,6 +434,8 @@ MUST write `.oks/runs/{run_id}/result.json` before reporting to user.
   "cost": 0,
   "latency_ms": 6200,
   "bundle_id": "bundle:2789f4ff",
+  "intake_grade": "A",
+  "intake_grade_reason": "有可复用的结论，且每条断言都能追到证据",
   "candidate_path": "drafts/controlled-chinese-scan.md",
   "review_status": "pending",
   "provider_selection": {
@@ -424,6 +447,14 @@ MUST write `.oks/runs/{run_id}/result.json` before reporting to user.
   }
 }
 ```
+
+### intake_grade fields
+
+- **intake_grade** (required): `A` | `B` | `C` — your Step 7 judgment
+- **intake_grade_reason** (required): one sentence on why. For `B` / `C` this is
+  the only record of the decision; without it the next run re-derives it blind
+- **candidate_path**: the draft path for `A`, and **`null` for `B` / `C`** —
+  naming a file that was never written makes the report untrue
 
 ### provider_selection fields
 
