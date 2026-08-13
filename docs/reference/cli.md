@@ -22,6 +22,8 @@ parent: 参考
 | `oks capability list/install/status/doctor` | 能力注册 |
 | `oks hook install/status` | opt-in 自动 recall 注入 |
 | `oks trace *` | 执行追踪（provenance） |
+| `oks mail send/inbox/read/count` | Agent 间通信（inbox/sent） |
+| `oks registry list/bind/remove` | 终端注册表（agent+cwd → profile/goal） |
 | `oks lint` | 扫 wiki/ 一致性 |
 | `oks config init/show/set` | 配置 |
 | `oks security sanitize <file>` | 凭据脱敏 |

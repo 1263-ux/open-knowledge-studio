@@ -133,6 +133,23 @@ Check the top hits' `score_components`:
 | Too many false positives | `OKS_RECALL_FLOOR` too low (default 0.7) | Raise floor: `OKS_RECALL_FLOOR=1.0` in hook env |
 | Goal boost not applied | `--goal none` was used, or no `profiles/goals/*.md` with `status: active` | Verify goal file exists + `status: active`; omit `--goal` to use default active |
 
+## Step 3.5: Register terminal (bind agent+cwd -> profile/goals)
+
+After generating profile + goals, bind the current terminal so the hook
+fast-retrieves goals and skips the first-run guide on future sessions:
+
+```bash
+# agent_id from OKS_AGENT_ID env, or cwd basename; cwd is the current project dir
+oks registry bind \
+  --agent-id "${OKS_AGENT_ID:-$(basename "$(pwd)")}" \
+  --cwd "$(pwd)" \
+  --profile {user} \
+  --goals {goal-slug-1},{goal-slug-2}
+```
+
+Writes `profiles/agents/registry.jsonl` (git-shared). The hook reads it on next
+prompt: matching entry skips the first-run guide.
+
 ## Step 4: Report
 
 Tell the user:

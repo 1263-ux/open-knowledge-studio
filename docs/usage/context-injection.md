@@ -151,6 +151,82 @@ Agent context 收到 `<recalled-memory>`——Claude Code 静默注入（用户�
 | 同 session 同 slug 重复 | 10 轮内不重复注入（cooldown） |
 | recall 失败 | exit 0，不阻塞 prompt（fail open） |
 
+## 终端注册表 + 首次引导
+
+### 终端注册表
+
+`profiles/agents/registry.jsonl`（git 共享）记录"哪个终端绑定哪个 profile/goal"：
+
+```json
+{"agent_id":"claude-code","cwd":"/path/repo","profile_slug":"itxaiohanglover",
+ "goal_slugs":["oss-contribution"],"first_seen":"...","last_active":"...","status":"active"}
+```
+
+- **key** = `agent_id + cwd`（同项目复用，不只 session_id）
+- **agent_id 来源**：env `OKS_AGENT_ID` > payload `agent_id` > cwd basename > "unknown"
+- **管理**：`oks registry list/bind/remove`
+
+### 首次引导
+
+新终端（registry 无记录）+ 首次 turn + 无 active goal → hook 植入询问引导：
+
+```xml
+<recalled-memory source="oks">
+## 首次使用（新终端）
+注册表无此终端的 profile/goal 信息，且知识库无 active goal。
+建议反问用户确认：当前目标 / 技术栈 / 项目。
+确认后调 /assess 建档，后续 hook 从注册表快速检索。
+</recalled-memory>
+```
+
+AI 看到会反问人类 → 人类回答 → AI 调 `/assess` 建 profile/goal → Step 3.5 写 registry → 后续 hook 跳过首次引导。
+
+### pi extension 传 cwd + agent_id
+
+pi 的 `before_agent_start` 现在传 `{ prompt, session_id, cwd, agent_id }`（cwd = `process.cwd()`，agent_id = `OKS_AGENT_ID` env）。claude/qoder 的 UserPromptSubmit 自动传 cwd。
+
+## 行为埋点（训练信号）
+
+hook 注入时写两个 jsonl（git 共享，跨机器训练信号）：
+
+### records/inject.jsonl — 注入记录
+
+每条 = 一次注入：
+
+```json
+{"session_id":"abc","turn":1,"agent_id":"claude-code","cwd":"/path",
+ "prompt_hash":"a1b2c3d4e5f6","slugs":["oss-call-chain","简历"],
+ "rels":[3.89,2.34],"injected_at":"..."}
+```
+
+- `prompt_hash`（SHA-256 前 12 位）保护隐私——不存原文
+- `slugs` + `rels` = 注入了什么 + 相关度
+
+### records/trace-feedback.jsonl — 人审反馈
+
+`oks trace feedback <run> --outcome accepted/rejected --comment "..."` 镜像到 jsonl：
+
+```json
+{"run_id":"test-run","outcome":"accepted","comment":"...","recorded_at":"..."}
+```
+
+### 接受信号：oks wiki use
+
+`oks wiki use <slug>` 标 inject.jsonl 该 slug 最近注入为 `used=1`：
+
+```json
+{"...","used":true,"used_at":"..."}
+```
+
+训练信号闭环：注入（inject.jsonl）→ 采纳（wiki use 标 used）→ 人审（trace-feedback.jsonl）。
+
+### P9 边界
+
+feedback 进**分析**不进**评分**——confidence 只在指纹命中 +0.1（防自我强化回路）。埋点数据用于：
+- 分析哪些注入常被采纳（接受率）
+- rejected 的 rel 分布 → 调 floor 建议
+- 但不直接改 confidence / recall 权重（需标注数据集量化，见 [recall-evaluation](../algorithms/recall-evaluation.md)）
+
 ## 可调参数（env）
 
 | env | 默认 | 作用 |
