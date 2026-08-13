@@ -76,7 +76,7 @@ def _save_state(path: Path, state: dict) -> None:
 
 
 def _load_active_goals(kb_root: Path) -> list:
-    """Read profiles/goals/*.md with status: active."""
+    """Read profiles/goals/*.md with status: active. Returns title/slug/keywords."""
     goals_dir = kb_root / "profiles" / "goals"
     if not goals_dir.is_dir():
         return []
@@ -87,11 +87,20 @@ def _load_active_goals(kb_root: Path) -> list:
             parts = text.split("---")
             if len(parts) >= 2 and "status: active" in parts[1]:
                 title = f.stem
+                keywords = []
+                in_kw = False
                 for line in parts[1].split("\n"):
                     if line.startswith("title:"):
                         title = line.split(":", 1)[1].strip().strip("\"'")
-                        break
-                goals.append({"title": title, "slug": f.stem})
+                    elif line.startswith("keywords:"):
+                        in_kw = True
+                    elif in_kw:
+                        s = line.strip()
+                        if s.startswith("- "):
+                            keywords.append(s[2:].strip())
+                        elif s and not line.startswith(" "):
+                            in_kw = False
+                goals.append({"title": title, "slug": f.stem, "keywords": keywords})
         except Exception:
             continue
     return goals
@@ -152,31 +161,26 @@ def main() -> int:
     if kb_root is None:
         return 0  # no KB to recall from — fail open
 
-    sections = []
+    session_id = str(payload.get("session_id", "") or "")
+    state_file = _state_path(session_id, kb_root)
+    state = _load_state(state_file)
+    is_first_turn = state.get("n", 0) == 0
 
-    # ── Goal section (always inject active goals) ──
-    goals = _load_active_goals(kb_root)
-    if goals:
-        lines = ["## 当前目标"]
-        for g in goals:
-            lines.append(f"[goal] {g['title']} ({g['slug']})")
-        sections.append("\n".join(lines))
-
-    # ── Knowledge section (6+1 recall + cooldown) ──
+    # ── Knowledge section (6+1 recall + cooldown) — compute first so we
+    # know whether the query is on-scope for any active goal ──
     try:
         from knowledge_studio.recall import recall
     except Exception:
         recall = None  # engine unavailable — still show goals + mail
 
-    session_id = str(payload.get("session_id", "") or "")
-    state_file = _state_path(session_id, kb_root)
+    picked: list = []
+    goal_relevant = False
 
     if recall is not None:
         floor = float(os.environ.get("OKS_RECALL_FLOOR", "0.7"))
         topn = int(os.environ.get("OKS_RECALL_TOPN", "3"))
         cooldown = int(os.environ.get("OKS_RECALL_COOLDOWN", "10"))
 
-        state = _load_state(state_file)
         state["n"] += 1
         turn = state["n"]
 
@@ -186,7 +190,6 @@ def main() -> int:
         except Exception:
             hits = []
 
-        picked = []
         for h in hits:
             if float(h.get("relevance", 0)) < floor:
                 continue
@@ -203,23 +206,57 @@ def main() -> int:
                 slug = str(h.get("slug", "")).strip()
                 if slug:
                     state["seen"][slug] = turn
+            # goal 相关性：picked 有 goal boost 说明 query 与 goal 相关
+            for h in picked:
+                c = h.get("score_components", {})
+                if c.get("goal_area", 0) > 0 or c.get("goal_keyword", 0) > 0:
+                    goal_relevant = True
+                    break
         _save_state(state_file, state)
 
-        if picked:
-            lines = [
-                "## 相关记忆",
-                "相关已沉淀记忆（引用时用 slug；与当前事实冲突以最新为准）：",
-            ]
-            for h in picked:
-                title = str(h.get("title", h.get("slug", ""))).strip()
-                slug = str(h.get("slug", "")).strip()
-                htype = str(h.get("type", "")).strip()
-                rel = float(h.get("relevance", 0))
-                preview = re.sub(r"\s+", " ", str(h.get("body_preview", ""))).strip()[:160]
-                lines.append(f"- [{htype}] {title} ({slug}) rel={rel:.2f}")
-                if preview:
-                    lines.append(f"    {preview}")
+    # goal 相关性双重判断：query 和 goal keywords 直接匹配（不依赖 picked，
+    # 避免 cooldown 补位到非 goal 域页时漏判）
+    if not goal_relevant:
+        prompt_lower = prompt.lower()
+        for g in _load_active_goals(kb_root):
+            for kw in g.get("keywords", []):
+                if kw.lower() in prompt_lower:
+                    goal_relevant = True
+                    break
+            if goal_relevant:
+                break
+
+    # ── Build sections in order: goal -> knowledge -> mail ──
+    sections = []
+
+    # Goal section: 首次提醒 (新 session) or 按需 (query 与 goal 相关才注入)
+    # 不相关时不占上下文
+    if is_first_turn or goal_relevant:
+        goals = _load_active_goals(kb_root)
+        if goals:
+            lines = ["## 当前目标"]
+            if is_first_turn and not goal_relevant:
+                lines.append("(首次提醒 — 之后只在 query 与 goal 相关时注入)")
+            for g in goals:
+                lines.append(f"[goal] {g['title']} ({g['slug']})")
             sections.append("\n".join(lines))
+
+    # Knowledge section
+    if picked:
+        lines = [
+            "## 相关记忆",
+            "相关已沉淀记忆（引用时用 slug；与当前事实冲突以最新为准）：",
+        ]
+        for h in picked:
+            title = str(h.get("title", h.get("slug", ""))).strip()
+            slug = str(h.get("slug", "")).strip()
+            htype = str(h.get("type", "")).strip()
+            rel = float(h.get("relevance", 0))
+            preview = re.sub(r"\s+", " ", str(h.get("body_preview", ""))).strip()[:160]
+            lines.append(f"- [{htype}] {title} ({slug}) rel={rel:.2f}")
+            if preview:
+                lines.append(f"    {preview}")
+        sections.append("\n".join(lines))
 
     # ── Mail section (unread, mark as read after inject) ──
     mail_topn = int(os.environ.get("OKS_MAIL_TOPN", "3"))
