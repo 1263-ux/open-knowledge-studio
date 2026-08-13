@@ -5,8 +5,7 @@ Every invariant here corresponds to a shipping bug that reached a release:
 
   - maintainer-only skills leaked into user installs
   - ``.codex``/``.agents`` agent config was never packaged
-  - the vendored connector was missing from sdists, so a source install had no
-    ``oks-connector`` at all
+  - the connector was missing from sdists (now a PyPI dependency, no longer vendored)
   - ``build/lib`` kept shipping a tree that had already been deleted from
     ``assets/``, so a "fresh" wheel still carried removed skills
 
@@ -29,13 +28,11 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 _ASSETS = _REPO_ROOT / "assets"
 _MAINTAINER_SKILLS = _REPO_ROOT / ".claude" / "skills"
 
-# `oks feishu` resolves these from _assets/scripts/ at runtime.
-_REQUIRED_SCRIPT_ASSETS = ("feishu_base_worker.py", "feishu_setup.py")
-
-# Entry points declared in pyproject: both must have their module in the wheel.
+# Entry point declared in pyproject: its module must be in the wheel.
+# (oks_connector.raw_bundle_adapter is provided by the PyPI oks-connector
+# package, a declared dependency — not vendored here.)
 _REQUIRED_MODULES = (
     "knowledge_studio/cli.py",
-    "oks_connector/raw_bundle_adapter.py",
 )
 
 
@@ -82,11 +79,6 @@ def check_wheel(names: list[str]) -> list[str]:
         if expected not in names:
             problems.append(f"wheel is missing asset {expected}")
 
-    for script in _REQUIRED_SCRIPT_ASSETS:
-        expected = f"{prefix}scripts/{script}"
-        if expected not in names:
-            problems.append(f"wheel is missing {expected} — `oks feishu` resolves it there")
-
     # Maintainer tooling must never reach a user's knowledge base.
     for skill in sorted(_maintainer_only_skills()):
         leaked = [n for n in names if f"skills/{skill}/" in n]
@@ -106,11 +98,8 @@ def check_wheel(names: list[str]) -> list[str]:
 
 def check_sdist(names: list[str]) -> list[str]:
     problems: list[str] = []
-    # A source install runs setup.py from the sdist, where the repo root is
-    # absent — so the vendored trees must already be inside the archive.
-    for required in ("oks_connector/raw_bundle_adapter.py", "oks_connector/network.py"):
-        if required not in names:
-            problems.append(f"sdist is missing {required} — a source install has no connector")
+    # The connector (oks_connector) is a PyPI dependency, not vendored in the
+    # sdist — a source install pulls it via pip from pyproject dependencies.
     if not any(n.startswith("knowledge_studio/_assets/") for n in names):
         problems.append("sdist carries no knowledge_studio/_assets/ — `oks init` would be empty")
     return problems
