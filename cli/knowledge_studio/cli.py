@@ -728,6 +728,8 @@ def trace_feedback(
 
     try:
         event = append_event(run_id, "human_comment", "human", {"outcome": outcome, "comment": comment})
+        root = _instance_root(None)
+        _append_trace_feedback_jsonl(root, run_id, outcome, comment)
     except (OSError, ValueError) as e:
         console.print(f"[red]{e}[/red]")
         raise typer.Exit(1)
@@ -957,6 +959,62 @@ def wiki_unarchive(slug: str = typer.Argument(help="Page slug to bring back into
         raise typer.Exit(1)
 
 
+def _mark_inject_used(root: Path, slug: str) -> int:
+    """Mark the most recent inject.jsonl entry containing slug as used=1.
+
+    Training signal: which injected memories were actually adopted.
+    Returns count of entries marked (0 if none found)."""
+    import json
+    from datetime import datetime, timezone
+    path = root / "records" / "inject.jsonl"
+    if not path.is_file():
+        return 0
+    ts = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    lines = path.read_text(encoding="utf-8").splitlines()
+    target_idx = -1
+    for i in range(len(lines) - 1, -1, -1):
+        line = lines[i].strip()
+        if not line:
+            continue
+        try:
+            rec = json.loads(line)
+            if slug in rec.get("slugs", []) and not rec.get("used"):
+                target_idx = i
+                break
+        except Exception:
+            continue
+    if target_idx < 0:
+        return 0
+    try:
+        rec = json.loads(lines[target_idx])
+        rec["used"] = True
+        rec["used_at"] = ts
+        lines[target_idx] = json.dumps(rec, ensure_ascii=False)
+        path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        return 1
+    except Exception:
+        return 0
+
+
+def _append_trace_feedback_jsonl(root: Path, run_id: str, outcome: str, comment: str) -> None:
+    """Append human feedback to records/trace-feedback.jsonl (git-shared)."""
+    import json
+    from datetime import datetime, timezone
+    path = root / "records" / "trace-feedback.jsonl"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    rec = {
+        "run_id": run_id,
+        "outcome": outcome,
+        "comment": comment,
+        "recorded_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+    }
+    try:
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+    except Exception:
+        pass
+
+
 @wiki_app.command("use")
 def wiki_use(slug: str = typer.Argument(help="Slug of a page that was actually used/injected")):
     """Record an explicit use of a wiki page — the memory-curve signal.
@@ -970,11 +1028,15 @@ def wiki_use(slug: str = typer.Argument(help="Slug of a page that was actually u
         console.print(f"[red]Not found:[/red] {slug}")
         raise typer.Exit(1)
     store.record_access(slug)
+    root = _instance_root(None)
+    used = _mark_inject_used(root, slug)
     updated = store.get_wiki_page(slug)
     console.print(
         f"[green]Recorded use:[/green] {slug} "
         f"(access_count={updated.get('access_count', 0)}, status={updated.get('status', 'active')})"
     )
+    if used:
+        console.print(f"[dim]inject trace: marked used=1 for recent injection of {slug}[/dim]")
 
 
 @wiki_app.command("export")
