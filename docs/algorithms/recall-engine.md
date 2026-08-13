@@ -81,6 +81,36 @@ Anthropic 的上下文感知检索在索引期调 LLM 给每个文本块补“�
 
 换来的好处：可解释（`--explain` 逐项分数）、零 AI 依赖、本地小-中知识库（百到千页）够用。代价：无语义召回（跨表述差）、无 IDF / 长度归一化。语义召回需 embedding，暂不做。
 
+## 对比 nowledge 搜索架构
+
+[Nowledge Mem](https://docs.nowledge.app) 的搜索综合 5 类语义信号 + 衰减置信度时间评分。对照 OKS：
+
+| nowledge 信号 | OKS 对应 | 取舍 |
+|--------------|---------|------|
+| 按含义搜索（embedding 语义相似度）| — | ❌ 不做——P4 不调 AI，无向量索引 |
+| BM25 关键词排序 | token overlap ×0.3（无权计数） | ❌ 简化——无倒排索引 + IDF |
+| 标签匹配 | frontmatter `tags` 参与 token overlap + 子串 | ✅ 有——人工 / Agent 维护 |
+| 图遍历（实体 / 主题社区） | `topic_trace`（discuss trace 关联对话） | ⚠️ 弱关联——无实体图 / 社区检测 |
+| 时效性（半衰期 30 天） | `e^(-λ × days_old)`，类型 λ 差异 | ✅ 有——concept=0, strategy=0.014 |
+| 频率（对数缩放） | `ln(1 + access_count)` | ✅ 有——收益递减 |
+| 重要性底线 | `importance` + `pin_bonus` | ✅ 有——高重要性不衰减 |
+| 置信度（只增不减 ~5%） | `confidence`（指纹命中 +0.1） | ⚠️ 更保守——只随内容证据，不随使用 |
+| 时间匹配（事件 vs 记录时间） | — | ❌ 不做——无事件时间字段 |
+
+**OKS 学了**：多信号融合 + 衰减（时效性 / 频率 / 重要性底线）+ 可解释（`--explain` 逐项分数 ≈ nowledge 分数分解）+ 双层架构（wiki 概览 + raw 细节 ≈ 结构化概览 + 按需细节）。
+
+**OKS 不学 + 为什么**：
+
+- **embedding / BM25 / 图遍历**——P4 不调 AI + 文件系统范式（无向量库 / 倒排索引 / 实体图）。token overlap 是无 embedding 的折中。
+- **反馈循环（展示 / 点击 / 停留）**——OKS 是 CLI 无 UI 跟踪；`access_count` 只记 `oks wiki use`（真被用上），不记被搜过几次。防自我强化（P9）：被读多说明相关不说明正确。
+- **搜索强化（v0.6.6 展示算轻度访问）**——OKS 反向选择：召回不算使用，`access_count` 只在 `oks wiki use` 时 +1。代价是记忆热度更新慢，换防自我强化回路。
+- **时间意图检测 / 深度模式 LLM 分析 / 自动标签**——都要 LLM 调用，P4 不调 AI。OKS 只有“快速模式”（单次词项 + 子串 + 图谱评分），无“深度模式”（查询扩展 + 时间意图）。
+
+**nowledge 的好概念（未来方向 / 对比）**：
+
+- **时间理解**（事件时间 vs 记录时间）——raw 的 `created` 是记录时间；事件时间要 frontmatter 加 `event_time` 字段，需 Agent 提取（P4 边界）。
+- **置信度只增不减**——OKS `confidence` 已有，但只在“同一份知识被独立重新推导”时 +0.1，不随使用增长——比 nowledge 更严格（nowledge ~5% 随展示 / 点击 / 图连接增长）。
+
 ## 指标
 
 当前无标注数据集做召回率/精确率量化（已知阻塞）。能给的"指标"是可解释输出——`oks recall "<q>" --explain` 给每个 hit 的逐项分数 + reasons + goal_matches + rank。
