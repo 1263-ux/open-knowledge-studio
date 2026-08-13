@@ -257,6 +257,20 @@ feedback 进**分析**不进**评分**——confidence 只在指纹命中 +0.1�
 `oks metrics --html` 会从注入和反馈记录生成本地报告；报告中的 floor 与 cooldown
 建议是观察结果，不会自动修改配置或 Recall 权重。
 
+## PostToolUse 文件冲突检测
+
+`post-tool-edit.py`（PostToolUse hook）检测多 Agent 协同编辑冲突：
+
+1. 读 stdin JSON payload（`tool_name` + `tool_input.file_path` + `session_id` + `cwd`）
+2. 只 watch Edit/Write/MultiEdit（不 watch read/search）
+3. 写 `records/file-edits.jsonl`（agent_id + file + ts，git 共享）
+4. 查该文件最近 `OKS_CONFLICT_WINDOW`（默认 300s = 5 分钟）内是否有其他 Agent 编辑过
+5. 冲突 → 写 `mail/inbox/`（type=conflict, priority=urgent, action=review）给当前 Agent
+
+`oks hook install` 同时 wire UserPromptSubmit（recall）+ PostToolUse（冲突检测）到 settings.json，幂等。
+
+可调：`OKS_CONFLICT_WINDOW`（300s）、`OKS_AGENT_ID`（默认 cwd basename）。
+
 ## 可调参数（env）
 
 | env | 默认 | 作用 |

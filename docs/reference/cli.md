@@ -21,7 +21,7 @@ parent: 参考
 | `oks drafts list/promote/reject` | draft 候选审核 |
 | `oks distill [--dry-run]` | 衰减 + 演化（dreaming 后半） |
 | `oks capability list/install/status/guide` | 能力注册与选择指导 |
-| `oks hook install/status` | opt-in 自动 recall 注入 |
+| `oks hook install/status` | opt-in 自动 recall + 文件冲突检测注入 |
 | `oks trace *` | 执行追踪（provenance） |
 | `oks mail send/inbox/read/count` | Agent 间消息接口；不属于 `oks recall` 结果 |
 | `oks registry list/bind/remove` | 终端注册表（agent+cwd → profile/goal） |
@@ -31,6 +31,17 @@ parent: 参考
 | `oks eval recall <dataset>` | 召回离线评测 |
 
 完整命令：`oks --help`。
+
+### hook 可调参数（env）
+
+| env | 默认 | 用途 |
+|-----|------|------|
+| `OKS_RECALL_FLOOR` | 0.7 | 最小 relevance 才注入 |
+| `OKS_RECALL_TOPN` | 3 | 最多注入条数 |
+| `OKS_RECALL_COOLDOWN` | 10 | 同 slug 重注入间隔（轮）|
+| `OKS_MAIL_TOPN` | 3 | 最多注入未读 mail |
+| `OKS_CONFLICT_WINDOW` | 300 | 文件冲突检测窗口（秒）|
+| `OKS_AGENT_ID` | cwd basename | Agent 身份（registry key）|
 
 Registry、Mail 和 `records/*.jsonl` 使用独立的运行路径，不由 `oks recall` 返回。
 `records/inject.jsonl` 记录哪些页面被注入，`oks wiki use` 可标记其是否被实际采用；
