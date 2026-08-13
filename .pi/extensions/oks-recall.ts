@@ -49,7 +49,12 @@ export default function (pi: ExtensionAPI) {
     const sessionId =
       ctxAny.sessionManager?.getSessionId?.() ?? "pi-default";
 
-    const payload = JSON.stringify({ prompt, session_id: sessionId });
+    const payload = JSON.stringify({
+      prompt,
+      session_id: sessionId,
+      cwd: process.cwd(),
+      agent_id: process.env.OKS_AGENT_ID ?? "",
+    });
 
     try {
       const out = execFileSync("python3", [script], {

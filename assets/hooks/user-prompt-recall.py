@@ -1,24 +1,36 @@
 #!/usr/bin/env python3
 """UserPromptSubmit hook — auto-recall memory + goals + mail, inject as context.
 
-Reads the editor's UserPromptSubmit JSON payload on stdin (Claude Code and Qoder
-share the same `.prompt` contract), runs the OKS recall engine against the user's
-prompt, reads active goals + unread mail, and prints a structured
-<recalled-memory> block on stdout (which the editor adds to the model's context).
-Fails open: any error or empty result prints nothing and exits 0, so it never
-blocks a prompt.
+Reads the editor's JSON payload on stdin (Claude Code / Qoder / pi extension pass
+{ prompt, session_id, cwd? }). Runs the OKS recall engine, reads active goals +
+unread mail, prints a structured <recalled-memory> block on stdout.
+
+Agent identity: env OKS_AGENT_ID > payload agent_id > cwd basename > "unknown".
+Terminal registry (profiles/agents/registry.jsonl, git-shared): binds agent+cwd
+to profile/goal. New terminal with no registry entry + no active goals → inject
+first-run guide prompting AI to ask the user (→ /assess builds profile/goal,
+writes registry). Subsequent prompts use active goals or registry goals.
+
+Inject trace (records/inject.jsonl, git-shared): appends what was injected
+(session/turn/agent/cwd/slugs/rels) as a training signal. sqlite (local, fast)
+added in Phase 2b.
+
+Fails open: any error or empty result prints nothing and exits 0.
 
 Tunables via env:
+  OKS_AGENT_ID         agent identity (default: cwd basename)
   OKS_RECALL_FLOOR     min knowledge relevance to inject (default 0.7)
   OKS_RECALL_TOPN      max knowledge memories injected (default 3)
   OKS_RECALL_MINLEN    skip prompts shorter than this many chars (default 6)
   OKS_RECALL_COOLDOWN  turns before the same slug may be re-injected (default 10)
   OKS_MAIL_TOPN        max unread mail injected (default 3)
 """
+import hashlib
 import json
 import os
 import re
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 _TRIVIAL = {
@@ -36,7 +48,6 @@ def _load_payload() -> dict:
 
 
 def _kb_root() -> Path | None:
-    """Locate the knowledge base root: OKS_ROOT -> config -> cwd."""
     env = os.environ.get("OKS_ROOT")
     if env and Path(env).is_dir():
         return Path(env)
@@ -51,7 +62,6 @@ def _kb_root() -> Path | None:
 
 
 def _state_path(session_id: str, kb_root: Path) -> Path:
-    """Persist cooldown state inside the KB (.oks/) so it survives restarts."""
     safe = re.sub(r"[^A-Za-z0-9_-]", "_", session_id)[:80] or "default"
     state_dir = kb_root / ".oks"
     state_dir.mkdir(parents=True, exist_ok=True)
@@ -72,7 +82,7 @@ def _save_state(path: Path, state: dict) -> None:
     try:
         path.write_text(json.dumps(state), encoding="utf-8")
     except Exception:
-        pass  # state is best-effort; dedup degrades gracefully
+        pass
 
 
 def _load_active_goals(kb_root: Path) -> list:
@@ -106,8 +116,83 @@ def _load_active_goals(kb_root: Path) -> list:
     return goals
 
 
+# ── Terminal registry (profiles/agents/registry.jsonl, git-shared) ──
+
+def _agent_id(payload: dict, cwd: str) -> str:
+    """Agent identity: env OKS_AGENT_ID > payload agent_id > cwd basename."""
+    aid = os.environ.get("OKS_AGENT_ID", "").strip()
+    if aid:
+        return aid
+    aid = str(payload.get("agent_id", "") or "").strip()
+    if aid:
+        return aid
+    if cwd:
+        name = Path(cwd).name
+        if name:
+            return name
+    return "unknown"
+
+
+def _registry_path(kb_root: Path) -> Path:
+    d = kb_root / "profiles" / "agents"
+    d.mkdir(parents=True, exist_ok=True)
+    return d / "registry.jsonl"
+
+
+def _find_registry_entry(kb_root: Path, agent_id: str, cwd: str) -> dict | None:
+    """Find registry entry matching agent_id + cwd (terminal identity)."""
+    path = _registry_path(kb_root)
+    if not path.is_file():
+        return None
+    try:
+        for line in path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rec = json.loads(line)
+                if rec.get("agent_id") == agent_id and rec.get("cwd") == cwd:
+                    return rec
+            except Exception:
+                continue
+    except Exception:
+        pass
+    return None
+
+
+def _touch_registry_last_active(kb_root: Path, agent_id: str, cwd: str) -> None:
+    """Update last_active timestamp for existing entry (best-effort, no create)."""
+    path = _registry_path(kb_root)
+    if not path.is_file():
+        return
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+        ts = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        out = []
+        changed = False
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rec = json.loads(line)
+                if rec.get("agent_id") == agent_id and rec.get("cwd") == cwd:
+                    rec["last_active"] = ts
+                    changed = True
+                    out.append(json.dumps(rec, ensure_ascii=False))
+                else:
+                    out.append(line)
+            except Exception:
+                out.append(line)
+        if changed:
+            path.write_text("\n".join(out) + "\n", encoding="utf-8")
+    except Exception:
+        pass
+
+
+# ── Mail ──
+
 def _load_unread_mail(kb_root: Path, limit: int = 3) -> list:
-    """Read mail/inbox/*.md with read: false, newest first."""
     inbox = kb_root / "mail" / "inbox"
     if not inbox.is_dir():
         return []
@@ -147,6 +232,35 @@ def _mark_mail_read(path: Path) -> None:
         pass
 
 
+# ── Inject trace (records/inject.jsonl, git-shared training signal) ──
+
+def _inject_trace_path(kb_root: Path) -> Path:
+    d = kb_root / "records"
+    d.mkdir(parents=True, exist_ok=True)
+    return d / "inject.jsonl"
+
+
+def _write_inject_trace(kb_root: Path, session_id: str, turn: int,
+                        agent_id: str, cwd: str, prompt: str,
+                        slugs: list, rels: list) -> None:
+    path = _inject_trace_path(kb_root)
+    rec = {
+        "session_id": session_id,
+        "turn": turn,
+        "agent_id": agent_id,
+        "cwd": cwd,
+        "prompt_hash": hashlib.sha256(prompt.encode()).hexdigest()[:12],
+        "slugs": slugs,
+        "rels": rels,
+        "injected_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+    }
+    try:
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+    except Exception:
+        pass
+
+
 def main() -> int:
     payload = _load_payload()
     prompt = str(payload.get("prompt", "") or "").strip()
@@ -159,19 +273,26 @@ def main() -> int:
 
     kb_root = _kb_root()
     if kb_root is None:
-        return 0  # no KB to recall from — fail open
+        return 0
 
     session_id = str(payload.get("session_id", "") or "")
+    cwd = str(payload.get("cwd", "") or "") or str(os.getcwd())
+    agent_id = _agent_id(payload, cwd)
+
     state_file = _state_path(session_id, kb_root)
     state = _load_state(state_file)
     is_first_turn = state.get("n", 0) == 0
 
-    # ── Knowledge section (6+1 recall + cooldown) — compute first so we
-    # know whether the query is on-scope for any active goal ──
+    # ── Terminal registry lookup (agent_id + cwd) ──
+    reg_entry = _find_registry_entry(kb_root, agent_id, cwd)
+    goals_all = _load_active_goals(kb_root)
+    has_goals = len(goals_all) > 0
+
+    # ── Knowledge section (6+1 recall + cooldown) ──
     try:
         from knowledge_studio.recall import recall
     except Exception:
-        recall = None  # engine unavailable — still show goals + mail
+        recall = None
 
     picked: list = []
     goal_relevant = False
@@ -185,7 +306,6 @@ def main() -> int:
         turn = state["n"]
 
         try:
-            # over-fetch to leave room for cooldown skips (补位)
             hits = recall(query=prompt, limit=max(topn * 3, 10)).get("knowledge", [])
         except Exception:
             hits = []
@@ -206,7 +326,6 @@ def main() -> int:
                 slug = str(h.get("slug", "")).strip()
                 if slug:
                     state["seen"][slug] = turn
-            # goal 相关性：picked 有 goal boost 说明 query 与 goal 相关
             for h in picked:
                 c = h.get("score_components", {})
                 if c.get("goal_area", 0) > 0 or c.get("goal_keyword", 0) > 0:
@@ -218,7 +337,7 @@ def main() -> int:
     # 避免 cooldown 补位到非 goal 域页时漏判）
     if not goal_relevant:
         prompt_lower = prompt.lower()
-        for g in _load_active_goals(kb_root):
+        for g in goals_all:
             for kw in g.get("keywords", []):
                 if kw.lower() in prompt_lower:
                     goal_relevant = True
@@ -226,22 +345,31 @@ def main() -> int:
             if goal_relevant:
                 break
 
-    # ── Build sections in order: goal -> knowledge -> mail ──
+    # ── Build sections ──
     sections = []
 
-    # Goal section: 首次提醒 (新 session) or 按需 (query 与 goal 相关才注入)
-    # 不相关时不占上下文
-    if is_first_turn or goal_relevant:
-        goals = _load_active_goals(kb_root)
-        if goals:
+    # 首次引导：新终端（registry 无记录）+ 首次 turn + 无 active goals
+    # → 植入询问引导，让 AI 反问人类建档
+    show_first_run = is_first_turn and not reg_entry and not has_goals
+    if show_first_run:
+        sections.append(
+            "## 首次使用（新终端）\n"
+            "注册表无此终端的 profile/goal 信息，且知识库无 active goal。\n"
+            "建议反问用户确认：当前目标 / 技术栈 / 项目。\n"
+            "确认后调 /assess 建档，后续 hook 从注册表快速检索。"
+        )
+
+    # Goal section: 首次提醒 or 按需（非首次引导时）
+    if not show_first_run and (is_first_turn or goal_relevant):
+        if goals_all:
             lines = ["## 当前目标"]
             if is_first_turn and not goal_relevant:
                 lines.append("(首次提醒 — 之后只在 query 与 goal 相关时注入)")
-            for g in goals:
+            for g in goals_all:
                 lines.append(f"[goal] {g['title']} ({g['slug']})")
             sections.append("\n".join(lines))
 
-    # Knowledge section
+    # Knowledge section（总是，不管是否引导）
     if picked:
         lines = [
             "## 相关记忆",
@@ -258,7 +386,7 @@ def main() -> int:
                 lines.append(f"    {preview}")
         sections.append("\n".join(lines))
 
-    # ── Mail section (unread, mark as read after inject) ──
+    # Mail section
     mail_topn = int(os.environ.get("OKS_MAIL_TOPN", "3"))
     mails = _load_unread_mail(kb_root, limit=mail_topn)
     if mails:
@@ -270,6 +398,18 @@ def main() -> int:
         sections.append("\n".join(lines))
         for m in mails:
             _mark_mail_read(m["path"])
+
+    # 更新 registry last_active（best-effort）
+    if reg_entry:
+        _touch_registry_last_active(kb_root, agent_id, cwd)
+
+    # 写 inject 埋点 jsonl（git 共享训练信号）
+    if picked:
+        _write_inject_trace(
+            kb_root, session_id, state.get("n", 0), agent_id, cwd, prompt,
+            [str(h.get("slug", "")).strip() for h in picked],
+            [round(float(h.get("relevance", 0)), 2) for h in picked],
+        )
 
     if not sections:
         return 0

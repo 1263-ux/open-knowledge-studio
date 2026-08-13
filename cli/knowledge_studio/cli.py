@@ -103,6 +103,7 @@ drafts_app = typer.Typer(help="Draft proposal management.")
 config_app = typer.Typer(help="Global configuration (~/.oks/config.json).")
 hook_app = typer.Typer(help="Optional editor hooks (opt-in auto-recall injection).")
 mail_app = typer.Typer(help="Agent-to-agent mail (inbox/sent).")
+registry_app = typer.Typer(help="Terminal registry (agent+cwd -> profile/goal).")
 eval_app = typer.Typer(help="Offline recall evaluation and run comparison.")
 trace_app = typer.Typer(help="Append-only execution traces and feedback.")
 
@@ -137,6 +138,7 @@ app.add_typer(drafts_app, name="drafts")
 app.add_typer(config_app, name="config")
 app.add_typer(hook_app, name="hook")
 app.add_typer(mail_app, name="mail")
+app.add_typer(registry_app, name="registry")
 app.add_typer(eval_app, name="eval")
 app.add_typer(trace_app, name="trace")
 
@@ -1743,6 +1745,126 @@ def mail_count() -> None:
         except Exception:
             continue
     print(n)
+
+
+@registry_app.command("list")
+def registry_list() -> None:
+    """List terminal registry entries (agent+cwd -> profile/goal)."""
+    import json
+    root = _instance_root(None)
+    path = root / "profiles" / "agents" / "registry.jsonl"
+    if not path.is_file():
+        console.print("[dim]No registry entries.[/dim]")
+        return
+    entries = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            entries.append(json.loads(line))
+        except Exception:
+            continue
+    if not entries:
+        console.print("[dim]No registry entries.[/dim]")
+        return
+    console.print(f"[bold]Terminal registry ({len(entries)} entries):[/bold]")
+    for e in entries:
+        agent = e.get("agent_id", "?")
+        cwd = e.get("cwd", "?")
+        profile = e.get("profile_slug", "-")
+        goals = ", ".join(e.get("goal_slugs", [])) or "-"
+        last = str(e.get("last_active", "?"))[:19]
+        console.print(
+            f"  [cyan]{agent}[/cyan] @ [dim]{cwd}[/dim]\n"
+            f"    profile: {profile}  goals: {goals}  last: {last}"
+        )
+
+
+@registry_app.command("bind")
+def registry_bind(
+    agent_id: str = typer.Option(..., "--agent-id", help="Agent identity"),
+    cwd: str = typer.Option(..., "--cwd", help="Terminal working directory"),
+    profile: str = typer.Option("", "--profile", help="Profile slug (profiles/users/)"),
+    goals: str = typer.Option("", "--goals", help="Comma-separated goal slugs"),
+) -> None:
+    """Bind an agent+cwd to a profile + goals (creates or updates entry)."""
+    import json
+    from datetime import datetime, timezone
+    root = _instance_root(None)
+    path = root / "profiles" / "agents" / "registry.jsonl"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lines = []
+    found = False
+    ts = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    if path.is_file():
+        for line in path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rec = json.loads(line)
+                if rec.get("agent_id") == agent_id and rec.get("cwd") == cwd:
+                    if profile:
+                        rec["profile_slug"] = profile
+                    if goals:
+                        rec["goal_slugs"] = [g.strip() for g in goals.split(",") if g.strip()]
+                    rec["last_active"] = ts
+                    found = True
+                    lines.append(json.dumps(rec, ensure_ascii=False))
+                else:
+                    lines.append(line)
+            except Exception:
+                lines.append(line)
+    if not found:
+        rec = {
+            "agent_id": agent_id,
+            "cwd": cwd,
+            "profile_slug": profile,
+            "goal_slugs": [g.strip() for g in goals.split(",") if g.strip()],
+            "first_seen": ts,
+            "last_active": ts,
+            "status": "active",
+        }
+        lines.append(json.dumps(rec, ensure_ascii=False))
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    console.print(
+        f"[green]Bound[/green] {agent_id} @ {cwd}\n"
+        f"  profile: {profile or '-'}  goals: {goals or '-'}"
+    )
+
+
+@registry_app.command("remove")
+def registry_remove(
+    agent_id: str = typer.Option(..., "--agent-id", help="Agent identity"),
+    cwd: str = typer.Option(..., "--cwd", help="Terminal working directory"),
+) -> None:
+    """Remove a registry entry."""
+    import json
+    root = _instance_root(None)
+    path = root / "profiles" / "agents" / "registry.jsonl"
+    if not path.is_file():
+        console.print("[dim]No registry.[/dim]")
+        return
+    lines = []
+    removed = False
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            rec = json.loads(line)
+            if rec.get("agent_id") == agent_id and rec.get("cwd") == cwd:
+                removed = True
+                continue
+            lines.append(line)
+        except Exception:
+            lines.append(line)
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    if removed:
+        console.print(f"[green]Removed[/green] {agent_id} @ {cwd}")
+    else:
+        console.print(f"[yellow]Not found[/yellow] {agent_id} @ {cwd}")
 
 
 def _ensure_recall_scripts(root: Path) -> list[str]:
