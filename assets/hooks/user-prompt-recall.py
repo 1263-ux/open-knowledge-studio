@@ -416,6 +416,16 @@ def main() -> int:
 
     out = ['<recalled-memory source="oks">']
     out.extend(sections)
+    # 自评闭环：AI 用完后自评，对实际引用的记忆调 oks wiki use，无需人类手动
+    if picked:
+        out.append("")
+        out.append(
+            "[自评闭环] 埋点由你（AI）代填（人类懒惰不手动）：\n"
+            "1. 你实际引用了的记忆 → 调 `oks wiki use <slug>`（标 used + access_count++）\n"
+            "2. 观察用户后续回复——用户接受/引用了某条 → 代调 `oks wiki use <slug>`；"
+            "用户明确拒绝（\"不要\"/\"错了\"）→ 不调（默认未采纳）\n"
+            "无用忽略——下次 cooldown 换别的。信号都在对话里，你代人类完成。"
+        )
     out.append("</recalled-memory>")
     sys.stdout.write("\n".join(out) + "\n")
     return 0

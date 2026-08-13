@@ -210,15 +210,25 @@ hook 注入时写两个 jsonl（git 共享，跨机器训练信号）：
 {"run_id":"test-run","outcome":"accepted","comment":"...","recorded_at":"..."}
 ```
 
-### 接受信号：oks wiki use
+### 接受信号：AI 自评闭环（无需人类手动）
 
-`oks wiki use <slug>` 标 inject.jsonl 该 slug 最近注入为 `used=1`：
+hook 注入块末尾带自评提示：
+
+```
+[自评闭环] 用完后，对实际引用了的记忆调 `oks wiki use <slug>`（标 used + access_count++）。无用忽略。无需人类手动。
+```
+
+AI 用完注入后自评——**实际引用了**的记忆调 `oks wiki use <slug>`，标 inject.jsonl 该 slug 为 `used=1` + `used_at`：
 
 ```json
 {"...","used":true,"used_at":"..."}
 ```
 
-训练信号闭环：注入（inject.jsonl）→ 采纳（wiki use 标 used）→ 人审（trace-feedback.jsonl）。
+- **AI 判断标准**：只在回答中实际引用了 slug/内容时调 wiki use（避免"礼貌性"全标）
+- **无用忽略**：下次 cooldown 换别的，自然淘汰
+- **人类不手动**：闭环自主，`oks wiki use` 由 AI 调
+
+训练信号闭环：注入（inject.jsonl）→ AI 自评采纳（wiki use 标 used）→ 人审（trace-feedback.jsonl，可选）。
 
 ### P9 边界
 
