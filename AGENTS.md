@@ -6,7 +6,7 @@
 
 Open Knowledge Studio is a file-based knowledge base system designed for use with Claude Code. It provides:
 
-- **4 cognitive buckets + 2 infrastructure layers**: profiles/, raw/, wiki/, drafts/ (cognitive), settings/ (config), _meta/ (schema)
+- **5 cognitive buckets + 2 infrastructure layers**: profiles/, raw/, wiki/, drafts/, mail/ (cognitive), settings/ (config), _meta/ (schema)
 - **Agent-Native ingestion pipeline**: Source → Provider → EvidenceFragment → EvidenceManifest → `oks raw-commit` → Raw Bundle v0.2 → Candidate → Human Review → Wiki
 - **6+1-factor recall engine**: token overlap + substring + topic trace + type boost + review bonus (failure lessons rank higher) + memory curve + optional goal boost (active goals lift on-scope pages; no-op without goals)
 - **16 Providers** across 4 execution tiers: agent_native (2), managed (8), external (4), human (1), blocked/experimental (2)
@@ -73,8 +73,9 @@ open-knowledge-studio/
 ├── raw/              # ② Raw materials — date-based: {YYYY}/{MM}/{DD}/{source}/
 ├── wiki/             # ③ Curated knowledge — 22 domains × 3 types
 ├── drafts/           # ④ Dreaming candidates
-├── settings/         # ⑤ Config layer — decay, tool registry, input sources
-├── _meta/            # ⑥ Schema layer — raw evidence, recall case, trace event
+├── mail/              # ⑤ Agent communication — inbox/ + sent/
+├── settings/         # ⑥ Config layer — decay, tool registry, input sources
+├── _meta/            # ⑦ Schema layer — raw evidence, recall case, trace event
 ├── templates/        # concept, strategy, anti-pattern, draft
 ├── capabilities/     # Capability action catalog (actions.yaml)
 ├── recipes/          # Modality recipes (text, pdf, office, image, web, audio, video)

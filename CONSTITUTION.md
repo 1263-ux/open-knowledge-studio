@@ -172,7 +172,7 @@ existed.
 
 ## Architecture Invariants
 
-### A1: Four cognitive buckets + two infrastructure layers
+### A1: Five cognitive buckets + two infrastructure layers
 
 The knowledge repo separates **four cognitive buckets** — content the agent
 observes, writes, recalls, and forgets — from **two infrastructure layers**
@@ -185,6 +185,7 @@ as knowledge. Config and schema do not decay and are not recalled by relevance.
 | Cognitive | `raw/` | Original records, date-based by source | None | Keyword + freshness (rglob any structure) |
 | Cognitive | `wiki/` | Curated knowledge (from raw via Dreaming) | Type-specific λ | 6+1-factor relevance + curve |
 | Cognitive | `drafts/` | Dreaming candidates (raw → wiki intermediate) | None | N/A (human review) |
+| Cognitive | `mail/` | Agent-to-agent messages + file-conflict notices | None | Unread inbox (injected on prompt) |
 | Config | `settings/` | Runtime knobs: input-sources.json, raw-tools | None | Direct read |
 | Schema | `_meta/` | Data-shape contracts: raw-evidence-schema | None | Applied on read |
 
@@ -219,9 +220,12 @@ open-knowledge-studio/
 ├── drafts/                       # ④ Dreaming candidates
 │   ├── {slug}.md
 │   └── rejected/{ts}-{slug}.json # Review receipts — a human "no" is a decision
-├── settings/                     # ⑤ Config layer
+├── mail/                         # ⑤ Agent communication
+│   ├── inbox/{ts}-{from}.md     # Unread messages (@all broadcast or @agent-id)
+│   └── sent/{agent-id}/{ts}.md # Outbox archive per agent
+├── settings/                     # ⑥ Config layer
 │   ├── input-sources.json        # Scheduled intake sources
-└── _meta/                        # ⑥ Schema layer
+└── _meta/                        # ⑦ Schema layer
     └── raw-evidence-schema.md    # raw/ evidence shape contract
 ```
 

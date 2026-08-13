@@ -102,6 +102,7 @@ wiki_app = typer.Typer(help="Wiki page management.")
 drafts_app = typer.Typer(help="Draft proposal management.")
 config_app = typer.Typer(help="Global configuration (~/.oks/config.json).")
 hook_app = typer.Typer(help="Optional editor hooks (opt-in auto-recall injection).")
+mail_app = typer.Typer(help="Agent-to-agent mail (inbox/sent).")
 eval_app = typer.Typer(help="Offline recall evaluation and run comparison.")
 trace_app = typer.Typer(help="Append-only execution traces and feedback.")
 
@@ -135,6 +136,7 @@ app.add_typer(wiki_app, name="wiki")
 app.add_typer(drafts_app, name="drafts")
 app.add_typer(config_app, name="config")
 app.add_typer(hook_app, name="hook")
+app.add_typer(mail_app, name="mail")
 app.add_typer(eval_app, name="eval")
 app.add_typer(trace_app, name="trace")
 
@@ -1347,6 +1349,8 @@ _INSTANCE_DIRS = [
     "raw",
     "wiki",
     "drafts",
+    "mail/inbox",
+    "mail/sent",
 ]
 
 _INSTANCE_GITIGNORE = """\
@@ -1636,6 +1640,109 @@ def _instance_root(path: str | None) -> Path:
         return Path(path).expanduser().resolve()
     from knowledge_studio.config import get_kb_root
     return get_kb_root()
+
+
+@mail_app.command("send")
+def mail_send(
+    body: str = typer.Option(..., "--body", "-b", help="Mail body text"),
+    to: str = typer.Option("@all", "--to", help="Recipient (@all or @agent-id)"),
+    type: str = typer.Option("message", "--type", help="message | conflict | handoff"),
+    title: str = typer.Option("", "--title", "-t", help="Mail title"),
+    priority: str = typer.Option("normal", "--priority", help="normal | urgent"),
+) -> None:
+    """Send a mail to inbox/ (Agent-to-agent communication)."""
+    from datetime import datetime
+    import os as _os
+    root = _instance_root(None)
+    inbox = root / "mail" / "inbox"
+    inbox.mkdir(parents=True, exist_ok=True)
+    now = datetime.now()
+    ts = now.strftime("%Y%m%dT%H%M%S")
+    from_id = _os.environ.get("OKS_AGENT_ID", "human")
+    to_field = to if to.startswith("@") else f"@{to}"
+    title_line = title or "(no title)"
+    content = (
+        "---\n"
+        f"from: {from_id}\n"
+        f"to: {to_field}\n"
+        f"timestamp: {now.isoformat()}\n"
+        "read: false\n"
+        f"type: {type}\n"
+        f"priority: {priority}\n"
+        "action: none\n"
+        "---\n\n"
+        f"# {title_line}\n\n"
+        f"{body}\n"
+    )
+    slug = f"{ts}-{from_id}"
+    (inbox / f"{slug}.md").write_text(content, encoding="utf-8")
+    console.print(f"[green]Sent mail:[/green] {slug} -> {to_field}")
+
+
+@mail_app.command("inbox")
+def mail_inbox() -> None:
+    """List unread mail."""
+    root = _instance_root(None)
+    inbox = root / "mail" / "inbox"
+    if not inbox.is_dir():
+        console.print("[dim]No mail inbox.[/dim]")
+        return
+    unread = []
+    for f in sorted(inbox.glob("*.md")):
+        try:
+            text = f.read_text(encoding="utf-8")
+            parts = text.split("---")
+            if len(parts) >= 2 and "read: false" in parts[1]:
+                title = ""
+                for line in parts[2].split("\n"):
+                    if line.startswith("# "):
+                        title = line[2:].strip()
+                        break
+                unread.append((f.stem, title))
+        except Exception:
+            continue
+    if not unread:
+        console.print("[dim]No unread mail.[/dim]")
+        return
+    console.print(f"[bold]Unread mail ({len(unread)}):[/bold]")
+    for slug, title in unread:
+        console.print(f"  - [cyan]{slug}[/cyan]  {title}")
+
+
+@mail_app.command("read")
+def mail_read(
+    id: str = typer.Argument(..., help="Mail slug (timestamp-from)"),
+) -> None:
+    """Mark a mail as read."""
+    root = _instance_root(None)
+    f = root / "mail" / "inbox" / f"{id}.md"
+    if not f.exists():
+        console.print(f"[red]Mail not found:[/red] {id}")
+        raise typer.Exit(1)
+    content = f.read_text(encoding="utf-8")
+    content = content.replace("read: false", "read: true", 1)
+    f.write_text(content, encoding="utf-8")
+    console.print(f"[green]Marked read:[/green] {id}")
+
+
+@mail_app.command("count")
+def mail_count() -> None:
+    """Count unread mail (for hook use; prints number to stdout)."""
+    root = _instance_root(None)
+    inbox = root / "mail" / "inbox"
+    if not inbox.is_dir():
+        print("0")
+        return
+    n = 0
+    for f in inbox.glob("*.md"):
+        try:
+            text = f.read_text(encoding="utf-8")
+            parts = text.split("---")
+            if len(parts) >= 2 and "read: false" in parts[1]:
+                n += 1
+        except Exception:
+            continue
+    print(n)
 
 
 def _ensure_recall_scripts(root: Path) -> list[str]:
