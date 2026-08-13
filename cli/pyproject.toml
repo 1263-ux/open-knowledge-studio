@@ -31,6 +31,7 @@ dependencies = [
     "gitpython>=3",
     "pyyaml>=6",
     "jsonschema>=4.20",
+    "oks-connector>=0.2.0",
 ]
 
 [project.optional-dependencies]
@@ -64,7 +65,7 @@ Documentation = "https://open-agent-power.github.io/open-knowledge-studio/"
 
 [project.scripts]
 oks = "knowledge_studio.cli:app"
-oks-connector = "oks_connector.raw_bundle_adapter:main"
+# oks-connector console script 由 PyPI 包 oks-connector 提供 (>=0.2.0)
 
 [tool.setuptools]
 include-package-data = false
@@ -75,8 +76,6 @@ packages = [
     "knowledge_studio.recipes",
     "knowledge_studio.schemas",
     "knowledge_studio.security",
-    "oks_connector",
-    "oks_connector.extractors",
 ]
 
 [tool.setuptools.package-dir]
@@ -84,7 +83,6 @@ packages = [
 "knowledge_studio.capabilities" = "knowledge_studio/capabilities"
 "knowledge_studio.providers" = "knowledge_studio/providers"
 "knowledge_studio.recipes" = "knowledge_studio/recipes"
-"oks_connector" = "oks_connector"
 "knowledge_studio.security" = "knowledge_studio/security"
 
 [tool.setuptools.package-data]

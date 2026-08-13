@@ -173,12 +173,15 @@ def test_no_direct_url_dependencies_block_pypi_upload():
 
 
 def test_connector_packages_are_declared_for_wheel_builds():
+    """oks_connector is a PyPI dependency (oks-connector>=0.2.0), not vendored."""
     pyproject = Path(__file__).parents[1] / "pyproject.toml"
     config = tomllib.loads(pyproject.read_text(encoding="utf-8"))
     packages = config["tool"]["setuptools"]["packages"]
 
-    assert "oks_connector" in packages
-    assert "oks_connector.extractors" in packages
+    assert "oks_connector" not in packages
+    assert "oks_connector.extractors" not in packages
+    deps = config["project"]["dependencies"]
+    assert any("oks-connector" in d for d in deps), "oks-connector must be a declared dependency"
 
 
 def test_wheel_never_installs_generic_top_level_names():
@@ -191,7 +194,7 @@ def test_wheel_never_installs_generic_top_level_names():
     installed_tops |= {
         name.split(".")[0] for name in setuptools_config.get("py-modules", [])
     }
-    assert installed_tops == {"knowledge_studio", "oks_connector"}
+    assert installed_tops == {"knowledge_studio"}
     for reserved in ("i18n", "constants", "digest", "network", "route", "validator"):
         assert reserved not in installed_tops
 def _command_children() -> dict[str, set[str]]:

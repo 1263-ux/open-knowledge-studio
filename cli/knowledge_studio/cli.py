@@ -32,27 +32,12 @@ from knowledge_studio.recall import (
     recall_knowledge,
 )
 
-# ── ingest: connector lives in the oks_connector package once installed,
-# or under ../scripts in a source checkout ───────────────────────────
-_connector_available = False
-try:
-    from oks_connector.raw_bundle_adapter import (
-        build_parser as _connector_parser,
-        run_ingest as _connector_run_ingest,
-    )
-    _connector_available = True
-except ImportError:
-    _SCRIPTS = Path(__file__).resolve().parent.parent.parent / "scripts"
-    if str(_SCRIPTS) not in sys.path:
-        sys.path.insert(0, str(_SCRIPTS))
-    try:
-        from raw_bundle_adapter import (
-            build_parser as _connector_parser,
-            run_ingest as _connector_run_ingest,
-        )
-        _connector_available = True
-    except ImportError:
-        pass
+# ── ingest: connector is a regular PyPI dependency (oks-connector>=0.2.0) ──
+from oks_connector.raw_bundle_adapter import (
+    build_parser as _connector_parser,
+    run_ingest as _connector_run_ingest,
+)
+_connector_available = True
 
 
 def _configure_utf8_stdio() -> None:
@@ -212,7 +197,7 @@ def capability_list():
 
 def _capability_already_installed(name: str) -> bool:
     """Check whether a capability is available (delegates to shared module)."""
-    from capability_check import is_capability_available
+    from oks_connector.capability_check import is_capability_available
     ok, _ = is_capability_available(name)
     return ok
 
@@ -411,7 +396,7 @@ def _connector_install_hint() -> str:
 
 
 def _connector_command() -> str | None:
-    """Connector is bundled as ``scripts/raw_bundle_adapter`` — no separate binary needed."""
+    """Connector is the PyPI ``oks-connector`` package (>=0.2.0) — no separate binary needed."""
     return "built-in" if _connector_available else None
 
 

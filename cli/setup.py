@@ -1,15 +1,15 @@
-"""Build hook: vendor the instance-template assets and the connector package.
+"""Build hook: vendor the instance-template assets.
 
 `assets/` at the repo root is the single source for everything an instance
 gets: skills, hooks, rules, templates, _meta, settings, per-agent config.
 Maintainer-only tooling lives in the repo's own `.claude/`, outside `assets/` —
 physical separation instead of ignore rules.
 
-Building from a git checkout copies `assets/` into `knowledge_studio/_assets/`
-and `scripts/` into `oks_connector/`, so source installs, sdists and PyPI
-wheels are identical. A `package-dir` pointing at `../scripts` cannot reach
-into an sdist, which is why the connector is vendored here. When building from
-an sdist the repo root is absent and both trees already exist — skip silently.
+Building from a git checkout copies `assets/` into `knowledge_studio/_assets/`,
+so source installs, sdists and PyPI wheels are identical. The connector
+package (`oks_connector`) is a regular PyPI dependency (>=0.2.0), no longer
+vendored from `scripts/`. When building from an sdist the repo root is absent
+and the assets tree already exists — skip silently.
 """
 from __future__ import annotations
 
@@ -20,24 +20,11 @@ from setuptools import setup
 from setuptools.command.build_py import build_py
 from setuptools.command.sdist import sdist
 
-# Test modules would collide with the repo-root copies during collection;
-# caches are build noise.
-_CONNECTOR_IGNORE = shutil.ignore_patterns("test_*.py", "tests", "__pycache__", "*.pyc")
+# Caches are build noise.
 _ASSET_IGNORE = shutil.ignore_patterns("__pycache__", "*.pyc")
 
 def _repo_root() -> Path:
     return Path(__file__).resolve().parent.parent
-
-
-def _vendor_connector() -> None:
-    """Copy ../scripts into cli/oks_connector/ so it reaches sdists and wheels."""
-    source = _repo_root() / "scripts"
-    if not source.is_dir():
-        return
-    dest = Path(__file__).resolve().parent / "oks_connector"
-    if dest.exists():
-        shutil.rmtree(dest)
-    shutil.copytree(source, dest, ignore=_CONNECTOR_IGNORE)
 
 
 def _vendor_assets() -> None:
@@ -72,9 +59,8 @@ def _purge_stale_build_copies(*relative: str) -> None:
 
 def _sync_from_checkout() -> None:
     if (_repo_root() / "assets").is_dir():
-        _purge_stale_build_copies("knowledge_studio/_assets", "oks_connector")
+        _purge_stale_build_copies("knowledge_studio/_assets")
         _vendor_assets()
-        _vendor_connector()
 
 
 class build_py_with_assets(build_py):
