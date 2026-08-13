@@ -31,24 +31,9 @@ has_children: true
 > **详细操作手册**: [Agent-Native Ingest 操作手册](ingest/agent-native-ingest-walkthrough.md) — 从 URL 到 promote 的逐步指南，含常见错误和解决方法。
 > **协议对象说明**: [协议对象关系](ingest/protocol-objects.md) — SourceEnvelope / EvidenceFragment / EvidenceManifest / RawBundle 的层级关系和字段含义。
 
-## 当前架构与进度
+## 架构事实源
 
-v0.4.0 已发布到 PyPI（`pipx install open-knowledge-studio`）。本轮收口内容：
-
-- **单 Wheel 包**: 仅 `knowledge_studio`，`oks_connector` 已移除
-- **17 个 Provider** + 25 个能力动作，其中 10 个含 `user_impact` 人类可读影响元数据（实时清单：`oks capability status --json`）
-- **Raw Bundle v0.2** 严格验证管线（`oks raw-commit`，含 provenance 机械检查 + Fragment ↔ Manifest 一致性校验）
-- **Agent 协议减负**: `ingest prepare` 预填充 evidence 槽位 + 返回 candidate_providers 短名单
-- **6 能力族首屏**: 文本 / 网页 / PDF / 图片 / 音视频 / 平台 — 不暴露 Provider ID
-- **打包单一事实源**（`assets/`，`_AGENT_TARGETS` 清单装配 `.claude` / `.codex` / `.agents`）
-- **Guided Decision UX**: 策略配置（lightweight/quality/privacy/ask_each_time）+ `user_impact` 元数据 + 技能模板中的 Strategy-Aware Ingestion 章节
-- **飞书集成**: 参考实现见 `examples/feishu-loop/`（已从核心迁出为示例）
-- **ASR 语义修正**: `kind=transcript` + `method=asr_transcription` 合法，不再伪装成 subtitle
-- **测试全绿**（三平台 × Python 3.12/3.13 的 CI 为合并门禁，实时数量见仓库 CI）
-
-架构事实源见：
-
-- **[核心架构](architecture/oks-core-architecture.md)** — v0.4.0 当前主事实源
+- **[核心架构](architecture/oks-core-architecture.md)** — 当前主事实源
 
 历史工程记录（v0.3.0 合并后的架构加固、各版本验收证据）保留在仓库
 [`records/archive/`](https://github.com/open-agent-power/open-knowledge-studio/tree/main/records/archive)

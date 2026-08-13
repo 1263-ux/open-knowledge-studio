@@ -973,6 +973,89 @@ def wiki_use(slug: str = typer.Argument(help="Slug of a page that was actually u
     )
 
 
+@wiki_app.command("export")
+def wiki_export(
+    output: Path = typer.Option(Path("wiki-export"), "--output", "-o", help="Output directory"),
+    fmt: str = typer.Option("okf", "--format", "-f", help="okf (open standard) or markdown (Obsidian wikilink)"),
+):
+    """Export wiki/ to a portable knowledge bundle.
+
+    Two flavors (both pure markdown; difference is link + frontmatter style):
+
+    - ``okf``      — Open Knowledge Format: standard markdown links + OKF frontmatter.
+    - ``markdown`` — Obsidian-style ``[[wikilink]]``, original frontmatter kept.
+
+    Snapshot, not two-way sync: edits made outside OKS do not flow back.
+    See CONSTITUTION A4 for the four relationships encoded as links.
+    """
+    import frontmatter
+
+    wd = store.wiki_dir()
+    if not wd.exists():
+        console.print("[yellow]No wiki/ directory — nothing to export.[/yellow]")
+        raise typer.Exit(0)
+    if fmt not in ("okf", "markdown"):
+        console.print(f"[red]Unknown format:[/red] {fmt} (use okf or markdown)")
+        raise typer.Exit(1)
+
+    output = output.resolve()
+    output.mkdir(parents=True, exist_ok=True)
+    by_type: dict[str, list[str]] = {}
+    n = 0
+    for f in sorted(wd.rglob("*.md")):
+        if f.name == "INDEX.md":
+            continue
+        try:
+            post = frontmatter.load(f)
+        except Exception:
+            continue
+        slug = str(post.get("slug") or f.stem)
+        wtype = str(post.get("type", "concept"))
+        relates_to = post.get("relates_to")
+        relationship = post.get("relationship")
+        body = post.content
+        if relates_to:
+            rel = f"{relationship}: {relates_to}" if relationship else f"see also: {relates_to}"
+            if fmt == "markdown":
+                link_line = f"\n\n---\n\n> {rel}\n\n[[{relates_to}]]"
+            else:
+                link_line = f"\n\n---\n\n> {rel}\n\n[{relates_to}](./{relates_to})"
+            body = body.rstrip() + "\n" + link_line + "\n"
+        out_meta = dict(post.metadata)
+        out_meta["type"] = wtype
+        out_meta["concept-id"] = f"{wtype}/{slug}"
+        out_dir = output / wtype
+        out_dir.mkdir(parents=True, exist_ok=True)
+        (out_dir / f"{slug}.md").write_text(
+            frontmatter.dumps(frontmatter.Post(body, **out_meta))
+        )
+        by_type.setdefault(wtype, []).append(slug)
+        n += 1
+    if n == 0:
+        console.print("[yellow]wiki/ is empty — nothing to export.[/yellow]")
+        return
+    # Per-type index.md (OKF reserved file)
+    for wtype, slugs in by_type.items():
+        (output / wtype / "index.md").write_text(
+            f"# {wtype}\n\n" + "\n".join(f"- [{s}](./{s})" for s in slugs) + "\n"
+        )
+    # Top-level index.md + log.md (OKF reserved files)
+    lines = [f"# Exported Wiki ({fmt})", "", f"{n} pages exported from `wiki/`.", ""]
+    for wtype, slugs in sorted(by_type.items()):
+        lines.append(f"## {wtype} ({len(slugs)})")
+        lines += [f"- [{s}](./{wtype}/{s})" for s in slugs]
+        lines.append("")
+    (output / "index.md").write_text("\n".join(lines))
+    (output / "log.md").write_text(
+        "# Log\n\nOne-way snapshot export. See the source instance's git history for the full change log.\n"
+    )
+    console.print(
+        f"[green]Exported {n} pages to {output}[/green] [dim](format={fmt}; "
+        + ", ".join(f"{k}={len(v)}" for k, v in sorted(by_type.items()))
+        + ")[/dim]"
+    )
+
+
 # ── Drafts ───────────────────────────────────────────────────────
 
 @drafts_app.command("list")

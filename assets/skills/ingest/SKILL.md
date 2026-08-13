@@ -16,6 +16,30 @@ oks ingest prepare <source>  →  SourceEnvelope + Manifest skeleton
 → AgentObservation → CandidateDraft → drafts/{slug}.md → Report
 ```
 
+## Pre-flight: Search before adding
+
+Before running `oks ingest prepare`, recall the topic to avoid a parallel
+page on something already known:
+
+```bash
+oks recall "<the topic of this source>"
+```
+
+Decide from the results:
+
+| Recall result | Action | Candidate frontmatter |
+|---------------|--------|------------------------|
+| No related wiki page | New page | (leave `relates_to` unset) |
+| Existing page, new content extends it | Extend | `relates_to: <slug>, relationship: enriches` |
+| Existing page, new content supersedes it | Replace | `relates_to: <slug>, relationship: supersedes` |
+| Existing page, new content agrees | Reinforce | `relates_to: <slug>, relationship: confirms` |
+| Existing page, new content contradicts | Flag conflict | `relates_to: <slug>, relationship: challenges` |
+
+A4 relationships are a human-review concern, but the Agent is the one who
+saw both the new source and the existing page — record the relationship in
+the Candidate so `/promote` can apply it. Never write a parallel page on
+the same topic: parallel pages dilute recall.
+
 ## Step 0: Prepare (use the CLI — do NOT hand-craft protocol JSON)
 
 Run `oks ingest prepare <source>` to create the workspace and generate
@@ -400,6 +424,8 @@ On success: bundle_id returned.  On rejection: read error_code, do NOT retry bli
    status: pending
    source_type: agent-ingest
    intake_grade: A
+   relates_to: ""            # slug of existing wiki page this relates to (Pre-flight)
+   relationship: ""         # enriches | supersedes | confirms | challenges (A4); empty for new
    ```
 
    **The field names must be `draft_type` and `draft_area`.** `oks drafts
