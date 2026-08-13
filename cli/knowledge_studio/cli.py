@@ -1796,7 +1796,8 @@ def init(
 # installs wired the relative path below; matching is done by script name
 # so both forms are recognized.
 _RECALL_HOOK_SCRIPT_NAME = "user-prompt-recall.sh"
-_RECALL_HOOK_SCRIPTS = ("user-prompt-recall.py", "user-prompt-recall.sh")
+_RECALL_HOOK_SCRIPTS = ("user-prompt-recall.py", "user-prompt-recall.sh", "post-tool-edit.py", "post-tool-edit.sh")
+_POST_TOOL_SCRIPT_NAME = "post-tool-edit.sh"
 _HOOK_EDITORS = {
     "claude": ".claude/settings.json",
     "qoder": ".qoder/settings.json",
@@ -2168,6 +2169,37 @@ def _wire_userpromptsubmit(settings_path: Path, command: str) -> str:
     return "wired"
 
 
+def _wire_posttooluse(settings_path: Path, command: str) -> str:
+    """Idempotently add a PostToolUse command hook (file conflict detection)."""
+    data: dict = {}
+    if settings_path.exists():
+        try:
+            data = json.loads(settings_path.read_text(encoding="utf-8")) or {}
+        except json.JSONDecodeError as e:
+            raise ValueError(f"{settings_path} is not valid JSON: {e}") from e
+    hooks = data.setdefault("hooks", {})
+    ptu = hooks.setdefault("PostToolUse", [])
+    stale: dict | None = None
+    for group in ptu:
+        for h in group.get("hooks", []):
+            cmd = h.get("command", "")
+            if cmd == command:
+                return "exists"
+            if cmd.endswith(_POST_TOOL_SCRIPT_NAME):
+                stale = h
+    if stale is not None:
+        stale["command"] = command
+    else:
+        ptu.append({"hooks": [{"type": "command", "command": command}]})
+    settings_path.parent.mkdir(parents=True, exist_ok=True)
+    if settings_path.is_file():
+        shutil.copy2(settings_path, settings_path.with_suffix(".json.oks-bak"))
+    store._atomic_write(
+        settings_path, json.dumps(data, indent=2, ensure_ascii=False) + "\n"
+    )
+    return "wired"
+
+
 def _hook_is_wired(settings_path: Path) -> bool:
     if not settings_path.exists():
         return False
@@ -2229,16 +2261,21 @@ def hook_install(
         console.print(f"[green]Installed hook script:[/green] {', '.join(created)}")
 
     hook_cmd = (root / ".claude" / "hooks" / _RECALL_HOOK_SCRIPT_NAME).resolve().as_posix()
+    post_cmd = (root / ".claude" / "hooks" / _POST_TOOL_SCRIPT_NAME).resolve().as_posix()
     editors = ("claude", "qoder") if editor == "both" else (editor,)
     for name in editors:
         settings_path = root / _HOOK_EDITORS[name]
         result = _wire_userpromptsubmit(settings_path, hook_cmd)
+        post_result = _wire_posttooluse(settings_path, post_cmd)
         label = "[green]wired[/green]" if result == "wired" else "[dim]already wired[/dim]"
-        console.print(f"  {name}: {label} → {settings_path}")
+        post_label = "[green]+conflict[/green]" if post_result == "wired" else "[dim]+conflict (exists)[/dim]"
+        console.print(f"  {name}: {label} {post_label} → {settings_path}")
 
     console.print(
-        "\n[bold]Auto-recall enabled.[/bold] New prompts will inject relevant memory.\n"
-        "Tune via env: OKS_RECALL_FLOOR (0.7), OKS_RECALL_TOPN (3), OKS_RECALL_MINLEN (6)."
+        "\n[bold]Auto-recall + conflict detection enabled.[/bold]\n"
+        "New prompts inject relevant memory; file edits across agents trigger conflict mail.\n"
+        "Tune via env: OKS_RECALL_FLOOR (0.7), OKS_RECALL_TOPN (3), OKS_RECALL_MINLEN (6),\n"
+        "  OKS_CONFLICT_WINDOW (300s)."
     )
 
 
