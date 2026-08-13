@@ -83,10 +83,15 @@ def _resolve_goal_context(
         selected = load_active_goals()
         mode = "active"
     else:
-        selected_goal = get_goal(requested)
-        if selected_goal is None:
+        # 支持逗号分隔多 slug（terminal registry goal_slugs）
+        slugs = [s.strip() for s in requested.split(",") if s.strip()]
+        selected = []
+        for slug in slugs:
+            g = get_goal(slug)
+            if g is not None:
+                selected.append(g)
+        if not selected:
             raise ValueError(f"Goal not found: {requested}")
-        selected = [selected_goal]
         mode = "explicit"
 
     domains: set[str] = set()

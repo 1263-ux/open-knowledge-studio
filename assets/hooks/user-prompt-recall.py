@@ -285,6 +285,7 @@ def main() -> int:
 
     # ── Terminal registry lookup (agent_id + cwd) ──
     reg_entry = _find_registry_entry(kb_root, agent_id, cwd)
+    reg_goals = reg_entry.get("goal_slugs", []) if reg_entry else []
     goals_all = _load_active_goals(kb_root)
     has_goals = len(goals_all) > 0
 
@@ -305,8 +306,10 @@ def main() -> int:
         state["n"] += 1
         turn = state["n"]
 
+        # registry 精准 boost：用绑定的 goal_slugs（而非所有 active）
+        goal_param = ",".join(reg_goals) if reg_goals else None
         try:
-            hits = recall(query=prompt, limit=max(topn * 3, 10)).get("knowledge", [])
+            hits = recall(query=prompt, limit=max(topn * 3, 10), goal=goal_param).get("knowledge", [])
         except Exception:
             hits = []
 
@@ -360,12 +363,14 @@ def main() -> int:
         )
 
     # Goal section: 首次提醒 or 按需（非首次引导时）
+    # 用 registry 绑定的 goals 精准（如果有），否则所有 active
     if not show_first_run and (is_first_turn or goal_relevant):
-        if goals_all:
+        display = [g for g in goals_all if g["slug"] in reg_goals] if reg_goals else goals_all
+        if display:
             lines = ["## 当前目标"]
             if is_first_turn and not goal_relevant:
                 lines.append("(首次提醒 — 之后只在 query 与 goal 相关时注入)")
-            for g in goals_all:
+            for g in display:
                 lines.append(f"[goal] {g['title']} ({g['slug']})")
             sections.append("\n".join(lines))
 
