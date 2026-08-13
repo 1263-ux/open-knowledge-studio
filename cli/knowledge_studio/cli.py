@@ -1582,6 +1582,55 @@ _HOOK_EDITORS = {
 }
 
 
+@app.command(name="skills-install")
+def skills_install(
+    force: bool = typer.Option(False, "--force", help="Overwrite existing skills"),
+) -> None:
+    """Materialize bundled skills into .claude/skills/ + .agents/skills/ (current KB).
+
+    Use after upgrading oks to refresh skills (e.g. /assess replacing /start),
+    without re-running full `oks init`.
+    """
+    root = Path.cwd()
+    if not (root / "wiki").is_dir():
+        console.print("[red]Not in a knowledge base directory (no wiki/).[/red]")
+        raise typer.Exit(1)
+    base = _asset_source()
+    if base is None:
+        console.print("[red]No bundled assets found. Reinstall: pipx upgrade open-knowledge-studio[/red]")
+        raise typer.Exit(1)
+    import shutil
+    done: list[str] = []
+    for dest_name, spec in _AGENT_TARGETS.items():
+        if not spec.get("skills"):
+            continue
+        dest = root / dest_name / "skills"
+        if force and dest.exists():
+            shutil.rmtree(dest)
+        dest.mkdir(parents=True, exist_ok=True)
+        wrote = False
+        src = base / "skills"
+        if src.is_dir():
+            for item in sorted(src.rglob("*")):
+                target = dest / item.relative_to(src)
+                if item.is_dir():
+                    target.mkdir(parents=True, exist_ok=True)
+                    continue
+                if target.exists() and not force:
+                    continue
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(item, target)
+                wrote = True
+        if wrote:
+            done.append(dest_name)
+    if done:
+        skill_names = sorted(p.name for p in (base / "skills").iterdir() if p.is_dir()) if (base / "skills").is_dir() else []
+        console.print(f"[green]Installed skills into:[/green] {', '.join(done)}")
+        console.print(f"[dim]Skills: {', '.join(skill_names)}[/dim]")
+    else:
+        console.print("[dim]Skills already present (use --force to refresh).[/dim]")
+
+
 def _instance_root(path: str | None) -> Path:
     if path:
         return Path(path).expanduser().resolve()

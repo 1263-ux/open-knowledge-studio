@@ -101,7 +101,7 @@ open-knowledge-studio/
 | `/status` | Overview: wiki count, tier distribution, drafts, quality |
 | `/archive` | Capture conversation transcript → raw/conversations/, distill Q&A → drafts/ (never writes wiki directly) |
 | `/promote` | Review drafts/ → promote/reject/edit |
-| `/accept` | Evidence-first isolated capability acceptance (wheel install, ingest, promote, recall) |
+| `/accept` ⚙ | Evidence-first isolated capability acceptance (maintainer-only, not in wheel) |
 | `/media-ingest` | Experimental video intake adapter (currently unavailable — scripts not yet packaged) |
 
 Agents skills mirror Claude skills with identical content. 4 dev-only skills

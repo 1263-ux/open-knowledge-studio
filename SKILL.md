@@ -84,7 +84,7 @@ oks hook install --editor claude # opt-in auto-recall injection
 
 `--editor` accepts `claude`, `qoder`, or `both`. The hook injects recalled knowledge into the agent's session context; it is **opt-in and reversible** — check with `oks hook status`, remove by deleting the injected config.
 
-After `skills-install`, the instance has 10 skills: `/assess`, `/ingest`, `/query`, `/lint`, `/compile`, `/status`, `/archive`, `/promote`, `/accept`, `/media-ingest` (experimental).
+After `skills-install`, the instance has 9 skills: `/assess`, `/ingest`, `/query`, `/lint`, `/compile`, `/status`, `/archive`, `/promote`, `/media-ingest` (experimental).
 
 ---
 
