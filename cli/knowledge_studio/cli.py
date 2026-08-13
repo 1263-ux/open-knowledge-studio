@@ -1990,10 +1990,11 @@ def registry_list() -> None:
         cwd = e.get("cwd", "?")
         profile = e.get("profile_slug", "-")
         goals = ", ".join(e.get("goal_slugs", [])) or "-"
+        scope = ", ".join(e.get("scope", [])) or "-"
         last = str(e.get("last_active", "?"))[:19]
         console.print(
             f"  [cyan]{agent}[/cyan] @ [dim]{cwd}[/dim]\n"
-            f"    profile: {profile}  goals: {goals}  last: {last}"
+            f"    profile: {profile}  goals: {goals}  scope: {scope}  last: {last}"
         )
 
 
@@ -2003,6 +2004,7 @@ def registry_bind(
     cwd: str = typer.Option(..., "--cwd", help="Terminal working directory"),
     profile: str = typer.Option("", "--profile", help="Profile slug (profiles/users/)"),
     goals: str = typer.Option("", "--goals", help="Comma-separated goal slugs"),
+    scope: str = typer.Option("", "--scope", help="Comma-separated wiki areas to narrow recall (empty = all)"),
 ) -> None:
     """Bind an agent+cwd to a profile + goals (creates or updates entry)."""
     import json
@@ -2025,6 +2027,8 @@ def registry_bind(
                         rec["profile_slug"] = profile
                     if goals:
                         rec["goal_slugs"] = [g.strip() for g in goals.split(",") if g.strip()]
+                    if scope:
+                        rec["scope"] = [s.strip() for s in scope.split(",") if s.strip()]
                     rec["last_active"] = ts
                     found = True
                     lines.append(json.dumps(rec, ensure_ascii=False))
@@ -2042,11 +2046,13 @@ def registry_bind(
             "last_active": ts,
             "status": "active",
         }
+        if scope:
+            rec["scope"] = [s.strip() for s in scope.split(",") if s.strip()]
         lines.append(json.dumps(rec, ensure_ascii=False))
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     console.print(
         f"[green]Bound[/green] {agent_id} @ {cwd}\n"
-        f"  profile: {profile or '-'}  goals: {goals or '-'}"
+        f"  profile: {profile or '-'}  goals: {goals or '-'}  scope: {scope or '-'}"
     )
 
 

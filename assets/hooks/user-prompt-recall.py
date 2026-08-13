@@ -306,10 +306,12 @@ def main() -> int:
         state["n"] += 1
         turn = state["n"]
 
-        # registry 精准 boost：用绑定的 goal_slugs（而非所有 active）
+        # registry 精准 boost + scope 过滤
         goal_param = ",".join(reg_goals) if reg_goals else None
+        reg_scope = reg_entry.get("scope", []) if reg_entry else []
+        scope_param = ",".join(reg_scope) if reg_scope else None
         try:
-            hits = recall(query=prompt, limit=max(topn * 3, 10), goal=goal_param).get("knowledge", [])
+            hits = recall(query=prompt, limit=max(topn * 3, 10), goal=goal_param, scope=scope_param).get("knowledge", [])
         except Exception:
             hits = []
 
@@ -351,25 +353,21 @@ def main() -> int:
     # ── Build sections ──
     sections = []
 
-    # 首次引导：新终端（registry 无记录）+ 首次 turn + 无 active goals
-    # → 植入询问引导，让 AI 反问人类建档
-    show_first_run = is_first_turn and not reg_entry and not has_goals
+    # 首次引导：新 session + 没绑 goal → 询问（一次性，AI 反问人类建档）
+    show_first_run = is_first_turn and not reg_goals
     if show_first_run:
         sections.append(
             "## 首次使用（新终端）\n"
-            "注册表无此终端的 profile/goal 信息，且知识库无 active goal。\n"
+            "注册表无此终端的 goal 绑定。\n"
             "建议反问用户确认：当前目标 / 技术栈 / 项目。\n"
-            "确认后调 /assess 建档，后续 hook 从注册表快速检索。"
+            "确认后调 /assess 建档 + `oks registry bind` 绑定 goal，后续 hook 显示 goal。"
         )
 
-    # Goal section: 首次提醒 or 按需（非首次引导时）
-    # 用 registry 绑定的 goals 精准（如果有），否则所有 active
-    if not show_first_run and (is_first_turn or goal_relevant):
-        display = [g for g in goals_all if g["slug"] in reg_goals] if reg_goals else goals_all
+    # Goal section: 只在 registry 绑了 goal 时显示（没绑 = 永远不显示）
+    if reg_goals and not show_first_run:
+        display = [g for g in goals_all if g["slug"] in reg_goals]
         if display:
             lines = ["## 当前目标"]
-            if is_first_turn and not goal_relevant:
-                lines.append("(首次提醒 — 之后只在 query 与 goal 相关时注入)")
             for g in display:
                 lines.append(f"[goal] {g['title']} ({g['slug']})")
             sections.append("\n".join(lines))

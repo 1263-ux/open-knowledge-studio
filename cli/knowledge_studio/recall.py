@@ -362,7 +362,7 @@ def _recall_knowledge_with_context(
     if not all_pages:
         return []
 
-    scope_lower = scope.lower().strip() if scope else ""
+    scope_areas = {s.strip().lower() for s in scope.split(",") if s.strip()} if scope else set()
     type_lower = type_filter.lower().strip() if type_filter else ""
     query_lower = query.lower().strip() if query else ""
     query_tokens = _tokenize(query_lower)
@@ -372,7 +372,7 @@ def _recall_knowledge_with_context(
         if item.get("status") in ("dropped", "superseded") or item.get("archived"):
             continue
 
-        if scope_lower and str(item.get("area", "")).lower().strip() != scope_lower:
+        if scope_areas and str(item.get("area", "")).lower().strip() not in scope_areas:
             continue
 
         item_type = str(item.get("type", item.get("category", "concept")))
