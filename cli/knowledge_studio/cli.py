@@ -1335,6 +1335,27 @@ def _generate_metrics_html(root: Path) -> str:
         f"<tr><td>Credibility</td><td>Avg confidence</td><td>{report['credibility']['avg_confidence']:.2f}</td></tr>",
     ]
 
+    # 调参建议：accepted/rejected rel 分布 + floor + cooldown
+    import statistics
+    from collections import Counter
+    accepted_rels = []
+    rejected_rels = []
+    for rec in injects:
+        used = rec.get("used", False)
+        for rel in rec.get("rels", []):
+            (accepted_rels if used else rejected_rels).append(rel)
+    acc_med = statistics.median(accepted_rels) if accepted_rels else 0
+    rej_med = statistics.median(rejected_rels) if rejected_rels else 0
+    import os as _os
+    cur_floor = _os.environ.get("OKS_RECALL_FLOOR", "0.7")
+    suggested_floor = max(0.7, acc_med - 0.2) if accepted_rels else 0.7
+    slug_freq = Counter()
+    for rec in injects:
+        for slug in rec.get("slugs", []):
+            slug_freq[slug] += 1
+    top_freq = slug_freq.most_common(3)
+    freq_str = ", ".join(f"{s}({c})" for s, c in top_freq) if top_freq else "—"
+
     ts = datetime.now().isoformat(timespec="seconds")
     inject_table = (
         "<table><tr><th>Slug</th><th>注入次数</th><th>被采纳</th><th>平均 rel</th><th>接受率</th></tr>"
@@ -1368,6 +1389,13 @@ th {{ background: #f4f4f8; }}
 {inject_table}
 <h2>Trace 反馈（trace-feedback.jsonl）</h2>
 {fb_table}
+<h2>调参建议</h2>
+<table><tr><th>指标</th><th>当前</th><th>建议</th></tr>
+<tr><td>accepted rel 中位数</td><td>{acc_med:.2f}</td><td>—</td></tr>
+<tr><td>rejected rel 中位数</td><td>{rej_med:.2f}</td><td>—</td></tr>
+<tr><td>OKS_RECALL_FLOOR</td><td>{cur_floor}</td><td>{suggested_floor:.2f}</td></tr>
+</table>
+<p>频繁注入（cooldown 可能太短）：{freq_str}</p>
 <h2>知识指标</h2>
 <table><tr><th>维度</th><th>指标</th><th>值</th></tr>{"".join(k_rows)}</table>
 </body>
