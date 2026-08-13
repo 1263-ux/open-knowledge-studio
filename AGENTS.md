@@ -93,7 +93,7 @@ open-knowledge-studio/
 
 | Skill | Purpose |
 |-------|---------|
-| `/start` | First-time setup: choose domain, build structure, scan raw/ |
+| `/assess` | Q&A builds profile + active goals, verify recall boost (initial setup + tuning) |
 | `/ingest` | Agent-native evidence ingestion (Source → Provider → Fragment → Manifest → raw-commit) |
 | `/query` | 6+1-factor recall → inject into context → AI answers with citations |
 | `/lint` | Scan wiki/: frontmatter, orphans, broken links, stale |
