@@ -82,3 +82,8 @@ raw/**
 # Drafts content (local only — do not push to remote)
 drafts/*.md
 !drafts/.gitkeep
+
+# Auto-recall hook (installed by `oks hook install`, personal: baked interpreter paths)
+.claude/settings.json
+.claude/hooks/
+.qoder/settings.json
