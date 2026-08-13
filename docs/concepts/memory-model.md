@@ -30,6 +30,22 @@ flowchart LR
 | Procedural Memory | Agent host 的 skills 目录 | 由 host 触发 | 无 | — |
 | Draft Memory | `drafts/{slug}.md` | N/A | 无 | N/A |
 
+## 记忆体系参考架构
+
+![多类型记忆协同参考架构](../assets/memory-paradigm.svg)
+
+*图源：[《深入理解 AI Agent》第3章](https://github.com/bojieli/ai-agent-book) fig3-4，Apache-2.0*
+
+认知科学把长期记忆分三类——情景（具体事件）、语义（一般知识）、程序（行为流程），外加工作记忆（当前任务状态，与长期记忆双向流动：重要信息选择性写入，相关记忆按需激活）。OKS 的六型记忆是这之上的工程扩展：
+
+| 认知科学类 | OKS 型 | 存储 |
+|------------|--------|------|
+| 情景 | Episodic | `raw/` |
+| 语义 | Semantic | `wiki/` |
+| 程序 | Procedural | `.claude/skills/` 等 |
+| 工作记忆 | （Agent 上下文窗口） | 运行时 |
+| — | User / Project / Draft | `profiles/` / `drafts/`（工程扩展，无直接认知对应） |
+
 ## 桶映射
 
 - User/Project → `profiles/`
@@ -47,6 +63,18 @@ OKS 无硬分区（不像某些产品的 Spaces 互隔离）。召回默认全�
 - `raw/` 按时间分区，召回用 `rglob` 递归，不构成隔离；`--scope` 只作用于 wiki（语义）路，episodic（raw）保持全局
 
 所有“分组”手段（area、模态目录、时间目录）都是软的：影响排序与归类，默认不切断可见性。
+
+## 轻量 vs 重型结构化索引
+
+主流 RAG 用 RAPTOR（树状层次摘要）或 GraphRAG（实体-关系图）做结构化索引——两者都要 LLM 在索引期多次调用（聚类摘要 / 三元组提取），精度高但贵且黑盒。
+
+OKS 选**轻量结构化**：
+
+- **目录分区**：22 域 × 3 类型做软归类（不切断可见性）
+- **frontmatter 字段**：`title`/`type`/`area`/`tags`/`traces`/`relates_to` 是手工结构化元数据
+- **A4 关系链接**：`supersedes`/`enriches`/`confirms`/`challenges` 在 frontmatter 记录，召回时旧页降权——这是 GraphRAG 实体关系图的子集，用 wikilink 实现
+
+取舍：OKS 用文件目录 + frontmatter + wikilink 做“可读可编辑的轻量图谱”，不建 RAPTOR 树 / GraphRAG 图（要 LLM 多次调用、产物黑盒、难人工审阅）。精度换可读性 + 零依赖——契合“人审门控”的宪法：结构必须能被人工逐条审阅，重型 LLM 生成的索引做不到。
 
 ## 注入顺序（稳定层在前，KV Cache 友好）
 

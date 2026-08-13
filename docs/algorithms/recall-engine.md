@@ -49,6 +49,38 @@ total = base × type_boost
 6. **记忆曲线 ×0.5** — 页面 memory_score（[衰减系统](decay-system.md) 算）×0.5 加法进入。Active ×1.2，archived=0。
 7. **目标加成 +0.8/+0.4（可选）** — 页面 `area` ∈ active goal 的 `domains` +0.8，命中 goal keyword +0.4。只作用于 `relevance>0` 的页（不凭空顶无关页上来）。
 
+## 双层架构
+
+OKS 的双路召回天然是“双层记忆架构”——结构化概览常驻 + episodic 细节按需：
+
+| 层 | 来源 | 角色 |
+|----|------|------|
+| 概览（常驻候选） | `wiki/` | 结构化、人审过的稳定知识，6+1 评分后顶在排序前列 |
+| 细节（按需召回） | `raw/` | episodic 原文，关键词 + 新鲜度，补 wiki 没覆盖的细节 |
+
+这是“结构化概览常驻 + 上下文检索按需取细节”理念在文件系统范式下的落地：wiki 页 frontmatter（title/type/area/tags）是结构化概览，raw 是按需拉取的原始证据。Agent 先看 wiki 概览，不够时 recall 双路补 raw 细节。
+
+## 技术取舍
+
+OKS 不学主流 RAG 的稠密嵌入 / BM25 / 混合检索 / 神经重排序，是 P4（CLI 核心不调 AI API）的直接后果：
+
+| 主流 RAG 技术 | OKS 对应 / 取舍 |
+|---------------|----------------|
+| 稠密嵌入（embedding） | 不做——要模型 + 向量索引，OKS 用 token overlap ×0.3（无 IDF、无长度归一化，已知简化） |
+| BM25（词频饱和 + 长度归一化） | 不做——要倒排索引 + IDF 统计，OKS 用无权 token 计数 |
+| 混合检索 + RRF 融合 | 不做——OKS 单路词项 + 子串 + 图谱，不并行两引擎 |
+| 神经重排序（跨编码器） | 不做——要 LLM 调用，OKS 用 type boost + review bonus 做规则重排 |
+| 上下文感知检索（LLM 补前缀） | **零成本平替**：OKS 的 frontmatter（title/area/tags）就是手工上下文前缀 |
+
+![上下文感知检索：传统分块 vs 加上下文前缀](../assets/contextual-retrieval.svg)
+
+*图源：[《深入理解 AI Agent》第3章](https://github.com/bojieli/ai-agent-book) fig3-14，Apache-2.0*
+
+{: .note }
+Anthropic 的上下文感知检索在索引期调 LLM 给每个文本块补“前缀摘要”（如“[ACME 公司 2025 Q2 财报·关键业绩指标]”），锚定语义环境。OKS 不调 LLM，但 frontmatter 的 `title`/`area`/`tags` 字段就是开发者 / Agent 手工写的同等“上下文前缀”——检索时这些字段参与 token overlap + 子串匹配，效果同源。代价是要人 / Agent 主动维护 frontmatter，不像 LLM 自动生成。
+
+换来的好处：可解释（`--explain` 逐项分数）、零 AI 依赖、本地小-中知识库（百到千页）够用。代价：无语义召回（跨表述差）、无 IDF / 长度归一化。语义召回需 embedding，暂不做。
+
 ## 指标
 
 当前无标注数据集做召回率/精确率量化（已知阻塞）。能给的"指标"是可解释输出——`oks recall "<q>" --explain` 给每个 hit 的逐项分数 + reasons + goal_matches + rank。
@@ -78,4 +110,6 @@ JSON 响应版本 `recall-response/v1`，单条 `recall-hit/v1`。
 
 6+1 是无 embedding 下的折中方案，适合本地小到中知识库（百到千页）。优点：轻量、可解释、不调 AI、类型/失败/目标感知。局限：无语义召回（跨表述差）、无 IDF/长度归一化。语义召回需 embedding（大改，需模型+索引+标注量化），暂不做。
 
-召回是只读：查询不算使用，不推 `access_count`。`oks wiki use <slug>` 才 +1 驱动记忆曲线——记忆热度反映"真被用上"而非"被搜过几次"。
+OKS 是 **search 原语，不是 agentic search**——单次查询返回结果，不做 ReAct 多轮迭代（“搜索→评估→再搜索”）。多轮探索由 host Agent（Claude Code 等）在宿主层做：OKS 提供召回原语 + source label（防间接提示注入），Agent 决定要不要再搜。这是 OKS“Agent 状态栏注入 + search”定位的边界。
+
+召回是只读：查询不算使用，不推 `access_count`。`oks wiki use <slug>` 才 +1 驱动记忆曲线——记忆热度反映“真被用上”而非“被搜过几次”。

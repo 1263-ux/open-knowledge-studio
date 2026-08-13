@@ -9,5 +9,6 @@ OKS 的核心算法。每个按"难题背景 + 技术设计 + 原理 + 指标 + 
 
 - [召回引擎](recall-engine.md) — 6+1 因子评分（无 embedding 下的折中召回）
 - [衰减系统](decay-system.md) — 记忆曲线 + 类型 λ + 可逆归档
+- [召回评估](recall-evaluation.md) — 三层次能力框架 + recall@k/MRR/nDCG
 
 后续会在这里堆砌新算法。
