@@ -38,6 +38,13 @@ Directory fsync after replace is required for crash safety.
   happened, not knowledge. They are **excluded from recall**
   (`recall_episodic` skips both) and are reached only through evidence links on
   a wiki page, so an agent's own output can never be fed back to it as memory.
+- `raw/conversations/` holds AI conversation transcripts as **episodic
+  material** — a record of what was said, not distilled knowledge. The LLM
+  that participated in a conversation may persist its own transcript here (the
+  conversation is the source; the LLM is not authoring new knowledge), but
+  summarizing, grading, or promoting stays in `drafts/` → `wiki/`. It carries
+  the same `[untrusted-source]` label as other `raw/` content and is recalled
+  the same way (keyword + freshness).
 
 ### P4: CLI core is API-free, external tools may use AI APIs
 
@@ -202,6 +209,8 @@ open-knowledge-studio/
 │   │   └── {source}/             # articles | papers | videos | audio | repos | misc
 │   │       ├── {slug}.md
 │   │       └── {slug}.jsonl
+│   ├── conversations/{YYYY}/{MM}/{DD}/{source}/  # AI conversation transcripts
+│   │   └── {slug}.md             # source: claude-code | cursor | codex | chatgpt-export
 │   └── executions/{run-id}/      # Append-only execution traces
 │       ├── events.jsonl
 │       └── run.json

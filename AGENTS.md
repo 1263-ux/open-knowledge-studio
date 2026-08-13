@@ -99,7 +99,7 @@ open-knowledge-studio/
 | `/lint` | Scan wiki/: frontmatter, orphans, broken links, stale |
 | `/compile` | Re-compile concept pages from sources → drafts/ |
 | `/status` | Overview: wiki count, tier distribution, drafts, quality |
-| `/archive` | Extract conversation Q&A → AI summarize → drafts/ (never writes wiki directly) |
+| `/archive` | Capture conversation transcript → raw/conversations/, distill Q&A → drafts/ (never writes wiki directly) |
 | `/promote` | Review drafts/ → promote/reject/edit |
 | `/accept` | Evidence-first isolated capability acceptance (wheel install, ingest, promote, recall) |
 | `/media-ingest` | Experimental video intake adapter (currently unavailable — scripts not yet packaged) |
