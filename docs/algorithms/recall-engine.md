@@ -3,47 +3,31 @@ title: 召回引擎
 nav_order: 1
 parent: 算法
 ---
-# 6+1 Factor Recall Engine（六加一因子召回引擎）
+# 召回引擎（6+1 因子评分）
 
-`oks recall` 是唯一召回入口。默认合并 Raw episodic 与 Wiki knowledge；
-`--knowledge-only` 只查 Wiki。`raw/executions/` 和 `raw/.logs/` 是 provenance，
-不参与召回。
+`oks recall` 是唯一召回入口。默认合并 Raw episodic 与 Wiki knowledge；`--knowledge-only` 只查 Wiki。`raw/executions/` 和 `raw/.logs/` 是 provenance，不参与召回。
 
-Recall 的来源标签也受信任边界约束：`[verified]` 只能由 trace 证据
-或 `human_reviewed_at` 产生，不能从 `status`、`confidence` 或访问次数推断。
+## 难题背景
 
-*六个核心因子 + 一个可选目标因子，为 wiki 页面评分，找到最相关知识。*
+知识库随时间增长，`wiki/` 累积成百上千页。用户或 Agent 提一个 query，如何找到最相关知识并排序？
 
-使用六个核心因子（外加可选的 goal boost）对 wiki 页面评分，找到最相关的知识。引擎将词项匹配、关键词匹配和图谱关联融合在一次统一的评分过程中。
+两条路：
 
-## 三种搜索模式合一
+- **语义召回**（embedding 相似度）——效果好，但 CLI 核心不调 AI API（P4），本地跑 embedding 模型成本高。
+- **关键词召回**（字面匹配）——轻量，但跨表述召回差（搜"design patterns"命中不了只写"architectural approaches"的页）。
 
-| 模式 | 做什么 | 哪些因子 |
-|------|--------|----------|
-| **Lexical（词项）** | 分词后按词项重叠打分 | Token overlap |
-| **Keyword（关键词）** | 精确匹配特定术语 | Substring match |
-| **Graph（图谱）** | 通过主题关联和类型加权查找 | Topic trace + type boost + review bonus |
+OKS 选了第二条，但用多因子评分把"关键词匹配"做到比纯计数更聪明：融合词项、子串、话题关联、知识类型、失败教训、记忆曲线、目标加成——7 个信号一次评分。
 
-```mermaid
-flowchart TD
-    Query["查询"] --> Lexical["Token overlap"]
-    Query --> Phrase["标题 / 正文 substring"]
-    Query --> Trace["Topic trace"]
-    Lexical --> Base["base"]
-    Phrase --> Base
-    Trace --> Base
-    Base --> Type["base × type boost"]
-    Type --> Review["+ review bonus"]
-    Review --> Memory["+ memory score × 0.5"]
-    Memory --> Goal["+ optional goal boost"]
-    Goal --> Ranked["Knowledge 排序结果 + 来源标签"]
-    Raw["Raw / profiles\n关键词 + 新鲜度"] --> Merge["合并双路结果"]
-    Ranked --> Merge
-```
+## 技术设计
 
-三种模式在每次查询时自动运行。引擎把它们与记忆分数、review 加成结合，生成最终相关性评分。
+双路召回：
 
-## 评分公式
+| 路径 | 来源 | 评分 |
+|------|------|------|
+| Episodic | `raw/` + `profiles/` | 关键词 + 新鲜度（`0.95^days_old`） |
+| Knowledge | `wiki/` | 6+1 因子相关性 + 记忆曲线 |
+
+评分公式：
 
 ```
 base  = token_overlap_count × 0.3 + substring_bonus + topic_trace_bonus
@@ -53,146 +37,23 @@ total = base × type_boost
         + goal_boost      # 可选第 7 因子，无 active goal 时为 0
 ```
 
-注意：`base == 0` 时页面直接出局；review 与记忆分数是**加法**项，不是乘数。
+`base == 0` 直接出局；review 与 memory 是**加法项不是乘数**——没有字面命中的页靠记忆热度上不来。
 
-## 六个核心因子（+ 1 个可选目标因子）
+## 原理（七因子）
 
-### 1. Token Overlap（×0.3）
+1. **词项重叠 ×0.3** — jieba 分词，统计 query token 在标题+正文+标签的命中数。词项层，逐 token 字面。当前是无权计数：无 IDF（罕见词与常见词等权）、无长度归一化（长页天然多命中）——已知简化，需标注数据集才能量化改进。
+2. **子串匹配 +1.0/+0.5** — 标题含 query 串 +1.0，正文含 +0.5，可叠加（都含 +1.5）。关键词层，精确短语。
+3. **话题关联 +2.0** — 页面带 discuss trace 且 topic_id 匹配查询的 topic_id，+2.0。图谱层，把 memory 关联回产生它的对话。
+4. **类型乘数 ×1.5/×0.8/×0.6** — anti-pattern ×1.5（错误最该召回，防重蹈覆辙）、strategy ×0.8、concept ×0.6。乘法因子。
+5. **失败加成 +2.0/+1.0** — `decision_correct=false` +2.0，`outcome=failure` +1.0。反直觉但合理：最有价值的知识常是"我们试了 X 没用"。
+6. **记忆曲线 ×0.5** — 页面 memory_score（[衰减系统](decay-system.md) 算）×0.5 加法进入。Active ×1.2，archived=0。
+7. **目标加成 +0.8/+0.4（可选）** — 页面 `area` ∈ active goal 的 `domains` +0.8，命中 goal keyword +0.4。只作用于 `relevance>0` 的页（不凭空顶无关页上来）。
 
-jieba 分词将查询拆分为 token，统计出现在页面（标题+正文+标签）中的个数。
+## 指标
 
-```
-overlap = count(query_tokens 出现在 title+body+tags 中) × 0.3
-```
+当前无标注数据集做召回率/精确率量化（已知阻塞）。能给的"指标"是可解释输出——`oks recall "<q>" --explain` 给每个 hit 的逐项分数 + reasons + goal_matches + rank。
 
-这是**词项层** —— 匹配逐 token 字面进行。搜索"design patterns"不会命中只写
-"architectural approaches"的页面：两者没有共享 token。跨表述召回需要稠密嵌入，
-而 CLI 核心不调用 AI API（P4），因此不在此层实现。
-
-当前公式是无权重的命中计数：既不做 IDF（罕见词与常见词同等计分），也不做长度
-归一化（长页面天然更容易积累命中）。
-
-### 2. Substring Match（+1.0 / +0.5）
-
-直接字符串匹配，属于**关键词层**：
-
-- 标题包含查询字符串：**+1.0**
-- 正文包含查询字符串：**+0.5**
-
-两者可叠加 — 标题和正文都包含查询的页面获得 +1.5。
-
-### 3. Topic Trace（+2.0）
-
-如果页面是从特定对话主题创建的，而你用同一个 `topic_id` 查询，页面获得 **+2.0** 加成。这是**图谱关联** — 将 memory 关联回产生它的对话。
-
-```python
-for trace in page.get("traces", []):
-    if trace["kind"] == "discuss" and str(trace["id"]) == str(topic_id):
-        base += 2.0
-```
-
-### 4. Type Boost（×1.5 / ×0.8 / ×0.6）
-
-不同知识类型有不同的召回优先级。这是一个**乘法因子**，不是加法：
-
-| 类型 | Boost | 原因 |
-|------|-------|------|
-| `anti-pattern` | ×1.5 | 错误最值得召回 — 在重蹈覆辙之前发现它们 |
-| `strategy` | ×0.8 | 策略有用但不如错误紧迫 |
-| `concept` | ×0.6 | 概念是背景知识 — 优先级最低 |
-
-### 5. Review Bonus（+2.0 / +1.0）
-
-来自失败决策或负面结果的页面获得加成，因为你需要回忆出了什么问题：
-
-- `decision_correct = false`：**+2.0**
-- `outcome = failure`：**+1.0**
-
-{: .note }
-这看似反直觉 — 为什么加成"坏"知识？因为最有价值的知识往往是"我们试了 X 但没用"。回忆失败可以防止重蹈覆辙。
-
-### 6. Memory Score（+score×0.5）
-
-页面的记忆分数（由记忆曲线计算：年龄衰减、访问次数、重要性、pin）以 **加法**方式进入相关性：`relevance += score × 0.5`。
-
-```
-score = importance × e^(-λ × days_old) + 0.5 × ln(1 + access_count) + pin_bonus
-```
-
-- Active 页面获得 ×1.2 乘数
-- Archived/dropped 页面为 0.0（从召回中排除）
-- 高频访问的页面抵抗衰减
-- Pinned 页面获得 +0.5 加成
-
-详见 [Decay System](decay-system.md)。
-
-### 7. Goal Boost（+0.8 / +0.4，可选）
-
-召回默认读取 `profiles/goals/` 下所有 `status: active` 的 goal，
-也可以显式指定一个 goal 或关闭 goal。Goal 是一个**加法**加权，
-只作用于**已经命中查询**（relevance>0）的页面：
-
-- 页面 `area` ∈ 某 active goal 的 `domains`：**+0.8**
-- 页面命中某 active goal 的任一 `keyword`：**+0.4**
-
-```python
-if relevance > 0 and (goal_domains or goal_keywords):
-    if page.area in goal_domains:
-        relevance += 0.8
-    if any(kw in searchable for kw in goal_keywords):
-        relevance += 0.4
-```
-
-{: .note }
-这是"目标感知召回"的真实实现（不是路线图）。它不会凭空把无关页面顶上来；
-只是在页面已经匹配查询后，让 on-scope 的策略优先出现。
-
-- `--goal active`：默认行为，合并全部 active goal，适合交互使用；
-- `--goal <slug>`：只使用一个 goal，适合可复现实验；
-- `--goal none`：关闭 goal，作为无偏基线；
-- Python API 的 `goal_boost=False` 继续保留，等价于关闭 goal。
-
-## 双路召回
-
-| 路径 | 来源 | 评分 |
-|------|------|------|
-| **Episodic** | `raw/` + `profiles/` | 关键词 + 新鲜度（`0.95^days_old`） |
-| **Knowledge** | `wiki/` | 6+1 因子相关性 + 记忆曲线 |
-| **合并** | 两者 | `{"episodic": [...], "knowledge": [...]}` |
-
-```bash
-# 仅 Knowledge（wiki 页面）
-oks recall "authentication" --knowledge-only --limit 5
-
-# 双路：Episodic（raw/）+ Knowledge（wiki/）
-oks recall "authentication" --limit 5
-
-# 固定单一 Goal，并查看每个评分因子
-oks recall "authentication" --goal team --explain
-
-# 输出机器可读 JSON，供离线评测使用
-oks recall "authentication" --goal none --format json --explain
-
-# 记录一次“真正使用”（召回/搜索本身只读、不计数）
-oks wiki use <slug>
-```
-
-> 召回与搜索是**只读**的：一次查询不算一次使用，不会改动 access_count 或页面状态。
-> 只有 `oks wiki use <slug>`（在真正注入/采用某页时调用）才 +1，从而驱动记忆曲线。
-> 这样记忆热度反映的是“真被用上”，而非“被搜过几次”。
->
-> 访问次数**不推动状态晋级**：Provisional → Active 只由人工审阅产生（CONSTITUTION P9）。
-
-## 可解释输出
-
-`--explain` 不改变候选或排序，只为每个 Knowledge hit 增加：
-
-- `score_components`：token、标题/正文子串、topic trace、类型乘数、review、memory score、Goal 的逐项分数；
-- `reasons`：便于人阅读的命中原因；
-- `goal_matches`：具体由哪个 Goal 的 area 或 keyword 命中；
-- `rank`、`channel` 和 `schema_version`：供评测程序稳定消费。
-
-总分可由下面的字段精确重建：
+总分可由下面字段精确重建：
 
 ```
 final_score = typed_base
@@ -203,25 +64,18 @@ final_score = typed_base
             + goal_keyword
 ```
 
-`oks recall` 的 JSON 响应版本为 `recall-response/v1`，单条结果版本为
-`recall-hit/v1`。`recall --type` 会在排序和 `--limit` 之前过滤，避免 Top-N
-截断后出现假空结果。JSON 直接写到标准输出，不带 Rich 颜色或表格字符。
+JSON 响应版本 `recall-response/v1`，单条 `recall-hit/v1`。
 
-## 实现
+## 实验
 
-源码：`cli/knowledge_studio/recall.py`
+`oks eval recall <dataset.yaml> --output <run.json>` 支持离线评测——但需要标注数据集（query + 期望命中页）。现状无官方数据集，社区可自建。
 
-核心函数：
-- `recall_episodic(query)` — 按关键词 + 新鲜度搜索 raw/，跳过 `raw/executions/ 与 raw/.logs/`（执行轨迹是溯源证据，不参与召回）
-- `recall_knowledge(query, topic_id)` — 通过 6+1 因子评分所有 wiki/ 页面
-- `recall(query, topic_id)` — 合并双路
+- `--goal none` — 无偏基线
+- `--goal <slug>` — 固定单一 goal，可复现实验
+- `--goal active` — 默认，合并全部 active goal，适合交互使用
 
-## 下一步
+## 结论
 
-* **[Memories](wiki.md)**：wiki 页面结构、类型和创建路径
-* **[Decay System](decay-system.md)**：记忆曲线公式和 tier 分级
-* **[宪法](../concepts/constitution.md)**：认知桶结构
+6+1 是无 embedding 下的折中方案，适合本地小到中知识库（百到千页）。优点：轻量、可解释、不调 AI、类型/失败/目标感知。局限：无语义召回（跨表述差）、无 IDF/长度归一化。语义召回需 embedding（大改，需模型+索引+标注量化），暂不做。
 
----
-
-{% include comments.html %}
+召回是只读：查询不算使用，不推 `access_count`。`oks wiki use <slug>` 才 +1 驱动记忆曲线——记忆热度反映"真被用上"而非"被搜过几次"。

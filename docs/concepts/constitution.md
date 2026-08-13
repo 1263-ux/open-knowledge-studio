@@ -19,9 +19,17 @@ User / Project / Episodic / Semantic / Procedural / Draft 六类，映射到四�
 
 `raw/` → AI 蒸馏 → `drafts/` → 人审 → `wiki/`。**绝不 auto-promote**——raw 内容不审不进 wiki。AI 写的只是 Candidate，人的 yes/no 是决策。
 
+Dreaming 循环：Collect（raw 积累）→ AI Dream（Agent 分级 A/B/C，A级写 draft）→ Human Review → Promote → Decay → Evolve（A4 关系）→ Commit。`oks distill` 跑衰减 + 演化，不代替 Agent 分级或人审。
+
 ## A4: 知识演变
 
 四种关系：`supersedes`（取代）/ `enriches`（补充）/ `confirms`（印证）/ `challenges`（质疑）。关系记在 frontmatter，召回时旧页降权。
+
+## Provenance 与安全边界
+
+`raw/executions/` + `raw/.logs/` 是 provenance（执行轨迹 + AI digests），**排除召回**——否则 agent 自己写的 `ai_comment` 会被当记忆加权喂回，压过人采材料。轨迹只能通过 wiki 页 frontmatter 的 evidence 链接到达。
+
+远程 provider（Firecrawl 等）调外部 API 时：凭据只从环境变量 / MCP token / OS keychain 来，绝不硬编码或入 git；`policy.remote_processing`（`deny` / `allow` / `ask`）控制是否调远程；输出经 `oks security sanitize` 脱敏后才入 Raw Bundle。这是 best-effort 凭据防护，非完整防泄漏。
 
 ## A5: 原子写
 

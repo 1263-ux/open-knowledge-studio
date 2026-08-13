@@ -46,7 +46,7 @@ OKS 是一个 Agent-native、文件系统优先的知识工作台——**Agent �
 - **使用 OKS**：[记忆](usage/memories.md) · [对话](usage/conversations.md) · [资料库](usage/library.md) · [上下文注入](usage/context-injection.md) · [你的档案](usage/profiles.md)
 - **概念**：[哲学](concepts/philosophy.md) · [宪法](concepts/constitution.md) · [记忆模型](concepts/memory-model.md)
 - **案例**：[托管你的研究](cases/research.md) · [托管你的 GitHub](cases/github.md) · [托管你的简历](cases/resume.md)
-- **算法**：[召回引擎](algorithms/recall-engine.md) · [衰减](algorithms/decay-system.md) · [梦幻循环](algorithms/dreaming-cycle.md) · [执行追踪](algorithms/execution-traces.md) · [前言模式](algorithms/frontmatter-schema.md) · [分区](algorithms/partitioning.md) · [raw 多模态](algorithms/raw-multimodal.md) · [安全治理](algorithms/security-governance.md)
+- **算法**：[召回引擎](algorithms/recall-engine.md) · [衰减系统](algorithms/decay-system.md)
 - **连接**：[备份与导出](connect/backup-export.md)
 - **参考**：[CLI](reference/cli.md) · [ingest 流程](reference/ingest.md) · [故障排除](reference/troubleshooting.md) · [社区](reference/community.md)
 

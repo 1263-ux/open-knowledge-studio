@@ -3,7 +3,7 @@ title: 记忆模型
 nav_order: 3
 parent: 概念
 ---
-# Six-Type Memory Model（六型记忆模型）
+# 记忆模型
 
 *六型记忆、注入顺序（稳定层在前）、来源标签与冲突优先级。*
 
@@ -37,6 +37,16 @@ flowchart LR
 - Semantic → `wiki/`
 - Draft → `drafts/`
 - Procedural → `.claude/skills/`、`.codex/` 或 `.agents/`（由对应 Agent host 管理）
+
+## 分区与软 scope
+
+OKS 无硬分区（不像某些产品的 Spaces 互隔离）。召回默认全局——不会因“空间”排除候选。提供可选 `--scope <area>` 软收窄：打分前只保留该域候选，默认仍全局。
+
+- `area`（知识域）是页面字段，默认只影响归类；`--scope` 时用它收窄检索
+- `topic_id` 命中 discuss trace 给 +2.0 软加权（顶上同话题，不挡其他）
+- `raw/` 按时间分区，召回用 `rglob` 递归，不构成隔离；`--scope` 只作用于 wiki（语义）路，episodic（raw）保持全局
+
+所有“分组”手段（area、模态目录、时间目录）都是软的：影响排序与归类，默认不切断可见性。
 
 ## 注入顺序（稳定层在前，KV Cache 友好）
 
@@ -88,9 +98,9 @@ episodic 命中（`oks recall` 直接给出 `source_label`）：
 
 ## 下一步
 
-* **[召回引擎](recall-engine.md)**：六型记忆如何被评分召回
+* **[召回引擎](../algorithms/recall-engine.md)**：六型记忆如何被评分召回
 * **[宪法](constitution.md)**：认知桶结构
-* **[衰减系统](decay-system.md)**：记忆如何随时间变化
+* **[衰减系统](../algorithms/decay-system.md)**：记忆如何随时间变化
 
 ---
 

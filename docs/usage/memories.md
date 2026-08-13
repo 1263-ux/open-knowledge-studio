@@ -28,7 +28,7 @@ Wiki 页面只有在存在 trace 证据或 `human_reviewed_at` 时才能在 Agen
 wiki/{domain}/{concepts|strategies|anti-patterns}/{slug}.md
 ```
 
-每个 wiki 页面的 IDENTITY 三字段**均为必填**（见 [Frontmatter Schema](frontmatter-schema.html)）：
+每个 wiki 页面的 IDENTITY 三字段**均为必填**（见 [Frontmatter Schema](../reference/cli.md)）：
 
 - `title` — 页面标题
 - `type` — `concept` / `strategy` / `anti-pattern`
@@ -66,7 +66,7 @@ wiki/{domain}/{concepts|strategies|anti-patterns}/{slug}.md
 
 ## 知识演化：4 种关系
 
-Dreaming 的 Evolve 步骤在新页面与旧页面之间建立关系（见 [Dreaming 循环](dreaming-cycle.html)）：
+Dreaming 的 Evolve 步骤在新页面与旧页面之间建立关系（见 [Dreaming 循环](../concepts/constitution.md)）：
 
 | 关系 | 对旧页面的影响 |
 |------|---------------|

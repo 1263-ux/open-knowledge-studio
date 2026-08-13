@@ -23,7 +23,7 @@ parent: 案例
 - 冒出的想法 → 立刻记，哪怕只有一句。
 - 组会/讨论的结论 → 存下来。
 
-保真为先，不急着下结论——这是 [Raw 多模态标准](../algorithms/raw-multimodal.md) 的原则。
+保真为先，不急着下结论——这是 [Raw 多模态标准](../reference/cli.md) 的原则。
 
 ## 审查沉淀 wiki/
 
@@ -33,7 +33,7 @@ parent: 案例
 - **strategy**：验证有效的实验设计、分析套路。
 - **anti-pattern**：走过的弯路、失败的实验（**召回时会被加权**，帮你不再重复）。
 
-沉淀时用[知识演化关系](../algorithms/frontmatter-schema.md)串起论文之间的 supersedes / confirms / challenges——这正是文献综述的骨架。
+沉淀时用[知识演化关系](../concepts/constitution.md)串起论文之间的 supersedes / confirms / challenges——这正是文献综述的骨架。
 
 ## 召回复用
 
@@ -312,5 +312,5 @@ completion = client.chat.completions.create(
 
 ## 接下来读哪里
 
-- **[梦幻循环](../algorithms/dreaming-cycle.md)**：让 AI 帮你从大量论文里发现模式。
-- **[前言模式](../algorithms/frontmatter-schema.md)**：A4 知识演化关系的字段定义。
+- **[梦幻循环](../concepts/constitution.md)**：让 AI 帮你从大量论文里发现模式。
+- **[前言模式](../concepts/constitution.md)**：A4 知识演化关系的字段定义。
