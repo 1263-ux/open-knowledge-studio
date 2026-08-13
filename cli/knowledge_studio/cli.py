@@ -1261,9 +1261,134 @@ def lint():
                   f"Active coverage: {s['coverage_pct']:.0f}%[/dim]")
 
 
+def _generate_metrics_html(root: Path) -> str:
+    """Generate HTML usage report from inject + trace-feedback + knowledge metrics."""
+    import json
+    from collections import defaultdict
+    from datetime import datetime
+
+    # 读 inject.jsonl
+    inject_path = root / "records" / "inject.jsonl"
+    injects = []
+    if inject_path.is_file():
+        for line in inject_path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if line:
+                try:
+                    injects.append(json.loads(line))
+                except Exception:
+                    continue
+
+    # 按 slug 聚合
+    slug_stats = defaultdict(lambda: {"count": 0, "used": 0, "rel_sum": 0.0})
+    for rec in injects:
+        slugs = rec.get("slugs", [])
+        rels = rec.get("rels", [])
+        for i, slug in enumerate(slugs):
+            s = slug_stats[slug]
+            s["count"] += 1
+            s["rel_sum"] += rels[i] if i < len(rels) else 0
+        if rec.get("used"):
+            for slug in slugs:
+                slug_stats[slug]["used"] += 1
+
+    total = len(injects)
+    accepted = sum(1 for r in injects if r.get("used"))
+    rate = (accepted / total * 100) if total else 0
+
+    rows = []
+    for slug, s in sorted(slug_stats.items(), key=lambda x: -x[1]["count"])[:20]:
+        avg_rel = s["rel_sum"] / s["count"] if s["count"] else 0
+        sr = (s["used"] / s["count"] * 100) if s["count"] else 0
+        rows.append(
+            f"<tr><td>{slug}</td><td>{s['count']}</td><td>{s['used']}</td>"
+            f"<td>{avg_rel:.2f}</td><td>{sr:.0f}%</td></tr>"
+        )
+
+    fb_path = root / "records" / "trace-feedback.jsonl"
+    feedbacks = []
+    if fb_path.is_file():
+        for line in fb_path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if line:
+                try:
+                    feedbacks.append(json.loads(line))
+                except Exception:
+                    continue
+    fb_rows = []
+    for fb in feedbacks[-20:]:
+        outcome = fb.get("outcome", "?")
+        cls = "accepted" if outcome == "accepted" else ("rejected" if outcome == "rejected" else "")
+        fb_rows.append(
+            f"<tr><td>{fb.get('run_id', '?')}</td>"
+            f"<td class='{cls}'>{outcome}</td>"
+            f"<td>{fb.get('comment', '')}</td>"
+            f"<td class='muted'>{fb.get('recorded_at', '?')[:19]}</td></tr>"
+        )
+
+    from knowledge_studio.metrics import get_knowledge_report
+    report = get_knowledge_report()
+    k_rows = [
+        f"<tr><td>Scale</td><td>Wiki pages</td><td>{report['scale']['total_wiki_pages']}</td></tr>",
+        f"<tr><td>Vitality</td><td>Active ratio</td><td>{report['vitality']['active_wiki_ratio']:.0%}</td></tr>",
+        f"<tr><td>Value</td><td>Total access</td><td>{report['value']['total_access_count']}</td></tr>",
+        f"<tr><td>Credibility</td><td>Avg confidence</td><td>{report['credibility']['avg_confidence']:.2f}</td></tr>",
+    ]
+
+    ts = datetime.now().isoformat(timespec="seconds")
+    inject_table = (
+        "<table><tr><th>Slug</th><th>注入次数</th><th>被采纳</th><th>平均 rel</th><th>接受率</th></tr>"
+        + "".join(rows) + "</table>"
+    ) if rows else "<p class='muted'>无注入记录</p>"
+    fb_table = (
+        "<table><tr><th>Run</th><th>Outcome</th><th>Comment</th><th>时间</th></tr>"
+        + "".join(fb_rows) + "</table>"
+    ) if fb_rows else "<p class='muted'>无反馈记录</p>"
+
+    return f"""<!DOCTYPE html>
+<html lang="zh">
+<head><meta charset="utf-8"><title>OKS 使用记录</title>
+<style>
+body {{ font: 14px/1.6 -apple-system, sans-serif; max-width: 900px; margin: 2em auto; padding: 0 1em; color: #222; }}
+h1 {{ border-bottom: 2px solid #0af; padding-bottom: .3em; }}
+h2 {{ color: #0af; margin-top: 2em; }}
+table {{ border-collapse: collapse; width: 100%; margin: 1em 0; }}
+th, td {{ border: 1px solid #ddd; padding: 6px 10px; text-align: left; }}
+th {{ background: #f4f4f8; }}
+.muted {{ color: #888; }}
+.accepted {{ color: #080; font-weight: bold; }}
+.rejected {{ color: #c00; font-weight: bold; }}
+</style>
+</head>
+<body>
+<h1>OKS 使用记录</h1>
+<p class="muted">生成于 {ts} | KB: {root}</p>
+<h2>注入统计（inject.jsonl）</h2>
+<p>总注入 <b>{total}</b> 次，<b>{accepted}</b> 条被采纳（<b>{rate:.0f}%</b>）</p>
+{inject_table}
+<h2>Trace 反馈（trace-feedback.jsonl）</h2>
+{fb_table}
+<h2>知识指标</h2>
+<table><tr><th>维度</th><th>指标</th><th>值</th></tr>{"".join(k_rows)}</table>
+</body>
+</html>"""
+
+
 @app.command()
-def metrics():
-    """Show 4-dimension knowledge metrics."""
+def metrics(
+    html: bool = typer.Option(False, "--html", help="生成 HTML 使用记录并打开"),
+):
+    """Show 4-dimension knowledge metrics, or --html for usage report."""
+    if html:
+        root = _instance_root(None)
+        html_str = _generate_metrics_html(root)
+        out_path = root / ".oks" / "metrics.html"
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(html_str, encoding="utf-8")
+        console.print(f"[green]HTML 报告:[/green] {out_path}")
+        import subprocess
+        subprocess.run(["open", str(out_path)], check=False)
+        return
     from knowledge_studio.metrics import get_knowledge_report
     report = get_knowledge_report()
 
