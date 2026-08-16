@@ -964,44 +964,44 @@ def _mark_inject_used(root: Path, slug: str) -> int:
 
     Training signal: which injected memories were actually adopted.
     Returns count of entries marked (0 if none found)."""
-    import json
     from datetime import datetime, timezone
     path = root / "records" / "inject.jsonl"
     if not path.is_file():
         return 0
     ts = datetime.now(timezone.utc).isoformat(timespec="seconds")
-    lines = path.read_text(encoding="utf-8").splitlines()
-    target_idx = -1
-    for i in range(len(lines) - 1, -1, -1):
-        line = lines[i].strip()
-        if not line:
-            continue
-        try:
-            rec = json.loads(line)
-            if slug in rec.get("slugs", []) and not rec.get("used"):
-                target_idx = i
-                break
-        except Exception:
-            continue
-    if target_idx < 0:
-        return 0
+
+    def update(current: str) -> str | None:
+        lines = current.splitlines()
+        for i in range(len(lines) - 1, -1, -1):
+            line = lines[i].strip()
+            if not line:
+                continue
+            try:
+                rec = json.loads(line)
+            except Exception:
+                continue
+            if slug not in rec.get("slugs", []) or rec.get("used"):
+                continue
+            rec["used"] = True
+            rec["used_at"] = ts
+            lines[i] = json.dumps(rec, ensure_ascii=False)
+            return "\n".join(lines) + "\n"
+        return None
+
     try:
-        rec = json.loads(lines[target_idx])
-        rec["used"] = True
-        rec["used_at"] = ts
-        lines[target_idx] = json.dumps(rec, ensure_ascii=False)
-        path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-        return 1
+        return int(store._locked_atomic_update(
+            path,
+            update,
+            lock_path=root / ".oks" / "locks" / "inject.lock",
+        ))
     except Exception:
         return 0
 
 
 def _append_trace_feedback_jsonl(root: Path, run_id: str, outcome: str, comment: str) -> None:
     """Append human feedback to records/trace-feedback.jsonl (git-shared)."""
-    import json
     from datetime import datetime, timezone
     path = root / "records" / "trace-feedback.jsonl"
-    path.parent.mkdir(parents=True, exist_ok=True)
     rec = {
         "run_id": run_id,
         "outcome": outcome,
@@ -1009,8 +1009,11 @@ def _append_trace_feedback_jsonl(root: Path, run_id: str, outcome: str, comment:
         "recorded_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
     }
     try:
-        with open(path, "a", encoding="utf-8") as f:
-            f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+        store._append_jsonl(
+            path,
+            rec,
+            lock_path=root / ".oks" / "locks" / "trace-feedback.lock",
+        )
     except Exception:
         pass
 
@@ -1797,6 +1800,7 @@ def init(
 # so both forms are recognized.
 _RECALL_HOOK_SCRIPT_NAME = "user-prompt-recall.sh"
 _RECALL_HOOK_SCRIPTS = ("user-prompt-recall.py", "user-prompt-recall.sh", "post-tool-edit.py", "post-tool-edit.sh")
+_HOOK_SUPPORT_FILES = ("_persistence.py",)
 _POST_TOOL_SCRIPT_NAME = "post-tool-edit.sh"
 _HOOK_EDITORS = {
     "claude": ".claude/settings.json",
@@ -2007,16 +2011,15 @@ def registry_bind(
     scope: str = typer.Option("", "--scope", help="Comma-separated wiki areas to narrow recall (empty = all)"),
 ) -> None:
     """Bind an agent+cwd to a profile + goals (creates or updates entry)."""
-    import json
     from datetime import datetime, timezone
     root = _instance_root(None)
     path = root / "profiles" / "agents" / "registry.jsonl"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    lines = []
-    found = False
     ts = datetime.now(timezone.utc).isoformat(timespec="seconds")
-    if path.is_file():
-        for line in path.read_text(encoding="utf-8").splitlines():
+
+    def update(current: str) -> str:
+        lines = []
+        found = False
+        for line in current.splitlines():
             line = line.strip()
             if not line:
                 continue
@@ -2036,20 +2039,26 @@ def registry_bind(
                     lines.append(line)
             except Exception:
                 lines.append(line)
-    if not found:
-        rec = {
-            "agent_id": agent_id,
-            "cwd": cwd,
-            "profile_slug": profile,
-            "goal_slugs": [g.strip() for g in goals.split(",") if g.strip()],
-            "first_seen": ts,
-            "last_active": ts,
-            "status": "active",
-        }
-        if scope:
-            rec["scope"] = [s.strip() for s in scope.split(",") if s.strip()]
-        lines.append(json.dumps(rec, ensure_ascii=False))
-    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        if not found:
+            rec = {
+                "agent_id": agent_id,
+                "cwd": cwd,
+                "profile_slug": profile,
+                "goal_slugs": [g.strip() for g in goals.split(",") if g.strip()],
+                "first_seen": ts,
+                "last_active": ts,
+                "status": "active",
+            }
+            if scope:
+                rec["scope"] = [s.strip() for s in scope.split(",") if s.strip()]
+            lines.append(json.dumps(rec, ensure_ascii=False))
+        return "\n".join(lines) + "\n"
+
+    store._locked_atomic_update(
+        path,
+        update,
+        lock_path=root / ".oks" / "locks" / "registry.lock",
+    )
     console.print(
         f"[green]Bound[/green] {agent_id} @ {cwd}\n"
         f"  profile: {profile or '-'}  goals: {goals or '-'}  scope: {scope or '-'}"
@@ -2062,27 +2071,35 @@ def registry_remove(
     cwd: str = typer.Option(..., "--cwd", help="Terminal working directory"),
 ) -> None:
     """Remove a registry entry."""
-    import json
     root = _instance_root(None)
     path = root / "profiles" / "agents" / "registry.jsonl"
     if not path.is_file():
         console.print("[dim]No registry.[/dim]")
         return
-    lines = []
     removed = False
-    for line in path.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            rec = json.loads(line)
-            if rec.get("agent_id") == agent_id and rec.get("cwd") == cwd:
-                removed = True
+
+    def update(current: str) -> str:
+        lines = []
+        nonlocal removed
+        for line in current.splitlines():
+            line = line.strip()
+            if not line:
                 continue
-            lines.append(line)
-        except Exception:
-            lines.append(line)
-    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+            try:
+                rec = json.loads(line)
+                if rec.get("agent_id") == agent_id and rec.get("cwd") == cwd:
+                    removed = True
+                    continue
+                lines.append(line)
+            except Exception:
+                lines.append(line)
+        return "\n".join(lines) + "\n"
+
+    store._locked_atomic_update(
+        path,
+        update,
+        lock_path=root / ".oks" / "locks" / "registry.lock",
+    )
     if removed:
         console.print(f"[green]Removed[/green] {agent_id} @ {cwd}")
     else:
@@ -2111,6 +2128,17 @@ def _ensure_recall_scripts(root: Path) -> list[str]:
 
     baked = f'"${{OKS_PYTHON:-{sys.executable}}}"'
     created: list[str] = []
+    for name in _HOOK_SUPPORT_FILES:
+        dest = hooks_dir / name
+        if dest.exists():
+            continue
+        if src_dir is None or not (src_dir / name).is_file():
+            raise FileNotFoundError(
+                f"bundled hook support file not found: {name} (asset source: {src_dir})"
+            )
+        shutil.copy2(src_dir / name, dest)
+        created.append(name)
+
     for name in _RECALL_HOOK_SCRIPTS:
         dest = hooks_dir / name
         if dest.exists():
