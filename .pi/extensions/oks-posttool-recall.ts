@@ -49,7 +49,9 @@ function queryFromTool(toolName: string, input: any): string {
         (w) =>
           w &&
           !w.startsWith("-") &&
-          !["&&", "||", "|", "sudo", "cd", ";", "python", "python3"].includes(w)
+          !w.startsWith("~") &&
+          !w.includes("/") &&
+          !["&&", "||", "|", "sudo", "cd", ";", "python", "python3", "bash", "sh"].includes(w)
       );
     return words.slice(0, 6).join(" ");
   }
