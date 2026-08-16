@@ -193,4 +193,35 @@ hook 注入机制是 OKS 的核心交付——Agent 不用主动调 `oks recall`
 
 ---
 
+## 九、TreeSearch 融合实验（互补召回）
+
+TreeSearch（shibing624, [github.com/shibing624/TreeSearch](https://github.com/shibing624/TreeSearch)）是 structure-aware 文档检索库——**无 embedding** + SQLite FTS5 + jieba 中文分词，和 OKS 同样无 embedding 但用了 FTS5 BM25 替代纯 token overlap。
+
+**假设**：TreeSearch 的 FTS5+jieba 对中文 query 的召回质量应优于 OKS 的 substring 匹配。
+
+**结果**（同 15 模糊 query）：
+
+| 方法 | R@1 | R@5 | MRR |
+|------|-----|-----|-----|
+| OKS baseline | 0.333 | 0.667 | 0.472 |
+| OKS scoped+goal | 0.600 | 0.800 | 0.689 |
+| TreeSearch FTS5+jieba | 0.133 | 0.400 | 0.267 |
+| RRF 1:1 融合 | 0.467 | 0.867 | 0.667 |
+| **OKS 主 + TS 补盲** | **0.667** | 0.800 | **0.722** |
+
+![图5 召回方法对比](../assets/experiments/fig5-fusion-comparison.png)
+
+**关键发现**：
+
+1. **TreeSearch 单独不如 OKS**——FTS5+jieba 对中文 query 反而比 OKS 的 substring 差（R@5 0.400 vs 0.800）。OKS 的 substring + topic trace 对中文知识 wiki 更有效。
+2. **但两者互补**——TreeSearch 独有命中 4 个 OKS scoped+goal 没命中的 case（ci-triage, repo-selection, loop-engineering, figure-design）。OKS 强在语义/领域 boost，TS 强在结构化关键词。
+3. **纯 RRF 伤 R@1**——TS 噪声即使权重低也进候选，稀释 OKS 的 top-1 优势（R@1 0.600→0.467）。
+4. **"OKS 主 + TS 补盲"最优**——OKS top-3 保 R@1，TS 独有补 2 个候选。R@1 0.600→0.667（+0.067），MRR 0.689→0.722（+0.033）。
+
+**融合方案**：OKS 6 因子召回（scoped+goal）top-3 为主排序 + TreeSearch FTS5+jieba 独有候选补 2 个到 top-5。OKS 命中的保 R@1 优势，OKS 没命中的由 TS 补。
+
+**集成方向**（待实现）：`treesearch` 作可选依赖（`pip install open-knowledge-studio[search]`），recall.py 加 `_treesearch_candidates` helper，`recall()` 加 `fusion: bool` 参数，config 加 `recall_fusion: native | treesearch | fusion`。hook 默认 native（不依赖 TS），用户配 fusion 启用。
+
+---
+
 **数据可复现**：数据集 + eval 结果存于实例 `xinhai-knowledge-studio` 的 `records/experiments/`，图表存于 `docs/assets/experiments/`。`oks eval recall <dataset.yaml> -o <run.json>` 可独立复现实验 A。
