@@ -239,10 +239,15 @@ def _query_from_tool(tool_name: str, tool_input: dict) -> str:
                 return stem
     cmd = str(tool_input.get("command", "") or "")
     if cmd:
+        # Filter path tokens (~/, /) + stopwords to get meaningful query.
         words = [
             w for w in re.split(r"\s+", cmd)
             if w and not w.startswith("-")
-            and w not in ("&&", "||", "|", "sudo", "cd", ";", "python", "python3")
+            and not w.startswith("~")
+            and "/" not in w
+            and w not in ("&&", "||", "|", "sudo", "cd", ";", "python", "python3",
+                         "bash", "sh", "echo", "cat", "ls", "grep", "head",
+                         "tail", "wc", "find", "sed", "awk", "export")
         ]
         return " ".join(words[:6])
     pat = str(tool_input.get("pattern", "") or tool_input.get("query", "") or "")
