@@ -81,6 +81,26 @@ Agent ID、工作目录或人工评论。提交到 Git 前应按团队隐私政�
 当前 Mail Hook 会扫描共享 inbox，尚未按 `to:` 字段隔离收件人；发送命令也不会
 写入 `mail/sent/`。多 Agent 共用知识库时，不应把当前实现当作私密投递通道。
 
+## PostToolUse recall 补位（长任务盲区）
+
+**问题**：`UserPromptSubmit` 只在用户说话时触发。长任务（用户给 agent 大目标，agent 自主多轮执行 Read/Edit/Bash）没有新用户 prompt → recall 不注入 → agent 执行中盲于相关记忆（失败教训、模块设计模式）。长任务正是最需要记忆的场景，当前架构恰好注入最少。
+
+**方案**：`post-tool-edit.py`（PostToolUse hook）加 recall 补位段，和文件冲突检测共存：
+
+1. **query 来自工具操作**（无用户 prompt）：
+   - Edit/Write/Read/MultiEdit → file basename（stem）
+   - Bash → command 前 ~6 词
+   - Grep/Glob → pattern
+2. **高 floor + 少 topn**：`OKS_POSTTOOL_FLOOR=0.9`（比 UserPromptSubmit 的 0.7 高），`OKS_POSTTOOL_TOPN=2`（比 3 少）——PostToolUse 频繁触发，只注入高置信度，避免淹没 agent 执行流
+3. **共享 cooldown**：和 UserPromptSubmit 共用 `recall-state-{session}.json` + `OKS_RECALL_COOLDOWN`——同 slug 不跨两个 hook 重复注入
+4. **inject trace**：`records/inject.jsonl` 记 `source=posttool`（区别于 `userprompt`）
+
+两个 hook 协同：
+- **UserPromptSubmit**（用户意图主线）：用户说话时注入，floor 0.7 / topn 3，覆盖广
+- **PostToolUse**（执行补位）：工具调用后注入，floor 0.9 / topn 2，只补高置信
+
+**测试**（xinhai KB）：Edit `recall.py` → query='recall' → 注入 OSS call chain + AI agent 记忆（rel 2.918/2.908）。第二次同 query → cooldown 跳过。
+
 ## pi extension 做法
 
 pi 的 `before_agent_start` 事件在用户提交 prompt 后、agent loop 前触发，能注入 persistent message——等价 Claude Code 的 `UserPromptSubmit`。

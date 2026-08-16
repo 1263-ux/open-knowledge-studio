@@ -43,6 +43,8 @@ parent: 参考
 | `OKS_CONFLICT_WINDOW` | 300 | 文件冲突检测窗口（秒）|
 | `OKS_AGENT_ID` | cwd basename | Agent 身份（registry key）|
 | `OKS_SEARCH_BACKEND` | native | search backend：`native` \| `fts5` \| `fusion` \| `<connector-name>`（见下） |
+| `OKS_POSTTOOL_FLOOR` | 0.9 | PostToolUse recall 补位最小 relevance（比 UserPromptSubmit 高，避免噪声）|
+| `OKS_POSTTOOL_TOPN` | 2 | PostToolUse 最多注入条数（比 UserPromptSubmit 少）|
 
 ### 可插拔 search backend
 
