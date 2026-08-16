@@ -98,6 +98,16 @@ def test_hook_install_refreshes_persistence_support_file_for_old_instances(tmp_p
     assert (hooks / "post-tool-edit.py").read_text(encoding="utf-8") == "old\n"
 
 
+def test_init_recommends_the_current_ingest_command(tmp_path):
+    target = tmp_path / "kb"
+
+    result = runner.invoke(app, ["init", str(target), "--no-git", "--no-set-default"])
+
+    assert result.exit_code == 0, result.output
+    assert "oks ingest prepare" in result.output
+    assert "--mode quick" not in result.output
+
+
 def test_init_scaffolds_buckets_and_data_gitignore(tmp_path):
     target = tmp_path / "kb"
     result = runner.invoke(app, ["init", str(target), "--no-git", "--no-set-default"])
