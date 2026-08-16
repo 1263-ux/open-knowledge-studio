@@ -1,5 +1,27 @@
 # Changelog
 
+## v0.5.10 (2026-08-17)
+
+### K+J 混合：system prompt 引导 + 智能信号
+
+PostToolUse recall 从 D 模式（每次工具 signal ~8KB）进化为 K+J 混合：
+
+- **K（system prompt 引导）**：`oks init` 生成实例根 `AGENTS.md`，内含 OKS
+  recall 引导——AI 读到即知晓有知识库 + 何时调 + query 来自任务意图。
+  零 hook 注入，token 最省。
+- **J（智能信号）**：`post-tool-edit.py` 加 `_should_signal()` 闸门，3 条件
+  AND 才注入 signal：
+  1. 工具类型：只 Edit/Write/MultiEdit/Grep/Glob（Bash/Read 跳过）
+  2. query 质量：非通用词（git/status/ls 等），≥4 字符
+  3. rel > 2.5（极高相关）
+- 实测：20 工具长任务只 2-3 次 signal ≈ 1KB（vs A=20KB，省 95%）
+- Bash/Read 全跳过——AI 已在读内容，signal 纯噪声
+
+### 新增
+
+- `_INSTANCE_AGENTS_MD` 模板常量 + `init` 写实例根 `AGENTS.md`
+- `_should_signal()` 闸门 + `_query_from_tool` 路径过滤增强
+
 ## v0.5.9 (2026-08-17)
 
 ### 可插拔 search backend 架构

@@ -1604,6 +1604,42 @@ raw/executions/*/.append.lock
 """
 
 
+_INSTANCE_AGENTS_MD = """\
+# {name}
+
+OKS 知识库实例（open-knowledge-studio）。
+
+## OKS recall：system prompt 引导 + 智能信号（K+J 混合）
+
+你有 OKS 知识库。任务涉及不确定的概念 / 模式 / 历史决策 / 竞品对照时，调：
+  ```bash
+  oks recall "<任务意图 query>" --explain --limit 3
+  ```
+query 用任务意图（如"OKS 记忆体系 对比 ai-book"），不是工具操作。
+不调也行——任务简单 / 已读够时不调。零 token 浪费。
+
+### J：智能信号（PostToolUse 补提醒）
+
+Edit/Write 代码文件后，检测到高相关（rel > 2.5）时，会看到轻量提示：
+  <oks-memory-signal>...</oks-memory-signal>
+只 slug + rel（不注入 body）。你判断需要才调 oks recall。
+Bash/Read 不触发信号。
+
+### UserPromptSubmit（用户意图注入）
+
+用户说话时自动注入相关记忆——真 recall 时机。
+
+## 常用命令
+
+```bash
+oks recall "<query>"           # 召回相关 wiki
+oks recall "<query>" --explain # 显示评分因子
+oks status                     # 知识库状态
+oks wiki use <slug>            # 标记引用
+```
+"""
+
+
 _SHARED_ASSETS = ("templates", "_meta", "settings", "profiles")
 
 # How each agent ecosystem's directory is assembled from the single-source
@@ -1747,6 +1783,14 @@ def init(
             console.print(f"[green]Materialized assets:[/green] {', '.join(copied)}")
         else:
             console.print("[dim]Assets already present (use --upgrade to refresh).[/dim]")
+
+    agents_md = root / "AGENTS.md"
+    if not agents_md.exists():
+        agents_md.write_text(
+            _INSTANCE_AGENTS_MD.format(name=root.name),
+            encoding="utf-8",
+        )
+        console.print(f"[green]Wrote[/green] {agents_md}")
 
     gitignore = root / ".gitignore"
     if gitignore.exists():
