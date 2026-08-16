@@ -121,6 +121,9 @@ class FTS5Backend:
         self._conn.execute(
             "CREATE TABLE IF NOT EXISTS pages (slug TEXT PRIMARY KEY, content_hash TEXT)"
         )
+        self._conn.execute(
+            "CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT)"
+        )
         if self._use_fts5:
             self._conn.execute(
                 "CREATE VIRTUAL TABLE IF NOT EXISTS wiki_fts USING fts5("
@@ -177,6 +180,59 @@ class FTS5Backend:
         self._conn.commit()
         self._indexed = True
 
+    def _wiki_fingerprint(self) -> str:
+        """所有 wiki 文件 path+mtime+size 的 hash——变了就 stale。
+
+        粗粒度但够用：遍历 wiki/**/*.md，只 stat（不读内容），比逐页
+        content_hash 快。index() 再逐页 content_hash 做增量 diff。
+        """
+        import hashlib
+
+        root = self._root
+        if not root:
+            from ..store import repo_root
+
+            root = repo_root()
+        wiki_dir = os.path.join(root or ".", "wiki")
+        if not os.path.isdir(wiki_dir):
+            return ""
+        h = hashlib.md5()
+        for dirpath, _, filenames in os.walk(wiki_dir):
+            for fn in sorted(filenames):
+                if not fn.endswith(".md"):
+                    continue
+                p = os.path.join(dirpath, fn)
+                try:
+                    st = os.stat(p)
+                    h.update(f"{p}:{st.st_mtime_ns}:{st.st_size}\n".encode())
+                except OSError:
+                    continue
+        return h.hexdigest()
+
+    def _maybe_reindex(self) -> None:
+        """lazy watch：recall 前调——fingerprint 变了才 index()。
+
+        无后台守护进程，recall 时自动保证索引新鲜。index() 已有 content_hash
+        逐页 diff，未变页跳过，所以"重索引"只处理变页，快（61 页 < 50ms）。
+        """
+        current = self._wiki_fingerprint()
+        if not current:
+            return
+        row = self._conn.execute(
+            "SELECT value FROM meta WHERE key='wiki_fingerprint'"
+        ).fetchone()
+        stored = row[0] if row else ""
+        if current == stored and self._indexed:
+            return  # 新鲜，跳过
+        from ..recall import list_wiki_pages
+
+        self.index(list_wiki_pages())
+        self._conn.execute(
+            "INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)",
+            ("wiki_fingerprint", current),
+        )
+        self._conn.commit()
+
     def _build_match_expr(self, query: str) -> str | None:
         """query → FTS5 MATCH 表达式（token OR 连接）。"""
         tokens = _tokenize_for_fts(query)
@@ -195,11 +251,7 @@ class FTS5Backend:
     def search(
         self, query: str, *, limit: int = 10, scope: str | None = None, **kwargs: Any
     ) -> list[SearchHit]:
-        if not self._indexed:
-            # 延迟索引：从 wiki/ 读全库
-            from ..recall import list_wiki_pages
-
-            self.index(list_wiki_pages())
+        self._maybe_reindex()  # lazy watch：stale 就增量重索引
         if not self._use_fts5:
             return self._search_like(query, limit=limit)
 

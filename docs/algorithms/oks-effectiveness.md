@@ -239,8 +239,36 @@ TreeSearch（shibing624, [github.com/shibing624/TreeSearch](https://github.com/s
 
 scoped+goal 场景持平（R@1 0.600, MRR 0.689）——scope 硬过滤 + goal boost 已优化排序，IDF/title bonus 加在已命中页上不改变顺序。**CV 价值在 baseline**（新 terminal 无 goal 绑定、无 scope 设定时），正是首次使用 OKS 的场景。
 
-**不 CV 的**（太重或不适配）：FTS5Index（1707 行 + 架构改动）、ast_parser（OKS 是知识库不是代码搜索）、watch（wiki 61 页遍历够快）、is_generic_section（OKS 整页召回不分章节）。
+**不 CV 的**（走 connector 扩展或不适配）：ast_parser（代码搜索走 connector，不硬塞核心）；FTS5Index 的 tree 结构（OKS 平铺单页，已 CV 平铺版 + lazy watch，见下）；is_generic_section 已学习迁移为 `is_generic_page`（page-title 级，非 node-depth）。
 
 ---
 
 **数据可复现**：数据集 + eval 结果存于实例 `xinhai-knowledge-studio` 的 `records/experiments/`，图表存于 `docs/assets/experiments/`。`oks eval recall <dataset.yaml> -o <run.json>` 可独立复现实验 A。
+
+## 十一、lazy watch（无守护进程的索引新鲜度）
+
+**问题**：fts5/fusion backend 的索引是快照——wiki 改了（promote 新页 / 编辑现有页）索引不跟着变，搜到旧内容或漏新页。
+
+**方案**：lazy watch（不引入后台守护进程，OKS 是 CLI+hook 工具不适合常驻）。FTS5Backend 加：
+- `_wiki_fingerprint()`：遍历 `wiki/**/*.md`，算 (path, mtime_ns, size) 的 hash（只 stat 不读内容，快）
+- `_maybe_reindex()`：recall 前指纹变了才 `index()`（增量 diff，未变页跳过）
+
+**速度对比**（61 页 wiki）：
+
+| 场景 | 耗时 |
+|------|------|
+| 首次索引 | 552ms（jieba 分词 61 页） |
+| 不变（指纹一致，跳过） | 3ms |
+| 变 1 页（增量 diff 重索引） | 41ms |
+
+**召回质量影响**：无（lazy watch 只保索引新鲜，不改评分逻辑）。15 case 对比 native/fts5/fusion 的 R@1/R@5/MRR 与 lazy watch 前完全一致。
+
+**对比实验**（15 query, scoped+goal, lazy watch 后）：
+
+| backend | R@1 | R@5 | MRR | avg ms |
+|---------|-----|-----|-----|--------|
+| native | 0.600 | 0.733 | 0.656 | 85.1 |
+| fts5 | 0.400 | 0.667 | 0.513 | 112.0 |
+| fusion | 0.600 | **0.800** | 0.672 | 172.2 |
+
+fusion 比 native 慢 ~2x（172 vs 85ms）但 R@5 +0.067——质量 vs 速度 trade-off，用户按需选 backend。
