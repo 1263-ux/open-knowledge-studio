@@ -596,6 +596,24 @@ def check_title_match(title: str, terms: list[str]) -> bool:
     return any(t in title_lower for t in terms)
 
 
+# 通用目录性页（学习迁移自 TreeSearch is_generic_section + _GENERIC_SECTIONS）
+_GENERIC_PAGE_TITLES = frozenset({
+    "index", "overview", "readme", "目录", "概述", "总览", "首页",
+    "introduction", "conclusion", "background", "summary",
+})
+
+
+def is_generic_page(title: str) -> bool:
+    """通用目录性页降权（学习迁移自 TreeSearch is_generic_section）。
+
+    这类页（index/overview/README/概述）信息密度低——BM25/token 命中多但
+    很少含精确答案，×0.5 降权避免淹没具体策略页。
+    """
+    if not title:
+        return False
+    return title.strip().lower() in _GENERIC_PAGE_TITLES
+
+
 def _compute_relevance(
     item: dict,
     query_lower: str,
@@ -685,7 +703,12 @@ def _compute_relevance_components(
         "concept": 0.6,
     }
     type_multiplier = type_boost.get(wiki_type, 0.5)
-    typed_base = base * type_multiplier
+    # 通用页降权（学习迁移自 TreeSearch is_generic_section）：index/overview 等
+    # 目录性页 ×0.5，避免淹没具体策略页。
+    generic_demotion = 0.5 if is_generic_page(item.get("title", "")) else 1.0
+    typed_base = base * type_multiplier * generic_demotion
+    if generic_demotion < 1.0:
+        reasons.append("generic-page:demoted")
 
     components: dict[str, Any] = {
         "token_overlap_count": overlap_count,
@@ -697,6 +720,7 @@ def _compute_relevance_components(
         "topic_trace": topic_trace,
         "base_score": base,
         "type_multiplier": type_multiplier,
+        "generic_demotion": generic_demotion,
         "typed_base": typed_base,
         "review_decision": 0.0,
         "review_failure": 0.0,
