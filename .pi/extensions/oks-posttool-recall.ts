@@ -125,6 +125,11 @@ export default function (pi: ExtensionAPI) {
     }
     queryCache.set(query, turnCounter);
 
+    // OKS_POSTTOOL_RECALL=0 disables recall supplement (keeps conflict detection
+    // in post-tool-edit.py). This lets you switch to AI-driven recall mode: the
+    // agent decides when to call `oks recall` instead of being force-injected.
+    if (process.env.OKS_POSTTOOL_RECALL === "0") return;
+
     const kbRoot = _kbRoot();
     if (!kbRoot) return; // no KB instance found — skip silently
     const script = join(kbRoot, ".claude/hooks/post-tool-edit.py");

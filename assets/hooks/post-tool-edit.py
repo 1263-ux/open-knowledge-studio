@@ -351,11 +351,14 @@ def main() -> int:
                 )
 
     # 2. Recall supplement (any tool — long-task blind spot)
-    query = _query_from_tool(tool_name, tool_input)
-    if query:
-        block = _recall_supplement(kb_root, session_id, query, agent_id)
-        if block:
-            output_parts.append(block)
+    # Set OKS_POSTTOOL_RECALL=0 to disable (keep conflict detection only).
+    recall_on = os.environ.get("OKS_POSTTOOL_RECALL", "1") != "0"
+    if recall_on:
+        query = _query_from_tool(tool_name, tool_input)
+        if query:
+            block = _recall_supplement(kb_root, session_id, query, agent_id)
+            if block:
+                output_parts.append(block)
 
     if output_parts:
         sys.stdout.write("\n".join(output_parts) + "\n")
