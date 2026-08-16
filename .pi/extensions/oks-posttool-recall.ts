@@ -25,7 +25,8 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
-import { join, basename, homedir } from "node:path";
+import { join, basename } from "node:path";
+import { homedir } from "node:os";
 
 const WATCHED = new Set(["edit", "write", "read", "bash", "grep", "glob", "multiedit"]);
 const COOLDOWN = parseInt(process.env.OKS_RECALL_COOLDOWN ?? "10", 10);
