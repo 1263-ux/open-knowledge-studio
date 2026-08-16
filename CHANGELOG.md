@@ -1,5 +1,33 @@
 # Changelog
 
+## v0.5.12 (2026-08-17)
+
+### env 废弃 — settings/recall.yaml 是唯一参数真源
+
+回应「参数不能永远跟随仓库配置文件吗？环境变量忘了怎么办？两边不同步怎么办？」
+
+- **env 完全废弃**：`load_recall_params()` 去掉 env 读取，只读 yaml + 默认。
+  参数永远跟随 `settings/recall.yaml`，git 同步，走到哪带到哪。
+- **迁移警告**：检测到旧 `OKS_*` env 时警告提示迁移到 yaml + unset
+  （`load_recall_params._warned` 防刷屏）
+- **CLI flag 临时调参**：`oks recall --floor 0.9` 一次性调 floor，不改 yaml。
+  recall_cmd 用 `floor_override` 过滤 rel 低于 floor 的结果。
+- **metrics html 文案**：去掉「env 覆盖 yaml」，改为「settings/recall.yaml 是唯一
+  参数真源 → git commit → 走到哪同步到哪。临时调参用 oks recall --floor」
+- **去掉 `envvar=OKS_SEARCH_BACKEND`**：search_backend 也从 yaml 读，不读 env
+
+### 新优先级
+
+```
+CLI flag（一次性临时调参）> settings/recall.yaml（唯一持久真源）> 代码默认值
+env 已废弃——不再读取
+```
+
+### 向后兼容
+
+现有 env 用户升级后 env 不再生效。`oks init . --upgrade` 生成默认 yaml，
+用户把 env 值搬到 yaml（或看警告手动迁移），unset env 即可。
+
 ## v0.5.11 (2026-08-17)
 
 ### 实验数据图表化 + 参数存知识库

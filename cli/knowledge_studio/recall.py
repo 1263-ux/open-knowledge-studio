@@ -106,24 +106,27 @@ def load_recall_params(root=None):
     except Exception:
         pass
 
-    # 2. env override (highest priority)
-    e = os.environ
-    for k, conv, ek in [
-        ("recall_floor", float, "OKS_RECALL_FLOOR"),
-        ("recall_topn", int, "OKS_RECALL_TOPN"),
-        ("recall_minlen", int, "OKS_RECALL_MINLEN"),
-        ("recall_cooldown", int, "OKS_RECALL_COOLDOWN"),
-        ("posttool_floor", float, "OKS_POSTTOOL_FLOOR"),
-        ("posttool_topn", int, "OKS_POSTTOOL_TOPN"),
-        ("posttool_recall", int, "OKS_POSTTOOL_RECALL"),
-        ("posttool_signal_rel_floor", float, "OKS_POSTTOOL_SIGNAL_REL_FLOOR"),
-        ("conflict_window", int, "OKS_CONFLICT_WINDOW"),
-        ("mail_topn", int, "OKS_MAIL_TOPN"),
-    ]:
-        v = e.get(ek)
-        if v: params[k] = conv(v)
-    if v := e.get("OKS_POSTTOOL_MODE"): params["posttool_mode"] = v
-    if v := e.get("OKS_SEARCH_BACKEND"): params["search_backend"] = v
+    # env 已废弃——settings/recall.yaml 是唯一真源（git 同步，走到哪带到哪）。
+    # 临时调参用 CLI flag（oks recall --floor 0.9），不污染持久状态。
+    # 迁移：检测到旧 OKS_ env 时警告，提示迁移到 yaml + unset。
+    _legacy_env = [
+        "OKS_RECALL_FLOOR", "OKS_RECALL_TOPN", "OKS_RECALL_MINLEN",
+        "OKS_RECALL_COOLDOWN", "OKS_POSTTOOL_FLOOR", "OKS_POSTTOOL_TOPN",
+        "OKS_POSTTOOL_MODE", "OKS_POSTTOOL_RECALL", "OKS_POSTTOOL_SIGNAL_REL_FLOOR",
+        "OKS_CONFLICT_WINDOW", "OKS_SEARCH_BACKEND", "OKS_MAIL_TOPN",
+    ]
+    import os as _os
+    _found = [k for k in _legacy_env if _os.environ.get(k)]
+    if _found and not getattr(load_recall_params, "_warned", False):
+        load_recall_params._warned = True
+        import sys
+        print(
+            "⚠ OKS: 检测到旧环境变量 " + ", ".join(_found) + "，已废弃。\n"
+            "  settings/recall.yaml 是唯一参数真源（git 同步）。\n"
+            "  请把值迁移到 settings/recall.yaml，然后 unset 这些 env。\n"
+            "  临时调参用 CLI flag: oks recall --floor 0.9",
+            file=sys.stderr,
+        )
     return params
 
 

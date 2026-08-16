@@ -559,13 +559,16 @@ def recall_cmd(
     project: Optional[str] = typer.Option(None, "--project", envvar="OKS_PROJECT", help="Current project slug; required to recall profiles/projects/<slug> (A2 scope)"),
     type_filter: Optional[str] = typer.Option(None, "--type", "-t", help="Restrict the knowledge path to one wiki type"),
     knowledge_only: bool = typer.Option(False, "--knowledge-only", help="Skip the episodic path — only wiki/ results, no raw/ source material"),
-    search_backend: str = typer.Option("native", "--search-backend", envvar="OKS_SEARCH_BACKEND", help="Search backend: native | fts5 | fusion | <connector-name> (connector via entry_points group=oks_search_backend)"),
+    search_backend: str = typer.Option("native", "--search-backend", help="Search backend: native | fts5 | fusion | <connector-name> (connector via entry_points group=oks_search_backend)"),
+    floor_override: Optional[float] = typer.Option(None, "--floor", help="临时调 floor（不改 settings/recall.yaml，一次性）"),
 ):
     """Two-path recall: episodic (raw/) + knowledge (wiki/).
 
     `--knowledge-only` drops the episodic path for a wiki-only view; `--type`
     narrows the knowledge path to one wiki type before ranking and `--limit`.
     """
+    from knowledge_studio.recall import load_recall_params
+    load_recall_params()  # 触发 env 迁移警告（env 已废弃）
     output_format = _validate_output_format(output_format)
     try:
         result = recall(
@@ -584,6 +587,16 @@ def recall_cmd(
     except ValueError as e:
         console.print(f"[red]{e}[/red]")
         raise typer.Exit(2)
+
+    if floor_override is not None:
+        result["episodic"] = [
+            h for h in result.get("episodic", [])
+            if float(h.get("relevance", h.get("rel", 0))) >= floor_override
+        ]
+        result["knowledge"] = [
+            h for h in result.get("knowledge", [])
+            if float(h.get("relevance", h.get("rel", 0))) >= floor_override
+        ]
 
     if output_format == "json":
         _emit_json(result)
@@ -1420,7 +1433,7 @@ th {{ background: #f4f4f8; }}
 <tr><td>posttool.signal_rel_floor</td><td>{params["posttool_signal_rel_floor"]}</td></tr>
 <tr><td>search_backend</td><td>{params["search_backend"]}</td></tr>
 </table>
-<p class="muted">改 settings/recall.yaml → git commit → 走到哪同步到哪。env 覆盖 yaml。</p>
+<p class="muted">settings/recall.yaml 是唯一参数真源 → git commit → 走到哪同步到哪。临时调参用 oks recall --floor 0.9。</p>
 <h2>知识指标</h2>
 <table><tr><th>维度</th><th>指标</th><th>值</th></tr>{"".join(k_rows)}</table>
 </body>
