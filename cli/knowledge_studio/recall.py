@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -368,6 +369,13 @@ def _recall_knowledge_with_context(
     query_tokens = _tokenize(query_lower)
 
     scored: list[tuple[float, dict, dict[str, Any]]] = []
+    # IDF 加权（CV from TreeSearch estimate_idf）：全库 body+title 估 IDF，
+    # 稀有 query term 权重高，避免常见词淹没信号。
+    query_terms = list(query_tokens)
+    idf = estimate_idf(
+        query_terms,
+        [f"{p.get('title', '')} {p.get('body', '')}" for p in all_pages],
+    )
     for item in all_pages:
         if item.get("status") in ("dropped", "superseded") or item.get("archived"):
             continue
@@ -385,6 +393,7 @@ def _recall_knowledge_with_context(
             query_tokens,
             topic_id,
             goal_context,
+            idf=idf,
         )
         relevance = components["final_score"]
         if relevance > 0:
@@ -463,6 +472,56 @@ def _tokenize(text: str) -> set[str]:
     return tokens
 
 
+# ── IDF-weighted token overlap (CV from TreeSearch heuristics.py, shibing624) ──
+# Pure functions, no extra deps. estimate_idf uses smooth IDF:
+# log((N+1)/(df+1)) + 1 to avoid zero weights for unseen terms.
+
+
+def estimate_idf(terms: list[str], corpus_texts: list[str]) -> dict[str, float]:
+    """Estimate smooth IDF weights for query terms from a corpus.
+
+    Uses smooth IDF: log((N + 1) / (df + 1)) + 1 to avoid zero weights.
+    Corpus is typically all wiki page texts in scope.
+    """
+    n = len(corpus_texts)
+    if n == 0:
+        return {t: 1.0 for t in terms}
+    df: dict[str, int] = {t: 0 for t in terms}
+    for text in corpus_texts:
+        text_lower = text.lower()
+        for t in terms:
+            if t in text_lower:
+                df[t] += 1
+    return {t: math.log((n + 1) / (df[t] + 1)) + 1.0 for t in terms}
+
+
+def compute_term_overlap(text: str, terms: list[str], idf: dict[str, float] | None = None) -> float:
+    """Compute IDF-weighted fraction of query terms that appear in text.
+
+    Rare terms (high IDF) contribute more than common terms. Falls back to
+    uniform weighting when idf is None. Returns a value in [0.0, 1.0].
+    """
+    if not text or not terms:
+        return 0.0
+    text_lower = text.lower()
+    if idf:
+        total_w = sum(idf.get(t, 1.0) for t in terms)
+        if total_w <= 0:
+            return 0.0
+        hit_w = sum(idf.get(t, 1.0) for t in terms if t in text_lower)
+        return hit_w / total_w
+    matched = sum(1 for t in terms if t in text_lower)
+    return matched / len(terms)
+
+
+def check_title_match(title: str, terms: list[str]) -> bool:
+    """Check if any query term appears in the title (CV from TreeSearch)."""
+    if not title or not terms:
+        return False
+    title_lower = title.lower()
+    return any(t in title_lower for t in terms)
+
+
 def _compute_relevance(
     item: dict,
     query_lower: str,
@@ -490,6 +549,7 @@ def _compute_relevance_components(
     query_tokens: set[str],
     topic_id: int | None,
     goal_context: dict[str, Any],
+    idf: dict[str, float] | None = None,
 ) -> dict[str, Any]:
     """Compute relevance and retain every component used in the score."""
     reasons: list[str] = []
@@ -508,12 +568,23 @@ def _compute_relevance_components(
     # is already covered by the dedicated title/body substring factor below.
     page_tokens = _tokenize(searchable)
     overlap_count = len(query_tokens & page_tokens)
-    token_overlap = overlap_count * 0.3
+    # IDF 加权 token overlap（CV from TreeSearch compute_term_overlap）：
+    # 稀有 term 命中权重高，加在原 count*0.3 之上作 bonus。
+    idf_overlap = compute_term_overlap(searchable, list(query_tokens), idf)
+    token_overlap = overlap_count * 0.3 + idf_overlap * 1.0
     if overlap_count:
         reasons.append(f"token-overlap:{overlap_count}")
+    if idf_overlap > 0:
+        reasons.append(f"idf-overlap:{idf_overlap:.2f}")
 
     title_substring = 0.0
     body_substring = 0.0
+    # Title term boost（CV from TreeSearch check_title_match）：query term
+    # 逐个命中 title，每个 +0.3。整 query substring（下）是更强的 1.0。
+    title_terms_hit = sum(1 for t in query_tokens if t in title)
+    title_term_boost = title_terms_hit * 0.3
+    if title_terms_hit:
+        reasons.append(f"title-terms:{title_terms_hit}")
     if query_lower and len(query_lower) > 3:
         if query_lower in title:
             title_substring = 1.0
@@ -531,7 +602,7 @@ def _compute_relevance_components(
                 reasons.append(f"topic-trace:{topic_id}")
                 break
 
-    base = token_overlap + title_substring + body_substring + topic_trace
+    base = token_overlap + title_substring + title_term_boost + body_substring + topic_trace
     has_query = bool(query_lower.strip() or query_tokens or topic_id is not None)
     wiki_type = item.get("type", item.get("category", "concept"))
     type_boost = {
@@ -546,6 +617,8 @@ def _compute_relevance_components(
         "token_overlap_count": overlap_count,
         "token_overlap": token_overlap,
         "title_substring": title_substring,
+        "title_term_boost": title_term_boost,
+        "idf_overlap": idf_overlap,
         "body_substring": body_substring,
         "topic_trace": topic_trace,
         "base_score": base,

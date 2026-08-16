@@ -222,6 +222,25 @@ TreeSearch（shibing624, [github.com/shibing624/TreeSearch](https://github.com/s
 
 **集成方向**（待实现）：`treesearch` 作可选依赖（`pip install open-knowledge-studio[search]`），recall.py 加 `_treesearch_candidates` helper，`recall()` 加 `fusion: bool` 参数，config 加 `recall_fusion: native | treesearch | fusion`。hook 默认 native（不依赖 TS），用户配 fusion 启用。
 
+## 十、TreeSearch CV（直接搬运优化）
+
+不做可选依赖，直接 CV TreeSearch 的纯函数到 `recall.py`：
+
+1. `estimate_idf` + `compute_term_overlap`（CV from `heuristics.py`）——平滑 IDF（`log((N+1)/(df+1))+1`）加权的 token overlap，稀有 term 命中权重高于常见词
+2. `check_title_match`（CV from `heuristics.py`）——query term 逐个命中 title，每个 +0.3 boost（OKS 原有整 query substring 是 +1.0，term 级是补充）
+
+**效果**（15 模糊 query，baseline 无 scope/goal）：
+
+| 指标 | CV 前 | CV 后 | Δ |
+|------|-------|-------|---|
+| Recall@1 | 0.333 | 0.400 | **+0.067** |
+| MRR | 0.472 | 0.506 | +0.034 |
+| nDCG@5 | 0.522 | 0.546 | +0.024 |
+
+scoped+goal 场景持平（R@1 0.600, MRR 0.689）——scope 硬过滤 + goal boost 已优化排序，IDF/title bonus 加在已命中页上不改变顺序。**CV 价值在 baseline**（新 terminal 无 goal 绑定、无 scope 设定时），正是首次使用 OKS 的场景。
+
+**不 CV 的**（太重或不适配）：FTS5Index（1707 行 + 架构改动）、ast_parser（OKS 是知识库不是代码搜索）、watch（wiki 61 页遍历够快）、is_generic_section（OKS 整页召回不分章节）。
+
 ---
 
 **数据可复现**：数据集 + eval 结果存于实例 `xinhai-knowledge-studio` 的 `records/experiments/`，图表存于 `docs/assets/experiments/`。`oks eval recall <dataset.yaml> -o <run.json>` 可独立复现实验 A。
