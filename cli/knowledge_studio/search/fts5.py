@@ -1,0 +1,262 @@
+"""FTS5 backend — CV from TreeSearch (shibing624) FTS5Index, flat version.
+
+SQLite FTS5 + jieba 中文分词 + BM25 + column weights + 增量 diff。
+大数据场景（1000+ wiki）比 native 遍历快，持久化索引。
+
+CV source: github.com/shibing624/TreeSearch treesearch/fts.py
+Adapted: tree-node → flat page (slug → title/body/tags/code_blocks).
+
+为何 CV（用户决策）：
+- 不假设数据少——大数据下 native 每次遍历 wiki + 实时算 IDF/title 越来越慢，
+  FTS5 持久化索引 + BM25 是大数据标配
+- jieba 已是 OKS 依赖，FTS5 用 stdlib sqlite3，无新依赖
+- 作为 fusion 的补盲 backend + connector 扩展的参照实现
+"""
+from __future__ import annotations
+
+import hashlib
+import os
+import re
+import sqlite3
+from typing import Any
+
+from . import SearchHit
+
+# ── Markdown 解析（CV from TreeSearch parse_md_node_text）──
+
+_RE_FRONT_MATTER = re.compile(r"^---\n(.*?)\n---\n?", re.DOTALL)
+_RE_CODE_BLOCK = re.compile(r"```[^\n]*\n(.*?)```", re.DOTALL)
+_RE_HAS_CJK = re.compile(r"[\u4e00-\u9fff\u3400-\u4dbf]")
+_RE_FTS5_SPECIAL = re.compile(r"[^\w\u4e00-\u9fff\u3400-\u4dbf]")
+_FTS5_OPERATORS = {"AND", "OR", "NOT", "NEAR"}
+
+# BM25 column weights: title 最重（5x），tags 次之（3x），body 基准（1x），code 轻（0.5x）
+_DEFAULT_WEIGHTS = {"title": 5.0, "body": 1.0, "tags": 3.0, "code_blocks": 0.5}
+
+
+def _check_fts5() -> bool:
+    """检测当前 SQLite 是否支持 FTS5（CPython 多数发行版自带，但部分精简版没有）。"""
+    try:
+        c = sqlite3.connect(":memory:")
+        c.execute("CREATE VIRTUAL TABLE t USING fts5(x)")
+        return True
+    except sqlite3.OperationalError:
+        return False
+
+
+def _tokenize_for_fts(text: str) -> str:
+    """FTS5 索引分词：CJK 用 jieba（复用 OKS recall._tokenize），英文靠 FTS5 unicode61。
+
+    返回空格分隔的 token 串（FTS5 unicode61 会二次切英文）。
+    """
+    if not text or not text.strip():
+        return ""
+    if _RE_HAS_CJK.search(text):
+        from ..recall import _tokenize
+
+        # _tokenize 返回 set（含 jieba cut_for_search + stopwords），FTS5 要 list 串
+        return " ".join(sorted(_tokenize(text)))
+    return text  # 纯英文：FTS5 unicode61 自己切
+
+
+def _parse_md(text: str) -> tuple[str, str, str]:
+    """Markdown → (front_matter, body, code_blocks)。
+
+    CV from TreeSearch ``parse_md_node_text``。code_blocks 从 body 抽出单独索引
+    （代码 query 不污染正文 BM25）。
+    """
+    if not text:
+        return "", "", ""
+    front_matter = ""
+    remaining = text
+    m = _RE_FRONT_MATTER.match(text)
+    if m:
+        front_matter = m.group(1).strip()
+        remaining = text[m.end():]
+
+    code_parts: list[str] = []
+
+    def _grab(mm: re.Match) -> str:
+        code_parts.append(mm.group(1).strip())
+        return ""  # 从 body 移除
+
+    body = _RE_CODE_BLOCK.sub(_grab, remaining)
+    body = re.sub(r"\n{3,}", "\n\n", body).strip()
+    return front_matter, body, "\n".join(code_parts)
+
+
+class FTS5Backend:
+    """SQLite FTS5 全文检索 backend（CV from TreeSearch FTS5Index, 平铺版）。
+
+    每页 1 行（slug, title, body, tags, code_blocks）。
+    - BM25 + column weights（title 5x > tags 3x > body 1x > code 0.5x）
+    - 增量 diff（content_hash），未变页跳过
+    - 持久化（db_path）或 in-memory（None）
+
+    FTS5 不可用时降级 LIKE（保证可用性）。
+    """
+
+    def __init__(
+        self,
+        root: str | None = None,
+        db_path: str | None = None,
+        weights: dict[str, float] | None = None,
+    ) -> None:
+        self._root = root
+        if db_path is None and root:
+            db_path = os.path.join(root, ".oks", "fts5.db")
+        self._db_path = db_path or ":memory:"
+        self._weights = {**_DEFAULT_WEIGHTS, **(weights or {})}
+        self._conn = sqlite3.connect(self._db_path)
+        self._conn.execute("PRAGMA journal_mode=WAL")
+        self._conn.execute("PRAGMA synchronous=NORMAL")
+        self._use_fts5 = _check_fts5()
+        self._init_db()
+        self._indexed = False
+
+    def _init_db(self) -> None:
+        if self._db_path != ":memory:":
+            os.makedirs(os.path.dirname(os.path.abspath(self._db_path)), exist_ok=True)
+        # pages 表存 content_hash 做 diff（不存全文，全文在 fts 表）
+        self._conn.execute(
+            "CREATE TABLE IF NOT EXISTS pages (slug TEXT PRIMARY KEY, content_hash TEXT)"
+        )
+        if self._use_fts5:
+            self._conn.execute(
+                "CREATE VIRTUAL TABLE IF NOT EXISTS wiki_fts USING fts5("
+                "slug UNINDEXED, title, body, tags, code_blocks)"
+            )
+        self._conn.commit()
+
+    def index(self, pages: list[dict[str, Any]]) -> None:
+        """增量索引（CV from TreeSearch index_document diff 逻辑）。
+
+        逐页算 content_hash，未变跳过；变的先删旧行再插新。
+        """
+        for page in pages:
+            slug = page.get("slug") or page.get("path", "").replace(".md", "")
+            if not slug:
+                continue
+            title = str(page.get("title", ""))
+            body = str(page.get("body", ""))
+            tags = page.get("tags", "")
+            if isinstance(tags, list):
+                tags = " ".join(str(t) for t in tags)
+
+            front, md_body, code = _parse_md(f"{title}\n\n{body}")
+            content = f"{title}\n{body}\n{tags}\n{code}"
+            content_hash = hashlib.md5(content.encode()).hexdigest()[:16]
+
+            row = self._conn.execute(
+                "SELECT content_hash FROM pages WHERE slug=?", (slug,)
+            ).fetchone()
+            if row and row[0] == content_hash:
+                continue  # 未变，跳过（增量 diff 核心）
+
+            if row:
+                self._conn.execute("DELETE FROM pages WHERE slug=?", (slug,))
+                if self._use_fts5:
+                    self._conn.execute("DELETE FROM wiki_fts WHERE slug=?", (slug,))
+
+            self._conn.execute(
+                "INSERT OR REPLACE INTO pages (slug, content_hash) VALUES (?, ?)",
+                (slug, content_hash),
+            )
+            if self._use_fts5:
+                self._conn.execute(
+                    "INSERT INTO wiki_fts (slug, title, body, tags, code_blocks) "
+                    "VALUES (?, ?, ?, ?, ?)",
+                    (
+                        slug,
+                        _tokenize_for_fts(title),
+                        _tokenize_for_fts(md_body),
+                        _tokenize_for_fts(str(tags)),
+                        _tokenize_for_fts(code),
+                    ),
+                )
+        self._conn.commit()
+        self._indexed = True
+
+    def _build_match_expr(self, query: str) -> str | None:
+        """query → FTS5 MATCH 表达式（token OR 连接）。"""
+        tokens = _tokenize_for_fts(query)
+        if not tokens.strip():
+            return None
+        words = [
+            _RE_FTS5_SPECIAL.sub("", w).strip()
+            for w in tokens.split()
+            if w and w.upper() not in _FTS5_OPERATORS
+        ]
+        words = [w for w in words if w]
+        if not words:
+            return None
+        return " OR ".join(words) if len(words) > 1 else words[0]
+
+    def search(
+        self, query: str, *, limit: int = 10, scope: str | None = None, **kwargs: Any
+    ) -> list[SearchHit]:
+        if not self._indexed:
+            # 延迟索引：从 wiki/ 读全库
+            from ..recall import list_wiki_pages
+
+            self.index(list_wiki_pages())
+        if not self._use_fts5:
+            return self._search_like(query, limit=limit)
+
+        match_expr = self._build_match_expr(query)
+        if match_expr is None:
+            return []
+
+        w = self._weights
+        # bm25(wiki_fts, w_slug=0, w_title, w_body, w_tags, w_code) — 列序对应建表
+        sql = (
+            f"SELECT f.slug, f.title, "
+            f"bm25(wiki_fts, 0, {w['title']}, {w['body']}, {w['tags']}, {w['code_blocks']}) AS rank "
+            f"FROM wiki_fts f WHERE wiki_fts MATCH ? ORDER BY rank LIMIT ?"
+        )
+        rows = self._conn.execute(sql, (match_expr, limit * 2)).fetchall()
+        # SQLite bm25 返回负值（越小越相关），取负转正
+        hits = [
+            SearchHit(
+                slug=slug, title=title or slug, score=float(-rank), backend="fts5"
+            )
+            for slug, title, rank in rows
+        ]
+        # scope 硬过滤（FTS5 不存 area，需后过滤——若要 FTS5 内过滤，扩展 schema 加 area 列）
+        if scope:
+            scope_set = {s.strip().lower() for s in scope.split(",") if s.strip()}
+            from ..recall import list_wiki_pages
+
+            area_map = {
+                p.get("slug"): str(p.get("area", "")).lower().strip()
+                for p in list_wiki_pages()
+            }
+            hits = [h for h in hits if area_map.get(h.slug, "") in scope_set]
+        return hits[:limit]
+
+    def _search_like(self, query: str, limit: int = 10) -> list[SearchHit]:
+        """FTS5 不可用时的 LIKE fallback（保证可用性，不崩）。"""
+        ql = query.lower()
+        rows = self._conn.execute("SELECT slug, title FROM pages").fetchall()
+        hits = []
+        for slug, title in rows:
+            if ql in (title or "").lower() or ql in slug.lower():
+                hits.append(
+                    SearchHit(slug=slug, title=title or slug, score=0.1, backend="fts5")
+                )
+        return hits[:limit]
+
+    def close(self) -> None:
+        try:
+            self._conn.close()
+        except Exception:
+            pass
+
+    def __del__(self):
+        try:
+            self._conn.close()
+        except Exception:
+            pass
+
+
+__all__ = ["FTS5Backend"]

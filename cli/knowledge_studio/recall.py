@@ -138,6 +138,7 @@ def recall(
     project_slug: str | None = None,
     type_filter: str | None = None,
     knowledge_only: bool = False,
+    search_backend: str = "native",
 ) -> dict[str, Any]:
     """Two-path recall: episodic (raw/ + profiles/) + knowledge (wiki/).
 
@@ -169,7 +170,7 @@ def recall(
             query=query, topic_id=topic_id, limit=limit,
             user_id=user_id, project_slug=project_slug,
         ),
-        "knowledge": _recall_knowledge_with_context(
+        "knowledge": _recall_knowledge_via_backend(
             query=query,
             topic_id=topic_id,
             limit=limit,
@@ -177,6 +178,7 @@ def recall(
             goal_context=goal_context,
             explain=explain,
             type_filter=type_filter,
+            search_backend=search_backend,
         ),
     }
 
@@ -347,6 +349,78 @@ def recall_knowledge(
         explain=explain,
         type_filter=type_filter,
     )
+
+
+def _recall_knowledge_via_backend(
+    *,
+    query: str,
+    topic_id: int | None,
+    limit: int,
+    scope: str | None,
+    goal_context: dict[str, Any],
+    explain: bool,
+    type_filter: str | None = None,
+    search_backend: str = "native",
+) -> list[dict[str, Any]]:
+    """Dispatch knowledge recall to native or a pluggable search backend.
+
+    native (default) → OKS 6+1 factor recall (jieba + IDF + title boost).
+    fts5 → SQLite FTS5 + BM25 (CV from TreeSearch, persistent index).
+    fusion → native top-3 + fts5 supplement-2 (experiment-validated optimal).
+    other → connector entry_points(group="oks_search_backend").
+    """
+    if search_backend == "native" or not search_backend:
+        return _recall_knowledge_with_context(
+            query=query,
+            topic_id=topic_id,
+            limit=limit,
+            scope=scope,
+            goal_context=goal_context,
+            explain=explain,
+            type_filter=type_filter,
+        )
+
+    from .search import get_backend
+    from .store import repo_root
+
+    backend = get_backend(search_backend, root=repo_root())
+    backend_kwargs: dict[str, Any] = {}
+    requested = goal_context.get("requested", "none")
+    if goal_context.get("mode") != "none" and requested not in ("active", "none"):
+        backend_kwargs["goal"] = requested
+    hits = backend.search(query, limit=limit, scope=scope, **backend_kwargs)
+
+    # 补全 recall-hit/v1 字段：backend 返回 SearchHit（slug/title/score），
+    # 其余字段从 wiki 页详情查补，保证 /query skill 和 eval 不受影响。
+    pages = {p.get("slug"): p for p in list_wiki_pages()}
+    results: list[dict[str, Any]] = []
+    for rank, h in enumerate(hits[:limit], start=1):
+        p = pages.get(h.slug, {})
+        review = p.get("review") or {}
+        entry: dict[str, Any] = {
+            "schema_version": RECALL_HIT_SCHEMA,
+            "channel": "knowledge",
+            "rank": rank,
+            "slug": h.slug,
+            "title": h.title or p.get("title", h.slug),
+            "type": p.get("type", p.get("category", "concept")),
+            "area": p.get("area", ""),
+            "status": p.get("status", "active"),
+            "score": round(float(p.get("score", 0) or 0), 3),
+            "relevance": round(h.score, 3),
+            "confidence": p.get("confidence", 0.8),
+            "body_preview": p.get("body", "")[:MAX_BODY_PREVIEW],
+            "tags": p.get("tags", ""),
+            "has_traces": bool(p.get("traces")),
+            "human_reviewed_at": p.get("human_reviewed_at", ""),
+            "relates_to": p.get("relates_to", ""),
+            "relationship": p.get("relationship", ""),
+            "backend": h.backend,
+        }
+        if review.get("lesson"):
+            entry["review_lesson"] = review["lesson"]
+        results.append(entry)
+    return results
 
 
 def _recall_knowledge_with_context(

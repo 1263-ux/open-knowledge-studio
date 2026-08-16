@@ -75,6 +75,7 @@ packages = [
     "knowledge_studio.providers",
     "knowledge_studio.recipes",
     "knowledge_studio.schemas",
+    "knowledge_studio.search",
     "knowledge_studio.security",
 ]
 
@@ -83,6 +84,7 @@ packages = [
 "knowledge_studio.capabilities" = "knowledge_studio/capabilities"
 "knowledge_studio.providers" = "knowledge_studio/providers"
 "knowledge_studio.recipes" = "knowledge_studio/recipes"
+"knowledge_studio.search" = "knowledge_studio/search"
 "knowledge_studio.security" = "knowledge_studio/security"
 
 [tool.setuptools.package-data]
