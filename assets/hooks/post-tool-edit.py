@@ -309,16 +309,32 @@ def _recall_supplement(
 
     _append_inject_trace(kb_root, agent_id, session_id, query, picked, source="posttool")
 
-    out = ['<recalled-memory source="oks-posttool">']
-    out.append(f'<!-- query="{query}" floor={floor} (PostToolUse supplement, long-task blind-spot fill) -->')
-    for h in picked:
-        body = str(h.get("body_preview", ""))[:280]
-        out.append(
-            f"- [{h.get('type', '')}] {h.get('title', '')} "
-            f"(slug: {h.get('slug', '')}, rel: {h.get('relevance', 0)})"
-        )
-        out.append(f"  {body}")
-    out.append("</recalled-memory>")
+    # 提示模式（exposure-based）：只告知“有记忆可用”，不注入内容。
+    # AI 看到信号后自主决定是否调 oks recall 取详情——token 省 90%，
+    # 沉默期仍有信号（避免长任务盲区），AI 不被强制注入无关内容。
+    # OKS_POSTTOOL_MODE=full 恢复旧行为（注入完整 body）。
+    mode = os.environ.get("OKS_POSTTOOL_MODE", "signal")
+    if mode == "full":
+        out = ['<recalled-memory source="oks-posttool">']
+        out.append(f'<!-- query="{query}" floor={floor} (PostToolUse supplement) -->')
+        for h in picked:
+            body = str(h.get("body_preview", ""))[:280]
+            out.append(
+                f"- [{h.get('type', '')}] {h.get('title', '')} "
+                f"(slug: {h.get('slug', '')}, rel: {h.get('relevance', 0)})"
+            )
+            out.append(f"  {body}")
+        out.append("</recalled-memory>")
+    else:  # signal mode（默认）——只 slug + rel + 引导，不注入 body
+        out = ['<oks-memory-signal source="oks-posttool">']
+        out.append(f'<!-- query="{query}" floor={floor} (signal: slugs only, no body) -->')
+        for h in picked:
+            out.append(
+                f"- [{h.get('type', '')}] {h.get('title', '')} "
+                f"(slug: {h.get('slug', '')}, rel: {h.get('relevance', 0)})"
+            )
+        out.append(f'  需要详情: oks recall "{query}" --explain')
+        out.append("</oks-memory-signal>")
     return "\n".join(out)
 
 
