@@ -25,7 +25,7 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
-import { join, basename } from "node:path";
+import { join, basename, homedir } from "node:path";
 
 const WATCHED = new Set(["edit", "write", "read", "bash", "grep", "glob", "multiedit"]);
 const COOLDOWN = parseInt(process.env.OKS_RECALL_COOLDOWN ?? "10", 10);
@@ -70,6 +70,32 @@ function loadSeen(sessionId: string): { n: number; seen: Record<string, number> 
   }
 }
 
+function _kbRoot(): string | null {
+  // Resolution order: OKS_ROOT env → ~/.oks/config.json knowledge_base_path → cwd
+  // (mirrors post-tool-edit.py _kb_root, so the extension works even when
+  // pi's cwd is the dev repo, not the KB instance).
+  const env = process.env.OKS_ROOT;
+  if (env && existsSync(env) && existsSync(join(env, "wiki"))) return env;
+  try {
+    const cfg = join(homedir(), ".oks", "config.json");
+    if (existsSync(cfg)) {
+      const { knowledge_base_path } = JSON.parse(readFileSync(cfg, "utf-8"));
+      if (
+        knowledge_base_path &&
+        existsSync(knowledge_base_path) &&
+        existsSync(join(knowledge_base_path, "wiki"))
+      ) {
+        return knowledge_base_path;
+      }
+    }
+  } catch {
+    // ignore config read errors
+  }
+  const cwd = process.cwd();
+  if (existsSync(join(cwd, "wiki"))) return cwd;
+  return null;
+}
+
 // query-level cooldown: same tool-derived query within COOLDOWN turns
 // skips Python subprocess entirely (0ms vs ~560ms startup). The .py hook
 // does authoritative slug-level cooldown; this is a coarser pre-filter.
@@ -96,7 +122,9 @@ export default function (pi: ExtensionAPI) {
     }
     queryCache.set(query, turnCounter);
 
-    const script = join(process.cwd(), ".claude/hooks/post-tool-edit.py");
+    const kbRoot = _kbRoot();
+    if (!kbRoot) return; // no KB instance found — skip silently
+    const script = join(kbRoot, ".claude/hooks/post-tool-edit.py");
     if (!existsSync(script)) return;
 
     const ctxAny = _ctx as unknown as {
@@ -109,7 +137,7 @@ export default function (pi: ExtensionAPI) {
       tool_name: event.toolName,
       tool_input: (event as any).input ?? {},
       session_id: sessionId,
-      cwd: process.cwd(),
+      cwd: kbRoot,
     });
 
     try {
