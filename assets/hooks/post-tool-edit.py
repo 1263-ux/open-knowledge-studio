@@ -304,10 +304,12 @@ def _recall_supplement(
     except Exception:
         return ""
 
-    floor = float(os.environ.get("OKS_POSTTOOL_FLOOR", "0.9"))
-    topn = int(os.environ.get("OKS_POSTTOOL_TOPN", "2"))
-    cooldown = int(os.environ.get("OKS_RECALL_COOLDOWN", "10"))
-    search_backend = os.environ.get("OKS_SEARCH_BACKEND", "native")
+    from knowledge_studio.recall import load_recall_params
+    p = load_recall_params(kb_root)
+    floor = p["posttool_floor"]
+    topn = p["posttool_topn"]
+    cooldown = p["recall_cooldown"]
+    search_backend = p["search_backend"]
 
     state_path = _state_path(session_id, kb_root)
     state = _load_state(state_path)

@@ -1353,6 +1353,14 @@ def _generate_metrics_html(root: Path) -> str:
     rej_med = statistics.median(rejected_rels) if rejected_rels else 0
     import os as _os
     cur_floor = _os.environ.get("OKS_RECALL_FLOOR", "0.7")
+    # PostToolUse 注入统计（source=posttool）
+    posttool_injects = [r for r in injects if r.get("source") == "posttool"]
+    pt_total = len(posttool_injects)
+    pt_accepted = sum(1 for r in posttool_injects if r.get("used"))
+    pt_rate = (pt_accepted / pt_total * 100) if pt_total else 0
+    # 当前生效参数（从 settings/recall.yaml + env）
+    from knowledge_studio.recall import load_recall_params
+    params = load_recall_params(root)
     suggested_floor = max(0.7, acc_med - 0.2) if accepted_rels else 0.7
     slug_freq = Counter()
     for rec in injects:
@@ -1401,6 +1409,18 @@ th {{ background: #f4f4f8; }}
 <tr><td>OKS_RECALL_FLOOR</td><td>{cur_floor}</td><td>{suggested_floor:.2f}</td></tr>
 </table>
 <p>频繁注入（cooldown 可能太短）：{freq_str}</p>
+<h2>PostToolUse 注入统计</h2>
+<p>PostToolUse 注入 <b>{pt_total}</b> 次，<b>{pt_accepted}</b> 条被采纳（<b>{pt_rate:.0f}%</b>）</p>
+<h2>当前参数（settings/recall.yaml + env）</h2>
+<table><tr><th>参数</th><th>当前值</th></tr>
+<tr><td>recall.floor</td><td>{params["recall_floor"]}</td></tr>
+<tr><td>recall.topn</td><td>{params["recall_topn"]}</td></tr>
+<tr><td>posttool.floor</td><td>{params["posttool_floor"]}</td></tr>
+<tr><td>posttool.mode</td><td>{params["posttool_mode"]}</td></tr>
+<tr><td>posttool.signal_rel_floor</td><td>{params["posttool_signal_rel_floor"]}</td></tr>
+<tr><td>search_backend</td><td>{params["search_backend"]}</td></tr>
+</table>
+<p class="muted">改 settings/recall.yaml → git commit → 走到哪同步到哪。env 覆盖 yaml。</p>
 <h2>知识指标</h2>
 <table><tr><th>维度</th><th>指标</th><th>值</th></tr>{"".join(k_rows)}</table>
 </body>

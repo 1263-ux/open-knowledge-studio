@@ -1,5 +1,32 @@
 # Changelog
 
+## v0.5.11 (2026-08-17)
+
+### 实验数据图表化 + 参数存知识库
+
+将 PostToolUse 注入实验数据沉淀到文档与报告，参数可随知识库同步：
+
+- **fig6 四模式对比图**（`docs/assets/experiments/fig6-posttool-modes.png`）：
+  A(20KB) / D(8KB) / J(1KB) / K+J(1KB) token + signal 次数对比
+- **docs/algorithms/oks-effectiveness.md 第十二节**：PostToolUse 注入模式对比，
+  含四模式表 + J 闸门 3 条件 + 实测数据 + K 引导说明
+- **`settings/recall.yaml` 参数文件**：`oks init` 生成实例级参数文件，
+  改 → git commit → 走到哪同步到哪。OKS 只提供默认值，每人自调。
+  优先级：env > settings/recall.yaml > 代码默认值
+- **`load_recall_params()` 共享加载函数**（recall.py）：env / yaml / 默认 三级 fallback
+- **post-tool-edit.py 用 load_recall_params**：取代直接 os.environ，读 yaml
+- **`oks metrics --html` 增强**：加 PostToolUse 注入统计 + 当前参数表
+  （recall.floor / posttool.mode / signal_rel_floor / search_backend）
+
+### 数据同步路径
+
+```
+settings/recall.yaml (参数) + records/inject.jsonl (注入数据)
+  → git commit → clone 即同步
+  → oks metrics --html 随时看报告
+  → 参数 + 数据不断积累沉淀，每人不同
+```
+
 ## v0.5.10 (2026-08-17)
 
 ### K+J 混合：system prompt 引导 + 智能信号
