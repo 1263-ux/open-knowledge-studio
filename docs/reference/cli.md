@@ -42,6 +42,20 @@ parent: 参考
 | `OKS_MAIL_TOPN` | 3 | 最多注入未读 mail |
 | `OKS_CONFLICT_WINDOW` | 300 | 文件冲突检测窗口（秒）|
 | `OKS_AGENT_ID` | cwd basename | Agent 身份（registry key）|
+| `OKS_SEARCH_BACKEND` | native | search backend：`native` \| `fts5` \| `fusion` \| `<connector-name>`（见下） |
+
+### 可插拔 search backend
+
+`oks recall --search-backend <name>` 或 `OKS_SEARCH_BACKEND=<name>` 切换召回后端：
+
+| backend | 说明 | 适用场景 |
+|---------|------|----------|
+| `native`（默认） | 6+1 因子 + jieba + IDF + title boost，实时遍历，无新依赖 | 小库（< 1000 页），新终端首次使用 |
+| `fts5` | SQLite FTS5 + BM25 + column weights + 持久化索引 + 增量 diff（CV from [TreeSearch](https://github.com/shibing624/TreeSearch) FTS5Index） | 大库（1000+ 页），持久化索引 |
+| `fusion` | native 主 top-3 + fts5 补盲 2（实验验证最优，R@5 +0.067） | 默认推荐，补 native 的关键词盲区 |
+| `<connector-name>` | 第三方包经 `entry_points(group="oks_search_backend")` 注册 | embedding / 代码搜索（ast_parser）/ 其他开源 search 框架 |
+
+**connector 扩展点**：第三方包写一个实现 `search()` + `index()` 的类，注册 entry_points，`oks recall --search-backend <name>` 即用，OKS 核心不改。这让 embedding 接入、代码检索等能力以 connector 方式自由扩展，而非硬塞进核心。
 
 Registry、Mail 和 `records/*.jsonl` 使用独立的运行路径，不由 `oks recall` 返回。
 `records/inject.jsonl` 记录哪些页面被注入，`oks wiki use` 可标记其是否被实际采用；

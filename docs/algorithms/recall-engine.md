@@ -41,7 +41,7 @@ total = base × type_boost
 
 ## 原理（七因子）
 
-1. **词项重叠 ×0.3** — jieba 分词，统计 query token 在标题+正文+标签的命中数。词项层，逐 token 字面。当前是无权计数：无 IDF（罕见词与常见词等权）、无长度归一化（长页天然多命中）——已知简化，需标注数据集才能量化改进。
+1. **词项重叠 ×0.3 + IDF 加权 bonus** — jieba 分词，统计 query token 在标题+正文+标签的命中数。词项层，逐 token 字面。**IDF 加权**（CV from TreeSearch `estimate_idf`）：全库估算 term 稀有度（`log((N+1)/(df+1))+1`），稀有 term 命中权重高，作 bonus 加在 count×0.3 之上。**标题 term 命中 +0.3/个**（CV from TreeSearch `check_title_match`）：query term 逐个命中标题，补 whole-query substring 的盲区。
 2. **子串匹配 +1.0/+0.5** — 标题含 query 串 +1.0，正文含 +0.5，可叠加（都含 +1.5）。关键词层，精确短语。
 3. **话题关联 +2.0** — 页面带 discuss trace 且 topic_id 匹配查询的 topic_id，+2.0。图谱层，把 memory 关联回产生它的对话。
 4. **类型乘数 ×1.5/×0.8/×0.6** — anti-pattern ×1.5（错误最该召回，防重蹈覆辙）、strategy ×0.8、concept ×0.6。乘法因子。
@@ -50,6 +50,17 @@ total = base × type_boost
 7. **目标加成 +0.8/+0.4（可选）** — 页面 `area` ∈ active goal 的 `domains` +0.8，命中 goal keyword +0.4。只作用于 `relevance>0` 的页（不凭空顶无关页上来）。
 
 ## 双层架构
+
+### 可插拔 search backend
+
+Knowledge 路径的召回后端可插拔（`recall(search_backend=...)` 或 `OKS_SEARCH_BACKEND` env）：
+
+- **native**（默认）：下文 6+1 因子 + jieba + IDF + title boost，实时遍历，无新依赖
+- **fts5**（CV from TreeSearch FTS5Index）：SQLite FTS5 + BM25 + column weights（title 5x > tags 3x > body 1x > code 0.5x）+ 增量 diff（content_hash）+ 持久化索引（`.oks/fts5.db`）。大库（1000+ 页）比 native 遍历快。FTS5 不可用时降级 LIKE
+- **fusion**：native top-3 主排序 + fts5 独有补盲 2，实验验证最优（避免 RRF 噪声稀释 native R@1）
+- **connector**：第三方包经 `entry_points(group="oks_search_backend")` 注册（embedding / 代码 ast_parser / 其他开源 search 框架），OKS 核心不改
+
+架构决策：不假设数据少——FTS5 持久化索引是大数据标配；embedding / 代码搜索等能力以 connector 方式自由扩展替换，而非硬编码进核心。
 
 OKS 的双路召回天然是“双层记忆架构”——结构化概览常驻 + episodic 细节按需：
 

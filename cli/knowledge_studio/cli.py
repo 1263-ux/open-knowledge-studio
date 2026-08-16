@@ -559,6 +559,7 @@ def recall_cmd(
     project: Optional[str] = typer.Option(None, "--project", envvar="OKS_PROJECT", help="Current project slug; required to recall profiles/projects/<slug> (A2 scope)"),
     type_filter: Optional[str] = typer.Option(None, "--type", "-t", help="Restrict the knowledge path to one wiki type"),
     knowledge_only: bool = typer.Option(False, "--knowledge-only", help="Skip the episodic path — only wiki/ results, no raw/ source material"),
+    search_backend: str = typer.Option("native", "--search-backend", envvar="OKS_SEARCH_BACKEND", help="Search backend: native | fts5 | fusion | <connector-name> (connector via entry_points group=oks_search_backend)"),
 ):
     """Two-path recall: episodic (raw/) + knowledge (wiki/).
 
@@ -578,6 +579,7 @@ def recall_cmd(
             project_slug=project,
             type_filter=type_filter,
             knowledge_only=knowledge_only,
+            search_backend=search_backend,
         )
     except ValueError as e:
         console.print(f"[red]{e}[/red]")

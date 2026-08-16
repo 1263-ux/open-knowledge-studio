@@ -309,6 +309,7 @@ def main() -> int:
         floor = float(os.environ.get("OKS_RECALL_FLOOR", "0.7"))
         topn = int(os.environ.get("OKS_RECALL_TOPN", "3"))
         cooldown = int(os.environ.get("OKS_RECALL_COOLDOWN", "10"))
+        search_backend = os.environ.get("OKS_SEARCH_BACKEND", "native")
 
         state["n"] += 1
         turn = state["n"]
@@ -318,7 +319,7 @@ def main() -> int:
         reg_scope = reg_entry.get("scope", []) if reg_entry else []
         scope_param = ",".join(reg_scope) if reg_scope else None
         try:
-            hits = recall(query=prompt, limit=max(topn * 3, 10), goal=goal_param, scope=scope_param).get("knowledge", [])
+            hits = recall(query=prompt, limit=max(topn * 3, 10), goal=goal_param, scope=scope_param, search_backend=search_backend).get("knowledge", [])
         except Exception:
             hits = []
 
