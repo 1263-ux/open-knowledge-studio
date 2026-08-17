@@ -1,7 +1,8 @@
 # OKS recall 参数（实例级，每人自调）
 #
-# 优先级：环境变量 > 本文件 > 代码默认值
+# settings/recall.yaml 是唯一参数真源（v0.5.12 起废弃环境变量）。
 # 改这里 → git commit → 走到哪同步到哪。OKS 只提供默认值，不强制。
+# 临时调参用 oks recall --floor 0.9（一次性，不改 yaml）。
 # oks metrics --html 会显示当前生效值。
 
 # ── 召回阈值 ──
