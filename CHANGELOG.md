@@ -1,3 +1,19 @@
+## [0.6.1] — 2026-08-18
+
+### oks 灵魂搬到 fts5 注入层
+
+用户关切: 改 fts5 默认后 6+1 的记忆遗忘机制还在吗?
+澄清: memory curve/decay/tier 在 store.py 独立系统, 不依附任何 backend, 照常跑.
+丢的只是 native 的召回算分（token_overlap/substring/topic_trace）, 被 fts5 BM25 node-level 取代.
+
+- **injection_boost**: type_boost + review_bonus + generic_demotion 搬到 fts5 注入层
+  score_components（anti-pattern ×1.5 > strategy ×0.8 > concept ×0.6 + review ×1.2 + 目录页 ×0.5）.
+  不改 fts5 召回顺序, 只作 boost 标注供 /query + eval 可见.
+- **简化**: 面向用户只留 fts5 一个常用 search（native/fusion 代码保留作历史 + 向后兼容）.
+- 三层 oks 灵魂: memory curve（store.py）+ goal boost（注入层重排）+ injection_boost（标注）.
+
+192 tests passed, fts5 P@3 仍 96%.
+
 ## [0.6.0] — 2026-08-18
 
 ### 召回引擎重构（吸收 TreeSearch node-level）
