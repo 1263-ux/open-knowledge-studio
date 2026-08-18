@@ -54,7 +54,7 @@ parent: 参考
 |---------|------|----------|
 | `native` | 6+1 因子 + jieba + IDF + title boost，page-level，实时遍历 | 小库 / 无 SQLite / 历史复现（v0.6.0 前默认，R@1=0.525） |
 | `fts5` | SQLite FTS5 + BM25 + column weights + 持久化索引 + 增量 diff（CV from [TreeSearch](https://github.com/shibing624/TreeSearch) FTS5Index） | 大库（1000+ 页），持久化索引 |
-| `fusion` | fts5 主召回 + native re-rank（0.7f+0.3n），P@3=90% | 实验位（低于纯 fts5 96%） |
+| `fusion` | fts5 主召回 + native re-rank（0.7f+0.3n），R@1=0.805 | 实验位（低于纯 fts5 R@1=0.825，灵魂 re-rank 负优化） |
 | `<connector-name>` | 第三方包经 `entry_points(group="oks_search_backend")` 注册 | embedding / 代码搜索（ast_parser）/ 其他开源 search 框架 |
 
 **connector 扩展点**：第三方包写一个实现 `search()` + `index()` 的类，注册 entry_points，`oks recall --search-backend <name>` 即用，OKS 核心不改。这让 embedding 接入、代码检索等能力以 connector 方式自由扩展，而非硬塞进核心。
