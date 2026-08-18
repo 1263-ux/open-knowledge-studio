@@ -519,6 +519,14 @@ def _recall_knowledge_via_backend(
         backend_kwargs["goal"] = requested
     hits = backend.search(query, limit=limit, scope=scope, **backend_kwargs)
 
+    # v0.6.0: goal boost 在注入层——fts5 召回 top-N 后，goal 命中的 slug
+    # 往前排（不改召回分数，只改注入顺序）。这是 oks 灵魂与召回精度分层
+    # 的实践：召回用 fts5（96% 精度），注入时 goal/review 等灵魂 boost。
+    if goal_context.get("mode") != "none":
+        goal_slugs = {g.get("slug") for g in goal_context.get("goals", [])}
+        if goal_slugs:
+            hits.sort(key=lambda h: (h.slug not in goal_slugs, -h.score))
+
     # 补全 recall-hit/v1 字段：backend 返回 SearchHit（slug/title/score），
     # 其余字段从 wiki 页详情查补，保证 /query skill 和 eval 不受影响。
     pages = {p.get("slug"): p for p in list_wiki_pages()}
