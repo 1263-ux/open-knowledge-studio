@@ -260,7 +260,7 @@ def recall(
     project_slug: str | None = None,
     type_filter: str | None = None,
     knowledge_only: bool = False,
-    search_backend: str = "native",
+    search_backend: str | None = None,
 ) -> dict[str, Any]:
     """Two-path recall: episodic (raw/ + profiles/) + knowledge (wiki/).
 
@@ -275,6 +275,9 @@ def recall(
     existing callers including the auto-recall hook are unaffected.
     """
     goal_context = _resolve_goal_context(goal, goal_boost=goal_boost)
+    # v0.6.0: CLI 未显式传 search_backend 时读 settings/recall.yaml
+    if not search_backend:
+        search_backend = load_recall_params().get("search_backend", "native")
     return {
         "schema_version": RECALL_RESPONSE_SCHEMA,
         "query": query,
@@ -482,7 +485,7 @@ def _recall_knowledge_via_backend(
     goal_context: dict[str, Any],
     explain: bool,
     type_filter: str | None = None,
-    search_backend: str = "native",
+    search_backend: str | None = None,
 ) -> list[dict[str, Any]]:
     """Dispatch knowledge recall to native or a pluggable search backend.
 
