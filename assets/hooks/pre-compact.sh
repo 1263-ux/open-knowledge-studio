@@ -4,9 +4,36 @@
 
 set -euo pipefail
 
+OKS_PYTHON_CMD="${OKS_PYTHON:-python3}"
+if [ -z "${OKS_PYTHON:-}" ] && [ "$OKS_PYTHON_CMD" = "python3" ]; then
+    case "$(uname -s 2>/dev/null || true)" in
+        MINGW*|MSYS*|CYGWIN*) OKS_PYTHON_CMD="python" ;;
+    esac
+fi
+if ! "$OKS_PYTHON_CMD" -c 'import sys' >/dev/null 2>&1; then
+    if [ -z "${OKS_PYTHON:-}" ] && [ "$OKS_PYTHON_CMD" != "python" ] && python -c 'import sys' >/dev/null 2>&1; then
+        OKS_PYTHON_CMD="python"
+    else
+        OKS_PYTHON_CMD=""
+    fi
+fi
+
+HOOK_INPUT=$(cat)
+HOOK_IS_CODEX=""
+if [ -n "$OKS_PYTHON_CMD" ]; then
+    HOOK_IS_CODEX=$(printf '%s' "$HOOK_INPUT" | "$OKS_PYTHON_CMD" -c '
+import json, sys
+try:
+    data = json.load(sys.stdin)
+    print("1" if data.get("hook_event_name") == "PreCompact" and data.get("model") else "")
+except Exception:
+    print("")
+' 2>/dev/null || true)
+fi
+
 REPO_ROOT="${OKS_ROOT:-}"
-if [ -z "$REPO_ROOT" ]; then
-    REPO_ROOT="$(python3 -c "import json,os;print(json.load(open(os.path.expanduser('~/.oks/config.json'))).get('knowledge_base_path',''))" 2>/dev/null || true)"
+if [ -z "$REPO_ROOT" ] && [ -n "$OKS_PYTHON_CMD" ]; then
+    REPO_ROOT="$("$OKS_PYTHON_CMD" -c "import json,os;print(json.load(open(os.path.expanduser('~/.oks/config.json'))).get('knowledge_base_path',''))" 2>/dev/null || true)"
 fi
 if [ -z "$REPO_ROOT" ]; then
     REPO_ROOT="$(pwd)"
@@ -47,5 +74,14 @@ $(oks status 2>/dev/null || echo "(oks not available)")
 \`\`\`
 EOF
 
-echo "Snapshot saved: $SNAPSHOT_FILE"
+if [ "$HOOK_IS_CODEX" = "1" ]; then
+    "$OKS_PYTHON_CMD" - "$SNAPSHOT_FILE" <<'PY'
+import json
+import sys
+
+print(json.dumps({"systemMessage": f"Snapshot saved: {sys.argv[1]}"}, ensure_ascii=True))
+PY
+else
+    echo "Snapshot saved: $SNAPSHOT_FILE"
+fi
 exit 0
