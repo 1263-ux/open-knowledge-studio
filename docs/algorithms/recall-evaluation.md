@@ -66,6 +66,24 @@ v0.6.1 把三层架构（召回 fts5 node-level / 注入 Soul Boost / 衰减 Mem
 | 去 Node-BM25 | 召回层 fts5→native 6+1 | 0.525 | 0.630 | Node-BM25 是精度主力（-36%） |
 | 去 Soul Boost（fusion re-rank 误用） | 灵魂因子搬回召回层 re-rank | 0.805 | 0.900 | 灵魂在注入层才对，召回层 re-rank 是负优化 |
 
+### embedding backend 对比（语义召回 connector 扩展）
+
+v0.6.2 加 embedding backend（oks-connector[embedding]，sentence-transformers
+本地 MiniLM，不调远程 API）。语义召回本应解决同义词鸿沟，实测却反直觉：
+
+| backend | R@1 | R@3 | R@5 | MRR | p50ms |
+|---------|------|------|------|------|-------|
+| **fts5（Node-BM25 字面）** | **0.825** | **0.925** | 0.927 | **0.907** | 93 |
+| embedding（语义 cosine） | 0.617 | 0.737 | 0.817 | 0.733 | 18304 |
+
+**为什么 embedding 反不如字面 BM25？**
+
+1. **中文术语重合高**——50-case 是语义改写但 query 与 wiki 用词高度重合（中文技术术语），BM25 字面已能命中，embedding 的语义泛化反而引入噪声（"自进化"→ auto-knowledge-distillation 而非 ai-native-strategy）。
+2. **R@5 接近**（0.817 vs 0.927）——embedding 宽网捞得到，但排序精度差。
+3. **慢 18304ms**——MiniLM CPU 每页 embed ~250ms，需 GPU 或 query embedding 缓存。
+
+**决策**：fts5 Node-BM25 仍是默认最优（R@1=0.825 + 93ms）。embedding 作语义鸿沟的 **fallback 补充**（fts5 miss 时走 embedding），不替代默认。语义召回的真正价值在大库 + 跨语言 + 同义词重的场景。
+
 ### 决策
 
 - 算法定名 **OKS Triple-Layer Recall = Node-BM25（召回）+ Soul Boost（注入）+ Memory Curve（衰减）**。
