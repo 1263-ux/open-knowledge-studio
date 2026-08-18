@@ -40,6 +40,26 @@
 
 # Changelog
 
+## [0.6.3] — 2026-08-18
+
+### Codex lifecycle parity（PR #38 by Huxc2020）
+
+让 OKS Codex 集成与 Claude Code + Qoder 对等:
+- Codex UserPromptSubmit / PostToolUse hook wiring
+- 解析 Codex apply_patch 文件路径做 conflict detection
+- 返回 Codex-compatible JSON additionalContext
+- Wiki frontmatter 写入前校验
+- PreCompact snapshot 输出
+- 从 Git 仓库根解析 project-local hooks
+- idempotent install/status + /hooks trust guidance
+- +7 回归测试 (test_hooks.py, 192→199 passed)
+
+### eval 增强（v0.6.2 续）
+
+- oks eval recall --search-backend {fts5|native|fusion|embedding} 支持消融
+- records/experiments/runs/ 归档 4 个 run json
+
+
 ## [0.6.2] — 2026-08-18
 
 ### OKS Triple-Layer Recall 命名 + 50-case 真实消融实验
