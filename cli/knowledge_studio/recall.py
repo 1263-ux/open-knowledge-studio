@@ -524,6 +524,11 @@ def _recall_knowledge_via_backend(
             "relates_to": p.get("relates_to", ""),
             "relationship": p.get("relationship", ""),
             "backend": h.backend,
+            "score_components": {
+                "fts5_score": round(h.score, 3),
+                "backend": h.backend,
+                **({"node": h.extra.get("best_node")} if h.extra.get("best_node") else {}),
+            },
         }
         if review.get("lesson"):
             entry["review_lesson"] = review["lesson"]
