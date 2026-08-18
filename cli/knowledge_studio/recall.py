@@ -475,7 +475,9 @@ def _recall_knowledge_via_backend(
     fusion → native top-3 + fts5 supplement-2 (experiment-validated optimal).
     other → connector entry_points(group="oks_search_backend").
     """
-    if search_backend == "native" or not search_backend:
+    # v0.6.0: native 走 get_backend → TreeSearchBackend（structure-aware FTS5）
+    # 旧 jieba+IDF 6+1 保留为 search_backend=legacy
+    if search_backend == "legacy":
         return _recall_knowledge_with_context(
             query=query,
             topic_id=topic_id,

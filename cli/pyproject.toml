@@ -30,6 +30,7 @@ dependencies = [
     "jieba>=0.42",
     "gitpython>=3",
     "pyyaml>=6",
+    "pytreesearch>=1.1.0",  # v0.6.0: native 默认检索改用 TreeSearch
     "jsonschema>=4.20",
     "oks-connector>=0.3.0",
 ]
