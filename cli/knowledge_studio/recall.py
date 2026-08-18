@@ -449,6 +449,7 @@ def recall_knowledge(
     goal: str | None = None,
     explain: bool = False,
     type_filter: str | None = None,
+    search_backend: str | None = None,
 ) -> list[dict[str, Any]]:
     """Find wiki pages relevant to the query via 6+1-factor scoring.
 
@@ -465,7 +466,7 @@ def recall_knowledge(
     type_filter: optional wiki type filter applied before ranking and limit.
     """
     goal_context = _resolve_goal_context(goal, goal_boost=goal_boost)
-    return _recall_knowledge_with_context(
+    return _recall_knowledge_via_backend(
         query=query,
         topic_id=topic_id,
         limit=limit,
@@ -473,6 +474,7 @@ def recall_knowledge(
         goal_context=goal_context,
         explain=explain,
         type_filter=type_filter,
+        search_backend=search_backend,
     )
 
 
@@ -499,7 +501,12 @@ def _recall_knowledge_via_backend(
     # fts5 → SQLite FTS5 + BM25 (CV from TreeSearch, flat page-level).
     # fusion → native top-3 + fts5 supplement-2 (default for best of both).
     if not search_backend or search_backend in ("native", "legacy"):
-        return _recall_knowledge_with_context(
+        # v0.6.1: backend None 时读 settings/recall.yaml（CLI recall() 同逻辑）
+        # 之前 None 直接走 native，导致 eval 测不到 fts5/fusion
+        if not search_backend:
+            search_backend = load_recall_params().get("search_backend", "native")
+        if search_backend in ("native", "legacy"):
+            return _recall_knowledge_with_context(
             query=query,
             topic_id=topic_id,
             limit=limit,

@@ -3,7 +3,7 @@ title: 召回引擎
 nav_order: 1
 parent: 算法
 ---
-# 召回引擎（fts5 node-level + oks 灵魂分层）
+# 召回引擎（OKS Triple-Layer Recall）
 
 `oks recall` 是唯一召回入口。默认合并 Raw episodic 与 Wiki knowledge；`--knowledge-only` 只查 Wiki。`raw/executions/` 和 `raw/.logs/` 是 provenance，不参与召回。
 

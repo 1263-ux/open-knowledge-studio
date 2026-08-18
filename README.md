@@ -70,6 +70,23 @@ the separately packaged `oks-connector` runtime.
 - Evidence and execution states remain traceable, including `partial`,
   `failed`, `skipped`, and `environment_limited`.
 
+### Recall Architecture — OKS Triple-Layer Recall
+
+Recall and injection are decoupled across three layers:
+
+- **Node-BM25** (retrieval) — fts5 node-level BM25 (one FTS5 row per `##`
+  heading, multi-word same-section scores high). 50-case ablation: R@1=82.5%,
+  MRR=0.907 (vs native 6+1 R@1=52.5%).
+- **Soul Boost** (injection) — goal re-rank + `injection_boost` annotation
+  (type×1.5/0.8/0.6 + review×1.2 + generic×0.5). Does not change retrieval
+  order; visible in `--explain`.
+- **Memory Curve** (decay) — type-specific λ → tier `hot/warm/cold/evictable`,
+  an independent subsystem in `store.py`.
+
+Ablation proves the layering: adding native 6+1 re-rank back into retrieval
+(fusion) *lowers* R@1 0.825→0.805 — the "soul" belongs in the injection layer,
+not the retrieval layer. See [Recall Evaluation](docs/algorithms/recall-evaluation.md).
+
 ### Learn More
 
 - [Start here](docs/start-here.md)
