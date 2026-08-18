@@ -491,9 +491,11 @@ def _recall_knowledge_via_backend(
     fusion → native top-3 + fts5 supplement-2 (experiment-validated optimal).
     other → connector entry_points(group="oks_search_backend").
     """
-    # v0.6.0: native 走 get_backend → TreeSearchBackend（structure-aware FTS5）
-    # 旧 jieba+IDF 6+1 保留为 search_backend=legacy
-    if search_backend == "legacy":
+    # native (default) → OKS 6+1 factor recall (jieba + IDF + title boost +
+    # memory curve + goal boost). oks 原创召回，不走 get_backend。
+    # fts5 → SQLite FTS5 + BM25 (CV from TreeSearch, flat page-level).
+    # fusion → native top-3 + fts5 supplement-2 (default for best of both).
+    if not search_backend or search_backend in ("native", "legacy"):
         return _recall_knowledge_with_context(
             query=query,
             topic_id=topic_id,
