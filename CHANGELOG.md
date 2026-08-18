@@ -40,6 +40,29 @@
 
 # Changelog
 
+## [0.6.2] — 2026-08-18
+
+### OKS Triple-Layer Recall 命名 + 50-case 真实消融实验
+
+定名 OKS Triple-Layer Recall = Node-BM25(召回) + Soul Boost(注入) + Memory Curve(衰减)。
+50-case 语义改写消融实验(严格精确 slug 匹配):
+- fts5(完整 Triple-Layer): R@1=0.825 R@3=0.925 MRR=0.907 nDCG@5=0.893 p50=93ms
+- native(去 Node-BM25, 6+1 page-level): R@1=0.525 R@3=0.647 MRR=0.630 nDCG@5=0.624
+- fusion(fts5+native rerank): R@1=0.805 R@3=0.905 MRR=0.900 nDCG@5=0.887
+关键发现: Node-BM25 R@1+57%; fusion re-rank 反降精度(灵魂须在注入层); fts5 还更快.
+
+3 个 eval bug 修复(之前 eval 一直测 native 不是 fts5!):
+1. recall_knowledge 调 _recall_knowledge_with_context(纯 native) → 改调 _recall_knowledge_via_backend(真 backend 分发)
+2. _recall_knowledge_via_backend search_backend=None 直接走 native → None 时读 settings/recall.yaml
+3. _kb_snapshot 把 .oks/fts5.db 算进 hash → 误报 'mutated state', 排除 .oks(索引是缓存)
+
+eval 增强: recall_knowledge + run_evaluation + eval_recall 全链加 search_backend 参数;
+  cli: oks eval recall --search-backend {fts5|native|fusion} 支持消融.
+
+docs: recall-engine/recall-evaluation/index/README/cli 11 处 P@3 虚高 96% → 真实 R@1=82.5%.
+records/experiments/runs/ 归档 3 个 run json.
+
+
 ## v0.5.14 (2026-08-17)
 
 ### 全面 review 修复（2 个 bug）
