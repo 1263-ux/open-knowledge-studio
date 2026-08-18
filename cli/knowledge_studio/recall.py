@@ -556,6 +556,10 @@ def _recall_knowledge_via_backend(
             "score_components": {
                 "fts5_score": round(h.score, 3),
                 "backend": h.backend,
+                # v0.6.0: oks 灵魂在注入层——type_boost + review_bonus +
+                # generic_demotion（CV from native 6+1 的灵魂因子）。
+                # 不改 fts5 召回顺序，只作为注入层 boost 标注，供 /query + eval 可见。
+                "injection_boost": round(_injection_boost(p, h), 3),
                 **({"node": h.extra.get("best_node")} if h.extra.get("best_node") else {}),
             },
         }
@@ -754,6 +758,29 @@ def is_generic_page(title: str) -> bool:
     if not title:
         return False
     return title.strip().lower() in _GENERIC_PAGE_TITLES
+
+
+# v0.6.0: oks 灵魂在注入层——把 native 6+1 的 type_boost + review_bonus +
+# generic_demotion 搬到 fts5 注入层。不改召回顺序，只作为 boost 标注。
+_INJECT_TYPE_BOOST = {"anti-pattern": 1.5, "strategy": 0.8, "concept": 0.6}
+
+
+def _injection_boost(page: dict, hit) -> float:
+    """注入层灵魂 boost（CV from native 6+1 的非召回因子）。
+
+    type_boost（anti-pattern ×1.5 > strategy ×0.8 > concept ×0.6）+
+    review_bonus（有 human review lesson ×1.2）+ generic_demotion（目录页 ×0.5）。
+    与 memory curve（store.py 独立算的 page score）叠加——召回用 fts5 BM25，
+    注入用 oks 灵魂。返回乘数（1.0 基准）。
+    """
+    wiki_type = str(page.get("type", page.get("category", "concept")))
+    boost = _INJECT_TYPE_BOOST.get(wiki_type, 0.5)
+    review = page.get("review") or {}
+    if review.get("lesson"):
+        boost *= 1.2  # 有人类审核教训的 page 注入优先
+    if is_generic_page(page.get("title", "")):
+        boost *= 0.5  # 目录页降权
+    return round(boost, 3)
 
 
 def _compute_relevance(
