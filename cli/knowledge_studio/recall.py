@@ -43,7 +43,15 @@ from knowledge_studio.store import (
 _logger = logging.getLogger(__name__)
 
 DEFAULT_RECALL_LIMIT = 5
-MAX_BODY_PREVIEW = 200
+MAX_BODY_PREVIEW = 200  # fallback; v0.6.0 实际用 inject_per_page_chars
+
+
+def _inject_per_page_chars() -> int:
+    """v0.6.0: 动态读 inject.per_page_chars（CV from karpathy-wiki token budget）。"""
+    try:
+        return int(load_recall_params().get("inject_per_page_chars", MAX_BODY_PREVIEW))
+    except Exception:
+        return MAX_BODY_PREVIEW
 RECALL_HIT_SCHEMA = "recall-hit/v1"
 RECALL_RESPONSE_SCHEMA = "recall-response/v1"
 
@@ -117,6 +125,9 @@ def load_recall_params(root=None):
         "posttool_floor": 0.9, "posttool_topn": 2, "posttool_mode": "signal",
         "posttool_recall": 1, "posttool_signal_rel_floor": 2.5,
         "conflict_window": 300, "search_backend": "native", "mail_topn": 3,
+        # v0.6.0: inject token budget (CV from karpathy-wiki L0-L3)
+        "inject_budget_chars": 4000, "inject_per_page_chars": 200,
+        "inject_title_only_floor": 0.5,
     }
 
     # 1. settings/recall.yaml (per-instance, git-synced)
@@ -142,6 +153,11 @@ def load_recall_params(root=None):
             params["conflict_window"] = int(cc.get("window", params["conflict_window"]))
             params["search_backend"] = str(data.get("search_backend", params["search_backend"]))
             params["mail_topn"] = int(data.get("mail_topn", params["mail_topn"]))
+            # v0.6.0: inject budget
+            ic = data.get("inject", {}) or {}
+            params["inject_budget_chars"] = int(ic.get("budget_chars", params["inject_budget_chars"]))
+            params["inject_per_page_chars"] = int(ic.get("per_page_chars", params["inject_per_page_chars"]))
+            params["inject_title_only_floor"] = float(ic.get("title_only_floor", params["inject_title_only_floor"]))
     except Exception:
         pass
 
@@ -517,7 +533,7 @@ def _recall_knowledge_via_backend(
             "score": round(float(p.get("score", 0) or 0), 3),
             "relevance": round(h.score, 3),
             "confidence": p.get("confidence", 0.8),
-            "body_preview": p.get("body", "")[:MAX_BODY_PREVIEW],
+            "body_preview": p.get("body", "")[:_inject_per_page_chars()],
             "tags": p.get("tags", ""),
             "has_traces": bool(p.get("traces")),
             "human_reviewed_at": p.get("human_reviewed_at", ""),
