@@ -16,14 +16,14 @@ parent: 算法
 - **语义召回**（embedding 相似度）——效果好，但 CLI 核心不调 AI API（P4），本地跑 embedding 模型成本高。
 - **关键词召回**（字面匹配）——轻量，但跨表述召回差（搜"design patterns"命中不了只写"architectural approaches"的页）。
 
-OKS 选了关键词召回，并用 **node-level BM25**（吸收 TreeSearch）把召回精度做到 **P@3 = 96%**（50-case 语义改写实测）。
+OKS 选了关键词召回，并用 **node-level BM25**（吸收 TreeSearch）把召回精度做到 **R@1 = 82.5% / MRR = 0.907**（50-case 消融实测）。
 
 ## 三层架构（v0.6.0+）
 
 召回与注入解耦——fts5 管"找得准"，oks 灵魂管"注入时优先什么"，衰减管"长期质量"：
 
 ```
-┌─ 召回层（fts5 node-level BM25, 默认 P@3=96%）─────────┐
+┌─ 召回层（fts5 node-level BM25, 默认 R@1=82.5%）──────┐
 │  每个 ## heading 段一个 FTS5 row，多词同段高分          │
 │  SQLite FTS5 + BM25 + column weights + 增量 diff       │
 └──────────────────────────────────────────────────────┘
@@ -41,7 +41,7 @@ OKS 选了关键词召回，并用 **node-level BM25**（吸收 TreeSearch）把
 └──────────────────────────────────────────────────────┘
 ```
 
-**关键洞察**（50-case 实测驱动）：oks 的"灵魂"——memory curve / goal boost / review bonus / type boost——在**召回层 re-rank 反而降精度**（fusion 90% < fts5 96%，不相关 page 高分挤掉精确命中）。因此**召回用 fts5 精度，灵魂在注入层 boost**。
+**关键洞察**（50-case 实测驱动）：oks 的"灵魂"——memory curve / goal boost / review bonus / type boost——在**召回层 re-rank 反而降精度**（fusion R@1=0.805 < fts5 R@1=0.825，不相关 page 高分挤掉精确命中）。因此**召回用 fts5 精度，灵魂在注入层 boost**。
 
 ## 双路召回
 
@@ -54,9 +54,9 @@ OKS 选了关键词召回，并用 **node-level BM25**（吸收 TreeSearch）把
 
 Knowledge 路径的召回后端可插拔（`recall(search_backend=...)` 或 `settings/recall.yaml`）：
 
-- **fts5**（**默认**，CV from TreeSearch FTS5Index + markdown tree parser）：SQLite FTS5 + BM25 + column weights（title 5x > tags 3x > body 1x > code 0.5x）+ 增量 diff（content_hash）+ 持久化索引（`.oks/fts5.db`）。v0.6.0 吸收 TreeSearch 的 markdown tree parser，每个 `##` heading 段一个 FTS5 row（node-level），多词同段 BM25 高分——50-case 实测 P@3=96%（v0.5.x flat page-level 仅 54%）。schema_version 检测自动 DROP 重建旧 schema。大库（1000+ 页）比 native 遍历快。FTS5 不可用时降级 LIKE。
-- **native**（6+1 因子，向后兼容）：jieba + IDF + token overlap + substring + topic trace + type boost + review bonus + memory curve + goal boost，page-level，实时遍历，无 SQLite 依赖。50-case P@3=54%——语义召回弱（词不匹配就失效）。v0.6.0 起不再默认，保留供小库 / 无 SQLite 环境 / 历史复现。
-- **fusion**（实验）：fts5 node-level 主召回 + native 6+1 归一化 re-rank（0.7 fts5 + 0.3 native）。50-case P@3=90%——低于纯 fts5 96%，证明 native re-rank 拖累。
+- **fts5**（**默认**，CV from TreeSearch FTS5Index + markdown tree parser）：SQLite FTS5 + BM25 + column weights（title 5x > tags 3x > body 1x > code 0.5x）+ 增量 diff（content_hash）+ 持久化索引（`.oks/fts5.db`）。v0.6.0 吸收 TreeSearch 的 markdown tree parser，每个 `##` heading 段一个 FTS5 row（node-level），多词同段 BM25 高分——50-case 消融 R@1=0.825 / MRR=0.907（native page-level R@1=0.525）。schema_version 检测自动 DROP 重建旧 schema。大库（1000+ 页）比 native 遍历快。FTS5 不可用时降级 LIKE。
+- **native**（6+1 因子，向后兼容）：jieba + IDF + token overlap + substring + topic trace + type boost + review bonus + memory curve + goal boost，page-level，实时遍历，无 SQLite 依赖。50-case R@1=0.525——语义召回弱（词不匹配就失效）。v0.6.0 起不再默认，保留供小库 / 无 SQLite 环境 / 历史复现。
+- **fusion**（实验）：fts5 node-level 主召回 + native 6+1 归一化 re-rank（0.7 fts5 + 0.3 native）。50-case R@1=0.805——低于纯 fts5 R@1=0.825，证明 native re-rank 拖累。
 - **connector**：第三方包经 `entry_points(group="oks_search_backend")` 注册（embedding / 代码 ast_parser / 其他开源 search 框架），OKS 核心不改。
 
 架构决策：不假设数据少——FTS5 持久化索引是大数据标配；embedding / 代码搜索等能力以 connector 方式自由扩展替换，而非硬编码进核心。
@@ -79,7 +79,7 @@ total = base × type_boost + review_bonus + memory_score × 0.5 + goal_boost
 7. **目标加成 +0.8/+0.4（可选）** — area ∈ goal domains / goal keyword
 
 {: .note }
-**灵魂因子去向（v0.6.0）**：type_boost + review_bonus + generic_demotion → fts5 注入层 `injection_boost`（`score_components.injection_boost`，`--explain` 可见）；memory curve → `store.py` apply_decay 独立系统；goal_boost → fts5 注入层重排。召回算分类（token overlap / substring / topic trace）被 fts5 BM25 node-level 取代（96% > 54%）。
+**灵魂因子去向（v0.6.0）**：type_boost + review_bonus + generic_demotion → fts5 注入层 `injection_boost`（`score_components.injection_boost`，`--explain` 可见）；memory curve → `store.py` apply_decay 独立系统；goal_boost → fts5 注入层重排。召回算分类（token overlap / substring / topic trace）被 fts5 BM25 node-level 取代（R@1 0.825 > 0.525）。
 
 ## 双层记忆架构
 
@@ -114,7 +114,7 @@ OKS 不学主流 RAG 的稠密嵌入 / 神经重排序，是 P4（CLI 核心不�
 
 ## 结论
 
-fts5 node-level 是 v0.6.0+ 的默认召回——吸收 TreeSearch markdown tree parser，P@3=96%，轻量、可解释、不调 AI、持久化索引。oks 灵魂（memory curve / goal boost / type boost / review bonus）分层到独立衰减系统 + 注入层 boost，不在召回层 re-rank。语义召回需 embedding（connector 扩展点已就位，待实现）。
+fts5 node-level 是 v0.6.1+ 的默认召回（OKS Triple-Layer Recall 的 Node-BM25 层）——吸收 TreeSearch markdown tree parser，消融 R@1=0.825 / MRR=0.907，轻量、可解释、不调 AI、持久化索引。oks 灵魂（memory curve / goal boost / type boost / review bonus）分层到独立衰减系统 + 注入层 boost，不在召回层 re-rank。语义召回需 embedding（connector 扩展点已就位，待实现）。
 
 OKS 提供的是 **Recall 原语，不是 agentic search**——单次查询返回结果，不做 ReAct 多轮迭代。多轮探索由 host Agent 在宿主层做。
 

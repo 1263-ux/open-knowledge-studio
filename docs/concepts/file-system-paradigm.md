@@ -32,7 +32,7 @@ recall 默认只注入 L0+L1（wiki frontmatter + 正文）。`raw/`（L2）只�
 - **Agent write_file 友好**——Agent 在工作分支写 draft，人审后合入主库
 - **链接可达**——wikilink + frontmatter `relates_to` 做轻量图谱（A4 关系）
 
-代价：无向量检索（语义召回差，需 embedding connector）。OKS 默认用 fts5 node-level BM25（吸收 TreeSearch markdown tree parser，P@3=96%）做召回，oks 灵魂（type/review/memory curve/goal）在注入层 boost 补这个缺口。
+代价：无向量检索（语义召回差，需 embedding connector）。OKS 默认用 fts5 node-level BM25（吸收 TreeSearch markdown tree parser，消融 R@1=0.825）做召回，oks 灵魂（type/review/memory curve/goal）在注入层 boost 补这个缺口。
 
 ## 防孤岛：链接与索引
 

@@ -52,7 +52,7 @@ parent: 参考
 
 | backend | 说明 | 适用场景 |
 |---------|------|----------|
-| `native` | 6+1 因子 + jieba + IDF + title boost，page-level，实时遍历 | 小库 / 无 SQLite / 历史复现（v0.6.0 前默认，P@3=54%） |
+| `native` | 6+1 因子 + jieba + IDF + title boost，page-level，实时遍历 | 小库 / 无 SQLite / 历史复现（v0.6.0 前默认，R@1=0.525） |
 | `fts5` | SQLite FTS5 + BM25 + column weights + 持久化索引 + 增量 diff（CV from [TreeSearch](https://github.com/shibing624/TreeSearch) FTS5Index） | 大库（1000+ 页），持久化索引 |
 | `fusion` | fts5 主召回 + native re-rank（0.7f+0.3n），P@3=90% | 实验位（低于纯 fts5 96%） |
 | `<connector-name>` | 第三方包经 `entry_points(group="oks_search_backend")` 注册 | embedding / 代码搜索（ast_parser）/ 其他开源 search 框架 |
