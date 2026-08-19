@@ -125,6 +125,8 @@ def load_recall_params(root=None):
         "posttool_floor": 0.9, "posttool_topn": 2, "posttool_mode": "signal",
         "posttool_recall": 1, "posttool_signal_rel_floor": 2.5,
         "conflict_window": 300, "search_backend": "native", "mail_topn": 3,
+        # v0.6.3: embedding fallback — fts5 召回空/明显不足时切 embedding 补充
+        "embedding_fallback": False,
         # v0.6.0: inject token budget (CV from karpathy-wiki L0-L3)
         "inject_budget_chars": 4000, "inject_per_page_chars": 200,
         "inject_title_only_floor": 0.5,
@@ -153,6 +155,7 @@ def load_recall_params(root=None):
             params["conflict_window"] = int(cc.get("window", params["conflict_window"]))
             params["search_backend"] = str(data.get("search_backend", params["search_backend"]))
             params["mail_topn"] = int(data.get("mail_topn", params["mail_topn"]))
+            params["embedding_fallback"] = bool(data.get("embedding_fallback", params["embedding_fallback"]))
             # v0.6.0: inject budget
             ic = data.get("inject", {}) or {}
             params["inject_budget_chars"] = int(ic.get("budget_chars", params["inject_budget_chars"]))
@@ -525,6 +528,24 @@ def _recall_knowledge_via_backend(
     if goal_context.get("mode") != "none" and requested not in ("active", "none"):
         backend_kwargs["goal"] = requested
     hits = backend.search(query, limit=limit, scope=scope, **backend_kwargs)
+
+    # v0.6.3: embedding fallback — fts5/native 召回空或明显不足时，
+    # 且 embedding_fallback 开启 + embedding connector 可用，切语义召回补充。
+    # 默认关闭（embedding 慢 ~18s/50query，一般场景不需要）。
+    # 触发条件：hits 空 或 召回数 < limit/2（明显召回不足）。
+    if (
+        len(hits) < max(1, (limit + 1) // 2)
+        and search_backend != "embedding"
+        and load_recall_params().get("embedding_fallback", False)
+    ):
+        try:
+            emb_backend = get_backend("embedding", root=repo_root())
+            emb_hits = emb_backend.search(query, limit=limit, scope=scope, **backend_kwargs)
+            hits = emb_hits or hits  # embedding 补充；空则保留原 fts5 结果
+        except Exception:
+            # embedding connector 未装或失败 → 静默回退原 fts5 结果（不阻断召回）
+            pass
+
 
     # v0.6.0: goal boost 在注入层——fts5 召回 top-N 后，goal 命中的 slug
     # 往前排（不改召回分数，只改注入顺序）。这是 oks 灵魂与召回精度分层
