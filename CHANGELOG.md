@@ -40,6 +40,25 @@
 
 # Changelog
 
+## [0.6.4] — 2026-08-18
+
+### embedding fallback 策略
+
+- `settings/recall.yaml` 加 `embedding_fallback: false`（默认关，embedding 慢 ~18s）
+- `_recall_knowledge_via_backend`: fts5 召回空/不足（<limit/2）+ 开启 + connector 可用时切 embedding 补充
+- except 静默回退原 fts5（不阻断召回）
+- 开启：`embedding_fallback: true` + `pip install 'oks-connector[embedding]'`
+
+### 代码清理（交付前 review）
+
+- `fusion.py` 删 dead code（return 后旧 native 主+fts5 补盲逻辑，永不执行）
+- `search/__init__.py` / `fusion.py` / `native.py` / `fts5.py` docstring 过时数据修正
+  （fusion R@1 0.667→0.805, native 默认→legacy, fts5 flat→node-level）
+- 删 `oks-connector-code` 重复包
+
+199 tests passed.
+
+
 ## [0.6.3] — 2026-08-18
 
 ### Codex lifecycle parity（PR #38 by Huxc2020）
