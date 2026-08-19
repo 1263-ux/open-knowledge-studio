@@ -104,9 +104,13 @@ See [Recall Evaluation](docs/algorithms/recall-evaluation.md).
 
 ### Learn More
 
+- [Real-world examples](examples/) — copyable scenarios: learning, books, Feishu, GitHub, maintenance, resume
 - [Start here](docs/start-here.md)
 - [Complete your first knowledge loop](docs/first-knowledge-loop.md)
 - [Verify that OKS works](docs/verify.md)
+
+*Advanced:*
+
 - [Architecture principles](docs/concepts/constitution.md)
 - [Ingest boundaries](docs/reference/ingest.md)
 
@@ -192,9 +196,13 @@ Node-BM25 R@1 较 native +57%；fusion re-rank 反而*降*精度——灵魂因�
 
 ### 继续阅读
 
+- [真实案例](examples/) — 可复制的场景：学习、书籍、飞书、GitHub、维护、简历
 - [从这里开始](docs/start-here.md)
 - [完成第一个知识闭环](docs/first-knowledge-loop.md)
 - [确认 OKS 正在工作](docs/verify.md)
+
+*进阶内容：*
+
 - [架构原则](docs/concepts/constitution.md)
 - [摄入边界](docs/reference/ingest.md)
 
