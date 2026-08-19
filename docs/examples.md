@@ -9,7 +9,7 @@ nav_order: 8
 
 | 场景 | 你在托管什么 |
 |------|-------------|
-| [托管你的学习](https://github.com/open-agent-power/open-knowledge-studio/tree/main/examples/oh-my-research) | 小白首选：从零跑通「收集 → 审查 → 沉淀 → 召回」第一个闭环 |
+| [托管你的研究](https://github.com/open-agent-power/open-knowledge-studio/tree/main/examples/oh-my-research) | 从零跑通「收集 → 审查 → 沉淀 → 召回」第一个闭环 |
 | [托管你的书籍](https://github.com/open-agent-power/open-knowledge-studio/tree/main/examples/oh-my-book) | 技术书章节、要点 |
 | [托管你的飞书](https://github.com/open-agent-power/open-knowledge-studio/tree/main/examples/oh-my-feishu) | 手机表单采集 + IM 审核 |
 | [托管你的 GitHub](https://github.com/open-agent-power/open-knowledge-studio/tree/main/examples/oh-my-github) | 项目、提交、技术决策 |
@@ -17,4 +17,4 @@ nav_order: 8
 | [托管你的简历](https://github.com/open-agent-power/open-knowledge-studio/tree/main/examples/oh-my-resume) | 经历、成果、能力证据 |
 
 {: .note }
-这些场景是**样例，不是框架的一部分**。小白建议从「托管你的学习」开始——设 goal → 收集 `raw/` → 审查沉淀 `wiki/` → 召回复用，最快跑通一个闭环。
+这些场景是**样例，不是框架的一部分**。可以从「托管你的研究」开始——设 goal → 收集 `raw/` → 审查沉淀 `wiki/` → 召回复用，跑通一个完整闭环。
