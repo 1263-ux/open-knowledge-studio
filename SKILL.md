@@ -88,6 +88,38 @@ After `skills-install`, the instance has 9 skills: `/assess`, `/ingest`, `/query
 
 ---
 
+## Step 2.5: Check capabilities (for video/audio)
+
+```bash
+oks capability status
+```
+
+For agents reading this: If the user's task involves video or audio ingestion, check which capabilities are available. Common scenarios:
+
+**Video ingestion** (YouTube, Bilibili, etc.):
+- **`watch` (yt-dlp)** — downloads video, metadata, and subtitles (~10MB, local, free)
+- Recommended: Ask user before installing: *"Video task detected. Install `watch` capability for video download? (Y/n)"*
+- Install: `oks capability install watch --yes`
+
+**Audio transcription** (optional):
+- **`local-asr`** — speech-to-text with local Whisper models (1-3GB, local, free, slower first-time)
+- **`remote-asr`** — speech-to-text via remote API (cloud, paid, faster)
+- Strategy: Ask user preference (local privacy vs remote speed/cost)
+
+**Agent guidance**:
+1. **Never auto-install without asking** if download >100MB or requires payment
+2. **Explain trade-offs**: Local (privacy, free, disk) vs Remote (speed, cost, no disk)
+3. **Skip gracefully**: If user declines, explain what won't be available (e.g., "subtitle fetch will be skipped")
+
+If `watch` is unavailable and user needs video, install it:
+```bash
+oks capability install watch --yes
+```
+
+For other capabilities, see `oks capability status` output and ask user based on their task requirements.
+
+---
+
 ## Step 3: Verify
 
 ```bash
