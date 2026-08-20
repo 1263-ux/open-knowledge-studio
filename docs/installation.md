@@ -3,42 +3,123 @@ title: 安装
 nav_order: 2
 parent: 开始使用
 ---
-# 安装
 
-要求：Python 3.12+、Git、pipx。
+# 安装 OKS
 
-## 推荐安装
+> 一个命令，2 分钟完成
+
+---
+
+## 推荐方式：pipx
 
 ```bash
+# 1. 安装 OKS
 pipx install open-knowledge-studio
-oks --version
-oks init ./my-knowledge-base
-cd ./my-knowledge-base
+
+# 2. 初始化知识库
+oks init ./my-knowledge
+
+# 3. 进入目录
+cd ./my-knowledge
+
+# 4. 验证
 oks status
 ```
 
-`oks init` 会创建文件式知识库，并安装 Claude Code、Codex 和通用 Agent 所需的
-Skills。个人知识应保存在这个实例目录，而不是 OKS 工具源码仓库。
+✅ **成功信号**：看到状态面板，显示 Wiki / Drafts 数量
 
-<details markdown="1">
-<summary>还没有 pipx？</summary>
+---
 
-- Ubuntu：`sudo apt install pipx && pipx ensurepath`
-- macOS：`brew install pipx && pipx ensurepath`
-- Windows：`py -m pip install --user pipx && py -m pipx ensurepath`
+## 系统要求
 
-安装后如果终端找不到 `oks`，重新打开终端再运行 `oks --version`。
-</details>
+| 项目 | 要求 |
+|------|------|
+| **Python** | 3.10+ |
+| **pipx** | 推荐 |
+| **磁盘** | 至少 100 MB |
+| **Agent** | Claude Code / Codex / Cursor |
 
-{: .note }
-源码 editable 安装属于贡献者工作流，不是普通用户的 Quick Start。
+---
 
-## 安装结果
+## 第一次装 pipx？
 
-成功时：
+**macOS**:
+```bash
+brew install pipx && pipx ensurepath
+```
 
-- `oks --version` 返回版本号；
-- `oks status` 能读取当前知识库；
-- 当前目录包含 `raw/`、`wiki/`、`drafts/`、`profiles/`、`mail/`、`settings/` 和 `_meta/`。
+**Ubuntu**:
+```bash
+sudo apt install pipx && pipx ensurepath
+```
 
-下一步：[完成第一个知识闭环](first-knowledge-loop.md)。
+**Windows**:
+```bash
+py -m pip install --user pipx && py -m pipx ensurepath
+```
+
+安装后**重启终端**，再运行 `oks --version`。
+
+---
+
+## 验证安装
+
+### 通过 Agent（推荐）
+
+打开 Claude Code / Codex，说：
+
+```
+"检查 OKS 是否正常工作"
+```
+
+Agent 会自动检查所有组件。
+
+---
+
+### 手动验证
+
+```bash
+oks --version  # 返回版本号
+oks status     # 显示知识库状态
+```
+
+---
+
+## 常见问题
+
+### Q: pipx: command not found
+
+**重启终端**后再试。如果还是不行：
+
+```bash
+# 手动添加到 PATH
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+---
+
+### Q: Permission denied
+
+不要用 `sudo`，改用用户目录：
+
+```bash
+oks init ~/my-knowledge
+```
+
+---
+
+### Q: Python 版本太低
+
+需要 Python 3.10+：
+
+```bash
+python --version  # 检查版本
+```
+
+---
+
+## 下一步
+
+✅ **安装完成**：[第一个知识闭环](first-knowledge-loop.md)
+
+⚠️ **遇到问题**：[确认 OKS 正在工作](verify.md)
