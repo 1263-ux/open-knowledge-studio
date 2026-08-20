@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+body {
+    margin: 0;
+    padding: 20px;
+    background: #1e1e1e;
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+.terminal {
+    background: #1e1e1e;
+    color: #d4d4d4;
+    padding: 20px;
+    border-radius: 8px;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.prompt {
+    color: #4ec9b0;
+    font-weight: bold;
+}
+
+.command {
+    color: #dcdcaa;
+}
+
+.output {
+    color: #d4d4d4;
+    white-space: pre;
+    margin: 10px 0;
+}
+
+.box {
+    border: 1px solid #569cd6;
+    padding: 10px;
+    margin: 10px 0;
+}
+
+.title {
+    color: #4ec9b0;
+    font-weight: bold;
+    margin-bottom: 10px;
+}
+
+.highlight {
+    color: #ce9178;
+    font-weight: bold;
+}
+
+.dim {
+    color: #858585;
+}
+
+.section {
+    margin: 30px 0;
+    padding: 20px 0;
+    border-bottom: 1px solid #333;
+}
+
+h2 {
+    color: #569cd6;
+    margin-bottom: 15px;
+}
+</style>
+</head>
+<body>
+
+<div class="terminal">
+
+<div class="section" id="step1-before">
+<h2>第 1 步：入库前状态</h2>
+<div class="output">
+<span class="prompt">$</span> <span class="command">oks status</span>
+
+┌────────────────────────────────────────────────────────────────────┐
+│ Open Knowledge Studio — Status                                     │
+│ Root: D:\XiangMuLuoDi\Clone\open-agent-power\open-knowledge-studio │
+│                                                                    │
+│ Wiki pages: <span class="highlight">7</span>  Domains: 2  Drafts: 4                               │
+│ Raw files: 167  Profiles: 0                                        │
+│                                                                    │
+│ Tiers: hot=6 warm=1 cold=0 evictable=0                             │
+│ Quality avg: 52.1/100  Pinned: 0                                   │
+│ Types: concept=6, strategy=1                                       │
+└────────────────────────────────────────────────────────────────────┘
+</div>
+<div class="output" style="margin-top: 20px;">
+<span class="prompt">$</span> <span class="command">oks recall "Kimi"</span>
+
+<span class="dim"># 入库前：没有 Kimi 相关内容
+# (或者有旧内容，但不是我们刚看的视频)</span>
+</div>
+</div>
+
+<div class="section" id="step5-recall">
+<h2>第 5 步：召回测试（入库后）</h2>
+<div class="output">
+<span class="prompt">$</span> <span class="command">oks recall "Kimi K3 成本" --limit 1 --explain</span>
+
+Episodic Memory (raw/ + profiles/)
+┌───  raw\2026\08\08\agent-capture\bundle-b70c3666e8347e6f\evidence.jsonl ────┐
+│ {"evidence_id": "ev-812a68179716", "artifact_id": "art-2719c95117b5",       │
+│ "kind": "metadata", "method": "metadata_extraction", "locator": {"kind":    │
+│ "document", "start_ms": 0, "end_ms": 0}, "text": "metadat                   │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+Semantic Memory (wiki/)
+┌─  <span class="highlight">Kimi K3 实测 — 1天烧完1个月算力，普通人慎买</span> (20260820-kimi-k3-实测-1天烧 ─┐
+│ # Kimi K3 实测 — 1天烧完1个月算力，普通人慎买                               │
+│                                                                             │
+│ ## 视频信息                                                                 │
+│                                                                             │
+│ | 属性 | 值 |                                                               │
+│ |------|-----|                                                              │
+│ | 标题 | Kimi K3我劝你别买，1天烧完1个月的算力实测！！ |                    │
+│ | UP主 | Ai小白Lab |                                                        │
+│ | 时长 | 4分50秒 |                                                          │
+│ | 平台 | Bilibili (BV1qg3F6dEvm) |                                          │
+│ | 发布日期 | 约2026年7月（世界人工智能大会后） |                            │
+│                                                                             │
+│ why: token-overlap:3, idf-overlap:1.00, title-terms:2, type:conceptx0.6,    │
+│ memory-score                                                                │
+└───────────────────────── <span class="highlight">score=0.84 relevance=1.92</span> ─────────────────────────┘
+</div>
+</div>
+
+<div class="section" id="step4-status-after">
+<h2>第 4 步后：Wiki 数量增加</h2>
+<div class="output">
+<span class="prompt">$</span> <span class="command">oks status</span>
+
+┌────────────────────────────────────────────────────────────────────┐
+│ Open Knowledge Studio — Status                                     │
+│ Root: D:\XiangMuLuoDi\Clone\open-agent-power\open-knowledge-studio │
+│                                                                    │
+│ Wiki pages: <span class="highlight">8</span>  Domains: 2  Drafts: 3                               │
+│ Raw files: 167  Profiles: 0                                        │
+│                                                                    │
+│ Tiers: hot=7 warm=1 cold=0 evictable=0                             │
+│ Quality avg: 52.5/100  Pinned: 0                                   │
+│ Types: concept=7, strategy=1                                       │
+└────────────────────────────────────────────────────────────────────┘
+
+<span class="dim"># 注意：Wiki pages 从 7 增加到 8
+# Types: concept 从 6 增加到 7</span>
+</div>
+</div>
+
+<div class="section" id="step4-wiki-list">
+<h2>第 4 步：确认 Wiki 条目</h2>
+<div class="output">
+<span class="prompt">$</span> <span class="command">oks wiki list | grep -i kimi</span>
+
+│ <span class="highlight">20260820-…</span> │ <span class="highlight">Kimi K3</span>     │ concept  │ computing │ hot  │  <span class="highlight">0.84</span> │ active     │
+│             │ 实测 —      │          │           │      │       │            │
+│             │ 1天烧完1个… │          │           │      │       │            │
+</div>
+</div>
+
+</div>
+
+</body>
+</html>
