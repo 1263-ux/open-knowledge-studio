@@ -3,18 +3,107 @@ title: 导入已有对话
 nav_order: 5
 parent: 开始使用
 ---
+
 # 导入已有对话
 
-AI 对话（Claude Code / Cursor / Codex / ChatGPT 导出）在 OKS 里是一等公民的来源。用 `/archive` 把对话存入 `raw/conversations/`，提炼 Q&A 到 `drafts/`。
+> 已有对话记录？可以导入，但**不要一次性全导入**
 
-## 流程
+---
 
-1. 会话结束前跑 `/archive`
-2. `/archive` 存对话原文到 `raw/conversations/{YYYY}/{MM}/{DD}/{source}/`（episodic 记录，`[untrusted-source]`）
-3. `/archive` 提炼 Q&A 到 `drafts/`，等人审（`/promote`）→ `wiki/`
+## 对话式导入（推荐）
 
-捕获与提炼是分开的两层——对话原文是材料，提炼出的结论走人审。详见 [对话](usage/conversations.md)。
+对 Agent 说：
 
-## 手动导入外部对话
+```
+"把这段对话收录进 OKS，提取有价值的知识点"
+```
 
-ChatGPT / DeepSeek 导出的 `.md`：`oks ingest run <file>`（text_ready 路径）→ Raw Bundle 落到 `raw/{date}/{source}/`。外部对话和 oks 内对话走同一条 episodic 路径。
+Agent 会：
+- ✓ 读取对话内容
+- ✓ 提取核心信息
+- ✓ 生成 Candidate
+- ✓ 等你审核
+
+---
+
+## /archive 命令
+
+在会话中使用：
+
+```
+/archive
+```
+
+功能：
+- 保存对话原文到 `raw/conversations/`
+- 提炼 Q&A 到 `drafts/`
+- 等待人工审核
+
+---
+
+## 批量导入建议
+
+### ❌ 不推荐：全部导入
+
+```
+❌ 一次导入 100+ 条对话
+   → 产生大量 Candidate
+   → 审核负担重
+   → 容易放弃
+```
+
+### ✅ 推荐：按需迁移
+
+**策略**：
+1. 从今天开始，新对话用 OKS
+2. 旧对话按需迁移（用到时再收录）
+3. 只迁移有价值的对话（A/B 级）
+
+---
+
+## 导入外部对话
+
+### ChatGPT / DeepSeek 导出
+
+```bash
+# 导出的 .md 文件
+oks ingest run <file>
+```
+
+### Claude.ai 对话
+
+对 Agent 说：
+
+```
+"把我在 Claude.ai 上关于 XX 的对话导入"
+```
+
+（需要你提供对话内容或导出文件）
+
+---
+
+## 注意事项
+
+### ⚠️ 时效性
+
+- 检查日期
+- 确认信息仍然准确
+- 标注时效性
+
+### ⚠️ 上下文
+
+- 补充必要背景
+- 确保知识独立可用
+
+### ⚠️ 质量
+
+- 只导入有复用价值的
+- A/B/C 分级（B 级以上）
+
+---
+
+## 下一步
+
+✅ **导入完成**：[最佳实践](../best-practices.md)
+
+📚 **了解更多**：[对话存档](usage/conversations.md)
