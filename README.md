@@ -26,7 +26,7 @@ your source → Candidate → human review → Wiki → Recall
 
 ### Quick Start
 
-Requirements: Python 3.10+, Git, and pipx.
+Requirements: Python 3.12+, Git, and pipx.
 
 ```bash
 pipx install open-knowledge-studio
@@ -129,7 +129,7 @@ Open Knowledge Studio（OKS）是一个 Agent-native、文件系统优先的知�
 
 ### 快速开始
 
-要求：Python 3.10+、Git、pipx。
+要求：Python 3.12+、Git、pipx。
 
 ```bash
 pipx install open-knowledge-studio

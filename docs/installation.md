@@ -34,7 +34,7 @@ oks status
 
 | 项目 | 要求 |
 |------|------|
-| **Python** | 3.10+ |
+| **Python** | 3.12+ |
 | **pipx** | 推荐 |
 | **磁盘** | 至少 100 MB |
 | **Agent** | Claude Code / Codex / Cursor |
