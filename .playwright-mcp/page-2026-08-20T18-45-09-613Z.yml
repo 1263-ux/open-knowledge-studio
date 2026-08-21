@@ -1,0 +1,173 @@
+- generic [active] [ref=f6e1]:
+  - generic [ref=f6e4]:
+    - generic [ref=f6e7]:
+      - generic [ref=f6e8]:
+        - button "新建会话" [ref=f6e280] [cursor=pointer]
+        - button "收起侧边栏" [ref=f6e309] [cursor=pointer]
+      - button "新建会话" [ref=f6e41] [cursor=pointer]:
+        - generic [ref=f6e310]: 新会话
+      - generic [ref=f6e47]:
+        - generic [ref=f6e48]:
+          - generic [ref=f6e311]: 工作区
+          - generic [ref=f6e313]:
+            - button "搜索会话" [ref=f6e314] [cursor=pointer]
+            - textbox "搜索会话…"
+          - generic [ref=f6e56]:
+            - button "视图选项" [ref=f6e319] [cursor=pointer]
+            - button "添加工作区" [ref=f6e61] [cursor=pointer]
+        - tree "会话" [ref=f6e323]:
+          - treeitem "open-agent-power" [ref=f6e326] [cursor=pointer]
+          - treeitem "three --workflow" [ref=f6e334] [cursor=pointer]
+          - generic [ref=f6e340]:
+            - treeitem "tool-deepseek" [expanded] [ref=f6e342] [cursor=pointer]
+            - treeitem "新会话" [selected] [ref=f6e350] [cursor=pointer]
+            - treeitem "可以审，而且我建议按“**能 7小时" [ref=f6e354] [cursor=pointer]:
+              - generic [ref=f6e356]: 可以审，而且我建议按“**能
+              - generic [ref=f6e357]: 7小时
+            - treeitem "# DeepSeek Harness Remote Access 20小时" [ref=f6e359] [cursor=pointer]:
+              - generic [ref=f6e361]: "# DeepSeek Harness Remote Access"
+              - generic [ref=f6e362]: 20小时
+            - treeitem "你好？ 2天" [ref=f6e364] [cursor=pointer]:
+              - generic [ref=f6e366]: 你好？
+              - generic [ref=f6e367]: 2天
+            - treeitem "Hello？ 3天" [ref=f6e369] [cursor=pointer]:
+              - generic [ref=f6e371]: Hello？
+              - generic [ref=f6e372]: 3天
+          - treeitem "未分组" [ref=f6e374] [cursor=pointer]
+      - generic [ref=f6e71]:
+        - button "设置" [expanded] [ref=f6e380] [cursor=pointer]
+        - dialog "设置" [ref=f6e388]:
+          - navigation [ref=f6e389]:
+            - generic [ref=f6e390]: 设置
+            - generic [ref=f6e391]:
+              - button "通用设置" [ref=f6e392] [cursor=pointer]
+              - button "模型" [ref=f6e398] [cursor=pointer]
+              - button "插件" [ref=f6e403] [cursor=pointer]
+              - button "Agent 预设" [ref=f6e407] [cursor=pointer]
+              - button "OKS" [ref=f6e414] [cursor=pointer]
+              - button "侧边卡片" [ref=f6e420] [cursor=pointer]
+          - generic [ref=f6e426]:
+            - generic [ref=f6e427]:
+              - button "打开配置文件" [ref=f6e431] [cursor=pointer]
+              - button "关闭" [ref=f6e432] [cursor=pointer]
+            - generic [ref=f6e493]:
+              - generic [ref=f6e494]:
+                - button "知识库" [ref=f6e495] [cursor=pointer]
+                - button "系统设置" [ref=f6e496] [cursor=pointer]
+              - generic [ref=f6e498]:
+                - generic [ref=f6e499]:
+                  - generic [ref=f6e500]: 回答时自动参考我的知识
+                  - paragraph [ref=f6e501]: 当问题相关时，Agent 会优先参考已审核的 Wiki 知识。关闭后不会影响手动召回或工具调用后的记忆提示。
+                - switch "开启" [checked] [ref=f6e554] [cursor=pointer]
+              - generic [ref=f6e503]:
+                - generic [ref=f6e504]:
+                  - generic [ref=f6e505]:
+                    - generic [ref=f6e506]:
+                      - heading "我的 OKS 知识库" [level=2] [ref=f6e507]
+                      - paragraph [ref=f6e508]: Wiki 是已审核知识；Draft 需要人工审核；Raw 是原始证据。
+                    - button "刷新" [ref=f6e509] [cursor=pointer]
+                  - generic [ref=f6e510]:
+                    - strong [ref=f6e511]: 已连接
+                    - text: ": OKS 知识库已连接。Wiki 8 · 审核草稿 3 · Raw 证据包 16 · Raw 文件 167"
+                  - generic [ref=f6e512]: 最近更新： 02:45:04
+                - generic [ref=f6e513]:
+                  - button "Wiki 知识" [ref=f6e514] [cursor=pointer]
+                  - button "审核草稿" [ref=f6e515] [cursor=pointer]
+                  - button "Raw 原始资料" [ref=f6e516] [cursor=pointer]
+                - generic [ref=f6e517]:
+                  - textbox "搜索知识" [ref=f6e518]:
+                    - /placeholder: 搜索 Wiki
+                  - generic [ref=f6e519]:
+                    - combobox "知识领域" [ref=f6e520]:
+                      - option "全部领域" [selected]
+                      - option "computing"
+                      - option "economics"
+                    - combobox "知识类型" [ref=f6e521]:
+                      - option "全部类型" [selected]
+                      - option "concept"
+                      - option "strategy"
+                - button "Kimi K3 实测 — 1天烧完1个月算力，普通人慎买 computing · concept · 2026-08-20T12:16:31.511944+00:00 Kimi K3 实测 — 1天烧完1个月算力，普通人慎买 视频信息 属性 值 ------ ----- 标题 Kimi K3我劝你别买，1天烧完1个月的算力实测！！ UP主 Ai小白Lab 时长 4分50秒 平台 Bilibili (BV1qg3F6dEvm) 发布日期 约2026年7月（世界人工智能大会后） 核心结论 \"写着结论：普通用户，我劝你别买，因为确实有点贵。\" UP主实测 Kimi K3（2026世界人工智能大会发布的…" [ref=f6e522] [cursor=pointer]:
+                  - generic [ref=f6e523]: Kimi K3 实测 — 1天烧完1个月算力，普通人慎买
+                  - generic [ref=f6e524]: computing · concept · 2026-08-20T12:16:31.511944+00:00
+                  - paragraph [ref=f6e525]: Kimi K3 实测 — 1天烧完1个月算力，普通人慎买 视频信息 属性 值 ------ ----- 标题 Kimi K3我劝你别买，1天烧完1个月的算力实测！！ UP主 Ai小白Lab 时长 4分50秒 平台 Bilibili (BV1qg3F6dEvm) 发布日期 约2026年7月（世界人工智能大会后） 核心结论 "写着结论：普通用户，我劝你别买，因为确实有点贵。" UP主实测 Kimi K3（2026世界人工智能大会发布的…
+                - button "OKS E2E Audit Test — Pipeline Verification computing · concept · 2026-08-08T15:13:34.982935+00:00 OKS E2E Audit Test Summary OKS (Open Knowledge Studio) is a file-based knowledge engineering system that converts external materials into recallable structured knowledge. The core pipeline was verified end-to-end in t…" [ref=f6e526] [cursor=pointer]:
+                  - generic [ref=f6e527]: OKS E2E Audit Test — Pipeline Verification
+                  - generic [ref=f6e528]: computing · concept · 2026-08-08T15:13:34.982935+00:00
+                  - paragraph [ref=f6e529]: OKS E2E Audit Test Summary OKS (Open Knowledge Studio) is a file-based knowledge engineering system that converts external materials into recallable structured knowledge. The core pipeline was verified end-to-end in t…
+                - button "中国秘密拯救全球经济的石油战略分析 economics · strategy · 2026-08-08T14:17:17.129944+00:00 中国秘密拯救全球经济的石油战略分析 Summary 年伊朗战争期间，中国通过秘密削减日均550万桶石油进口（占总进口量一半）、动用超大规模战略石油储备、以及大规模煤代油转换，单方面吸收了全球石油冲击，避免了世界经济崩溃。这套组合拳揭示了中国已具备全球石油定价权，并解除了马六甲困境对台海局势的制约。 核心机制 需求侧削减（5.5百万桶/日） 燃料出口禁令 ：秘密命令炼油厂停止出口航空燃油和汽油 煤代油 ：将煤用于塑料和化肥生产（传统…" [ref=f6e530] [cursor=pointer]:
+                  - generic [ref=f6e531]: 中国秘密拯救全球经济的石油战略分析
+                  - generic [ref=f6e532]: economics · strategy · 2026-08-08T14:17:17.129944+00:00
+                  - paragraph [ref=f6e533]: 中国秘密拯救全球经济的石油战略分析 Summary 年伊朗战争期间，中国通过秘密削减日均550万桶石油进口（占总进口量一半）、动用超大规模战略石油储备、以及大规模煤代油转换，单方面吸收了全球石油冲击，避免了世界经济崩溃。这套组合拳揭示了中国已具备全球石油定价权，并解除了马六甲困境对台海局势的制约。 核心机制 需求侧削减（5.5百万桶/日） 燃料出口禁令 ：秘密命令炼油厂停止出口航空燃油和汽油 煤代油 ：将煤用于塑料和化肥生产（传统…
+                - 'button "Quotes to Scrape — 经典网页抓取数据 computing · concept · 2026-08-08T12:24:02.297454+00:00 Quotes to Scrape — 经典网页抓取数据 Summary Quotes to Scrape 是 Scrapinghub 提供的经典网页抓取练习沙盒网站。页面采用服务端渲染 HTML，包含 10 条名人名言及其作者和标签。本次摄入仅为 OKS 管道验证测试。 Content: 10 条名言 # 名言摘要 作者 标签 --- ---------- ------ ------ 1 世界是我们思维的产物，改变世界需要改变思维…" [ref=f6e534] [cursor=pointer]':
+                  - generic [ref=f6e535]: Quotes to Scrape — 经典网页抓取数据
+                  - generic [ref=f6e536]: computing · concept · 2026-08-08T12:24:02.297454+00:00
+                  - paragraph [ref=f6e537]: "Quotes to Scrape — 经典网页抓取数据 Summary Quotes to Scrape 是 Scrapinghub 提供的经典网页抓取练习沙盒网站。页面采用服务端渲染 HTML，包含 10 条名人名言及其作者和标签。本次摄入仅为 OKS 管道验证测试。 Content: 10 条名言 # 名言摘要 作者 标签 --- ---------- ------ ------ 1 世界是我们思维的产物，改变世界需要改变思维…"
+                - button "高中数学公式大全 computing · concept · 2026-08-08T12:24:02.050855+00:00 高中数学公式大全 Summary A 7-page Chinese high school mathematics formula reference PDF covering core topics in algebra, trigonometry, geometry, sequences, probability, and calculus. Extracted via pymupdf (fitz) from digital…" [ref=f6e538] [cursor=pointer]:
+                  - generic [ref=f6e539]: 高中数学公式大全
+                  - generic [ref=f6e540]: computing · concept · 2026-08-08T12:24:02.050855+00:00
+                  - paragraph [ref=f6e541]: 高中数学公式大全 Summary A 7-page Chinese high school mathematics formula reference PDF covering core topics in algebra, trigonometry, geometry, sequences, probability, and calculus. Extracted via pymupdf (fitz) from digital…
+                - button "Quotes to Scrape JS — 动态网页数据提取案例 computing · concept · 2026-08-08T12:24:01.809924+00:00 Quotes to Scrape JS — 动态网页数据提取案例 Summary Quotes to Scrape 的 JS 渲染版本，展示了 Client-Side Rendering (CSR) 场景下的数据提取策略。页面源码以 var data = [...] 的 JavaScript 内嵌 JSON 方式传递数据，无需浏览器引擎即可直接提取。 提取策略 Provider 选择 Provider 可用性 选择 原因 ----…" [ref=f6e542] [cursor=pointer]:
+                  - generic [ref=f6e543]: Quotes to Scrape JS — 动态网页数据提取案例
+                  - generic [ref=f6e544]: computing · concept · 2026-08-08T12:24:01.809924+00:00
+                  - paragraph [ref=f6e545]: Quotes to Scrape JS — 动态网页数据提取案例 Summary Quotes to Scrape 的 JS 渲染版本，展示了 Client-Side Rendering (CSR) 场景下的数据提取策略。页面源码以 var data = [...] 的 JavaScript 内嵌 JSON 方式传递数据，无需浏览器引擎即可直接提取。 提取策略 Provider 选择 Provider 可用性 选择 原因 ----…
+                - button "Attention Is All You Need — Transformer Architecture Paper computing · concept · 2026-08-08T11:30:41.166251+00:00 Attention Is All You Need Summary The seminal 2017 paper by Vaswani et al. that introduced the Transformer architecture — a novel neural network architecture based solely on attention mechanisms, dispensing with recur…" [ref=f6e546] [cursor=pointer]:
+                  - generic [ref=f6e547]: Attention Is All You Need — Transformer Architecture Paper
+                  - generic [ref=f6e548]: computing · concept · 2026-08-08T11:30:41.166251+00:00
+                  - paragraph [ref=f6e549]: Attention Is All You Need Summary The seminal 2017 paper by Vaswani et al. that introduced the Transformer architecture — a novel neural network architecture based solely on attention mechanisms, dispensing with recur…
+                - button "R0 Baseline Report computing · concept · 2026-08-08T11:05:39.814942+00:00 暂无正文摘要。" [ref=f6e550] [cursor=pointer]:
+                  - generic [ref=f6e551]: R0 Baseline Report
+                  - generic [ref=f6e552]: computing · concept · 2026-08-08T11:05:39.814942+00:00
+                  - paragraph [ref=f6e553]: 暂无正文摘要。
+    - generic [ref=f6e86]:
+      - generic [ref=f6e89]:
+        - generic [ref=f6e94]: 探索未至之境
+        - generic [ref=f6e95]: 预览版
+      - generic [ref=f6e96]:
+        - button "选择工作区" [ref=f6e97] [cursor=pointer]:
+          - generic [ref=f6e100]: tool-deepseek
+        - button "标准模式" [ref=f6e105] [cursor=pointer]
+      - generic [ref=f6e115]:
+        - textbox "描述你想要构建的内容" [ref=f6e141]
+        - generic [ref=f6e119]:
+          - generic [ref=f6e120]:
+            - button "命令" [ref=f6e142] [cursor=pointer]
+            - button "访问模式，当前：Workspace Write" [ref=f6e147] [cursor=pointer]
+          - generic [ref=f6e121]:
+            - button "选择模型，当前 DeepSeek-V4-Flash (modlens vision)，推理等级 High" [ref=f6e161] [cursor=pointer]:
+              - generic [ref=f6e162]: DeepSeek-V4-Flash (modlens vision)
+              - generic [ref=f6e163]: High
+            - button "发送消息" [disabled] [ref=f6e166]
+    - generic [ref=f6e170]:
+      - generic [ref=f6e171]:
+        - generic: 详情
+        - button "关闭详情" [ref=f6e172] [cursor=pointer]
+      - generic [ref=f6e175]: 点击消息流中的工具行查看详情
+  - generic:
+    - generic [ref=f6e176]:
+      - button "展开底部面板" [ref=f6e177] [cursor=pointer]
+      - button "折叠侧边栏" [ref=f6e181] [cursor=pointer]
+    - generic [ref=f6e189]:
+      - generic [ref=f6e191]:
+        - generic "Explorer" [ref=f6e192] [cursor=pointer]:
+          - button "关闭" [ref=f6e197]
+        - button "新建标签页" [ref=f6e201] [cursor=pointer]
+      - generic [ref=f6e206]:
+        - generic [ref=f6e207]:
+          - generic "D:\\XiangMuLuoDi\\Learning\\Practice\\tool-deepseek" [ref=f6e208]: tool-deepseek
+          - button "刷新" [ref=f6e209] [cursor=pointer]
+        - generic [ref=f6e212]:
+          - generic [ref=f6e213] [cursor=pointer]: tool-deepseek
+          - button ".agent" [ref=f6e219] [cursor=pointer]
+          - button ".git" [ref=f6e224] [cursor=pointer]
+          - button ".playwright-mcp" [ref=f6e229] [cursor=pointer]
+          - button "custom-auth-ui" [ref=f6e234] [cursor=pointer]
+          - button "dsh-remote-auth" [ref=f6e239] [cursor=pointer]
+          - button "dsh-server-deploy" [ref=f6e244] [cursor=pointer]
+          - button ".gitignore" [ref=f6e248] [cursor=pointer]
+          - button "Caddyfile" [ref=f6e252] [cursor=pointer]
+          - button "dsh-remote-auth.tar.gz" [ref=f6e256] [cursor=pointer]
+          - button "login-final-fixed.png" [ref=f6e260] [cursor=pointer]
+          - button "login-final-screenshot.png" [ref=f6e264] [cursor=pointer]
+          - button "package.json" [ref=f6e268] [cursor=pointer]
+          - button "PROJECT-SUMMARY.md" [ref=f6e272] [cursor=pointer]
+          - button "README.md" [ref=f6e276] [cursor=pointer]

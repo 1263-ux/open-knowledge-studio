@@ -1,0 +1,60 @@
+- generic [ref=f1e3]:
+  - heading "第 6 步：基于召回知识设计技术方案" [level=2] [ref=f1e4]
+  - generic [ref=f1e5]:
+    - generic [ref=f1e6]: 💬 用户问：
+    - generic [ref=f1e7]: 我要设计一个智能文档分析系统，考虑使用 Kimi K3。 请帮我评估是否合适，并给出技术方案。
+    - generic [ref=f1e8]: 🤖 AI 回答（基于 OKS 召回）：
+    - generic [ref=f1e9]:
+      - heading "适用性分析" [level=3] [ref=f1e10]
+      - paragraph [ref=f1e11]:
+        - strong [ref=f1e12]: 优势
+        - generic [ref=f1e13]: 来自 OKS
+      - list [ref=f1e14]:
+        - listitem [ref=f1e15]: ✓ 效果强：2026 WAIC 发布，最强国产大模型
+        - listitem [ref=f1e16]: ✓ 应用开发能力：成功搭建律师事务所官网
+        - listitem [ref=f1e17]: ✓ 跑分表现优异
+      - paragraph [ref=f1e18]:
+        - strong [ref=f1e19]: 关键风险
+        - generic [ref=f1e20]: 来自 OKS
+      - list [ref=f1e21]:
+        - listitem [ref=f1e22]: ⚠ 成本极高：单次官网生成约 20 元
+        - listitem [ref=f1e23]: ⚠ 消耗速度快：十几小时烧掉 300+ 元
+        - listitem [ref=f1e24]: ⚠ 核心结论："普通用户我劝你别买，因为确实有点贵"
+      - heading "成本估算" [level=3] [ref=f1e25]
+      - table [ref=f1e26]:
+        - rowgroup [ref=f1e27]:
+          - row [ref=f1e28]:
+            - columnheader "场景" [ref=f1e29]
+            - columnheader "处理量" [ref=f1e30]
+            - columnheader "Kimi K3 成本" [ref=f1e31]
+            - columnheader "说明" [ref=f1e32]
+          - row [ref=f1e33]:
+            - cell "智能文档分析" [ref=f1e34]
+            - cell "100 个文档/天" [ref=f1e35]
+            - cell "~2,000 元/天 60,000 元/月" [ref=f1e36]: ~2,000 元/天60,000 元/月
+            - cell "基于 OKS 数据 20元/次 × 100" [ref=f1e37]:
+              - generic [ref=f1e38]: 基于 OKS 数据
+              - text: 20元/次 × 100
+          - row [ref=f1e39]:
+            - cell "对比：官网订阅" [ref=f1e40]
+            - cell "-" [ref=f1e41]
+            - cell "300 元/月 (已暂停)" [ref=f1e42]: 300 元/月(已暂停)
+            - cell "API 成本是订阅的 200 倍" [ref=f1e43]: API 成本是订阅的200 倍
+      - heading "技术方案建议" [level=3] [ref=f1e44]
+      - paragraph [ref=f1e45]:
+        - strong [ref=f1e46]: ❌ 不推荐
+        - text: 将 Kimi K3 作为主力模型，除非：
+      - list [ref=f1e47]:
+        - listitem [ref=f1e48]: ✓ 客户是大型企业，对成本不敏感
+        - listitem [ref=f1e49]: ✓ 文档分析的商业价值远超 API 成本
+      - paragraph [ref=f1e50]:
+        - strong [ref=f1e51]: ✓ 推荐方案
+        - generic [ref=f1e52]: 基于通用知识
+      - generic [ref=f1e53]: 混合模型策略： ├── 日常文档：GPT-3.5 / Claude Haiku (低成本) ├── 复杂分析：GPT-4 / Claude Opus (可控成本) └── 演示功能：Kimi K3 (展示最优效果)
+      - paragraph [ref=f1e55]:
+        - strong [ref=f1e56]: 知识来源标注
+        - text: ：
+        - generic [ref=f1e57]: 来自 OKS
+        - text: 成本数据（20元/次、300+元）、"我劝你别买"结论
+        - generic [ref=f1e58]: 通用知识
+        - text: 替代方案（GPT-4/Claude）

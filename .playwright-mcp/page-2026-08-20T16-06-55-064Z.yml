@@ -1,0 +1,231 @@
+- generic [ref=f4e2]:
+  - generic [ref=f4e3]:
+    - link "Skip to content" [ref=f4e4] [cursor=pointer]:
+      - /url: "#start-of-content"
+    - banner [ref=f4e9]:
+      - heading "Navigation Menu" [level=2] [ref=f4e10]
+      - generic [ref=f4e11]:
+        - link "Homepage" [ref=f4e13] [cursor=pointer]:
+          - /url: /
+        - generic [ref=f4e16]:
+          - navigation "Global" [ref=f4e17]:
+            - list [ref=f4e18]:
+              - listitem [ref=f4e19]:
+                - button "Platform" [ref=f4e21] [cursor=pointer]
+              - listitem [ref=f4e24]:
+                - button "Solutions" [ref=f4e26] [cursor=pointer]
+              - listitem [ref=f4e29]:
+                - button "Resources" [ref=f4e31] [cursor=pointer]
+              - listitem [ref=f4e34]:
+                - button "Open Source" [ref=f4e36] [cursor=pointer]
+              - listitem [ref=f4e39]:
+                - button "Enterprise" [ref=f4e41] [cursor=pointer]
+              - listitem [ref=f4e44]:
+                - link "Pricing" [ref=f4e45] [cursor=pointer]:
+                  - /url: https://github.com/pricing
+          - generic [ref=f4e46]:
+            - button "Search or jump to, type / to search" [ref=f4e48] [cursor=pointer]
+            - link "Sign in" [ref=f4e55] [cursor=pointer]:
+              - /url: /login?return_to=https%3A%2F%2Fgithub.com%2Fopen-agent-power%2Fopen-knowledge-studio%2Fblob%2Fmain%2Fassets%2Fhooks%2Fuser-prompt-recall.sh
+            - link "Sign up" [ref=f4e58] [cursor=pointer]:
+              - /url: /signup?ref_cta=Sign+up&ref_loc=header+logged+out&ref_page=%2F%3Cuser-name%3E%2F%3Crepo-name%3E%2Fblob%2Fshow&source=header-repo&source_repo=open-agent-power%2Fopen-knowledge-studio
+            - button "Appearance settings" [ref=f4e61] [cursor=pointer]
+  - main [ref=f4e68]:
+    - generic [ref=f4e69]:
+      - generic [ref=f4e70]:
+        - generic [ref=f4e72]:
+          - link "open-agent-power" [ref=f4e76] [cursor=pointer]:
+            - /url: /open-agent-power
+          - generic [ref=f4e77]: /
+          - strong [ref=f4e78]:
+            - link "open-knowledge-studio" [ref=f4e79] [cursor=pointer]:
+              - /url: /open-agent-power/open-knowledge-studio
+          - generic [ref=f4e80]: Public
+        - generic [ref=f4e81]:
+          - list:
+            - listitem [ref=f4e82]:
+              - link "You must be signed in to change notification settings" [ref=f4e83] [cursor=pointer]:
+                - /url: /login?return_to=%2Fopen-agent-power%2Fopen-knowledge-studio
+                - text: Notifications
+            - listitem [ref=f4e86]:
+              - link "Fork 4" [ref=f4e87] [cursor=pointer]:
+                - /url: /login?return_to=%2Fopen-agent-power%2Fopen-knowledge-studio
+                - text: Fork
+                - generic "4" [ref=f4e90]
+            - listitem [ref=f4e91]:
+              - link "You must be signed in to star a repository" [ref=f4e93] [cursor=pointer]:
+                - /url: /login?return_to=%2Fopen-agent-power%2Fopen-knowledge-studio
+                - text: Star
+                - generic "6 users starred this repository" [ref=f4e96]: "6"
+      - navigation "Repository" [ref=f4e97]:
+        - list [ref=f4e98]:
+          - listitem [ref=f4e99]:
+            - link "Code" [ref=f4e100] [cursor=pointer]:
+              - /url: /open-agent-power/open-knowledge-studio
+          - listitem [ref=f4e104]:
+            - link "Issues 1" [ref=f4e105] [cursor=pointer]:
+              - /url: /open-agent-power/open-knowledge-studio/issues
+              - generic [ref=f4e109]: Issues
+              - generic "1" [ref=f4e110]
+          - listitem [ref=f4e111]:
+            - link "Pull requests" [ref=f4e112] [cursor=pointer]:
+              - /url: /open-agent-power/open-knowledge-studio/pulls
+          - listitem [ref=f4e116]:
+            - link "Actions" [ref=f4e117] [cursor=pointer]:
+              - /url: /open-agent-power/open-knowledge-studio/actions
+          - listitem [ref=f4e121]:
+            - link "Projects" [ref=f4e122] [cursor=pointer]:
+              - /url: /open-agent-power/open-knowledge-studio/projects
+          - listitem [ref=f4e126]:
+            - link "Security and quality" [ref=f4e127] [cursor=pointer]:
+              - /url: /open-agent-power/open-knowledge-studio/security
+          - listitem [ref=f4e131]:
+            - link "Insights" [ref=f4e132] [cursor=pointer]:
+              - /url: /open-agent-power/open-knowledge-studio/pulse
+    - generic [ref=f4e146]:
+      - generic [ref=f4e150]:
+        - generic [ref=f4e151]:
+          - heading "Expand file tree" [level=2] [ref=f4e153]:
+            - button "Expand file tree" [ref=f4e154] [cursor=pointer]
+          - button "main branch" [ref=f4e159] [cursor=pointer]:
+            - generic [ref=f4e160]: main
+          - generic [ref=f4e165]:
+            - navigation [ref=f4e166]:
+              - heading "Breadcrumbs" [level=2] [ref=f4e167]
+              - list [ref=f4e168]:
+                - listitem [ref=f4e169]:
+                  - link "open-knowledge-studio" [ref=f4e170] [cursor=pointer]:
+                    - /url: /open-agent-power/open-knowledge-studio/tree/main
+                - listitem [ref=f4e171]:
+                  - text: /
+                  - link "assets" [ref=f4e172] [cursor=pointer]:
+                    - /url: /open-agent-power/open-knowledge-studio/tree/main/assets
+                - listitem [ref=f4e173]:
+                  - text: /
+                  - link "hooks" [ref=f4e174] [cursor=pointer]:
+                    - /url: /open-agent-power/open-knowledge-studio/tree/main/assets/hooks
+            - generic [ref=f4e175]:
+              - text: /
+              - heading "user-prompt-recall.sh" [level=1] [ref=f4e176]
+            - button "Copy path" [ref=f4e177] [cursor=pointer]
+        - generic [ref=f4e183]:
+          - combobox "Go to file" [ref=f4e190]
+          - button "More file actions" [ref=f4e191] [cursor=pointer]
+      - generic [ref=f4e194]:
+        - generic [ref=f4e196]:
+          - heading "Latest commit" [level=2] [ref=f4e197]
+          - generic [ref=f4e200]:
+            - heading "History" [level=2] [ref=f4e201]
+            - link "History" [ref=f4e202] [cursor=pointer]:
+              - /url: /open-agent-power/open-knowledge-studio/commits/main/assets/hooks/user-prompt-recall.sh
+        - generic [ref=f4e206]:
+          - generic [ref=f4e208]:
+            - heading "File metadata and controls" [level=2] [ref=f4e209]
+            - generic [ref=f4e210]:
+              - list "File view" [ref=f4e211]:
+                - listitem [ref=f4e212]:
+                  - button "Code" [pressed] [ref=f4e213] [cursor=pointer]
+                - listitem [ref=f4e216]:
+                  - button "Blame" [ref=f4e217] [cursor=pointer]
+              - generic [ref=f4e221]:
+                - generic "executable file" [ref=f4e222]
+                - text: ·
+                - generic "530 Bytes" [ref=f4e223]: 8 lines (8 loc) · 530 Bytes
+            - generic [ref=f4e224]:
+              - generic [ref=f4e226]:
+                - link "Raw" [ref=f4e228] [cursor=pointer]:
+                  - /url: https://github.com/open-agent-power/open-knowledge-studio/raw/refs/heads/main/assets/hooks/user-prompt-recall.sh
+                - button "Copy raw file" [ref=f4e232] [cursor=pointer]
+                - button "Download raw file" [ref=f4e237] [cursor=pointer]
+              - button "Open symbols panel" [ref=f4e241] [cursor=pointer]
+          - region [ref=f4e245]:
+            - generic [ref=f4e250]:
+              - generic [ref=f4e251]:
+                - generic [ref=f4e252] [cursor=pointer]: "1"
+                - generic [ref=f4e253] [cursor=pointer]: "2"
+                - generic [ref=f4e254] [cursor=pointer]: "3"
+                - generic [ref=f4e255] [cursor=pointer]: "4"
+                - generic [ref=f4e256] [cursor=pointer]: "5"
+                - generic [ref=f4e257] [cursor=pointer]: "6"
+                - generic [ref=f4e258] [cursor=pointer]: "7"
+                - generic [ref=f4e259] [cursor=pointer]: "8"
+              - generic [ref=f4e260]:
+                - generic [ref=f4e264]:
+                  - generic [ref=f4e265]: "#!"
+                  - text: /usr/bin/env bash
+                - generic [ref=f4e269]:
+                  - generic [ref=f4e270]: "#"
+                  - text: user-prompt-recall.sh — UserPromptSubmit wrapper.
+                - generic [ref=f4e274]:
+                  - generic [ref=f4e275]: "#"
+                  - text: Passes the original stdin (editor JSON payload) through to the Python hook,
+                - generic [ref=f4e279]:
+                  - generic [ref=f4e280]: "#"
+                  - text: and drops jieba's stderr chatter so only the clean <recalled-memory> block
+                - generic [ref=f4e284]:
+                  - generic [ref=f4e285]: "#"
+                  - text: reaches stdout. Fails open (exit 0) so a prompt is never blocked.
+                - generic [ref=f4e289]:
+                  - generic [ref=f4e290]: "#"
+                  - text: "OKS_PYTHON is baked in by `oks hook install` to point at the interpreter"
+                - generic [ref=f4e294]:
+                  - generic [ref=f4e295]: "#"
+                  - text: that can import knowledge_studio (pipx/venv safe); falls back to python3.
+                - generic [ref=f4e298]:
+                  - generic [ref=f4e299]: exec
+                  - generic [ref=f4e300]:
+                    - generic [ref=f4e301]: "\""
+                    - generic [ref=f4e302]:
+                      - text: "${OKS_PYTHON"
+                      - generic [ref=f4e303]: :-
+                      - text: "python3}"
+                    - generic [ref=f4e304]: "\""
+                  - generic [ref=f4e305]:
+                    - generic [ref=f4e306]: "\""
+                    - generic [ref=f4e307]:
+                      - generic [ref=f4e308]: $(
+                      - text: dirname
+                      - generic [ref=f4e309]:
+                        - generic [ref=f4e310]: "\""
+                        - generic [ref=f4e311]: $0
+                        - generic [ref=f4e312]: "\""
+                      - generic [ref=f4e313]: )
+                    - text: /user-prompt-recall.py
+                    - generic [ref=f4e314]: "\""
+                  - generic [ref=f4e315]: 2>
+                  - text: /dev/null
+  - contentinfo [ref=f4e317]:
+    - heading "Footer" [level=2] [ref=f4e318]
+    - generic [ref=f4e319]:
+      - generic [ref=f4e320]:
+        - link "GitHub Homepage" [ref=f4e321] [cursor=pointer]:
+          - /url: https://github.com
+        - generic [ref=f4e324]: © 2026 GitHub, Inc.
+      - navigation "Footer" [ref=f4e325]:
+        - heading "Footer navigation" [level=3] [ref=f4e326]
+        - list "Footer navigation" [ref=f4e327]:
+          - listitem [ref=f4e328]:
+            - link "Terms" [ref=f4e329] [cursor=pointer]:
+              - /url: https://docs.github.com/site-policy/github-terms/github-terms-of-service
+          - listitem [ref=f4e330]:
+            - link "Privacy" [ref=f4e331] [cursor=pointer]:
+              - /url: https://docs.github.com/site-policy/privacy-policies/github-privacy-statement
+          - listitem [ref=f4e332]:
+            - link "Security" [ref=f4e333] [cursor=pointer]:
+              - /url: https://github.com/security
+          - listitem [ref=f4e334]:
+            - link "Status" [ref=f4e335] [cursor=pointer]:
+              - /url: https://www.githubstatus.com/
+          - listitem [ref=f4e336]:
+            - link "Community" [ref=f4e337] [cursor=pointer]:
+              - /url: https://github.community/
+          - listitem [ref=f4e338]:
+            - link "Docs" [ref=f4e339] [cursor=pointer]:
+              - /url: https://docs.github.com/
+          - listitem [ref=f4e340]:
+            - link "Contact" [ref=f4e341] [cursor=pointer]:
+              - /url: https://support.github.com?tags=dotcom-footer
+          - listitem [ref=f4e342]:
+            - button "Manage cookies" [ref=f4e344] [cursor=pointer]
+          - listitem [ref=f4e345]:
+            - button "Do not share my personal information" [ref=f4e347] [cursor=pointer]

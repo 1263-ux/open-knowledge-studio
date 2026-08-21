@@ -1,0 +1,14 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "D:/XiangMuLuoDi/Clone/open-agent-power/open-knowledge-studio/.claude/hooks/user-prompt-recall.sh"
+          }
+        ]
+      }
+    ]
+  }
+}

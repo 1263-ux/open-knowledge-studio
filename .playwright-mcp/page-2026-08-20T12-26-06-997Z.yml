@@ -1,0 +1,14 @@
+- generic [ref=e2]:
+  - generic [ref=e3]:
+    - heading "第 1 步：入库前状态" [level=2] [ref=e4]
+    - generic [ref=e5]: "$ oks status ┌────────────────────────────────────────────────────────────────────┐ │ Open Knowledge Studio — Status │ │ Root: D:\\XiangMuLuoDi\\Clone\\open-agent-power\\open-knowledge-studio │ │ │ │ Wiki pages: 7 Domains: 2 Drafts: 4 │ │ Raw files: 167 Profiles: 0 │ │ │ │ Tiers: hot=6 warm=1 cold=0 evictable=0 │ │ Quality avg: 52.1/100 Pinned: 0 │ │ Types: concept=6, strategy=1 │ └────────────────────────────────────────────────────────────────────┘"
+    - generic [ref=e6]: "$ oks recall \"Kimi\" # 入库前：没有 Kimi 相关内容 # (或者有旧内容，但不是我们刚看的视频)"
+  - generic [ref=e7]:
+    - heading "第 5 步：召回测试（入库后）" [level=2] [ref=e8]
+    - generic [ref=e9]: "$ oks recall \"Kimi K3 成本\" --limit 1 --explain Episodic Memory (raw/ + profiles/) ┌─── raw\\2026\\08\\08\\agent-capture\\bundle-b70c3666e8347e6f\\evidence.jsonl ────┐ │ {\"evidence_id\": \"ev-812a68179716\", \"artifact_id\": \"art-2719c95117b5\", │ │ \"kind\": \"metadata\", \"method\": \"metadata_extraction\", \"locator\": {\"kind\": │ │ \"document\", \"start_ms\": 0, \"end_ms\": 0}, \"text\": \"metadat │ └─────────────────────────────────────────────────────────────────────────────┘ Semantic Memory (wiki/) ┌─ Kimi K3 实测 — 1天烧完1个月算力，普通人慎买 (20260820-kimi-k3-实测-1天烧 ─┐ │ # Kimi K3 实测 — 1天烧完1个月算力，普通人慎买 │ │ │ │ ## 视频信息 │ │ │ │ | 属性 | 值 | │ │ |------|-----| │ │ | 标题 | Kimi K3我劝你别买，1天烧完1个月的算力实测！！ | │ │ | UP主 | Ai小白Lab | │ │ | 时长 | 4分50秒 | │ │ | 平台 | Bilibili (BV1qg3F6dEvm) | │ │ | 发布日期 | 约2026年7月（世界人工智能大会后） | │ │ │ │ why: token-overlap:3, idf-overlap:1.00, title-terms:2, type:conceptx0.6, │ │ memory-score │ └───────────────────────── score=0.84 relevance=1.92 ─────────────────────────┘"
+  - generic [ref=e10]:
+    - heading "第 4 步后：Wiki 数量增加" [level=2] [ref=e11]
+    - generic [ref=e12]: "$ oks status ┌────────────────────────────────────────────────────────────────────┐ │ Open Knowledge Studio — Status │ │ Root: D:\\XiangMuLuoDi\\Clone\\open-agent-power\\open-knowledge-studio │ │ │ │ Wiki pages: 8 Domains: 2 Drafts: 3 │ │ Raw files: 167 Profiles: 0 │ │ │ │ Tiers: hot=7 warm=1 cold=0 evictable=0 │ │ Quality avg: 52.5/100 Pinned: 0 │ │ Types: concept=7, strategy=1 │ └────────────────────────────────────────────────────────────────────┘ # 注意：Wiki pages 从 7 增加到 8 # Types: concept 从 6 增加到 7"
+  - generic [ref=e13]:
+    - heading "第 4 步：确认 Wiki 条目" [level=2] [ref=e14]
+    - generic [ref=e15]: $ oks wiki list | grep -i kimi │ 20260820-… │ Kimi K3 │ concept │ computing │ hot │ 0.84 │ active │ │ │ 实测 — │ │ │ │ │ │ │ │ 1天烧完1个… │ │ │ │ │ │
