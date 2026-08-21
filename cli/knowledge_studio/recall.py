@@ -29,7 +29,7 @@ import json
 import logging
 import math
 from datetime import UTC, datetime
-from pathlib import Path
+from pathlib import Path, PurePath
 from typing import Any
 
 from knowledge_studio.store import (
@@ -39,6 +39,7 @@ from knowledge_studio.store import (
     raw_dir,
     repo_root,
 )
+from knowledge_studio.vfs import VfsError, VfsResolver
 
 _logger = logging.getLogger(__name__)
 
@@ -60,6 +61,19 @@ RECALL_RESPONSE_SCHEMA = "recall-response/v1"
 # memory. executions/ holds provenance traces; .logs/ holds tool and AI-written
 # digests (see distiller.write_digest).
 _NON_RECALLABLE_RAW_SUBDIRS = ("executions", ".logs")
+
+
+def _uri_for_hit_path(root: Path, path: str | Path) -> str:
+    """Map a hit's physical path through the shared canonical VFS resolver."""
+    candidate = Path(path)
+    if not candidate.is_absolute():
+        candidate = root / candidate
+    return VfsResolver(root).uri_for_path(candidate)
+
+
+def _portable_source_path(path: PurePath, root: PurePath) -> str:
+    """Return a stable, POSIX-style path relative to the knowledge base."""
+    return path.relative_to(root).as_posix()
 
 
 def set_recall_yaml_param(kb_root: Path, location: tuple[str | None, str], value: str) -> None:
@@ -378,7 +392,7 @@ def recall_episodic(
                     snippet = content[snippet_idx:snippet_idx + 300] if snippet_idx >= 0 else content[:300]
                     results.append((freshness, {
                         "type": "raw",
-                        "source_path": str(f.relative_to(root)),
+                        "source_path": _portable_source_path(f, root),
                         "snippet": snippet,
                         "freshness": round(freshness, 3),
                         "relevance": round(freshness, 3),
@@ -399,7 +413,7 @@ def recall_episodic(
                         freshness = _freshness_score(f)
                         results.append((freshness + 0.5, {
                             "type": "trace",
-                            "source_path": str(f.relative_to(root)),
+                            "source_path": _portable_source_path(f, root),
                             "snippet": content[:300],
                             "freshness": round(freshness, 3),
                             "relevance": round(freshness + 0.5, 3),
@@ -420,7 +434,7 @@ def recall_episodic(
                     snippet = content[snippet_idx:snippet_idx + 300] if snippet_idx >= 0 else content[:300]
                     results.append((freshness + 1.0, {
                         "type": "profile",
-                        "source_path": str(f.relative_to(root)),
+                        "source_path": _portable_source_path(f, root),
                         "snippet": snippet,
                         "freshness": round(freshness, 3),
                         "relevance": round(freshness + 1.0, 3),
@@ -431,6 +445,7 @@ def recall_episodic(
     results.sort(key=lambda x: -x[0])
     ranked: list[dict[str, Any]] = []
     for rank, (_, item) in enumerate(results[:limit], start=1):
+        item["uri"] = _uri_for_hit_path(root, item["source_path"])
         item["schema_version"] = RECALL_HIT_SCHEMA
         item["channel"] = "episodic"
         # Default to untrusted: an unrecognised episodic type is third-party
@@ -559,13 +574,33 @@ def _recall_knowledge_via_backend(
     # 其余字段从 wiki 页详情查补，保证 /query skill 和 eval 不受影响。
     pages = {p.get("slug"): p for p in list_wiki_pages()}
     results: list[dict[str, Any]] = []
-    for rank, h in enumerate(hits[:limit], start=1):
-        p = pages.get(h.slug, {})
+    for h in hits[:limit]:
+        p = pages.get(h.slug)
+        if not p or not p.get("file_path"):
+            _logger.warning(
+                "recall backend skipped hit without a current wiki page: "
+                "slug=%r backend=%r",
+                h.slug,
+                h.backend,
+            )
+            continue
+        try:
+            uri = _uri_for_hit_path(repo_root(), p["file_path"])
+        except VfsError as exc:
+            _logger.warning(
+                "recall backend skipped hit with a non-public wiki path: "
+                "slug=%r backend=%r code=%s",
+                h.slug,
+                h.backend,
+                exc.code,
+            )
+            continue
         review = p.get("review") or {}
         entry: dict[str, Any] = {
             "schema_version": RECALL_HIT_SCHEMA,
             "channel": "knowledge",
-            "rank": rank,
+            "rank": len(results) + 1,
+            "uri": uri,
             "slug": h.slug,
             "title": h.title or p.get("title", h.slug),
             "type": p.get("type", p.get("category", "concept")),
@@ -656,6 +691,7 @@ def _recall_knowledge_with_context(
             "schema_version": RECALL_HIT_SCHEMA,
             "channel": "knowledge",
             "rank": rank,
+            "uri": _uri_for_hit_path(repo_root(), item["file_path"]),
             "slug": item["slug"],
             "title": item.get("title", item["slug"]),
             "type": item.get("type", item.get("category", "concept")),
