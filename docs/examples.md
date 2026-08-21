@@ -1,6 +1,6 @@
 ---
 title: 案例
-nav_order: 8
+nav_order: 4
 ---
 
 # 案例

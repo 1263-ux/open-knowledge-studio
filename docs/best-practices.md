@@ -95,9 +95,9 @@ nav_order: 4
 - 成本分析：20元/次 → **60,000元/月**
 - 技术方案：基于召回知识，有理有据
 
-👉 **[查看完整演示（配截图）](../examples/oh-my-research/demo/kimi-video-walkthrough.md)**
+👉 **[查看完整演示（配截图）](examples.md)**
 
-![效果对比](../examples/oh-my-research/assets/screenshots/07-comparison-table.png)
+![效果对比](assets/comparison-table.png)
 
 **核心收获**：从"看过这个视频"到"能用它做技术选型"，只需 7 分钟。
 
@@ -123,7 +123,7 @@ nav_order: 4
 ```
 **技巧**：用 `supersedes` 更新过时决策
 
-> **更多场景**：[托管你的 GitHub](../examples/oh-my-github/) · [托管你的飞书](../examples/oh-my-feishu/)
+> **更多场景**：[查看所有案例](examples.md)
 
 ---
 

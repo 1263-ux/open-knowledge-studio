@@ -104,6 +104,6 @@ oks ingest run <file>
 
 ## 下一步
 
-✅ **导入完成**：[最佳实践](../best-practices.md)
+✅ **导入完成**：[最佳实践](best-practices.md)
 
 📚 **了解更多**：[对话存档](usage/conversations.md)
