@@ -350,7 +350,7 @@ Agent:
    你: "用 --explain 参数召回"
    ```
 
-> **召回调优技巧**：[最佳实践 - 阶段 3](../best-practices.md#阶段-3召回-recall)
+> **召回调优技巧**：[最佳实践 - 阶段 3](best-practices.md#阶段-3召回-recall)
 
 ---
 
