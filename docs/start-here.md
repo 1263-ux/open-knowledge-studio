@@ -1,7 +1,6 @@
 ---
 title: 从这里开始
-nav_order: 1
-parent: 开始使用
+nav_order: 2
 ---
 
 # 从这里开始

@@ -1,7 +1,6 @@
 ---
 title: 确认 OKS 正在工作
-nav_order: 4
-parent: 开始使用
+nav_order: 5
 ---
 
 # 确认 OKS 正在工作
