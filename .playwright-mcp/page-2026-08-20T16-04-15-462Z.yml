@@ -1,0 +1,563 @@
+- generic [ref=f2e2]:
+  - generic [ref=f2e3]:
+    - link "Skip to content" [ref=f2e4] [cursor=pointer]:
+      - /url: "#start-of-content"
+    - banner [ref=f2e9]:
+      - heading "Navigation Menu" [level=2] [ref=f2e10]
+      - generic [ref=f2e11]:
+        - link "Homepage" [ref=f2e13] [cursor=pointer]:
+          - /url: /
+        - generic [ref=f2e16]:
+          - navigation "Global" [ref=f2e17]:
+            - list [ref=f2e18]:
+              - listitem [ref=f2e19]:
+                - button "Platform" [ref=f2e21] [cursor=pointer]
+              - listitem [ref=f2e24]:
+                - button "Solutions" [ref=f2e26] [cursor=pointer]
+              - listitem [ref=f2e29]:
+                - button "Resources" [ref=f2e31] [cursor=pointer]
+              - listitem [ref=f2e34]:
+                - button "Open Source" [ref=f2e36] [cursor=pointer]
+              - listitem [ref=f2e39]:
+                - button "Enterprise" [ref=f2e41] [cursor=pointer]
+              - listitem [ref=f2e44]:
+                - link "Pricing" [ref=f2e45] [cursor=pointer]:
+                  - /url: https://github.com/pricing
+          - generic [ref=f2e46]:
+            - button "Search or jump to, type / to search" [ref=f2e48] [cursor=pointer]
+            - link "Sign in" [ref=f2e55] [cursor=pointer]:
+              - /url: /login?return_to=https%3A%2F%2Fgithub.com%2Fopen-agent-power%2Fopen-knowledge-studio%2Fblob%2Fmain%2F.gitignore
+            - link "Sign up" [ref=f2e58] [cursor=pointer]:
+              - /url: /signup?ref_cta=Sign+up&ref_loc=header+logged+out&ref_page=%2F%3Cuser-name%3E%2F%3Crepo-name%3E%2Fblob%2Fshow&source=header-repo&source_repo=open-agent-power%2Fopen-knowledge-studio
+            - button "Appearance settings" [ref=f2e61] [cursor=pointer]
+  - main [ref=f2e68]:
+    - generic [ref=f2e69]:
+      - generic [ref=f2e70]:
+        - generic [ref=f2e72]:
+          - link "open-agent-power" [ref=f2e76] [cursor=pointer]:
+            - /url: /open-agent-power
+          - generic [ref=f2e77]: /
+          - strong [ref=f2e78]:
+            - link "open-knowledge-studio" [ref=f2e79] [cursor=pointer]:
+              - /url: /open-agent-power/open-knowledge-studio
+          - generic [ref=f2e80]: Public
+        - generic [ref=f2e81]:
+          - list:
+            - listitem [ref=f2e82]:
+              - link "You must be signed in to change notification settings" [ref=f2e83] [cursor=pointer]:
+                - /url: /login?return_to=%2Fopen-agent-power%2Fopen-knowledge-studio
+                - text: Notifications
+            - listitem [ref=f2e86]:
+              - link "Fork 4" [ref=f2e87] [cursor=pointer]:
+                - /url: /login?return_to=%2Fopen-agent-power%2Fopen-knowledge-studio
+                - text: Fork
+                - generic "4" [ref=f2e90]
+            - listitem [ref=f2e91]:
+              - link "You must be signed in to star a repository" [ref=f2e93] [cursor=pointer]:
+                - /url: /login?return_to=%2Fopen-agent-power%2Fopen-knowledge-studio
+                - text: Star
+                - generic "6 users starred this repository" [ref=f2e96]: "6"
+      - navigation "Repository" [ref=f2e97]:
+        - list [ref=f2e98]:
+          - listitem [ref=f2e99]:
+            - link "Code" [ref=f2e100] [cursor=pointer]:
+              - /url: /open-agent-power/open-knowledge-studio
+          - listitem [ref=f2e104]:
+            - link "Issues 1" [ref=f2e105] [cursor=pointer]:
+              - /url: /open-agent-power/open-knowledge-studio/issues
+              - generic [ref=f2e109]: Issues
+              - generic "1" [ref=f2e110]
+          - listitem [ref=f2e111]:
+            - link "Pull requests" [ref=f2e112] [cursor=pointer]:
+              - /url: /open-agent-power/open-knowledge-studio/pulls
+          - listitem [ref=f2e116]:
+            - link "Actions" [ref=f2e117] [cursor=pointer]:
+              - /url: /open-agent-power/open-knowledge-studio/actions
+          - listitem [ref=f2e121]:
+            - link "Projects" [ref=f2e122] [cursor=pointer]:
+              - /url: /open-agent-power/open-knowledge-studio/projects
+          - listitem [ref=f2e126]:
+            - link "Security and quality" [ref=f2e127] [cursor=pointer]:
+              - /url: /open-agent-power/open-knowledge-studio/security
+          - listitem [ref=f2e131]:
+            - link "Insights" [ref=f2e132] [cursor=pointer]:
+              - /url: /open-agent-power/open-knowledge-studio/pulse
+    - generic [ref=f2e146]:
+      - generic [ref=f2e150]:
+        - generic [ref=f2e151]:
+          - heading "Expand file tree" [level=2] [ref=f2e153]:
+            - button "Expand file tree" [ref=f2e154] [cursor=pointer]
+          - button "main branch" [ref=f2e159] [cursor=pointer]:
+            - generic [ref=f2e160]: main
+          - generic [ref=f2e165]:
+            - navigation [ref=f2e166]:
+              - heading "Breadcrumbs" [level=2] [ref=f2e167]
+              - list [ref=f2e168]:
+                - listitem [ref=f2e169]:
+                  - link "open-knowledge-studio" [ref=f2e170] [cursor=pointer]:
+                    - /url: /open-agent-power/open-knowledge-studio/tree/main
+            - generic [ref=f2e171]:
+              - text: /
+              - heading ".gitignore" [level=1] [ref=f2e172]
+            - button "Copy path" [ref=f2e173] [cursor=pointer]
+        - generic [ref=f2e179]:
+          - combobox "Go to file" [ref=f2e186]
+          - button "More file actions" [ref=f2e187] [cursor=pointer]
+      - generic [ref=f2e190]:
+        - generic [ref=f2e192]:
+          - heading "Latest commit" [level=2] [ref=f2e193]
+          - generic [ref=f2e196]:
+            - heading "History" [level=2] [ref=f2e197]
+            - link "History" [ref=f2e198] [cursor=pointer]:
+              - /url: /open-agent-power/open-knowledge-studio/commits/main/.gitignore
+        - generic [ref=f2e202]:
+          - generic [ref=f2e204]:
+            - heading "File metadata and controls" [level=2] [ref=f2e205]
+            - generic [ref=f2e206]:
+              - list "File view" [ref=f2e207]:
+                - listitem [ref=f2e208]:
+                  - button "Code" [pressed] [ref=f2e209] [cursor=pointer]
+                - listitem [ref=f2e212]:
+                  - button "Blame" [ref=f2e213] [cursor=pointer]
+              - generic "1.6 KB" [ref=f2e218]: 91 lines (74 loc) · 1.6 KB
+            - generic [ref=f2e219]:
+              - generic [ref=f2e221]:
+                - link "Raw" [ref=f2e223] [cursor=pointer]:
+                  - /url: https://github.com/open-agent-power/open-knowledge-studio/raw/refs/heads/main/.gitignore
+                - button "Copy raw file" [ref=f2e227] [cursor=pointer]
+                - button "Download raw file" [ref=f2e232] [cursor=pointer]
+              - button "Open symbols panel" [ref=f2e236] [cursor=pointer]
+          - region [ref=f2e240]:
+            - generic [ref=f2e245]:
+              - generic [ref=f2e246]:
+                - generic [ref=f2e247] [cursor=pointer]: "1"
+                - generic [ref=f2e248] [cursor=pointer]: "2"
+                - generic [ref=f2e249] [cursor=pointer]: "3"
+                - generic [ref=f2e250] [cursor=pointer]: "4"
+                - generic [ref=f2e251] [cursor=pointer]: "5"
+                - generic [ref=f2e252] [cursor=pointer]: "6"
+                - generic [ref=f2e253] [cursor=pointer]: "7"
+                - generic [ref=f2e254] [cursor=pointer]: "8"
+                - generic [ref=f2e255] [cursor=pointer]: "9"
+                - generic [ref=f2e256] [cursor=pointer]: "10"
+                - generic [ref=f2e257] [cursor=pointer]: "11"
+                - generic [ref=f2e258] [cursor=pointer]: "12"
+                - generic [ref=f2e259] [cursor=pointer]: "13"
+                - generic [ref=f2e260] [cursor=pointer]: "14"
+                - generic [ref=f2e261] [cursor=pointer]: "15"
+                - generic [ref=f2e262] [cursor=pointer]: "16"
+                - generic [ref=f2e263] [cursor=pointer]: "17"
+                - generic [ref=f2e264] [cursor=pointer]: "18"
+                - generic [ref=f2e265] [cursor=pointer]: "19"
+                - generic [ref=f2e266] [cursor=pointer]: "20"
+                - generic [ref=f2e267] [cursor=pointer]: "21"
+                - generic [ref=f2e268] [cursor=pointer]: "22"
+                - generic [ref=f2e269] [cursor=pointer]: "23"
+                - generic [ref=f2e270] [cursor=pointer]: "24"
+                - generic [ref=f2e271] [cursor=pointer]: "25"
+                - generic [ref=f2e272] [cursor=pointer]: "26"
+                - generic [ref=f2e273] [cursor=pointer]: "27"
+                - generic [ref=f2e274] [cursor=pointer]: "28"
+                - generic [ref=f2e275] [cursor=pointer]: "29"
+                - generic [ref=f2e276] [cursor=pointer]: "30"
+                - generic [ref=f2e277] [cursor=pointer]: "31"
+                - generic [ref=f2e278] [cursor=pointer]: "32"
+                - generic [ref=f2e279] [cursor=pointer]: "33"
+                - generic [ref=f2e280] [cursor=pointer]: "34"
+                - generic [ref=f2e281] [cursor=pointer]: "35"
+                - generic [ref=f2e282] [cursor=pointer]: "36"
+                - generic [ref=f2e283] [cursor=pointer]: "37"
+                - generic [ref=f2e284] [cursor=pointer]: "38"
+                - generic [ref=f2e285] [cursor=pointer]: "39"
+                - generic [ref=f2e286] [cursor=pointer]: "40"
+                - generic [ref=f2e287] [cursor=pointer]: "41"
+                - generic [ref=f2e288] [cursor=pointer]: "42"
+                - generic [ref=f2e289] [cursor=pointer]: "43"
+                - generic [ref=f2e290] [cursor=pointer]: "44"
+                - generic [ref=f2e291] [cursor=pointer]: "45"
+                - generic [ref=f2e292] [cursor=pointer]: "46"
+                - generic [ref=f2e293] [cursor=pointer]: "47"
+                - generic [ref=f2e294] [cursor=pointer]: "48"
+                - generic [ref=f2e295] [cursor=pointer]: "49"
+                - generic [ref=f2e296] [cursor=pointer]: "50"
+                - generic [ref=f2e297] [cursor=pointer]: "51"
+                - generic [ref=f2e298] [cursor=pointer]: "52"
+                - generic [ref=f2e299] [cursor=pointer]: "53"
+                - generic [ref=f2e300] [cursor=pointer]: "54"
+                - generic [ref=f2e301] [cursor=pointer]: "55"
+                - generic [ref=f2e302] [cursor=pointer]: "56"
+                - generic [ref=f2e303] [cursor=pointer]: "57"
+                - generic [ref=f2e304] [cursor=pointer]: "58"
+                - generic [ref=f2e305] [cursor=pointer]: "59"
+                - generic [ref=f2e306] [cursor=pointer]: "60"
+                - generic [ref=f2e307] [cursor=pointer]: "61"
+                - generic [ref=f2e308] [cursor=pointer]: "62"
+                - generic [ref=f2e309] [cursor=pointer]: "63"
+                - generic [ref=f2e310] [cursor=pointer]: "64"
+                - generic [ref=f2e311] [cursor=pointer]: "65"
+                - generic [ref=f2e312] [cursor=pointer]: "66"
+                - generic [ref=f2e313] [cursor=pointer]: "67"
+                - generic [ref=f2e314] [cursor=pointer]: "68"
+                - generic [ref=f2e315] [cursor=pointer]: "69"
+                - generic [ref=f2e316] [cursor=pointer]: "70"
+                - generic [ref=f2e317] [cursor=pointer]: "71"
+                - generic [ref=f2e318] [cursor=pointer]: "72"
+                - generic [ref=f2e319] [cursor=pointer]: "73"
+                - generic [ref=f2e320] [cursor=pointer]: "74"
+                - generic [ref=f2e321] [cursor=pointer]: "75"
+                - generic [ref=f2e322] [cursor=pointer]: "76"
+                - generic [ref=f2e323] [cursor=pointer]: "77"
+                - generic [ref=f2e324] [cursor=pointer]: "78"
+                - generic [ref=f2e325] [cursor=pointer]: "79"
+                - generic [ref=f2e326] [cursor=pointer]: "80"
+                - generic [ref=f2e327] [cursor=pointer]: "81"
+                - generic [ref=f2e328] [cursor=pointer]: "82"
+                - generic [ref=f2e329] [cursor=pointer]: "83"
+                - generic [ref=f2e330] [cursor=pointer]: "84"
+                - generic [ref=f2e331] [cursor=pointer]: "85"
+                - generic [ref=f2e332] [cursor=pointer]: "86"
+                - generic [ref=f2e333] [cursor=pointer]: "87"
+                - generic [ref=f2e334] [cursor=pointer]: "88"
+                - generic [ref=f2e335] [cursor=pointer]: "89"
+                - generic [ref=f2e336] [cursor=pointer]: "90"
+                - generic [ref=f2e337] [cursor=pointer]: "91"
+              - generic [ref=f2e338]:
+                - generic [ref=f2e342]:
+                  - generic [ref=f2e343]: "#"
+                  - text: Python
+                - generic [ref=f2e346]:
+                  - generic [ref=f2e347]: __pycache__
+                  - text: /
+                - generic [ref=f2e350]:
+                  - generic [ref=f2e351]: "*"
+                  - generic [ref=f2e352]: .py
+                  - text: "["
+                  - generic [ref=f2e353]: cod
+                  - text: "]"
+                - generic [ref=f2e356]:
+                  - generic [ref=f2e357]: "*"
+                  - generic [ref=f2e358]: $py.class
+                - generic [ref=f2e361]:
+                  - generic [ref=f2e362]: "*"
+                  - generic [ref=f2e363]: .egg-info
+                  - text: /
+                - generic [ref=f2e366]:
+                  - generic [ref=f2e367]: dist
+                  - text: /
+                - generic [ref=f2e370]:
+                  - generic [ref=f2e371]: build
+                  - text: /
+                - generic [ref=f2e374]:
+                  - generic [ref=f2e375]: .eggs
+                  - text: /
+                - generic [ref=f2e378]:
+                  - generic [ref=f2e379]: "*"
+                  - generic [ref=f2e380]: .egg
+                - generic [ref=f2e387]:
+                  - generic [ref=f2e388]: "#"
+                  - text: Virtual env
+                - generic [ref=f2e391]:
+                  - generic [ref=f2e392]: .venv
+                  - text: /
+                - generic [ref=f2e395]:
+                  - generic [ref=f2e396]: venv
+                  - text: /
+                - generic [ref=f2e399]:
+                  - generic [ref=f2e400]: env
+                  - text: /
+                - generic [ref=f2e407]:
+                  - generic [ref=f2e408]: "#"
+                  - text: IDE
+                - generic [ref=f2e411]:
+                  - generic [ref=f2e412]: .idea
+                  - text: /
+                - generic [ref=f2e415]:
+                  - generic [ref=f2e416]: .vscode
+                  - text: /
+                - generic [ref=f2e419]:
+                  - generic [ref=f2e420]: "*"
+                  - generic [ref=f2e421]: .swp
+                - generic [ref=f2e424]:
+                  - generic [ref=f2e425]: "*"
+                  - generic [ref=f2e426]: .swo
+                - generic [ref=f2e429]:
+                  - generic [ref=f2e430]: "*"
+                  - generic [ref=f2e431]: ~
+                - generic [ref=f2e438]:
+                  - generic [ref=f2e439]: "#"
+                  - text: OS
+                - generic [ref=f2e440]: .DS_Store
+                - generic [ref=f2e444]: Thumbs.db
+                - generic [ref=f2e454]:
+                  - generic [ref=f2e455]: "#"
+                  - text: CLI local data (all .oks state, not just snapshots)
+                - generic [ref=f2e458]:
+                  - generic [ref=f2e459]: .oks
+                  - text: /
+                - generic [ref=f2e462]:
+                  - generic [ref=f2e463]: cli
+                  - text: /
+                  - generic [ref=f2e464]: .oks
+                  - text: /
+                - generic [ref=f2e467]:
+                  - generic [ref=f2e468]: cli
+                  - text: /
+                  - generic [ref=f2e469]: knowledge_studio.egg-info
+                  - text: /
+                - generic [ref=f2e476]:
+                  - generic [ref=f2e477]: "#"
+                  - text: Trace append locks (runtime state, not trace content)
+                - generic [ref=f2e480]:
+                  - generic [ref=f2e481]: raw
+                  - text: /
+                  - generic [ref=f2e482]: executions
+                  - text: /
+                  - generic [ref=f2e483]: "*"
+                  - text: /
+                  - generic [ref=f2e484]: .append.lock
+                - generic [ref=f2e491]:
+                  - generic [ref=f2e492]: "#"
+                  - text: Qoder local runtime state (scheduled tasks etc.)
+                - generic [ref=f2e495]:
+                  - generic [ref=f2e496]: .qoder
+                  - text: /
+                - generic [ref=f2e503]:
+                  - generic [ref=f2e504]: "#"
+                  - text: Codex local runtime state
+                - generic [ref=f2e507]:
+                  - generic [ref=f2e508]: .codex-tmp
+                  - text: /
+                - generic [ref=f2e511]:
+                  - generic [ref=f2e512]: .worktrees
+                  - text: /
+                - generic [ref=f2e519]:
+                  - generic [ref=f2e520]: "#"
+                  - text: Bundled assets (build artifact — generated by scripts/bundle_assets.py from repo-root source)
+                - generic [ref=f2e523]:
+                  - generic [ref=f2e524]: cli
+                  - text: /
+                  - generic [ref=f2e525]: knowledge_studio
+                  - text: /
+                  - generic [ref=f2e526]: _assets
+                  - text: /
+                - generic [ref=f2e533]:
+                  - generic [ref=f2e534]: "#"
+                  - text: Vendored connector (build artifact — setup.py copies scripts/ here so it reaches sdists)
+                - generic [ref=f2e537]:
+                  - generic [ref=f2e538]: cli
+                  - text: /
+                  - generic [ref=f2e539]: oks_connector
+                  - text: /
+                - generic [ref=f2e546]:
+                  - generic [ref=f2e547]: "#"
+                  - text: setuptools sdist/egg-info leaks copies of scripts/ into cli/scripts/ — only the
+                - generic [ref=f2e551]:
+                  - generic [ref=f2e552]: "#"
+                  - text: real build helpers belong to the repo.
+                - generic [ref=f2e555]:
+                  - generic [ref=f2e556]: cli
+                  - text: /
+                  - generic [ref=f2e557]: scripts
+                  - text: /
+                  - generic [ref=f2e558]: "*"
+                - generic [ref=f2e561]:
+                  - generic [ref=f2e562]: "!"
+                  - generic [ref=f2e563]: cli
+                  - text: /
+                  - generic [ref=f2e564]: scripts
+                  - text: /
+                  - generic [ref=f2e565]: bundle_assets.py
+                - generic [ref=f2e568]:
+                  - generic [ref=f2e569]: "!"
+                  - generic [ref=f2e570]: cli
+                  - text: /
+                  - generic [ref=f2e571]: scripts
+                  - text: /
+                  - generic [ref=f2e572]: check_dist.py
+                - generic [ref=f2e579]:
+                  - generic [ref=f2e580]: "#"
+                  - text: Logs
+                - generic [ref=f2e583]:
+                  - generic [ref=f2e584]: "*"
+                  - generic [ref=f2e585]: .log
+                - generic [ref=f2e592]:
+                  - generic [ref=f2e593]: "#"
+                  - text: GitHub Pages
+                - generic [ref=f2e596]:
+                  - generic [ref=f2e597]: docs
+                  - text: /
+                  - generic [ref=f2e598]: _site
+                  - text: /
+                - generic [ref=f2e601]:
+                  - generic [ref=f2e602]: docs
+                  - text: /
+                  - generic [ref=f2e603]: .jekyll-cache
+                  - text: /
+                - generic [ref=f2e606]:
+                  - generic [ref=f2e607]: docs
+                  - text: /
+                  - generic [ref=f2e608]: Gemfile
+                - generic [ref=f2e611]:
+                  - generic [ref=f2e612]: docs
+                  - text: /
+                  - generic [ref=f2e613]: Gemfile.lock
+                - generic [ref=f2e616]:
+                  - generic [ref=f2e617]: docs
+                  - text: /
+                  - generic [ref=f2e618]: _config.dev.yml
+                - generic [ref=f2e625]:
+                  - generic [ref=f2e626]: "#"
+                  - text: Generated document/PDF test artifacts
+                - generic [ref=f2e629]:
+                  - generic [ref=f2e630]: output
+                  - text: /
+                  - generic [ref=f2e631]: pdf
+                  - text: /
+                - generic [ref=f2e634]:
+                  - generic [ref=f2e635]: tmp
+                  - text: /
+                  - generic [ref=f2e636]: pdfs
+                  - text: /
+                - generic [ref=f2e643]:
+                  - generic [ref=f2e644]: "#"
+                  - text: Wiki content (local only — do not push to remote)
+                - generic [ref=f2e647]:
+                  - generic [ref=f2e648]: wiki
+                  - text: /
+                  - generic [ref=f2e649]: "**"
+                  - text: /
+                  - generic [ref=f2e650]: "*"
+                  - generic [ref=f2e651]: .md
+                - generic [ref=f2e654]:
+                  - generic [ref=f2e655]: "!"
+                  - generic [ref=f2e656]: wiki
+                  - text: /
+                  - generic [ref=f2e657]: "**"
+                  - text: /
+                  - generic [ref=f2e658]: .gitkeep
+                - generic [ref=f2e665]:
+                  - generic [ref=f2e666]: "#"
+                  - text: Raw captures are local evidence, not Studio source code.
+                - generic [ref=f2e669]:
+                  - generic [ref=f2e670]: raw
+                  - text: /
+                  - generic [ref=f2e671]: "**"
+                - generic [ref=f2e674]:
+                  - generic [ref=f2e675]: "!"
+                  - generic [ref=f2e676]: raw
+                  - text: /
+                  - generic [ref=f2e677]: articles
+                  - text: /
+                - generic [ref=f2e680]:
+                  - generic [ref=f2e681]: "!"
+                  - generic [ref=f2e682]: raw
+                  - text: /
+                  - generic [ref=f2e683]: articles
+                  - text: /
+                  - generic [ref=f2e684]: .gitkeep
+                - generic [ref=f2e687]:
+                  - generic [ref=f2e688]: "!"
+                  - generic [ref=f2e689]: raw
+                  - text: /
+                  - generic [ref=f2e690]: misc
+                  - text: /
+                - generic [ref=f2e693]:
+                  - generic [ref=f2e694]: "!"
+                  - generic [ref=f2e695]: raw
+                  - text: /
+                  - generic [ref=f2e696]: misc
+                  - text: /
+                  - generic [ref=f2e697]: .gitkeep
+                - generic [ref=f2e700]:
+                  - generic [ref=f2e701]: "!"
+                  - generic [ref=f2e702]: raw
+                  - text: /
+                  - generic [ref=f2e703]: papers
+                  - text: /
+                - generic [ref=f2e706]:
+                  - generic [ref=f2e707]: "!"
+                  - generic [ref=f2e708]: raw
+                  - text: /
+                  - generic [ref=f2e709]: papers
+                  - text: /
+                  - generic [ref=f2e710]: .gitkeep
+                - generic [ref=f2e713]:
+                  - generic [ref=f2e714]: "!"
+                  - generic [ref=f2e715]: raw
+                  - text: /
+                  - generic [ref=f2e716]: repos
+                  - text: /
+                - generic [ref=f2e719]:
+                  - generic [ref=f2e720]: "!"
+                  - generic [ref=f2e721]: raw
+                  - text: /
+                  - generic [ref=f2e722]: repos
+                  - text: /
+                  - generic [ref=f2e723]: .gitkeep
+                - generic [ref=f2e730]:
+                  - generic [ref=f2e731]: "#"
+                  - text: Drafts content (local only — do not push to remote)
+                - generic [ref=f2e734]:
+                  - generic [ref=f2e735]: drafts
+                  - text: /
+                  - generic [ref=f2e736]: "*"
+                  - generic [ref=f2e737]: .md
+                - generic [ref=f2e740]:
+                  - generic [ref=f2e741]: "!"
+                  - generic [ref=f2e742]: drafts
+                  - text: /
+                  - generic [ref=f2e743]: .gitkeep
+                - generic [ref=f2e750]:
+                  - generic [ref=f2e751]: "#"
+                  - text: "Auto-recall hook (installed by `oks hook install`, personal: baked interpreter paths)"
+                - generic [ref=f2e754]:
+                  - generic [ref=f2e755]: .claude
+                  - text: /
+                  - generic [ref=f2e756]: settings.json
+                - generic [ref=f2e759]:
+                  - generic [ref=f2e760]: .claude
+                  - text: /
+                  - generic [ref=f2e761]: hooks
+                  - text: /
+                - generic [ref=f2e764]:
+                  - generic [ref=f2e765]: .qoder
+                  - text: /
+                  - generic [ref=f2e766]: settings.json
+                - generic [ref=f2e769]:
+                  - generic [ref=f2e770]: .oks-treesearch-cache
+                  - text: /
+  - contentinfo [ref=f2e772]:
+    - heading "Footer" [level=2] [ref=f2e773]
+    - generic [ref=f2e774]:
+      - generic [ref=f2e775]:
+        - link "GitHub Homepage" [ref=f2e776] [cursor=pointer]:
+          - /url: https://github.com
+        - generic [ref=f2e779]: © 2026 GitHub, Inc.
+      - navigation "Footer" [ref=f2e780]:
+        - heading "Footer navigation" [level=3] [ref=f2e781]
+        - list "Footer navigation" [ref=f2e782]:
+          - listitem [ref=f2e783]:
+            - link "Terms" [ref=f2e784] [cursor=pointer]:
+              - /url: https://docs.github.com/site-policy/github-terms/github-terms-of-service
+          - listitem [ref=f2e785]:
+            - link "Privacy" [ref=f2e786] [cursor=pointer]:
+              - /url: https://docs.github.com/site-policy/privacy-policies/github-privacy-statement
+          - listitem [ref=f2e787]:
+            - link "Security" [ref=f2e788] [cursor=pointer]:
+              - /url: https://github.com/security
+          - listitem [ref=f2e789]:
+            - link "Status" [ref=f2e790] [cursor=pointer]:
+              - /url: https://www.githubstatus.com/
+          - listitem [ref=f2e791]:
+            - link "Community" [ref=f2e792] [cursor=pointer]:
+              - /url: https://github.community/
+          - listitem [ref=f2e793]:
+            - link "Docs" [ref=f2e794] [cursor=pointer]:
+              - /url: https://docs.github.com/
+          - listitem [ref=f2e795]:
+            - link "Contact" [ref=f2e796] [cursor=pointer]:
+              - /url: https://support.github.com?tags=dotcom-footer
+          - listitem [ref=f2e797]:
+            - button "Manage cookies" [ref=f2e799] [cursor=pointer]
+          - listitem [ref=f2e800]:
+            - button "Do not share my personal information" [ref=f2e802] [cursor=pointer]

@@ -1,0 +1,83 @@
+- generic [ref=f7e1]:
+  - generic [ref=f7e4]:
+    - generic [ref=f7e7]:
+      - button "打开侧边栏" [ref=f7e122] [cursor=pointer]
+      - button "新建会话" [ref=f7e41] [cursor=pointer]
+      - generic [ref=f7e47]:
+        - button "添加工作区" [ref=f7e61] [cursor=pointer]
+        - button "搜索会话" [ref=f7e128] [cursor=pointer]
+      - button [ref=f7e132] [cursor=pointer]
+    - generic [ref=f7e81]:
+      - banner [ref=f7e283]:
+        - generic [ref=f7e284]:
+          - generic [ref=f7e285]:
+            - navigation "会话层级" [ref=f7e286]:
+              - button "Kimi K3 适合用来做大规模文档" [disabled] [ref=f7e288]
+            - generic "功能完整的编码 Agent，支持文件编辑、Shell、文件与网页检索、Skills、计划、目标、子代理和工作流。" [ref=f7e291]: 标准模式
+          - button "Session log" [ref=f7e299] [cursor=pointer]
+        - tablist [ref=f7e303]:
+          - tab "对话" [selected] [ref=f7e304] [cursor=pointer]
+          - tab "轨迹" [ref=f7e305] [cursor=pointer]
+      - generic [ref=f7e82]:
+        - generic [ref=f7e311]:
+          - generic [ref=f7e314]:
+            - generic [ref=f7e315]: Kimi K3 适合用来做大规模文档分析吗？性能和成本如何？
+            - generic [ref=f7e318]:
+              - generic [ref=f7e319]: 11:10
+              - button "复制" [ref=f7e320] [cursor=pointer]
+          - button "上下文注入 @deepseek-ai/dsh-system-prompt" [ref=f7e326] [cursor=pointer]:
+            - generic [ref=f7e335]: 上下文注入
+            - generic [ref=f7e337]: "@deepseek-ai/dsh-system-prompt"
+          - button "上下文注入 skill-catalog" [ref=f7e341] [cursor=pointer]:
+            - generic [ref=f7e350]: 上下文注入
+            - generic [ref=f7e352]: skill-catalog
+          - button "上下文注入 dsh-oks" [ref=f7e356] [cursor=pointer]:
+            - generic [ref=f7e365]: 上下文注入
+            - generic [ref=f7e367]: dsh-oks
+          - status [ref=f7e368]: Deep diving...
+        - generic [ref=f7e105]:
+          - textbox "给智能体发消息" [active] [ref=f7e369]
+          - generic [ref=f7e109]:
+            - generic [ref=f7e110]:
+              - button "命令" [ref=f7e151] [cursor=pointer]
+              - button "访问模式，当前：Workspace Write" [ref=f7e156] [cursor=pointer]:
+                - generic [ref=f7e281]: Workspace Write
+            - generic [ref=f7e111]:
+              - button "选择模型，当前 DeepSeek-V4-Flash (modlens vision)，推理等级 High" [ref=f7e169] [cursor=pointer]:
+                - generic [ref=f7e170]: DeepSeek-V4-Flash (modlens vision)
+                - generic [ref=f7e171]: High
+              - button "停止生成" [ref=f7e370] [cursor=pointer]
+    - generic [ref=f7e178]:
+      - generic [ref=f7e179]:
+        - generic: 详情
+        - button "关闭详情" [ref=f7e180] [cursor=pointer]
+      - generic [ref=f7e183]: 点击消息流中的工具行查看详情
+  - generic:
+    - generic [ref=f7e113]:
+      - button "展开底部面板" [ref=f7e184] [cursor=pointer]
+      - button "折叠侧边栏" [ref=f7e185] [cursor=pointer]
+    - generic [ref=f7e190]:
+      - generic [ref=f7e192]:
+        - generic "Explorer" [ref=f7e193] [cursor=pointer]:
+          - button "关闭" [ref=f7e198]
+        - button "新建标签页" [ref=f7e202] [cursor=pointer]
+      - generic [ref=f7e207]:
+        - generic [ref=f7e208]:
+          - generic "D:\\XiangMuLuoDi\\Learning\\Practice\\tool-deepseek" [ref=f7e209]: tool-deepseek
+          - button "刷新" [ref=f7e210] [cursor=pointer]
+        - generic [ref=f7e213]:
+          - generic [ref=f7e214] [cursor=pointer]: tool-deepseek
+          - button ".agent" [ref=f7e220] [cursor=pointer]
+          - button ".git" [ref=f7e225] [cursor=pointer]
+          - button ".playwright-mcp" [ref=f7e230] [cursor=pointer]
+          - button "custom-auth-ui" [ref=f7e235] [cursor=pointer]
+          - button "dsh-remote-auth" [ref=f7e240] [cursor=pointer]
+          - button "dsh-server-deploy" [ref=f7e245] [cursor=pointer]
+          - button ".gitignore" [ref=f7e249] [cursor=pointer]
+          - button "Caddyfile" [ref=f7e253] [cursor=pointer]
+          - button "dsh-remote-auth.tar.gz" [ref=f7e257] [cursor=pointer]
+          - button "login-final-fixed.png" [ref=f7e261] [cursor=pointer]
+          - button "login-final-screenshot.png" [ref=f7e265] [cursor=pointer]
+          - button "package.json" [ref=f7e269] [cursor=pointer]
+          - button "PROJECT-SUMMARY.md" [ref=f7e273] [cursor=pointer]
+          - button "README.md" [ref=f7e277] [cursor=pointer]

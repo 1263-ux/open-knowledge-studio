@@ -15,9 +15,9 @@ nav_order: 1
 
 ---
 
-## 🚀 三条清晰路径
+## 🚀 快速开始
 
-### 路径 1: 第一次用？从这开始
+### 第一次使用？
 
 | 步骤 | 做什么 | 时间 |
 |------|--------|------|
@@ -27,25 +27,36 @@ nav_order: 1
 
 **总耗时**：17 分钟，完全理解 OKS
 
-> **从哪开始**：[从这里开始](start-here.md)
+---
+
+## 📚 真实案例
+
+| 场景 | 你在托管什么 | 演示 |
+|------|-------------|------|
+| **[托管你的学习](../examples/oh-my-research/)** | 文章、视频、课程 | [完整演示](../examples/oh-my-research/demo/kimi-video-walkthrough.md) |
+| **[托管你的 GitHub](../examples/oh-my-github/)** | 技术决策、踩坑 | - |
+| **[托管你的飞书](../examples/oh-my-feishu/)** | 手机表单 + IM 审核 | - |
+| **[托管你的书籍](../examples/oh-my-book/)** | 阅读笔记 | - |
+
+[更多案例](examples.md)
 
 ---
 
-### 路径 2: 已经装好？开始用
+## 💡 已经装好？开始用
 
 **常用操作**：
 - 📥 **收录资料** - 对 Agent 说"收录这个"
 - ✅ **审核 Candidate** - [审核指南](review-candidates.md)
 - 🔍 **召回知识** - Agent 自动注入，或 `oks recall`
-- 💡 **最佳实践** - [三个阶段](best-practices.md)
 
-**进阶**：
+**进阶指南**：
+- [最佳实践 - 三个阶段](best-practices.md)
 - [上下文注入机制](usage/context-injection.md)
 - [配置 Goal 和 Profile](usage/profiles.md)
 
 ---
 
-### 路径 3: 遇到问题？这里排查
+## 🔧 遇到问题？
 
 | 问题 | 解决 |
 |------|------|
@@ -55,7 +66,7 @@ nav_order: 1
 
 ---
 
-## 📚 深入了解
+## 📖 深入了解
 
 <details>
 <summary><strong>概念和原理</strong></summary>
@@ -64,20 +75,6 @@ nav_order: 1
 - [记忆模型](concepts/memory-model.md) - Raw vs Wiki
 - [Triple-Layer Recall](algorithms/recall-engine.md) - R@1=82.5%
 - [文件系统范式](concepts/file-system-paradigm.md)
-
-</details>
-
-<details>
-<summary><strong>真实案例</strong></summary>
-
-| 场景 | 你在托管什么 |
-|------|-------------|
-| [托管你的学习](../examples/oh-my-research/) | 文章、视频、课程 |
-| [托管你的 GitHub](../examples/oh-my-github/) | 技术决策、踩坑 |
-| [托管你的飞书](../examples/oh-my-feishu/) | 手机表单 + IM 审核 |
-| [托管你的书籍](../examples/oh-my-book/) | 阅读笔记 |
-
-[更多案例](examples.md)
 
 </details>
 

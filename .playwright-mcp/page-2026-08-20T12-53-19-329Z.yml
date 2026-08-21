@@ -1,0 +1,785 @@
+- generic [active] [ref=f1e1]:
+  - generic [ref=f1e2]:
+    - generic [ref=f1e3]:
+      - link "Skip to content" [ref=f1e4] [cursor=pointer]:
+        - /url: "#start-of-content"
+      - banner [ref=f1e9]:
+        - heading "Navigation Menu" [level=2] [ref=f1e10]
+        - generic [ref=f1e11]:
+          - link "Homepage" [ref=f1e13] [cursor=pointer]:
+            - /url: /
+          - generic [ref=f1e16]:
+            - navigation "Global" [ref=f1e17]:
+              - list [ref=f1e18]:
+                - listitem [ref=f1e19]:
+                  - button "Platform" [ref=f1e21] [cursor=pointer]
+                - listitem [ref=f1e24]:
+                  - button "Solutions" [ref=f1e26] [cursor=pointer]
+                - listitem [ref=f1e29]:
+                  - button "Resources" [ref=f1e31] [cursor=pointer]
+                - listitem [ref=f1e34]:
+                  - button "Open Source" [ref=f1e36] [cursor=pointer]
+                - listitem [ref=f1e39]:
+                  - button "Enterprise" [ref=f1e41] [cursor=pointer]
+                - listitem [ref=f1e44]:
+                  - link "Pricing" [ref=f1e45] [cursor=pointer]:
+                    - /url: https://github.com/pricing
+            - generic [ref=f1e46]:
+              - button "Search or jump to, type / to search" [ref=f1e48] [cursor=pointer]
+              - link "Sign in" [ref=f1e55] [cursor=pointer]:
+                - /url: /login?return_to=https%3A%2F%2Fgithub.com%2F1263-ux%2Fopen-knowledge-studio%2Ftree%2Fdocs%2Fbest-practices-and-demo
+              - link "Sign up" [ref=f1e58] [cursor=pointer]:
+                - /url: /signup?ref_cta=Sign+up&ref_loc=header+logged+out&ref_page=%2F%3Cuser-name%3E%2F%3Crepo-name%3E%2Ffiles%2Fdisambiguate&source=header-repo&source_repo=1263-ux%2Fopen-knowledge-studio
+              - button "Appearance settings" [ref=f1e61] [cursor=pointer]
+    - main [ref=f1e68]:
+      - generic [ref=f1e69]:
+        - generic [ref=f1e70]:
+          - generic [ref=f1e71]:
+            - generic [ref=f1e72]:
+              - link "1263-ux" [ref=f1e76] [cursor=pointer]:
+                - /url: /1263-ux
+              - generic [ref=f1e77]: /
+              - strong [ref=f1e78]:
+                - link "open-knowledge-studio" [ref=f1e79] [cursor=pointer]:
+                  - /url: /1263-ux/open-knowledge-studio
+              - generic [ref=f1e80]: Public
+            - generic [ref=f1e81]:
+              - text: forked from
+              - link "open-agent-power/open-knowledge-studio" [ref=f1e82] [cursor=pointer]:
+                - /url: /open-agent-power/open-knowledge-studio
+          - generic [ref=f1e83]:
+            - list:
+              - listitem [ref=f1e84]:
+                - link "You must be signed in to change notification settings" [ref=f1e85] [cursor=pointer]:
+                  - /url: /login?return_to=%2F1263-ux%2Fopen-knowledge-studio
+                  - text: Notifications
+              - listitem [ref=f1e88]:
+                - link "Fork 0" [ref=f1e89] [cursor=pointer]:
+                  - /url: /login?return_to=%2F1263-ux%2Fopen-knowledge-studio
+                  - text: Fork
+                  - generic "0" [ref=f1e92]
+              - listitem [ref=f1e93]:
+                - link "You must be signed in to star a repository" [ref=f1e95] [cursor=pointer]:
+                  - /url: /login?return_to=%2F1263-ux%2Fopen-knowledge-studio
+                  - text: Star
+                  - generic "0 users starred this repository" [ref=f1e98]: "0"
+        - navigation "Repository" [ref=f1e99]:
+          - list [ref=f1e100]:
+            - listitem [ref=f1e101]:
+              - link "Code" [ref=f1e102] [cursor=pointer]:
+                - /url: /1263-ux/open-knowledge-studio/tree/docs/best-practices-and-demo
+            - listitem [ref=f1e106]:
+              - link "Pull requests" [ref=f1e107] [cursor=pointer]:
+                - /url: /1263-ux/open-knowledge-studio/pulls
+            - listitem [ref=f1e111]:
+              - link "Actions" [ref=f1e112] [cursor=pointer]:
+                - /url: /1263-ux/open-knowledge-studio/actions
+            - listitem [ref=f1e116]:
+              - link "Projects" [ref=f1e117] [cursor=pointer]:
+                - /url: /1263-ux/open-knowledge-studio/projects
+            - listitem [ref=f1e121]:
+              - link "Security and quality" [ref=f1e122] [cursor=pointer]:
+                - /url: /1263-ux/open-knowledge-studio/security
+            - listitem [ref=f1e126]:
+              - link "Insights" [ref=f1e127] [cursor=pointer]:
+                - /url: /1263-ux/open-knowledge-studio/pulse
+      - generic [ref=f1e144]:
+        - generic [ref=f1e147]:
+          - generic [ref=f1e148]:
+            - generic [ref=f1e149]:
+              - button "docs/best-practices-and-demo branch" [ref=f1e151] [cursor=pointer]:
+                - generic [ref=f1e152]: docs/best-practices-and-demo
+              - generic [ref=f1e156]:
+                - link "Go to Branches page" [ref=f1e157] [cursor=pointer]:
+                  - /url: /1263-ux/open-knowledge-studio/branches
+                - link "Go to Tags page" [ref=f1e160] [cursor=pointer]:
+                  - /url: /1263-ux/open-knowledge-studio/tags
+            - generic [ref=f1e163]:
+              - combobox "Go to file" [ref=f1e171]
+              - button "Code" [ref=f1e172] [cursor=pointer]
+          - generic [ref=f1e176]:
+            - text: This branch is
+            - link "9 commits ahead of" [ref=f1e177] [cursor=pointer]:
+              - /url: /1263-ux/open-knowledge-studio/compare/open-agent-power%3Aopen-knowledge-studio%3Amain...docs/best-practices-and-demo
+            - text: and
+            - link "1 commit behind" [ref=f1e178] [cursor=pointer]:
+              - /url: /1263-ux/open-knowledge-studio/compare/docs/best-practices-and-demo...open-agent-power%3Aopen-knowledge-studio%3Amain
+            - generic [ref=f1e179]: open-agent-power/open-knowledge-studio:main
+            - text: .
+          - generic [ref=f1e180]:
+            - generic [ref=f1e181]:
+              - generic [ref=f1e183]:
+                - heading "Latest commit" [level=2] [ref=f1e184]
+                - generic [ref=f1e185]:
+                  - generic [ref=f1e187]:
+                    - link [ref=f1e188] [cursor=pointer]:
+                      - /url: /1263-ux
+                      - img "1263-ux" [ref=f1e189]
+                    - link "commits by 1263-ux" [ref=f1e190] [cursor=pointer]:
+                      - /url: /1263-ux/open-knowledge-studio/commits?author=1263-ux
+                      - text: 1263-ux
+                  - generic [ref=f1e191]:
+                    - 'link "docs: add best practices guide + Kimi video demo with screenshots" [ref=f1e194] [cursor=pointer]':
+                      - /url: /1263-ux/open-knowledge-studio/commit/b0f5f391eb9368cc7c8032cacdff485c3f2e30be
+                    - button "Open commit details" [ref=f1e195] [cursor=pointer]
+                    - button "failure" [ref=f1e198] [cursor=pointer]
+                - generic [ref=f1e201]:
+                  - generic [ref=f1e203]:
+                    - link "Commit b0f5f39" [ref=f1e204] [cursor=pointer]:
+                      - /url: /1263-ux/open-knowledge-studio/commit/b0f5f391eb9368cc7c8032cacdff485c3f2e30be
+                      - text: b0f5f39
+                    - text: ·
+                    - generic "Aug 20, 2026, 20:42 GMT+8" [ref=f1e205]: Aug 20, 202610 minutes ago
+                  - generic [ref=f1e206]:
+                    - heading "History" [level=2] [ref=f1e207]
+                    - link "370 Commits" [ref=f1e208] [cursor=pointer]:
+                      - /url: /1263-ux/open-knowledge-studio/commits/docs/best-practices-and-demo/
+              - heading "Folders and files" [level=2] [ref=f1e211]
+              - table "Folders and files" [ref=f1e212]:
+                - rowgroup:
+                  - row "Name Last commit message Last commit date":
+                    - columnheader "Name"
+                    - columnheader "Last commit message"
+                    - columnheader "Last commit date"
+                - rowgroup [ref=f1e213]:
+                  - row [ref=f1e214]:
+                    - cell [ref=f1e215]:
+                      - link ".claude/skills, (Directory)" [ref=f1e222] [cursor=pointer]:
+                        - /url: /1263-ux/open-knowledge-studio/tree/docs/best-practices-and-demo/.claude/skills
+                        - text: .claude/skills
+                    - cell [ref=f1e223]:
+                      - 'link "refactor(cli)!: 飞书集成从核心迁出至 examples/feishu-loop/code" [ref=f1e226] [cursor=pointer]':
+                        - /url: /1263-ux/open-knowledge-studio/commit/5f76aefe0f97d469457f169b47afec723e02b354
+                    - cell "Aug 13, 2026last week" [ref=f1e227]
+                  - row [ref=f1e229]:
+                    - cell [ref=f1e230]:
+                      - link ".github/workflows, (Directory)" [ref=f1e237] [cursor=pointer]:
+                        - /url: /1263-ux/open-knowledge-studio/tree/docs/best-practices-and-demo/.github/workflows
+                        - text: .github/workflows
+                    - cell [ref=f1e238]:
+                      - 'link "ci: PR 强制门禁 — 三平台 pytest + 构建产物内容校验" [ref=f1e241] [cursor=pointer]':
+                        - /url: /1263-ux/open-knowledge-studio/commit/366d88172561df9868cfae1e1f92520dc8522b93
+                    - cell "Aug 9, 20262 weeks ago" [ref=f1e242]
+                  - row [ref=f1e244]:
+                    - cell [ref=f1e245]:
+                      - link ".pi/extensions, (Directory)" [ref=f1e252] [cursor=pointer]:
+                        - /url: /1263-ux/open-knowledge-studio/tree/docs/best-practices-and-demo/.pi/extensions
+                        - text: .pi/extensions
+                    - cell [ref=f1e253]:
+                      - 'link "feat(hooks): signal mode (OKS_POSTTOOL_MODE=signal) — exposure-based" [ref=f1e256] [cursor=pointer]':
+                        - /url: /1263-ux/open-knowledge-studio/commit/5efa0d4fb89e24fa99e909c4f1ccfcfc92717e5b
+                    - cell "Aug 17, 20264 days ago" [ref=f1e257]
+                  - row [ref=f1e259]:
+                    - cell [ref=f1e260]:
+                      - link "assets, (Directory)" [ref=f1e267] [cursor=pointer]:
+                        - /url: /1263-ux/open-knowledge-studio/tree/docs/best-practices-and-demo/assets
+                        - text: assets
+                    - cell [ref=f1e268]:
+                      - 'link "feat(recall): embedding fallback 策略 + 代码清理交付" [ref=f1e271] [cursor=pointer]':
+                        - /url: /1263-ux/open-knowledge-studio/commit/f239b96cc39b15d4418647dc25ee89641dfc8c09
+                    - cell "Aug 19, 2026yesterday" [ref=f1e272]
+                  - row [ref=f1e274]:
+                    - cell [ref=f1e275]:
+                      - link "cli, (Directory)" [ref=f1e282] [cursor=pointer]:
+                        - /url: /1263-ux/open-knowledge-studio/tree/docs/best-practices-and-demo/cli
+                        - text: cli
+                    - cell [ref=f1e283]:
+                      - 'link "release: v0.6.4 — embedding fallback 策略 + 代码清理交付" [ref=f1e286] [cursor=pointer]':
+                        - /url: /1263-ux/open-knowledge-studio/commit/19fd1df341a3d2768f3fe5af28fa572b5f6d7798
+                    - cell "Aug 19, 2026yesterday" [ref=f1e287]
+                  - row [ref=f1e289]:
+                    - cell [ref=f1e290]:
+                      - link "docs, (Directory)" [ref=f1e297] [cursor=pointer]:
+                        - /url: /1263-ux/open-knowledge-studio/tree/docs/best-practices-and-demo/docs
+                        - text: docs
+                    - cell [ref=f1e298]:
+                      - 'link "docs: add best practices guide + Kimi video demo with screenshots" [ref=f1e301] [cursor=pointer]':
+                        - /url: /1263-ux/open-knowledge-studio/commit/b0f5f391eb9368cc7c8032cacdff485c3f2e30be
+                    - cell "Aug 20, 202610 minutes ago" [ref=f1e302]
+                  - row [ref=f1e304]:
+                    - cell [ref=f1e305]:
+                      - link "examples, (Directory)" [ref=f1e312] [cursor=pointer]:
+                        - /url: /1263-ux/open-knowledge-studio/tree/docs/best-practices-and-demo/examples
+                        - text: examples
+                    - cell [ref=f1e313]:
+                      - 'link "docs: add best practices guide + Kimi video demo with screenshots" [ref=f1e316] [cursor=pointer]':
+                        - /url: /1263-ux/open-knowledge-studio/commit/b0f5f391eb9368cc7c8032cacdff485c3f2e30be
+                    - cell "Aug 20, 202610 minutes ago" [ref=f1e317]
+                  - row [ref=f1e319]:
+                    - cell [ref=f1e320]:
+                      - link "internal/superpowers, (Directory)" [ref=f1e327] [cursor=pointer]:
+                        - /url: /1263-ux/open-knowledge-studio/tree/docs/best-practices-and-demo/internal/superpowers
+                        - text: internal/superpowers
+                    - cell [ref=f1e328]:
+                      - 'link "examples: add case index, remove stale artifacts, move internal plans…" [ref=f1e331] [cursor=pointer]':
+                        - /url: /1263-ux/open-knowledge-studio/commit/f219bcf9be85c515275f45beda39b6756453aac8
+                    - cell "Aug 19, 2026yesterday" [ref=f1e332]
+                  - row [ref=f1e334]:
+                    - cell [ref=f1e335]:
+                      - link "records, (Directory)" [ref=f1e342] [cursor=pointer]:
+                        - /url: /1263-ux/open-knowledge-studio/tree/docs/best-practices-and-demo/records
+                        - text: records
+                    - cell [ref=f1e343]:
+                      - 'link "docs: recall-evaluation 加 embedding backend 对比（语义召回反不如字面 BM25）" [ref=f1e346] [cursor=pointer]':
+                        - /url: /1263-ux/open-knowledge-studio/commit/ceaa555afb14521bdd16a57d82d2559a9e5f668c
+                    - cell "Aug 18, 20262 days ago" [ref=f1e347]
+                  - row [ref=f1e349]:
+                    - cell [ref=f1e350]:
+                      - link "schemas, (Directory)" [ref=f1e357] [cursor=pointer]:
+                        - /url: /1263-ux/open-knowledge-studio/tree/docs/best-practices-and-demo/schemas
+                        - text: schemas
+                    - cell [ref=f1e358]:
+                      - 'link "fix(B4): prepare 产物合法化 + 补上 skill 一直在教却不存在的命令" [ref=f1e361] [cursor=pointer]':
+                        - /url: /1263-ux/open-knowledge-studio/commit/e0ae255e86dc3f295d05dd38ee5b65c966edfc39
+                    - cell "Aug 9, 20262 weeks ago" [ref=f1e362]
+                  - row [ref=f1e364]:
+                    - cell [ref=f1e365]:
+                      - link ".gitignore, (File)" [ref=f1e372] [cursor=pointer]:
+                        - /url: /1263-ux/open-knowledge-studio/blob/docs/best-practices-and-demo/.gitignore
+                        - text: .gitignore
+                    - cell [ref=f1e373]:
+                      - 'link "fix(search): TreeSearchBackend 建 clean cache (#title+body, 去 frontmat…" [ref=f1e376] [cursor=pointer]':
+                        - /url: /1263-ux/open-knowledge-studio/commit/47ae3f62f4c0bee985f0e7bce60e09b795ecb038
+                    - cell "Aug 18, 20262 days ago" [ref=f1e377]
+                  - row [ref=f1e379]:
+                    - cell [ref=f1e380]:
+                      - link "AGENTS.md, (File)" [ref=f1e387] [cursor=pointer]:
+                        - /url: /1263-ux/open-knowledge-studio/blob/docs/best-practices-and-demo/AGENTS.md
+                        - text: AGENTS.md
+                    - cell [ref=f1e388]:
+                      - generic [ref=f1e390]:
+                        - 'link "feat(hooks): add Codex lifecycle parity (" [ref=f1e391] [cursor=pointer]':
+                          - /url: /1263-ux/open-knowledge-studio/commit/95a638f1bd89b23a49c657a734b11685e682af24
+                        - link "open-agent-power#38" [ref=f1e392] [cursor=pointer]:
+                          - /url: https://github.com/open-agent-power/open-knowledge-studio/pull/38
+                        - link ")" [ref=f1e393] [cursor=pointer]:
+                          - /url: /1263-ux/open-knowledge-studio/commit/95a638f1bd89b23a49c657a734b11685e682af24
+                    - cell "Aug 19, 20262 days ago" [ref=f1e394]
+                  - row [ref=f1e396]:
+                    - cell [ref=f1e397]:
+                      - link "CHANGELOG.md, (File)" [ref=f1e404] [cursor=pointer]:
+                        - /url: /1263-ux/open-knowledge-studio/blob/docs/best-practices-and-demo/CHANGELOG.md
+                        - text: CHANGELOG.md
+                    - cell [ref=f1e405]:
+                      - 'link "release: v0.6.4 — embedding fallback 策略 + 代码清理交付" [ref=f1e408] [cursor=pointer]':
+                        - /url: /1263-ux/open-knowledge-studio/commit/19fd1df341a3d2768f3fe5af28fa572b5f6d7798
+                    - cell "Aug 19, 2026yesterday" [ref=f1e409]
+                  - row [ref=f1e411]:
+                    - cell [ref=f1e412]:
+                      - link "CLAUDE.md, (File)" [ref=f1e419] [cursor=pointer]:
+                        - /url: /1263-ux/open-knowledge-studio/blob/docs/best-practices-and-demo/CLAUDE.md
+                        - text: CLAUDE.md
+                    - cell [ref=f1e420]:
+                      - generic [ref=f1e422]:
+                        - 'link "feat(hooks): add Codex lifecycle parity (" [ref=f1e423] [cursor=pointer]':
+                          - /url: /1263-ux/open-knowledge-studio/commit/95a638f1bd89b23a49c657a734b11685e682af24
+                        - link "open-agent-power#38" [ref=f1e424] [cursor=pointer]:
+                          - /url: https://github.com/open-agent-power/open-knowledge-studio/pull/38
+                        - link ")" [ref=f1e425] [cursor=pointer]:
+                          - /url: /1263-ux/open-knowledge-studio/commit/95a638f1bd89b23a49c657a734b11685e682af24
+                    - cell "Aug 19, 20262 days ago" [ref=f1e426]
+                  - row [ref=f1e428]:
+                    - cell [ref=f1e429]:
+                      - link "CONSTITUTION.md, (File)" [ref=f1e436] [cursor=pointer]:
+                        - /url: /1263-ux/open-knowledge-studio/blob/docs/best-practices-and-demo/CONSTITUTION.md
+                        - text: CONSTITUTION.md
+                    - cell [ref=f1e437]:
+                      - generic [ref=f1e439]:
+                        - 'link "fix(persistence): enforce shared file write contracts (" [ref=f1e440] [cursor=pointer]':
+                          - /url: /1263-ux/open-knowledge-studio/commit/9304359b8af49f29b3c5fc212035908ca8934122
+                        - link "open-agent-pow…" [ref=f1e441] [cursor=pointer]:
+                          - /url: https://github.com/open-agent-power/open-knowledge-studio/pull/27
+                    - cell "Aug 16, 20264 days ago" [ref=f1e442]
+                  - row [ref=f1e444]:
+                    - cell [ref=f1e445]:
+                      - link "LICENSE, (File)" [ref=f1e452] [cursor=pointer]:
+                        - /url: /1263-ux/open-knowledge-studio/blob/docs/best-practices-and-demo/LICENSE
+                        - text: LICENSE
+                    - cell [ref=f1e453]:
+                      - 'link "feat: initialize open-knowledge-studio v0.1.0" [ref=f1e456] [cursor=pointer]':
+                        - /url: /1263-ux/open-knowledge-studio/commit/350e6b2bc1a6e9221f97a74aee790f7667f9f013
+                    - cell "Jul 13, 2026last month" [ref=f1e457]
+                  - row [ref=f1e459]:
+                    - cell [ref=f1e460]:
+                      - link "README.md, (File)" [ref=f1e467] [cursor=pointer]:
+                        - /url: /1263-ux/open-knowledge-studio/blob/docs/best-practices-and-demo/README.md
+                        - text: README.md
+                    - cell [ref=f1e468]:
+                      - 'link "examples: make 托管你的学习 beginner-friendly with teaching goal and template" [ref=f1e471] [cursor=pointer]':
+                        - /url: /1263-ux/open-knowledge-studio/commit/575b51a1406b4366bf8583f73f3c0a82f2ab60e8
+                    - cell "Aug 19, 2026yesterday" [ref=f1e472]
+                  - row [ref=f1e474]:
+                    - cell [ref=f1e475]:
+                      - link "SKILL.md, (File)" [ref=f1e482] [cursor=pointer]:
+                        - /url: /1263-ux/open-knowledge-studio/blob/docs/best-practices-and-demo/SKILL.md
+                        - text: SKILL.md
+                    - cell [ref=f1e483]:
+                      - 'link "feat(cli): add oks skills-install command + fix skill count docs" [ref=f1e486] [cursor=pointer]':
+                        - /url: /1263-ux/open-knowledge-studio/commit/2e3398a50ad04fbf83fffcb6b4fbe901efaae9a4
+                    - cell "Aug 13, 2026last week" [ref=f1e487]
+                  - row [ref=f1e489]:
+                    - cell [ref=f1e490]:
+                      - link "index.db, (File)" [ref=f1e497] [cursor=pointer]:
+                        - /url: /1263-ux/open-knowledge-studio/blob/docs/best-practices-and-demo/index.db
+                        - text: index.db
+                    - cell [ref=f1e498]:
+                      - 'link "revert+clarify: native 恢复 6+1（oks 原创），不依赖外部 TreeSearch 包" [ref=f1e501] [cursor=pointer]':
+                        - /url: /1263-ux/open-knowledge-studio/commit/39b3df2a2036a1fc7b2fcb490dd31782524d0480
+                    - cell "Aug 18, 20262 days ago" [ref=f1e502]
+                  - row [ref=f1e504]:
+                    - cell [ref=f1e505]:
+                      - link "index.db.lock, (File)" [ref=f1e512] [cursor=pointer]:
+                        - /url: /1263-ux/open-knowledge-studio/blob/docs/best-practices-and-demo/index.db.lock
+                        - text: index.db.lock
+                    - cell [ref=f1e513]:
+                      - 'link "feat(search): v0.6.0 — native 默认检索改用 TreeSearch" [ref=f1e516] [cursor=pointer]':
+                        - /url: /1263-ux/open-knowledge-studio/commit/70a5abfb95b0ef7e611515f4fcd4a1613326c76d
+                    - cell "Aug 18, 20262 days ago" [ref=f1e517]
+                  - row [ref=f1e519]:
+                    - cell [ref=f1e520]:
+                      - link "pytest.ini, (File)" [ref=f1e527] [cursor=pointer]:
+                        - /url: /1263-ux/open-knowledge-studio/blob/docs/best-practices-and-demo/pytest.ini
+                        - text: pytest.ini
+                    - cell [ref=f1e528]:
+                      - 'link "refactor(cli)!: 飞书集成从核心迁出至 examples/feishu-loop/code" [ref=f1e531] [cursor=pointer]':
+                        - /url: /1263-ux/open-knowledge-studio/commit/5f76aefe0f97d469457f169b47afec723e02b354
+                    - cell "Aug 13, 2026last week" [ref=f1e532]
+            - generic [ref=f1e535]:
+              - generic [ref=f1e536]:
+                - heading "Repository files navigation" [level=2] [ref=f1e537]
+                - navigation "Repository files" [ref=f1e538]:
+                  - list [ref=f1e539]:
+                    - listitem [ref=f1e540]:
+                      - link "README" [ref=f1e541] [cursor=pointer]:
+                        - /url: "#"
+                    - listitem [ref=f1e543]:
+                      - link "License" [ref=f1e544] [cursor=pointer]:
+                        - /url: "#"
+                - button "Outline" [ref=f1e546] [cursor=pointer]
+              - article [ref=f1e550]:
+                - generic [ref=f1e551]:
+                  - link [ref=f1e552] [cursor=pointer]:
+                    - /url: /1263-ux/open-knowledge-studio/blob/docs/best-practices-and-demo/docs/assets/oks-logo-readme.png
+                    - img "Open Knowledge Studio" [ref=f1e553]
+                  - generic [ref=f1e554]:
+                    - heading "Open Knowledge Studio" [level=1] [ref=f1e555]
+                    - 'link "Permalink: Open Knowledge Studio" [ref=f1e556] [cursor=pointer]':
+                      - /url: "#open-knowledge-studio"
+                  - paragraph [ref=f1e559]: Turn sources into reviewed, traceable knowledge that your Agent can recall later.
+                  - paragraph [ref=f1e560]:
+                    - link "English" [ref=f1e561] [cursor=pointer]:
+                      - /url: "#english"
+                    - text: ·
+                    - link "中文" [ref=f1e562] [cursor=pointer]:
+                      - /url: "#chinese"
+                    - text: ·
+                    - link "Documentation" [ref=f1e563] [cursor=pointer]:
+                      - /url: https://open-agent-power.github.io/open-knowledge-studio/
+                - separator [ref=f1e564]
+                - paragraph
+                - generic [ref=f1e565]:
+                  - heading "English" [level=2] [ref=f1e566]
+                  - 'link "Permalink: English" [ref=f1e567] [cursor=pointer]':
+                    - /url: "#english"
+                - paragraph [ref=f1e570]: Open Knowledge Studio (OKS) is an Agent-native, filesystem-first knowledge workspace. It preserves source evidence, lets an Agent draft reusable knowledge, keeps a human in control of promotion, and recalls the result in later work.
+                - generic [ref=f1e571]:
+                  - code [ref=f1e573]: your source → Candidate → human review → Wiki → Recall
+                  - button "Copy code to clipboard" [ref=f1e575] [cursor=pointer]
+                - generic [ref=f1e579]:
+                  - heading "Quick Start" [level=3] [ref=f1e580]
+                  - 'link "Permalink: Quick Start" [ref=f1e581] [cursor=pointer]':
+                    - /url: "#quick-start"
+                - paragraph [ref=f1e584]: "Requirements: Python 3.12+, Git, and pipx."
+                - generic [ref=f1e585]:
+                  - generic [ref=f1e586]: pipx install open-knowledge-studio oks init ./my-knowledge-base cd ./my-knowledge-base oks status
+                  - button "Copy code to clipboard" [ref=f1e588] [cursor=pointer]
+                - paragraph [ref=f1e592]: "In Claude Code, Codex, or another compatible Agent host, give the Agent a real source and ask it to ingest it:"
+                - blockquote [ref=f1e593]:
+                  - paragraph [ref=f1e594]: Ingest this PDF into my OKS knowledge base.
+                - paragraph [ref=f1e595]:
+                  - text: The Agent follows the installed
+                  - code [ref=f1e596]: /ingest
+                  - text: skill, records evidence, and creates a Candidate in
+                  - code [ref=f1e597]: drafts/
+                  - text: ". Review it before promotion:"
+                - generic [ref=f1e598]:
+                  - generic [ref=f1e599]:
+                    - text: oks drafts list oks drafts promote <slug> oks recall
+                    - generic [ref=f1e600]: "\"what did we decide?\""
+                  - button "Copy code to clipboard" [ref=f1e602] [cursor=pointer]
+                - paragraph [ref=f1e606]: "Without an Agent, prepare a run workspace explicitly:"
+                - generic [ref=f1e607]:
+                  - generic [ref=f1e608]: oks ingest prepare <file-or-url>
+                  - button "Copy code to clipboard" [ref=f1e610] [cursor=pointer]
+                - paragraph [ref=f1e614]:
+                  - code [ref=f1e615]: prepare
+                  - text: does not call an Agent. It creates the protocol workspace and prints the next steps. For connector-managed acquisition, use
+                  - code [ref=f1e616]: oks ingest run <file-or-url>
+                  - text: ; that compatibility path delegates extraction to the separately packaged
+                  - code [ref=f1e617]: oks-connector
+                  - text: runtime.
+                - generic [ref=f1e618]:
+                  - heading "Product Boundaries" [level=3] [ref=f1e619]
+                  - 'link "Permalink: Product Boundaries" [ref=f1e620] [cursor=pointer]':
+                    - /url: "#product-boundaries"
+                - list [ref=f1e623]:
+                  - listitem [ref=f1e624]: Core owns filesystem protocols, validation, human review, and Recall; it does not call AI APIs.
+                  - listitem [ref=f1e625]:
+                    - code [ref=f1e626]: oks-connector
+                    - text: owns acquisition and mechanical extraction.
+                  - listitem [ref=f1e627]: Providers create evidence, not Wiki knowledge. Candidate promotion always requires human review.
+                  - listitem [ref=f1e628]:
+                    - text: Evidence and execution states remain traceable, including
+                    - code [ref=f1e629]: partial
+                    - text: ","
+                    - code [ref=f1e630]: failed
+                    - text: ","
+                    - code [ref=f1e631]: skipped
+                    - text: ", and"
+                    - code [ref=f1e632]: environment_limited
+                    - text: .
+                - generic [ref=f1e633]:
+                  - heading "Recall Architecture — OKS Triple-Layer Recall" [level=3] [ref=f1e634]
+                  - 'link "Permalink: Recall Architecture — OKS Triple-Layer Recall" [ref=f1e635] [cursor=pointer]':
+                    - /url: "#recall-architecture--oks-triple-layer-recall"
+                - paragraph [ref=f1e638]: "Recall and injection are decoupled across three layers:"
+                - list [ref=f1e639]:
+                  - listitem [ref=f1e640]:
+                    - strong [ref=f1e641]: Node-BM25
+                    - text: (retrieval) — fts5 node-level BM25 (one FTS5 row per
+                    - code [ref=f1e642]: "##"
+                    - text: "heading, multi-word same-section scores high). 50-case ablation: R@1=82.5%, MRR=0.907 (vs native 6+1 R@1=52.5%)."
+                  - listitem [ref=f1e643]:
+                    - strong [ref=f1e644]: Soul Boost
+                    - text: (injection) — goal re-rank +
+                    - code [ref=f1e645]: injection_boost
+                    - text: annotation (type×1.5/0.8/0.6 + review×1.2 + generic×0.5). Does not change retrieval order; visible in
+                    - code [ref=f1e646]: "--explain"
+                    - text: .
+                  - listitem [ref=f1e647]:
+                    - strong [ref=f1e648]: Memory Curve
+                    - text: (decay) — type-specific λ → tier
+                    - code [ref=f1e649]: hot/warm/cold/evictable
+                    - text: ", an independent subsystem in"
+                    - code [ref=f1e650]: store.py
+                    - text: .
+                - paragraph [ref=f1e651]:
+                  - text: "Ablation proves the layering: adding native 6+1 re-rank back into retrieval (fusion)"
+                  - emphasis [ref=f1e652]: lowers
+                  - text: R@1 0.825→0.805 — the "soul" belongs in the injection layer, not the retrieval layer.
+                - generic [ref=f1e653]:
+                  - heading "50-case ablation (semantic-paraphrase queries, strict exact-slug match)" [level=4] [ref=f1e654]
+                  - 'link "Permalink: 50-case ablation (semantic-paraphrase queries, strict exact-slug match)" [ref=f1e655] [cursor=pointer]':
+                    - /url: "#50-case-ablation-semantic-paraphrase-queries-strict-exact-slug-match"
+                - table [ref=f1e659]:
+                  - rowgroup [ref=f1e660]:
+                    - row [ref=f1e661]:
+                      - columnheader "backend" [ref=f1e662]
+                      - columnheader "R@1" [ref=f1e663]
+                      - columnheader "R@3" [ref=f1e664]
+                      - columnheader "R@5" [ref=f1e665]
+                      - columnheader "MRR" [ref=f1e666]
+                      - columnheader "nDCG@5" [ref=f1e667]
+                      - columnheader "p50" [ref=f1e668]
+                  - rowgroup [ref=f1e669]:
+                    - row [ref=f1e670]:
+                      - cell [ref=f1e671]:
+                        - strong [ref=f1e672]: fts5 (full Triple-Layer)
+                      - cell [ref=f1e673]:
+                        - strong [ref=f1e674]: "0.825"
+                      - cell [ref=f1e675]:
+                        - strong [ref=f1e676]: "0.925"
+                      - cell "0.927" [ref=f1e677]
+                      - cell [ref=f1e678]:
+                        - strong [ref=f1e679]: "0.907"
+                      - cell [ref=f1e680]:
+                        - strong [ref=f1e681]: "0.893"
+                      - cell "93ms" [ref=f1e682]
+                    - row [ref=f1e683]:
+                      - cell "native (−Node-BM25, 6+1 page-level)" [ref=f1e684]
+                      - cell "0.525" [ref=f1e685]
+                      - cell "0.647" [ref=f1e686]
+                      - cell "0.689" [ref=f1e687]
+                      - cell "0.630" [ref=f1e688]
+                      - cell "0.624" [ref=f1e689]
+                      - cell "137ms" [ref=f1e690]
+                    - row [ref=f1e691]:
+                      - cell "fusion (fts5 + native re-rank)" [ref=f1e692]
+                      - cell "0.805" [ref=f1e693]
+                      - cell "0.905" [ref=f1e694]
+                      - cell "0.927" [ref=f1e695]
+                      - cell "0.900" [ref=f1e696]
+                      - cell "0.887" [ref=f1e697]
+                      - cell "226ms" [ref=f1e698]
+                - paragraph [ref=f1e699]:
+                  - text: Node-BM25 lifts R@1 +57% over native; fusion re-rank
+                  - emphasis [ref=f1e700]: lowers
+                  - text: precision — the soul factors must live in the injection layer, never in retrieval. Runs archived in
+                  - code [ref=f1e701]: records/experiments/runs/
+                  - text: ". Reproduce:"
+                  - code [ref=f1e702]: oks eval recall records/experiments/eval-50.yaml -o run.json --search-backend fts5
+                  - text: .
+                - paragraph [ref=f1e703]:
+                  - text: See
+                  - link "Recall Evaluation" [ref=f1e704] [cursor=pointer]:
+                    - /url: /1263-ux/open-knowledge-studio/blob/docs/best-practices-and-demo/docs/algorithms/recall-evaluation.md
+                  - text: .
+                - generic [ref=f1e705]:
+                  - heading "Learn More" [level=3] [ref=f1e706]
+                  - 'link "Permalink: Learn More" [ref=f1e707] [cursor=pointer]':
+                    - /url: "#learn-more"
+                - list [ref=f1e710]:
+                  - listitem [ref=f1e711]:
+                    - link "Real-world examples" [ref=f1e712] [cursor=pointer]:
+                      - /url: /1263-ux/open-knowledge-studio/blob/docs/best-practices-and-demo/examples
+                    - text: "— copyable scenarios: learning, books, Feishu, GitHub, maintenance, resume"
+                  - listitem [ref=f1e713]:
+                    - link "Start here" [ref=f1e714] [cursor=pointer]:
+                      - /url: /1263-ux/open-knowledge-studio/blob/docs/best-practices-and-demo/docs/start-here.md
+                  - listitem [ref=f1e715]:
+                    - link "Complete your first knowledge loop" [ref=f1e716] [cursor=pointer]:
+                      - /url: /1263-ux/open-knowledge-studio/blob/docs/best-practices-and-demo/docs/first-knowledge-loop.md
+                  - listitem [ref=f1e717]:
+                    - link "Verify that OKS works" [ref=f1e718] [cursor=pointer]:
+                      - /url: /1263-ux/open-knowledge-studio/blob/docs/best-practices-and-demo/docs/verify.md
+                - paragraph [ref=f1e719]:
+                  - emphasis [ref=f1e720]: "Advanced:"
+                - list [ref=f1e721]:
+                  - listitem [ref=f1e722]:
+                    - link "Architecture principles" [ref=f1e723] [cursor=pointer]:
+                      - /url: /1263-ux/open-knowledge-studio/blob/docs/best-practices-and-demo/docs/concepts/constitution.md
+                  - listitem [ref=f1e724]:
+                    - link "Ingest boundaries" [ref=f1e725] [cursor=pointer]:
+                      - /url: /1263-ux/open-knowledge-studio/blob/docs/best-practices-and-demo/docs/reference/ingest.md
+                - separator [ref=f1e726]
+                - paragraph
+                - generic [ref=f1e727]:
+                  - heading "中文" [level=2] [ref=f1e728]
+                  - 'link "Permalink: 中文" [ref=f1e729] [cursor=pointer]':
+                    - /url: "#中文"
+                - paragraph [ref=f1e732]: Open Knowledge Studio（OKS）是一个 Agent-native、文件系统优先的知识工作台： 它保存来源证据，让 Agent 起草可复用知识，由人决定是否晋升，并在未来任务中重新召回。
+                - generic [ref=f1e733]:
+                  - code [ref=f1e735]: 你的资料 → Candidate → 人工审核 → Wiki → Recall
+                  - button "Copy code to clipboard" [ref=f1e737] [cursor=pointer]
+                - generic [ref=f1e741]:
+                  - heading "快速开始" [level=3] [ref=f1e742]
+                  - 'link "Permalink: 快速开始" [ref=f1e743] [cursor=pointer]':
+                    - /url: "#快速开始"
+                - paragraph [ref=f1e746]: 要求：Python 3.12+、Git、pipx。
+                - generic [ref=f1e747]:
+                  - generic [ref=f1e748]: pipx install open-knowledge-studio oks init ./my-knowledge-base cd ./my-knowledge-base oks status
+                  - button "Copy code to clipboard" [ref=f1e750] [cursor=pointer]
+                - paragraph [ref=f1e754]: 在 Claude Code、Codex 或兼容 Agent 中，把一份自己的真实资料交给 Agent：
+                - blockquote [ref=f1e755]:
+                  - paragraph [ref=f1e756]: 把这份 PDF 收录到我的 OKS 知识库。
+                - paragraph [ref=f1e757]:
+                  - text: Agent 会按已安装的
+                  - code [ref=f1e758]: /ingest
+                  - text: Skill 保存证据，并在
+                  - code [ref=f1e759]: drafts/
+                  - text: 生成 Candidate。 审核后再晋升：
+                - generic [ref=f1e760]:
+                  - generic [ref=f1e761]:
+                    - text: oks drafts list oks drafts promote <slug> oks recall
+                    - generic [ref=f1e762]: "\"我们当时做了什么决定？\""
+                  - button "Copy code to clipboard" [ref=f1e764] [cursor=pointer]
+                - paragraph [ref=f1e768]: 没有 Agent 时，可以显式准备 Run Workspace：
+                - generic [ref=f1e769]:
+                  - generic [ref=f1e770]: oks ingest prepare <文件或URL>
+                  - button "Copy code to clipboard" [ref=f1e772] [cursor=pointer]
+                - paragraph [ref=f1e776]:
+                  - code [ref=f1e777]: prepare
+                  - text: 不会自行调用 Agent，只创建协议工作区并输出下一步说明。需要 connector 托管采集时，使用
+                  - code [ref=f1e778]: oks ingest run <文件或URL>
+                  - text: ；这条兼容路径把提取交给独立发布的
+                  - code [ref=f1e779]: oks-connector
+                  - text: 。
+                - generic [ref=f1e780]:
+                  - heading "召回架构 — OKS Triple-Layer Recall" [level=3] [ref=f1e781]
+                  - 'link "Permalink: 召回架构 — OKS Triple-Layer Recall" [ref=f1e782] [cursor=pointer]':
+                    - /url: "#召回架构--oks-triple-layer-recall"
+                - paragraph [ref=f1e785]: 召回与注入解耦，三层架构：
+                - list [ref=f1e786]:
+                  - listitem [ref=f1e787]:
+                    - strong [ref=f1e788]: Node-BM25
+                    - text: （召回层）—— fts5 node-level BM25（每个
+                    - code [ref=f1e789]: "##"
+                    - text: heading 段一个 FTS5 row，多词同段高分）。50-case 消融：R@1=82.5%，MRR=0.907（vs native 6+1 R@1=52.5%）。
+                  - listitem [ref=f1e790]:
+                    - strong [ref=f1e791]: Soul Boost
+                    - text: （注入层）—— goal 重排 +
+                    - code [ref=f1e792]: injection_boost
+                    - text: 标注 （type×1.5/0.8/0.6 + review×1.2 + generic×0.5）。不改召回顺序，
+                    - code [ref=f1e793]: "--explain"
+                    - text: 可见。
+                  - listitem [ref=f1e794]:
+                    - strong [ref=f1e795]: Memory Curve
+                    - text: （衰减层）—— type-specific λ → tier
+                    - code [ref=f1e796]: hot/warm/cold/evictable
+                    - text: ，
+                    - code [ref=f1e797]: store.py
+                    - text: 独立子系统。
+                - generic [ref=f1e798]:
+                  - heading "50-case 消融实验（语义改写 query，严格精确 slug 匹配）" [level=4] [ref=f1e799]
+                  - 'link "Permalink: 50-case 消融实验（语义改写 query，严格精确 slug 匹配）" [ref=f1e800] [cursor=pointer]':
+                    - /url: "#50-case-消融实验语义改写-query严格精确-slug-匹配"
+                - table [ref=f1e804]:
+                  - rowgroup [ref=f1e805]:
+                    - row [ref=f1e806]:
+                      - columnheader "backend" [ref=f1e807]
+                      - columnheader "R@1" [ref=f1e808]
+                      - columnheader "R@3" [ref=f1e809]
+                      - columnheader "R@5" [ref=f1e810]
+                      - columnheader "MRR" [ref=f1e811]
+                      - columnheader "nDCG@5" [ref=f1e812]
+                      - columnheader "p50" [ref=f1e813]
+                  - rowgroup [ref=f1e814]:
+                    - row [ref=f1e815]:
+                      - cell [ref=f1e816]:
+                        - strong [ref=f1e817]: fts5（完整 Triple-Layer）
+                      - cell [ref=f1e818]:
+                        - strong [ref=f1e819]: "0.825"
+                      - cell [ref=f1e820]:
+                        - strong [ref=f1e821]: "0.925"
+                      - cell "0.927" [ref=f1e822]
+                      - cell [ref=f1e823]:
+                        - strong [ref=f1e824]: "0.907"
+                      - cell [ref=f1e825]:
+                        - strong [ref=f1e826]: "0.893"
+                      - cell "93ms" [ref=f1e827]
+                    - row [ref=f1e828]:
+                      - cell "native（去 Node-BM25，6+1 page-level）" [ref=f1e829]
+                      - cell "0.525" [ref=f1e830]
+                      - cell "0.647" [ref=f1e831]
+                      - cell "0.689" [ref=f1e832]
+                      - cell "0.630" [ref=f1e833]
+                      - cell "0.624" [ref=f1e834]
+                      - cell "137ms" [ref=f1e835]
+                    - row [ref=f1e836]:
+                      - cell "fusion（fts5 + native re-rank）" [ref=f1e837]
+                      - cell "0.805" [ref=f1e838]
+                      - cell "0.905" [ref=f1e839]
+                      - cell "0.927" [ref=f1e840]
+                      - cell "0.900" [ref=f1e841]
+                      - cell "0.887" [ref=f1e842]
+                      - cell "226ms" [ref=f1e843]
+                - paragraph [ref=f1e844]:
+                  - text: Node-BM25 R@1 较 native +57%；fusion re-rank 反而
+                  - emphasis [ref=f1e845]: 降
+                  - text: 精度——灵魂因子必须留在注入层， 不能放召回层。run json 归档
+                  - code [ref=f1e846]: records/experiments/runs/
+                  - text: 。复现：
+                  - code [ref=f1e847]: oks eval recall records/experiments/eval-50.yaml -o run.json --search-backend fts5
+                  - text: 。
+                - paragraph [ref=f1e848]:
+                  - text: 详见
+                  - link "召回评估" [ref=f1e849] [cursor=pointer]:
+                    - /url: /1263-ux/open-knowledge-studio/blob/docs/best-practices-and-demo/docs/algorithms/recall-evaluation.md
+                  - text: 。
+                - generic [ref=f1e850]:
+                  - heading "产品边界" [level=3] [ref=f1e851]
+                  - 'link "Permalink: 产品边界" [ref=f1e852] [cursor=pointer]':
+                    - /url: "#产品边界"
+                - list [ref=f1e855]:
+                  - listitem [ref=f1e856]: Core 负责文件协议、校验、人工审核和 Recall，不调用 AI API。
+                  - listitem [ref=f1e857]:
+                    - code [ref=f1e858]: oks-connector
+                    - text: 负责资料获取与机械提取。
+                  - listitem [ref=f1e859]: Provider 产生证据，不直接产生 Wiki 知识；Candidate 晋升必须经过人工审核。
+                  - listitem [ref=f1e860]:
+                    - text: 证据与执行状态必须可追溯，包括
+                    - code [ref=f1e861]: partial
+                    - text: 、
+                    - code [ref=f1e862]: failed
+                    - text: 、
+                    - code [ref=f1e863]: skipped
+                    - text: 和
+                    - code [ref=f1e864]: environment_limited
+                    - text: 。
+                - generic [ref=f1e865]:
+                  - heading "继续阅读" [level=3] [ref=f1e866]
+                  - 'link "Permalink: 继续阅读" [ref=f1e867] [cursor=pointer]':
+                    - /url: "#继续阅读"
+                - list [ref=f1e870]:
+                  - listitem [ref=f1e871]:
+                    - link "真实案例" [ref=f1e872] [cursor=pointer]:
+                      - /url: /1263-ux/open-knowledge-studio/blob/docs/best-practices-and-demo/examples
+                    - text: — 可复制的场景：学习、书籍、飞书、GitHub、维护、简历
+                  - listitem [ref=f1e873]:
+                    - link "从这里开始" [ref=f1e874] [cursor=pointer]:
+                      - /url: /1263-ux/open-knowledge-studio/blob/docs/best-practices-and-demo/docs/start-here.md
+                  - listitem [ref=f1e875]:
+                    - link "完成第一个知识闭环" [ref=f1e876] [cursor=pointer]:
+                      - /url: /1263-ux/open-knowledge-studio/blob/docs/best-practices-and-demo/docs/first-knowledge-loop.md
+                  - listitem [ref=f1e877]:
+                    - link "确认 OKS 正在工作" [ref=f1e878] [cursor=pointer]:
+                      - /url: /1263-ux/open-knowledge-studio/blob/docs/best-practices-and-demo/docs/verify.md
+                - paragraph [ref=f1e879]:
+                  - emphasis [ref=f1e880]: 进阶内容：
+                - list [ref=f1e881]:
+                  - listitem [ref=f1e882]:
+                    - link "架构原则" [ref=f1e883] [cursor=pointer]:
+                      - /url: /1263-ux/open-knowledge-studio/blob/docs/best-practices-and-demo/docs/concepts/constitution.md
+                  - listitem [ref=f1e884]:
+                    - link "摄入边界" [ref=f1e885] [cursor=pointer]:
+                      - /url: /1263-ux/open-knowledge-studio/blob/docs/best-practices-and-demo/docs/reference/ingest.md
+                - generic [ref=f1e886]:
+                  - heading "License" [level=2] [ref=f1e887]
+                  - 'link "Permalink: License" [ref=f1e888] [cursor=pointer]':
+                    - /url: "#license"
+                - paragraph [ref=f1e891]: MIT
+        - generic [ref=f1e894]:
+          - generic [ref=f1e895]:
+            - heading "About" [level=2] [ref=f1e896]
+            - paragraph [ref=f1e897]: File-based knowledge engineering CLI for Claude Code — raw → wiki → recall
+            - heading "Resources" [level=3] [ref=f1e898]
+            - link "Readme" [ref=f1e900] [cursor=pointer]:
+              - /url: "#readme-ov-file"
+            - link "License" [ref=f1e904] [cursor=pointer]:
+              - /url: "#License-1-ov-file"
+            - link "Activity" [ref=f1e908] [cursor=pointer]:
+              - /url: /1263-ux/open-knowledge-studio/activity
+            - heading "Stars" [level=3] [ref=f1e911]
+            - generic [ref=f1e913]:
+              - strong [ref=f1e916]: "0"
+              - text: stars
+            - heading "Watchers" [level=3] [ref=f1e917]
+            - generic [ref=f1e919]:
+              - strong [ref=f1e922]: "0"
+              - text: watching
+            - heading "Forks" [level=3] [ref=f1e923]
+            - link [ref=f1e925] [cursor=pointer]:
+              - /url: /1263-ux/open-knowledge-studio/forks
+              - strong [ref=f1e929]: "0"
+              - text: forks
+            - link "Report repository" [ref=f1e931] [cursor=pointer]:
+              - /url: /contact/report-content?content_url=https%3A%2F%2Fgithub.com%2F1263-ux%2Fopen-knowledge-studio&report=1263-ux+%28user%29
+          - generic [ref=f1e932]:
+            - heading [level=2] [ref=f1e933]:
+              - link "Releases" [ref=f1e935] [cursor=pointer]:
+                - /url: /1263-ux/open-knowledge-studio/releases
+            - link "1tag" [ref=f1e936] [cursor=pointer]:
+              - /url: /1263-ux/open-knowledge-studio/tags
+          - generic [ref=f1e939]:
+            - heading "Contributors" [level=2] [ref=f1e940]
+            - generic [ref=f1e941]: No contributors
+          - generic [ref=f1e942]:
+            - heading "Languages" [level=2] [ref=f1e943]
+            - generic [ref=f1e945]:
+              - 'progressbar "Python: 97.5%" [ref=f1e946]'
+              - 'progressbar "TypeScript: 1.7%" [ref=f1e947]'
+              - 'progressbar "Shell: 0.8%" [ref=f1e948]'
+            - list [ref=f1e949]:
+              - listitem [ref=f1e950]:
+                - generic [ref=f1e951]:
+                  - generic [ref=f1e953]: Python
+                  - generic [ref=f1e954]: 97.5%
+              - listitem [ref=f1e955]:
+                - generic [ref=f1e956]:
+                  - generic [ref=f1e958]: TypeScript
+                  - generic [ref=f1e959]: 1.7%
+              - listitem [ref=f1e960]:
+                - generic [ref=f1e961]:
+                  - generic [ref=f1e963]: Shell
+                  - generic [ref=f1e964]: 0.8%
+  - alert [ref=f1e968]

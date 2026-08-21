@@ -199,4 +199,4 @@ oks recall "关键词" --explain
 
 ✅ **排查完成**：回到 [第一个知识闭环](first-knowledge-loop.md)
 
-📚 **学习更多**：[最佳实践](../best-practices.md)
+📚 **学习更多**：[最佳实践](best-practices.md)

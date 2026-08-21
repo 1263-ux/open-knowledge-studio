@@ -1,0 +1,225 @@
+- generic [ref=f3e2]:
+  - generic [ref=f3e3]:
+    - link "Skip to content" [ref=f3e4] [cursor=pointer]:
+      - /url: "#start-of-content"
+    - banner [ref=f3e9]:
+      - heading "Navigation Menu" [level=2] [ref=f3e10]
+      - generic [ref=f3e11]:
+        - link "Homepage" [ref=f3e13] [cursor=pointer]:
+          - /url: /
+        - generic [ref=f3e16]:
+          - navigation "Global" [ref=f3e17]:
+            - list [ref=f3e18]:
+              - listitem [ref=f3e19]:
+                - button "Platform" [ref=f3e21] [cursor=pointer]
+              - listitem [ref=f3e24]:
+                - button "Solutions" [ref=f3e26] [cursor=pointer]
+              - listitem [ref=f3e29]:
+                - button "Resources" [ref=f3e31] [cursor=pointer]
+              - listitem [ref=f3e34]:
+                - button "Open Source" [ref=f3e36] [cursor=pointer]
+              - listitem [ref=f3e39]:
+                - button "Enterprise" [ref=f3e41] [cursor=pointer]
+              - listitem [ref=f3e44]:
+                - link "Pricing" [ref=f3e45] [cursor=pointer]:
+                  - /url: https://github.com/pricing
+          - generic [ref=f3e46]:
+            - button "Search or jump to, type / to search" [ref=f3e48] [cursor=pointer]
+            - link "Sign in" [ref=f3e55] [cursor=pointer]:
+              - /url: /login?return_to=https%3A%2F%2Fgithub.com%2Fopen-agent-power%2Fopen-knowledge-studio%2Ftree%2Fmain%2Fassets%2Fhooks
+            - link "Sign up" [ref=f3e58] [cursor=pointer]:
+              - /url: /signup?ref_cta=Sign+up&ref_loc=header+logged+out&ref_page=%2F%3Cuser-name%3E%2F%3Crepo-name%3E%2Ffiles%2Fdisambiguate&source=header-repo&source_repo=open-agent-power%2Fopen-knowledge-studio
+            - button "Appearance settings" [ref=f3e61] [cursor=pointer]
+  - main [ref=f3e68]:
+    - generic [ref=f3e69]:
+      - generic [ref=f3e70]:
+        - generic [ref=f3e72]:
+          - link "open-agent-power" [ref=f3e76] [cursor=pointer]:
+            - /url: /open-agent-power
+          - generic [ref=f3e77]: /
+          - strong [ref=f3e78]:
+            - link "open-knowledge-studio" [ref=f3e79] [cursor=pointer]:
+              - /url: /open-agent-power/open-knowledge-studio
+          - generic [ref=f3e80]: Public
+        - generic [ref=f3e81]:
+          - list:
+            - listitem [ref=f3e82]:
+              - link "You must be signed in to change notification settings" [ref=f3e83] [cursor=pointer]:
+                - /url: /login?return_to=%2Fopen-agent-power%2Fopen-knowledge-studio
+                - text: Notifications
+            - listitem [ref=f3e86]:
+              - link "Fork 4" [ref=f3e87] [cursor=pointer]:
+                - /url: /login?return_to=%2Fopen-agent-power%2Fopen-knowledge-studio
+                - text: Fork
+                - generic "4" [ref=f3e90]
+            - listitem [ref=f3e91]:
+              - link "You must be signed in to star a repository" [ref=f3e93] [cursor=pointer]:
+                - /url: /login?return_to=%2Fopen-agent-power%2Fopen-knowledge-studio
+                - text: Star
+                - generic "6 users starred this repository" [ref=f3e96]: "6"
+      - navigation "Repository" [ref=f3e97]:
+        - list [ref=f3e98]:
+          - listitem [ref=f3e99]:
+            - link "Code" [ref=f3e100] [cursor=pointer]:
+              - /url: /open-agent-power/open-knowledge-studio
+          - listitem [ref=f3e104]:
+            - link "Issues 1" [ref=f3e105] [cursor=pointer]:
+              - /url: /open-agent-power/open-knowledge-studio/issues
+              - generic [ref=f3e109]: Issues
+              - generic "1" [ref=f3e110]
+          - listitem [ref=f3e111]:
+            - link "Pull requests" [ref=f3e112] [cursor=pointer]:
+              - /url: /open-agent-power/open-knowledge-studio/pulls
+          - listitem [ref=f3e116]:
+            - link "Actions" [ref=f3e117] [cursor=pointer]:
+              - /url: /open-agent-power/open-knowledge-studio/actions
+          - listitem [ref=f3e121]:
+            - link "Projects" [ref=f3e122] [cursor=pointer]:
+              - /url: /open-agent-power/open-knowledge-studio/projects
+          - listitem [ref=f3e126]:
+            - link "Security and quality" [ref=f3e127] [cursor=pointer]:
+              - /url: /open-agent-power/open-knowledge-studio/security
+          - listitem [ref=f3e131]:
+            - link "Insights" [ref=f3e132] [cursor=pointer]:
+              - /url: /open-agent-power/open-knowledge-studio/pulse
+    - generic [ref=f3e146]:
+      - generic [ref=f3e150]:
+        - generic [ref=f3e151]:
+          - heading "Expand file tree" [level=2] [ref=f3e153]:
+            - button "Expand file tree" [ref=f3e154] [cursor=pointer]
+          - button "main branch" [ref=f3e159] [cursor=pointer]:
+            - generic [ref=f3e160]: main
+          - generic [ref=f3e165]:
+            - navigation [ref=f3e166]:
+              - heading "Breadcrumbs" [level=2] [ref=f3e167]
+              - list [ref=f3e168]:
+                - listitem [ref=f3e169]:
+                  - link "open-knowledge-studio" [ref=f3e170] [cursor=pointer]:
+                    - /url: /open-agent-power/open-knowledge-studio/tree/main
+                - listitem [ref=f3e171]:
+                  - text: /
+                  - link "assets" [ref=f3e172] [cursor=pointer]:
+                    - /url: /open-agent-power/open-knowledge-studio/tree/main/assets
+            - generic [ref=f3e173]:
+              - text: /
+              - heading "hooks" [level=1] [ref=f3e174]
+              - text: /
+            - button "Copy path" [ref=f3e175] [cursor=pointer]
+        - generic [ref=f3e181]:
+          - heading "Directory actions" [level=2] [ref=f3e182]
+          - combobox "Go to file" [ref=f3e189]
+          - heading "More options" [level=2] [ref=f3e190]
+          - button "More options" [ref=f3e191] [cursor=pointer]
+      - generic [ref=f3e194]:
+        - generic [ref=f3e196]:
+          - heading "Latest commit" [level=2] [ref=f3e197]
+          - generic [ref=f3e200]:
+            - heading "History" [level=2] [ref=f3e201]
+            - link "History" [ref=f3e202] [cursor=pointer]:
+              - /url: /open-agent-power/open-knowledge-studio/commits/main/assets/hooks
+        - generic [ref=f3e206]:
+          - heading "Folders and files" [level=2] [ref=f3e207]
+          - table "Folders and files" [ref=f3e208]:
+            - rowgroup [ref=f3e209]:
+              - row [ref=f3e210]:
+                - columnheader "Name" [ref=f3e211]
+                - columnheader "Last commit message" [ref=f3e212]
+                - columnheader "Last commit date" [ref=f3e214]
+            - rowgroup [ref=f3e216]:
+              - row [ref=f3e217]:
+                - cell [ref=f3e218]:
+                  - heading "parent directory" [level=3] [ref=f3e219]
+                  - link "Parent directory" [ref=f3e220] [cursor=pointer]:
+                    - /url: /open-agent-power/open-knowledge-studio/tree/main/assets
+                    - generic [ref=f3e221]: ..
+              - row "_persistence.py, (File)" [ref=f3e224]:
+                - cell [ref=f3e225]:
+                  - link "_persistence.py, (File)" [ref=f3e232] [cursor=pointer]:
+                    - /url: /open-agent-power/open-knowledge-studio/blob/main/assets/hooks/_persistence.py
+                    - text: _persistence.py
+                - cell [ref=f3e233]
+                - cell [ref=f3e235]
+              - row "post-tool-edit.py, (File)" [ref=f3e238]:
+                - cell [ref=f3e239]:
+                  - link "post-tool-edit.py, (File)" [ref=f3e246] [cursor=pointer]:
+                    - /url: /open-agent-power/open-knowledge-studio/blob/main/assets/hooks/post-tool-edit.py
+                    - text: post-tool-edit.py
+                - cell [ref=f3e247]
+                - cell [ref=f3e249]
+              - row "post-tool-edit.sh, (File)" [ref=f3e252]:
+                - cell [ref=f3e253]:
+                  - link "post-tool-edit.sh, (File)" [ref=f3e260] [cursor=pointer]:
+                    - /url: /open-agent-power/open-knowledge-studio/blob/main/assets/hooks/post-tool-edit.sh
+                    - text: post-tool-edit.sh
+                - cell [ref=f3e261]
+                - cell [ref=f3e263]
+              - row "pre-compact.sh, (File)" [ref=f3e266]:
+                - cell [ref=f3e267]:
+                  - link "pre-compact.sh, (File)" [ref=f3e274] [cursor=pointer]:
+                    - /url: /open-agent-power/open-knowledge-studio/blob/main/assets/hooks/pre-compact.sh
+                    - text: pre-compact.sh
+                - cell [ref=f3e275]
+                - cell [ref=f3e277]
+              - row "session-start.sh, (File)" [ref=f3e280]:
+                - cell [ref=f3e281]:
+                  - link "session-start.sh, (File)" [ref=f3e288] [cursor=pointer]:
+                    - /url: /open-agent-power/open-knowledge-studio/blob/main/assets/hooks/session-start.sh
+                    - text: session-start.sh
+                - cell [ref=f3e289]
+                - cell [ref=f3e291]
+              - row "user-prompt-recall.py, (File)" [ref=f3e294]:
+                - cell [ref=f3e295]:
+                  - link "user-prompt-recall.py, (File)" [ref=f3e302] [cursor=pointer]:
+                    - /url: /open-agent-power/open-knowledge-studio/blob/main/assets/hooks/user-prompt-recall.py
+                    - text: user-prompt-recall.py
+                - cell [ref=f3e303]
+                - cell [ref=f3e305]
+              - row "user-prompt-recall.sh, (File)" [ref=f3e308]:
+                - cell [ref=f3e309]:
+                  - link "user-prompt-recall.sh, (File)" [ref=f3e316] [cursor=pointer]:
+                    - /url: /open-agent-power/open-knowledge-studio/blob/main/assets/hooks/user-prompt-recall.sh
+                    - text: user-prompt-recall.sh
+                - cell [ref=f3e317]
+                - cell [ref=f3e319]
+              - row "validate-wiki-write.sh, (File)" [ref=f3e322]:
+                - cell [ref=f3e323]:
+                  - link "validate-wiki-write.sh, (File)" [ref=f3e330] [cursor=pointer]:
+                    - /url: /open-agent-power/open-knowledge-studio/blob/main/assets/hooks/validate-wiki-write.sh
+                    - text: validate-wiki-write.sh
+                - cell [ref=f3e331]
+                - cell [ref=f3e333]
+  - contentinfo [ref=f3e337]:
+    - heading "Footer" [level=2] [ref=f3e338]
+    - generic [ref=f3e339]:
+      - generic [ref=f3e340]:
+        - link "GitHub Homepage" [ref=f3e341] [cursor=pointer]:
+          - /url: https://github.com
+        - generic [ref=f3e344]: © 2026 GitHub, Inc.
+      - navigation "Footer" [ref=f3e345]:
+        - heading "Footer navigation" [level=3] [ref=f3e346]
+        - list "Footer navigation" [ref=f3e347]:
+          - listitem [ref=f3e348]:
+            - link "Terms" [ref=f3e349] [cursor=pointer]:
+              - /url: https://docs.github.com/site-policy/github-terms/github-terms-of-service
+          - listitem [ref=f3e350]:
+            - link "Privacy" [ref=f3e351] [cursor=pointer]:
+              - /url: https://docs.github.com/site-policy/privacy-policies/github-privacy-statement
+          - listitem [ref=f3e352]:
+            - link "Security" [ref=f3e353] [cursor=pointer]:
+              - /url: https://github.com/security
+          - listitem [ref=f3e354]:
+            - link "Status" [ref=f3e355] [cursor=pointer]:
+              - /url: https://www.githubstatus.com/
+          - listitem [ref=f3e356]:
+            - link "Community" [ref=f3e357] [cursor=pointer]:
+              - /url: https://github.community/
+          - listitem [ref=f3e358]:
+            - link "Docs" [ref=f3e359] [cursor=pointer]:
+              - /url: https://docs.github.com/
+          - listitem [ref=f3e360]:
+            - link "Contact" [ref=f3e361] [cursor=pointer]:
+              - /url: https://support.github.com?tags=dotcom-footer
+          - listitem [ref=f3e362]:
+            - button "Manage cookies" [ref=f3e364] [cursor=pointer]
+          - listitem [ref=f3e365]:
+            - button "Do not share my personal information" [ref=f3e367] [cursor=pointer]

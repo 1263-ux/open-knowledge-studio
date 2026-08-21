@@ -1,0 +1,15 @@
+- generic [ref=f3e1]:
+  - main [ref=f3e2]:
+    - heading "Unlock" [level=1] [ref=f3e7]
+    - paragraph [ref=f3e8]: Enter your access token to continue
+    - generic [ref=f3e9]:
+      - generic [ref=f3e10]:
+        - generic [ref=f3e11]: Access token
+        - generic [ref=f3e12]:
+          - textbox "Access token Toggle password visibility" [active] [ref=f3e13]:
+            - /placeholder: Paste your token
+          - button "Toggle password visibility" [ref=f3e14] [cursor=pointer]
+      - button "Unlock" [ref=f3e19] [cursor=pointer]
+  - contentinfo [ref=f3e20]:
+    - link "Secured by dsh-auth-gate" [ref=f3e21] [cursor=pointer]:
+      - /url: https://github.com/TecFancy/dsh-auth-gate

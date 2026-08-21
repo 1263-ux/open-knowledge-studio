@@ -1,0 +1,1470 @@
+- generic [active] [ref=f2e1]:
+  - generic [ref=f2e2]:
+    - generic [ref=f2e3]:
+      - link "Skip to content" [ref=f2e4] [cursor=pointer]:
+        - /url: "#start-of-content"
+      - banner [ref=f2e9]:
+        - heading "Navigation Menu" [level=2] [ref=f2e10]
+        - generic [ref=f2e11]:
+          - link "Homepage" [ref=f2e13] [cursor=pointer]:
+            - /url: /
+          - generic [ref=f2e16]:
+            - navigation "Global" [ref=f2e17]:
+              - list [ref=f2e18]:
+                - listitem [ref=f2e19]:
+                  - button "Platform" [ref=f2e21] [cursor=pointer]
+                - listitem [ref=f2e24]:
+                  - button "Solutions" [ref=f2e26] [cursor=pointer]
+                - listitem [ref=f2e29]:
+                  - button "Resources" [ref=f2e31] [cursor=pointer]
+                - listitem [ref=f2e34]:
+                  - button "Open Source" [ref=f2e36] [cursor=pointer]
+                - listitem [ref=f2e39]:
+                  - button "Enterprise" [ref=f2e41] [cursor=pointer]
+                - listitem [ref=f2e44]:
+                  - link "Pricing" [ref=f2e45] [cursor=pointer]:
+                    - /url: https://github.com/pricing
+            - generic [ref=f2e46]:
+              - button "Search or jump to, type / to search" [ref=f2e48] [cursor=pointer]
+              - link "Sign in" [ref=f2e55] [cursor=pointer]:
+                - /url: /login?return_to=https%3A%2F%2Fgithub.com%2F1263-ux%2Fopen-knowledge-studio%2Fblob%2Fdocs%2Fbest-practices-and-demo%2Fdocs%2Fbest-practices.md
+              - link "Sign up" [ref=f2e58] [cursor=pointer]:
+                - /url: /signup?ref_cta=Sign+up&ref_loc=header+logged+out&ref_page=%2F%3Cuser-name%3E%2F%3Crepo-name%3E%2Fblob%2Fshow&source=header-repo&source_repo=1263-ux%2Fopen-knowledge-studio
+              - button "Appearance settings" [ref=f2e61] [cursor=pointer]
+    - main [ref=f2e68]:
+      - generic [ref=f2e69]:
+        - generic [ref=f2e70]:
+          - generic [ref=f2e71]:
+            - generic [ref=f2e72]:
+              - link "1263-ux" [ref=f2e76] [cursor=pointer]:
+                - /url: /1263-ux
+              - generic [ref=f2e77]: /
+              - strong [ref=f2e78]:
+                - link "open-knowledge-studio" [ref=f2e79] [cursor=pointer]:
+                  - /url: /1263-ux/open-knowledge-studio
+              - generic [ref=f2e80]: Public
+            - generic [ref=f2e81]:
+              - text: forked from
+              - link "open-agent-power/open-knowledge-studio" [ref=f2e82] [cursor=pointer]:
+                - /url: /open-agent-power/open-knowledge-studio
+          - generic [ref=f2e83]:
+            - list:
+              - listitem [ref=f2e84]:
+                - link "You must be signed in to change notification settings" [ref=f2e85] [cursor=pointer]:
+                  - /url: /login?return_to=%2F1263-ux%2Fopen-knowledge-studio
+                  - text: Notifications
+              - listitem [ref=f2e88]:
+                - link "Fork 0" [ref=f2e89] [cursor=pointer]:
+                  - /url: /login?return_to=%2F1263-ux%2Fopen-knowledge-studio
+                  - text: Fork
+                  - generic "0" [ref=f2e92]
+              - listitem [ref=f2e93]:
+                - link "You must be signed in to star a repository" [ref=f2e95] [cursor=pointer]:
+                  - /url: /login?return_to=%2F1263-ux%2Fopen-knowledge-studio
+                  - text: Star
+                  - generic "0 users starred this repository" [ref=f2e98]: "0"
+        - navigation "Repository" [ref=f2e99]:
+          - list [ref=f2e100]:
+            - listitem [ref=f2e101]:
+              - link "Code" [ref=f2e102] [cursor=pointer]:
+                - /url: /1263-ux/open-knowledge-studio/tree/docs/best-practices-and-demo
+            - listitem [ref=f2e106]:
+              - link "Pull requests" [ref=f2e107] [cursor=pointer]:
+                - /url: /1263-ux/open-knowledge-studio/pulls
+            - listitem [ref=f2e111]:
+              - link "Actions" [ref=f2e112] [cursor=pointer]:
+                - /url: /1263-ux/open-knowledge-studio/actions
+            - listitem [ref=f2e116]:
+              - link "Projects" [ref=f2e117] [cursor=pointer]:
+                - /url: /1263-ux/open-knowledge-studio/projects
+            - listitem [ref=f2e121]:
+              - link "Security and quality" [ref=f2e122] [cursor=pointer]:
+                - /url: /1263-ux/open-knowledge-studio/security
+            - listitem [ref=f2e126]:
+              - link "Insights" [ref=f2e127] [cursor=pointer]:
+                - /url: /1263-ux/open-knowledge-studio/pulse
+      - generic [ref=f2e138]:
+        - generic [ref=f2e140]:
+          - generic [ref=f2e143]:
+            - generic [ref=f2e144]:
+              - generic [ref=f2e145]:
+                - heading "Collapse file tree" [level=2] [ref=f2e146]:
+                  - button "Collapse file tree" [expanded] [ref=f2e147] [cursor=pointer]
+                - heading "Files" [level=2] [ref=f2e151]
+              - generic [ref=f2e152]:
+                - generic [ref=f2e154]:
+                  - button "View file on default branch" [disabled] [ref=f2e156]
+                  - button "docs/best-practices-and-demo branch" [ref=f2e160] [cursor=pointer]:
+                    - generic [ref=f2e161]: docs/best-practices-and-demo
+                - button "Search this repository (forward slash)" [ref=f2e166] [cursor=pointer]
+            - combobox "Go to file" [ref=f2e174]
+            - navigation "File Tree Navigation" [ref=f2e180]:
+              - tree "Files" [ref=f2e182]:
+                - treeitem ".claude" [level=1] [ref=f2e183]
+                - treeitem ".github" [level=1] [ref=f2e195]
+                - treeitem ".pi" [level=1] [ref=f2e207]
+                - treeitem "assets" [level=1] [ref=f2e219]
+                - treeitem "cli" [level=1] [ref=f2e231]
+                - treeitem "docs" [expanded] [level=1] [ref=f2e243]:
+                  - group "docs" [ref=f2e255]:
+                    - treeitem "_includes" [level=2] [ref=f2e256]
+                    - treeitem "_sass" [level=2] [ref=f2e271]
+                    - treeitem "algorithms" [level=2] [ref=f2e286]
+                    - treeitem "assets" [level=2] [ref=f2e301]
+                    - treeitem "concepts" [level=2] [ref=f2e316]
+                    - treeitem "connect" [level=2] [ref=f2e331]
+                    - treeitem "reference" [level=2] [ref=f2e346]
+                    - treeitem "usage" [level=2] [ref=f2e361]
+                    - treeitem "_config.yml" [level=2] [ref=f2e376]
+                    - treeitem "best-practices.md" [level=2] [ref=f2e387]
+                    - treeitem "examples.md" [level=2] [ref=f2e398]
+                    - treeitem "first-knowledge-loop.md" [level=2] [ref=f2e409]
+                    - treeitem "import-conversations.md" [level=2] [ref=f2e420]
+                    - treeitem "index.md" [level=2] [ref=f2e431]
+                    - treeitem "installation.md" [level=2] [ref=f2e442]
+                    - treeitem "quick-start.md" [level=2] [ref=f2e453]
+                    - treeitem "recall.md" [level=2] [ref=f2e464]
+                    - treeitem "review-candidates.md" [level=2] [ref=f2e475]
+                    - treeitem "start-here.md" [level=2] [ref=f2e486]
+                    - treeitem "verify.md" [level=2] [ref=f2e497]
+                - treeitem "examples" [level=1] [ref=f2e508]
+                - treeitem "internal" [level=1] [ref=f2e520]
+                - treeitem "records" [level=1] [ref=f2e532]
+                - treeitem "schemas" [level=1] [ref=f2e544]
+                - treeitem ".gitignore" [level=1] [ref=f2e556]
+                - treeitem "AGENTS.md" [level=1] [ref=f2e564]
+                - treeitem "CHANGELOG.md" [level=1] [ref=f2e572]
+                - treeitem "CLAUDE.md" [level=1] [ref=f2e580]
+                - treeitem "CONSTITUTION.md" [level=1] [ref=f2e588]
+                - treeitem "LICENSE" [level=1] [ref=f2e596]
+                - treeitem "README.md" [level=1] [ref=f2e604]
+                - treeitem "SKILL.md" [level=1] [ref=f2e612]
+                - treeitem "index.db" [level=1] [ref=f2e620]
+                - treeitem "index.db.lock" [level=1] [ref=f2e628]
+                - treeitem "pytest.ini" [level=1] [ref=f2e636]
+          - slider "Draggable pane splitter" [ref=f2e645]
+        - generic [ref=f2e648]:
+          - generic [ref=f2e652]:
+            - generic [ref=f2e654]:
+              - navigation [ref=f2e655]:
+                - heading "Breadcrumbs" [level=2] [ref=f2e656]
+                - list [ref=f2e657]:
+                  - listitem [ref=f2e658]:
+                    - link "open-knowledge-studio" [ref=f2e659] [cursor=pointer]:
+                      - /url: /1263-ux/open-knowledge-studio/tree/docs/best-practices-and-demo
+                  - listitem [ref=f2e660]:
+                    - text: /
+                    - link "docs" [ref=f2e661] [cursor=pointer]:
+                      - /url: /1263-ux/open-knowledge-studio/tree/docs/best-practices-and-demo/docs
+              - generic [ref=f2e662]:
+                - text: /
+                - heading "best-practices.md" [level=1] [ref=f2e663]
+              - button "Copy path" [ref=f2e664] [cursor=pointer]
+            - button "More file actions" [ref=f2e671] [cursor=pointer]
+          - generic [ref=f2e674]:
+            - generic [ref=f2e676]:
+              - heading "Latest commit" [level=2] [ref=f2e677]
+              - generic [ref=f2e678]:
+                - generic [ref=f2e680]:
+                  - link [ref=f2e681] [cursor=pointer]:
+                    - /url: /1263-ux
+                    - img "1263-ux" [ref=f2e682]
+                  - link "commits by 1263-ux" [ref=f2e683] [cursor=pointer]:
+                    - /url: /1263-ux/open-knowledge-studio/commits?author=1263-ux
+                    - text: 1263-ux
+                - generic [ref=f2e684]:
+                  - 'link "docs: add best practices guide + Kimi video demo with screenshots" [ref=f2e687] [cursor=pointer]':
+                    - /url: /1263-ux/open-knowledge-studio/commit/b0f5f391eb9368cc7c8032cacdff485c3f2e30be
+                  - button "Open commit details" [ref=f2e688] [cursor=pointer]
+                  - button "failure" [ref=f2e691] [cursor=pointer]
+              - generic [ref=f2e694]:
+                - generic [ref=f2e696]:
+                  - link "Commit b0f5f39" [ref=f2e697] [cursor=pointer]:
+                    - /url: /1263-ux/open-knowledge-studio/commit/b0f5f391eb9368cc7c8032cacdff485c3f2e30be
+                    - text: b0f5f39
+                  - text: ·
+                  - generic "Aug 20, 2026, 20:42 GMT+8" [ref=f2e698]: Aug 20, 202610 minutes ago
+                - generic [ref=f2e699]:
+                  - heading "History" [level=2] [ref=f2e700]
+                  - link "History" [ref=f2e701] [cursor=pointer]:
+                    - /url: /1263-ux/open-knowledge-studio/commits/docs/best-practices-and-demo/docs/best-practices.md
+            - generic [ref=f2e705]:
+              - generic "20.4 KB" [ref=f2e709]: 711 lines (522 loc) · 20.4 KB
+              - generic [ref=f2e711]:
+                - heading "File metadata and controls" [level=2] [ref=f2e712]
+                - list "File view" [ref=f2e714]:
+                  - listitem [ref=f2e715]:
+                    - button "Preview" [pressed] [ref=f2e716] [cursor=pointer]
+                  - listitem [ref=f2e719]:
+                    - button "Code" [ref=f2e720] [cursor=pointer]
+                  - listitem [ref=f2e723]:
+                    - button "Blame" [ref=f2e724] [cursor=pointer]
+                - generic [ref=f2e727]:
+                  - generic [ref=f2e728]:
+                    - generic [ref=f2e729]:
+                      - link "Raw" [ref=f2e731] [cursor=pointer]:
+                        - /url: https://github.com/1263-ux/open-knowledge-studio/raw/refs/heads/docs/best-practices-and-demo/docs/best-practices.md
+                      - button "Copy raw file" [ref=f2e735] [cursor=pointer]
+                      - button "Download raw file" [ref=f2e740] [cursor=pointer]
+                    - generic [ref=f2e744]:
+                      - button "You must be signed in to make or propose changes" [disabled] [ref=f2e746]
+                      - button "More edit options" [ref=f2e750] [cursor=pointer]
+                  - button "Outline" [ref=f2e753] [cursor=pointer]
+              - region "best-practices.md" [ref=f2e757]:
+                - article [ref=f2e759]:
+                  - table [ref=f2e761]:
+                    - rowgroup [ref=f2e762]:
+                      - row [ref=f2e763]:
+                        - rowheader "title" [ref=f2e764]
+                        - cell "最佳实践" [ref=f2e765]
+                      - row [ref=f2e766]:
+                        - rowheader "nav_order" [ref=f2e767]
+                        - cell "4" [ref=f2e768]
+                  - generic [ref=f2e769]:
+                    - heading "OKS 最佳实践" [level=1] [ref=f2e770]
+                    - 'link "Permalink: OKS 最佳实践" [ref=f2e771] [cursor=pointer]':
+                      - /url: "#oks-最佳实践"
+                  - blockquote [ref=f2e774]:
+                    - paragraph [ref=f2e775]: 如何正确使用 OKS 管理知识
+                  - paragraph [ref=f2e776]:
+                    - strong [ref=f2e777]: OKS 不是笔记软件
+                    - text: 。它不要求你长期坐在里面写作、整理页面。OKS 负责的是：把你已有的文件、网页、媒体和主动提交的信息，经 Agent 提取、人工审核后，沉淀成可召回的文件系统知识。
+                  - separator [ref=f2e778]
+                  - generic [ref=f2e779]:
+                    - heading "核心理念" [level=2] [ref=f2e780]
+                    - 'link "Permalink: 核心理念" [ref=f2e781] [cursor=pointer]':
+                      - /url: "#核心理念"
+                  - generic [ref=f2e784]:
+                    - heading "知识 vs 资料" [level=3] [ref=f2e785]
+                    - 'link "Permalink: 知识 vs 资料" [ref=f2e786] [cursor=pointer]':
+                      - /url: "#知识-vs-资料"
+                  - table [ref=f2e790]:
+                    - rowgroup [ref=f2e791]:
+                      - row [ref=f2e792]:
+                        - columnheader [ref=f2e793]
+                        - columnheader "资料（Raw）" [ref=f2e794]
+                        - columnheader "知识（Wiki）" [ref=f2e795]
+                    - rowgroup [ref=f2e796]:
+                      - row [ref=f2e797]:
+                        - cell [ref=f2e798]:
+                          - strong [ref=f2e799]: 谁写
+                        - cell "人收集，工具提取" [ref=f2e800]
+                        - cell "AI 起草，人审核" [ref=f2e801]
+                      - row [ref=f2e802]:
+                        - cell [ref=f2e803]:
+                          - strong [ref=f2e804]: 特点
+                        - cell "原始的、未经筛选的" [ref=f2e805]
+                        - cell "审核后的、可复用的" [ref=f2e806]
+                      - row [ref=f2e807]:
+                        - cell [ref=f2e808]:
+                          - strong [ref=f2e809]: 衰减
+                        - cell "无（永久保留）" [ref=f2e810]
+                        - cell "有（type-specific λ）" [ref=f2e811]
+                      - row [ref=f2e812]:
+                        - cell [ref=f2e813]:
+                          - strong [ref=f2e814]: 召回
+                        - cell "按时间新鲜度" [ref=f2e815]
+                        - cell "按相关性 + 记忆曲线" [ref=f2e816]
+                  - paragraph [ref=f2e817]:
+                    - strong [ref=f2e818]: 一个好的工作流
+                    - text: ：把资料存入
+                    - code [ref=f2e819]: raw/
+                    - text: ，然后把值得长期记住的部分提炼到
+                    - code [ref=f2e820]: wiki/
+                    - text: 。
+                  - generic [ref=f2e821]:
+                    - heading "三个关键决策点" [level=3] [ref=f2e822]
+                    - 'link "Permalink: 三个关键决策点" [ref=f2e823] [cursor=pointer]':
+                      - /url: "#三个关键决策点"
+                  - paragraph [ref=f2e826]: 每次使用 OKS，你会遇到三个决策点：
+                  - list [ref=f2e827]:
+                    - listitem [ref=f2e828]:
+                      - strong [ref=f2e829]: 收集时
+                      - text: ：这份资料值得收录吗？（A/B/C 分级）
+                    - listitem [ref=f2e830]:
+                      - strong [ref=f2e831]: 审核时
+                      - text: ：这个 Draft 值得晋升吗？（审核标准）
+                    - listitem [ref=f2e832]:
+                      - strong [ref=f2e833]: 召回时
+                      - text: ：为什么找不到 / 如何优化？（调优技巧）
+                  - paragraph [ref=f2e834]: 下面按这三个阶段展开最佳实践。
+                  - separator [ref=f2e835]
+                  - generic [ref=f2e836]:
+                    - heading "阶段 1：收集 Raw" [level=2] [ref=f2e837]
+                    - 'link "Permalink: 阶段 1：收集 Raw" [ref=f2e838] [cursor=pointer]':
+                      - /url: "#阶段-1收集-raw"
+                  - generic [ref=f2e841]:
+                    - heading "✅ 应该收集" [level=3] [ref=f2e842]
+                    - 'link "Permalink: ✅ 应该收集" [ref=f2e843] [cursor=pointer]':
+                      - /url: "#-应该收集"
+                  - list [ref=f2e846]:
+                    - listitem [ref=f2e847]:
+                      - paragraph [ref=f2e848]:
+                        - strong [ref=f2e849]: 你真正看过/读过的资料
+                      - list [ref=f2e850]:
+                        - listitem [ref=f2e851]: 看完的技术视频、文章、论文
+                        - listitem [ref=f2e852]: 读完的书籍章节
+                        - listitem [ref=f2e853]: 参与过的技术讨论
+                    - listitem [ref=f2e854]:
+                      - paragraph [ref=f2e855]:
+                        - strong [ref=f2e856]: 未来可能需要追溯来源的信息
+                      - list [ref=f2e857]:
+                        - listitem [ref=f2e858]: 技术选型的调研资料
+                        - listitem [ref=f2e859]: 重要决策的讨论记录
+                        - listitem [ref=f2e860]: 踩坑和解决方案
+                    - listitem [ref=f2e861]:
+                      - paragraph [ref=f2e862]:
+                        - strong [ref=f2e863]: 包含具体数据和结论的内容
+                      - list [ref=f2e864]:
+                        - listitem [ref=f2e865]: 成本数据、性能指标
+                        - listitem [ref=f2e866]: 对比分析、测评结果
+                        - listitem [ref=f2e867]: 明确的技术建议
+                  - generic [ref=f2e868]:
+                    - heading "❌ 不应该收集" [level=3] [ref=f2e869]
+                    - 'link "Permalink: ❌ 不应该收集" [ref=f2e870] [cursor=pointer]':
+                      - /url: "#-不应该收集"
+                  - list [ref=f2e873]:
+                    - listitem [ref=f2e874]:
+                      - paragraph [ref=f2e875]:
+                        - strong [ref=f2e876]: 随手转发的链接
+                        - text: （没看过内容）
+                      - list [ref=f2e877]:
+                        - listitem [ref=f2e878]: 收藏夹堆积症的根源
+                        - listitem [ref=f2e879]: 没读过就入库 = 噪音
+                    - listitem [ref=f2e880]:
+                      - paragraph [ref=f2e881]:
+                        - strong [ref=f2e882]: 纯娱乐内容
+                        - text: （没有复用价值）
+                      - list [ref=f2e883]:
+                        - listitem [ref=f2e884]: 除非你在研究这个领域
+                        - listitem [ref=f2e885]: 娱乐就娱乐，不要假装学习
+                    - listitem [ref=f2e886]:
+                      - paragraph [ref=f2e887]:
+                        - strong [ref=f2e888]: 敏感信息
+                        - text: （安全成本高于价值）
+                      - list [ref=f2e889]:
+                        - listitem [ref=f2e890]: 密码、密钥、token
+                        - listitem [ref=f2e891]: 个人隐私、商业机密
+                        - listitem [ref=f2e892]: OKS 是本地文件系统，但也要注意备份安全
+                  - generic [ref=f2e893]:
+                    - heading "💡 A/B/C 分级策略" [level=3] [ref=f2e894]
+                    - 'link "Permalink: 💡 A/B/C 分级策略" [ref=f2e895] [cursor=pointer]':
+                      - /url: "#-abc-分级策略"
+                  - paragraph [ref=f2e898]: 入库时对资料分级，帮助后续决策：
+                  - list [ref=f2e899]:
+                    - listitem [ref=f2e900]:
+                      - paragraph [ref=f2e901]:
+                        - strong [ref=f2e902]: A级
+                        - text: ：核心资料，必须完整保留
+                      - list [ref=f2e903]:
+                        - listitem [ref=f2e904]: 项目核心技术决策文档
+                        - listitem [ref=f2e905]: 关键技术的深度教程
+                        - listitem [ref=f2e906]: 重要会议记录
+                    - listitem [ref=f2e907]:
+                      - paragraph [ref=f2e908]:
+                        - strong [ref=f2e909]: B级
+                        - text: ：有价值，提取关键点即可
+                      - list [ref=f2e910]:
+                        - listitem [ref=f2e911]: 技术博客、产品介绍
+                        - listitem [ref=f2e912]: 一般性技术讨论
+                        - listitem [ref=f2e913]: 参考案例
+                    - listitem [ref=f2e914]:
+                      - paragraph [ref=f2e915]:
+                        - strong [ref=f2e916]: C级
+                        - text: ：参考资料，保留索引
+                      - list [ref=f2e917]:
+                        - listitem [ref=f2e918]: 快速浏览的文章
+                        - listitem [ref=f2e919]: 备用方案资料
+                        - listitem [ref=f2e920]: "\"可能有用\"的链接"
+                  - paragraph [ref=f2e921]:
+                    - strong [ref=f2e922]: 实践建议
+                    - text: ：A 级必审必晋升，B 级选择性晋升，C 级可以只保留 Raw 不生成 Wiki。
+                  - generic [ref=f2e923]:
+                    - heading "📸 实例：Kimi 视频入库" [level=3] [ref=f2e924]
+                    - 'link "Permalink: 📸 实例：Kimi 视频入库" [ref=f2e925] [cursor=pointer]':
+                      - /url: "#-实例kimi-视频入库"
+                  - paragraph [ref=f2e928]: 我们用 B 站的 Kimi K3 实测视频（B 级资料）演示完整流程。视频内容是产品评测，包含具体的成本数据和使用建议，值得收录并提炼知识。
+                  - paragraph [ref=f2e929]:
+                    - text: 👉
+                    - link "查看完整演示" [ref=f2e930] [cursor=pointer]:
+                      - /url: /1263-ux/open-knowledge-studio/blob/docs/best-practices-and-demo/examples/oh-my-research/demo/kimi-video-walkthrough.md#%E7%AC%AC-2-%E6%AD%A5%E5%85%A5%E5%BA%93%E8%A7%86%E9%A2%91
+                  - paragraph [ref=f2e931]:
+                    - strong [ref=f2e932]: 入库过程
+                    - text: ：
+                  - list [ref=f2e933]:
+                    - listitem [ref=f2e934]: yt-dlp 提取视频元数据
+                    - listitem [ref=f2e935]: ffmpeg 提取音频
+                    - listitem [ref=f2e936]: faster-whisper 转写为文字（220 段）
+                    - listitem [ref=f2e937]: AI 生成结构化 Draft
+                  - paragraph [ref=f2e938]:
+                    - strong [ref=f2e939]: 时间成本
+                    - text: ：约 5-10 分钟（取决于视频长度）
+                  - separator [ref=f2e940]
+                  - generic [ref=f2e941]:
+                    - heading "阶段 2：沉淀 Wiki" [level=2] [ref=f2e942]
+                    - 'link "Permalink: 阶段 2：沉淀 Wiki" [ref=f2e943] [cursor=pointer]':
+                      - /url: "#阶段-2沉淀-wiki"
+                  - generic [ref=f2e946]:
+                    - heading "✅ Draft 审核标准" [level=3] [ref=f2e947]
+                    - 'link "Permalink: ✅ Draft 审核标准" [ref=f2e948] [cursor=pointer]':
+                      - /url: "#-draft-审核标准"
+                  - paragraph [ref=f2e951]: 审核 Draft 时，检查三个维度：
+                  - list [ref=f2e952]:
+                    - listitem [ref=f2e953]:
+                      - paragraph [ref=f2e954]:
+                        - strong [ref=f2e955]: 准确性
+                        - text: ：事实正确，无明显错误
+                      - list [ref=f2e956]:
+                        - listitem [ref=f2e957]: 核心数据是否准确（如成本、性能）
+                        - listitem [ref=f2e958]: 结论是否符合原始资料
+                        - listitem [ref=f2e959]: 有没有 AI 幻觉（编造的内容）
+                    - listitem [ref=f2e960]:
+                      - paragraph [ref=f2e961]:
+                        - strong [ref=f2e962]: 可复用性
+                        - text: ：未来能实际使用
+                      - list [ref=f2e963]:
+                        - listitem [ref=f2e964]: 信息是否具体、可操作
+                        - listitem [ref=f2e965]: 有没有时效性问题
+                        - listitem [ref=f2e966]: 能否支持实际决策
+                    - listitem [ref=f2e967]:
+                      - paragraph [ref=f2e968]:
+                        - strong [ref=f2e969]: 可追溯性
+                        - text: ：关联到 Raw 来源
+                      - list [ref=f2e970]:
+                        - listitem [ref=f2e971]: 能否找回原始资料
+                        - listitem [ref=f2e972]: Provider 链是否清晰
+                        - listitem [ref=f2e973]: 置信度标注是否合理
+                  - paragraph [ref=f2e974]:
+                    - strong [ref=f2e975]: 快速判断法
+                    - text: ：问自己"三个月后我会用到吗？如果用到，这个 Draft 够用吗？"
+                  - generic [ref=f2e976]:
+                    - heading "❌ 常见错误" [level=3] [ref=f2e977]
+                    - 'link "Permalink: ❌ 常见错误" [ref=f2e978] [cursor=pointer]':
+                      - /url: "#-常见错误"
+                  - list [ref=f2e981]:
+                    - listitem [ref=f2e982]:
+                      - paragraph [ref=f2e983]:
+                        - text: ❌
+                        - strong [ref=f2e984]: 不审核直接晋升
+                      - list [ref=f2e985]:
+                        - listitem [ref=f2e986]: AI 提取可能有误差
+                        - listitem [ref=f2e987]: 必须人工确认准确性
+                        - listitem [ref=f2e988]: 错误知识比没知识更危险
+                    - listitem [ref=f2e989]:
+                      - paragraph [ref=f2e990]:
+                        - text: ❌
+                        - strong [ref=f2e991]: Draft 堆积不处理
+                      - list [ref=f2e992]:
+                        - listitem [ref=f2e993]: Draft 数量 > 20 就该清理
+                        - listitem [ref=f2e994]: 时间久了记不清上下文
+                        - listitem [ref=f2e995]: 建议每周/每两周审核一次
+                    - listitem [ref=f2e996]:
+                      - paragraph [ref=f2e997]:
+                        - text: ❌
+                        - strong [ref=f2e998]: 晋升后不验证召回
+                      - list [ref=f2e999]:
+                        - listitem [ref=f2e1000]: 晋升后测试一次召回
+                        - listitem [ref=f2e1001]: 确认能用自然问题找到
+                        - listitem [ref=f2e1002]: 发现问题及时调整
+                    - listitem [ref=f2e1003]:
+                      - paragraph [ref=f2e1004]:
+                        - text: ❌
+                        - strong [ref=f2e1005]: 过度提炼导致信息丢失
+                      - list [ref=f2e1006]:
+                        - listitem [ref=f2e1007]: 具体数据要保留（如"20元/次"不是"比较贵"）
+                        - listitem [ref=f2e1008]: 关键结论要原样保留（如"我劝你别买"）
+                        - listitem [ref=f2e1009]: 可以精简，但不要丢失核心信息
+                  - generic [ref=f2e1010]:
+                    - heading "💡 知识关系技巧" [level=3] [ref=f2e1011]
+                    - 'link "Permalink: 💡 知识关系技巧" [ref=f2e1012] [cursor=pointer]':
+                      - /url: "#-知识关系技巧"
+                  - paragraph [ref=f2e1015]: OKS 支持 4 种知识关系（CONSTITUTION A4），帮助维护知识网络：
+                  - list [ref=f2e1016]:
+                    - listitem [ref=f2e1017]:
+                      - paragraph [ref=f2e1018]:
+                        - strong [ref=f2e1019]: supersedes
+                        - text: （替代）：新知识替代旧知识
+                      - list [ref=f2e1020]:
+                        - listitem [ref=f2e1021]: 例：Kimi K3.5 发布后，替代 K3 的特性描述
+                        - listitem [ref=f2e1022]:
+                          - text: 旧知识标记为
+                          - code [ref=f2e1023]: archived
+                    - listitem [ref=f2e1024]:
+                      - paragraph [ref=f2e1025]:
+                        - strong [ref=f2e1026]: enriches
+                        - text: （丰富）：补充新细节
+                      - list [ref=f2e1027]:
+                        - listitem [ref=f2e1028]: 例：新增 K3 在特定场景的测试数据
+                        - listitem [ref=f2e1029]:
+                          - text: 两个知识都保持
+                          - code [ref=f2e1030]: active
+                    - listitem [ref=f2e1031]:
+                      - paragraph [ref=f2e1032]:
+                        - strong [ref=f2e1033]: confirms
+                        - text: （确认）：验证已有结论
+                      - list [ref=f2e1034]:
+                        - listitem [ref=f2e1035]: 例：第二个测评也证实了高成本问题
+                        - listitem [ref=f2e1036]: 增加置信度
+                    - listitem [ref=f2e1037]:
+                      - paragraph [ref=f2e1038]:
+                        - strong [ref=f2e1039]: challenges
+                        - text: （质疑）：质疑现有观点
+                      - list [ref=f2e1040]:
+                        - listitem [ref=f2e1041]: 例：新测试显示成本优化后可接受
+                        - listitem [ref=f2e1042]:
+                          - text: 两个观点并存，用
+                          - code [ref=f2e1043]: human_reviewed_at
+                          - text: 判断优先级
+                  - paragraph [ref=f2e1044]:
+                    - strong [ref=f2e1045]: 实践建议
+                    - text: ：在 Draft 的 frontmatter 中用
+                    - code [ref=f2e1046]: "supersedes: <slug>"
+                    - text: 标注关系。
+                  - generic [ref=f2e1047]:
+                    - heading "📸 实例：Kimi Draft 审核" [level=3] [ref=f2e1048]
+                    - 'link "Permalink: 📸 实例：Kimi Draft 审核" [ref=f2e1049] [cursor=pointer]':
+                      - /url: "#-实例kimi-draft-审核"
+                  - paragraph [ref=f2e1052]:
+                    - link [ref=f2e1053] [cursor=pointer]:
+                      - /url: /1263-ux/open-knowledge-studio/blob/docs/best-practices-and-demo/examples/oh-my-research/assets/screenshots/04-wiki-list.png
+                      - img "Draft 内容示例" [ref=f2e1054]
+                  - paragraph [ref=f2e1055]: 审核时检查：
+                  - list [ref=f2e1056]:
+                    - listitem [ref=f2e1057]: ✅ 成本数据准确（20元/次、300+元/十几小时）
+                    - listitem [ref=f2e1058]: ✅ 核心结论完整（"普通用户我劝你别买"）
+                    - listitem [ref=f2e1059]: ✅ 三大场景清晰（应用开发、编程、办公）
+                    - listitem [ref=f2e1060]: ✅ 来源可追溯（B站视频 + ASR 转写 + Provider 链）
+                  - paragraph [ref=f2e1061]:
+                    - text: 👉
+                    - link "查看完整演示" [ref=f2e1062] [cursor=pointer]:
+                      - /url: /1263-ux/open-knowledge-studio/blob/docs/best-practices-and-demo/examples/oh-my-research/demo/kimi-video-walkthrough.md#%E7%AC%AC-3-%E6%AD%A5%E5%AE%A1%E6%A0%B8-draft
+                  - separator [ref=f2e1063]
+                  - generic [ref=f2e1064]:
+                    - heading "阶段 3：召回 Recall" [level=2] [ref=f2e1065]
+                    - 'link "Permalink: 阶段 3：召回 Recall" [ref=f2e1066] [cursor=pointer]':
+                      - /url: "#阶段-3召回-recall"
+                  - generic [ref=f2e1069]:
+                    - heading "✅ 提问技巧" [level=3] [ref=f2e1070]
+                    - 'link "Permalink: ✅ 提问技巧" [ref=f2e1071] [cursor=pointer]':
+                      - /url: "#-提问技巧"
+                  - paragraph [ref=f2e1074]:
+                    - text: OKS 使用
+                    - strong [ref=f2e1075]: Node-BM25
+                    - text: （node-level BM25，每个
+                    - code [ref=f2e1076]: "##"
+                    - text: heading 一个 node），语义召回在 R@1 指标上反而不如字面匹配。好的提问方式：
+                  - list [ref=f2e1077]:
+                    - listitem [ref=f2e1078]:
+                      - paragraph [ref=f2e1079]:
+                        - strong [ref=f2e1080]: 用自然语言
+                        - text: （不是关键词堆砌）
+                      - list [ref=f2e1081]:
+                        - listitem [ref=f2e1082]: ✅ "Kimi K3 适合用来做文档分析吗？"
+                        - listitem [ref=f2e1083]: ❌ "Kimi K3 文档分析 成本 性能"
+                    - listitem [ref=f2e1084]:
+                      - paragraph [ref=f2e1085]:
+                        - strong [ref=f2e1086]: 包含上下文
+                      - list [ref=f2e1087]:
+                        - listitem [ref=f2e1088]: ✅ "我要设计智能文档分析系统，Kimi K3 适合吗？"
+                        - listitem [ref=f2e1089]: ❌ "Kimi K3"
+                    - listitem [ref=f2e1090]:
+                      - paragraph [ref=f2e1091]:
+                        - strong [ref=f2e1092]: 测试不同措辞
+                        - text: （paraphrase）
+                      - list [ref=f2e1093]:
+                        - listitem [ref=f2e1094]: ✅ "Kimi K3 价格" / "Kimi K3 成本" / "Kimi K3 多少钱"
+                        - listitem [ref=f2e1095]: Node-BM25 会匹配到不同段落
+                    - listitem [ref=f2e1096]:
+                      - paragraph [ref=f2e1097]:
+                        - strong [ref=f2e1098]:
+                          - text: 用
+                          - code [ref=f2e1099]: "--explain"
+                          - text: 查看评分原因
+                      - generic [ref=f2e1100]:
+                        - generic [ref=f2e1101]:
+                          - text: oks recall
+                          - generic [ref=f2e1102]: "\"Kimi K3 成本\""
+                          - text: "--explain"
+                        - button "Copy code to clipboard" [ref=f2e1104] [cursor=pointer]
+                      - list [ref=f2e1108]:
+                        - listitem [ref=f2e1109]:
+                          - text: 查看
+                          - code [ref=f2e1110]: token-overlap
+                          - text: ","
+                          - code [ref=f2e1111]: idf-overlap
+                          - text: ","
+                          - code [ref=f2e1112]: title-terms
+                          - text: 等因子
+                        - listitem [ref=f2e1113]: 理解为什么某个页面排在前面
+                  - generic [ref=f2e1114]:
+                    - heading "❌ 为什么召回不准" [level=3] [ref=f2e1115]
+                    - 'link "Permalink: ❌ 为什么召回不准" [ref=f2e1116] [cursor=pointer]':
+                      - /url: "#-为什么召回不准"
+                  - paragraph [ref=f2e1119]: 三个最常见原因：
+                  - list [ref=f2e1120]:
+                    - listitem [ref=f2e1121]:
+                      - paragraph [ref=f2e1122]:
+                        - strong [ref=f2e1123]: Wiki 不存在
+                      - list [ref=f2e1124]:
+                        - listitem [ref=f2e1125]: Draft 还没晋升
+                        - listitem [ref=f2e1126]:
+                          - text: 检查：
+                          - code [ref=f2e1127]: oks wiki list | grep <关键词>
+                        - listitem [ref=f2e1128]: 解决：审核并晋升 Draft
+                    - listitem [ref=f2e1129]:
+                      - paragraph [ref=f2e1130]:
+                        - strong [ref=f2e1131]: Query 偏差
+                        - text: （用词和 Wiki 不匹配）
+                      - list [ref=f2e1132]:
+                        - listitem [ref=f2e1133]: Wiki 用"成本"，你问"价格"
+                        - listitem [ref=f2e1134]: Node-BM25 靠字面匹配，同义词需要 paraphrase
+                        - listitem [ref=f2e1135]: 解决：测试不同措辞
+                    - listitem [ref=f2e1136]:
+                      - paragraph [ref=f2e1137]:
+                        - strong [ref=f2e1138]: 类型权重
+                      - list [ref=f2e1139]:
+                        - listitem [ref=f2e1140]:
+                          - code [ref=f2e1141]: generic
+                          - text: 类型被降权 0.5（Soul Boost 注入层）
+                        - listitem [ref=f2e1142]:
+                          - code [ref=f2e1143]: concept/strategy
+                          - text: 类型被提权 1.5
+                        - listitem [ref=f2e1144]:
+                          - text: 解决：调整 Wiki 的
+                          - code [ref=f2e1145]: type
+                          - text: 字段
+                  - paragraph [ref=f2e1146]:
+                    - strong [ref=f2e1147]: Triple-Layer Recall 架构
+                    - text: ：
+                  - list [ref=f2e1148]:
+                    - listitem [ref=f2e1149]:
+                      - strong [ref=f2e1150]: Layer 1（召回层）
+                      - text: ：Node-BM25 fts5 索引
+                    - listitem [ref=f2e1151]:
+                      - strong [ref=f2e1152]: Layer 2（注入层）
+                      - text: ：Soul Boost（type×boost + review×1.2 + goal 重排）
+                    - listitem [ref=f2e1153]:
+                      - strong [ref=f2e1154]: Layer 3（衰减层）
+                      - text: ：Memory Curve（type-specific λ → hot/warm/cold/evictable）
+                  - paragraph [ref=f2e1155]: 召回不准通常是 Layer 1 的问题（用词不匹配），不是 Layer 2/3。
+                  - generic [ref=f2e1156]:
+                    - heading "💡 调优技巧" [level=3] [ref=f2e1157]
+                    - 'link "Permalink: 💡 调优技巧" [ref=f2e1158] [cursor=pointer]':
+                      - /url: "#-调优技巧"
+                  - list [ref=f2e1161]:
+                    - listitem [ref=f2e1162]:
+                      - paragraph [ref=f2e1163]:
+                        - strong [ref=f2e1164]: Goal 加权
+                        - text: （Layer 2 注入层）
+                      - list [ref=f2e1165]:
+                        - listitem [ref=f2e1166]: 设置 active goal 提升相关领域召回
+                        - listitem [ref=f2e1167]:
+                          - text: 例：
+                          - code [ref=f2e1168]: oks config set active_goal master-ai-product-selection
+                        - listitem [ref=f2e1169]: 或在 goal.md 中配置
+                    - listitem [ref=f2e1170]:
+                      - paragraph [ref=f2e1171]:
+                        - strong [ref=f2e1172]: 主动标记使用
+                      - list [ref=f2e1173]:
+                        - listitem [ref=f2e1174]:
+                          - code [ref=f2e1175]: oks wiki use <slug>
+                          - text: 提升使用记录
+                        - listitem [ref=f2e1176]:
+                          - text: 增加
+                          - code [ref=f2e1177]: review_bonus
+                          - text: （Layer 2）
+                    - listitem [ref=f2e1178]:
+                      - paragraph [ref=f2e1179]:
+                        - strong [ref=f2e1180]: 调整类型
+                      - list [ref=f2e1181]:
+                        - listitem [ref=f2e1182]:
+                          - code [ref=f2e1183]: concept
+                          - text: 权重 1.5（技术概念、产品特性）
+                        - listitem [ref=f2e1184]:
+                          - code [ref=f2e1185]: strategy
+                          - text: 权重 1.5（方法论、决策建议）
+                        - listitem [ref=f2e1186]:
+                          - code [ref=f2e1187]: generic
+                          - text: 权重 0.5（一般性内容）
+                        - listitem [ref=f2e1188]:
+                          - text: 改 frontmatter 的
+                          - code [ref=f2e1189]: type
+                          - text: 字段
+                    - listitem [ref=f2e1190]:
+                      - paragraph [ref=f2e1191]:
+                        - strong [ref=f2e1192]:
+                          - text: 用
+                          - code [ref=f2e1193]: "--scope"
+                          - text: 限定范围
+                      - generic [ref=f2e1194]:
+                        - generic [ref=f2e1195]:
+                          - text: oks recall
+                          - generic [ref=f2e1196]: "\"query\""
+                          - text: "--scope computing"
+                        - button "Copy code to clipboard" [ref=f2e1198] [cursor=pointer]
+                      - list [ref=f2e1202]:
+                        - listitem [ref=f2e1203]: 只在 computing area 中召回
+                  - generic [ref=f2e1204]:
+                    - heading "📸 实例：Kimi 知识召回" [level=3] [ref=f2e1205]
+                    - 'link "Permalink: 📸 实例：Kimi 知识召回" [ref=f2e1206] [cursor=pointer]':
+                      - /url: "#-实例kimi-知识召回"
+                  - paragraph [ref=f2e1209]:
+                    - link [ref=f2e1210] [cursor=pointer]:
+                      - /url: /1263-ux/open-knowledge-studio/blob/docs/best-practices-and-demo/examples/oh-my-research/assets/screenshots/05-recall.png
+                      - img "召回结果" [ref=f2e1211]
+                  - generic [ref=f2e1212]:
+                    - generic [ref=f2e1213]:
+                      - text: $ oks recall
+                      - generic [ref=f2e1214]: "\"Kimi K3 成本\""
+                      - text: "--limit 1 --explain"
+                    - button "Copy code to clipboard" [ref=f2e1216] [cursor=pointer]
+                  - paragraph [ref=f2e1220]:
+                    - strong [ref=f2e1221]: 结果
+                    - text: ：
+                  - list [ref=f2e1222]:
+                    - listitem [ref=f2e1223]:
+                      - strong [ref=f2e1224]: score=0.84
+                      - text: ", relevance=1.92"
+                    - listitem [ref=f2e1225]: 准确召回 "Kimi K3 实测 — 1天烧完1个月算力，普通人慎买"
+                    - listitem [ref=f2e1226]: 显示核心信息：20元/次、300+元/十几小时
+                  - paragraph [ref=f2e1227]:
+                    - strong [ref=f2e1228]: 评分因子
+                    - text: （
+                    - code [ref=f2e1229]: "--explain"
+                    - text: 输出）：
+                  - list [ref=f2e1230]:
+                    - listitem [ref=f2e1231]:
+                      - code [ref=f2e1232]: "token-overlap: 3"
+                      - text: "- Query 和 Wiki 有 3 个 token 重叠"
+                    - listitem [ref=f2e1233]:
+                      - code [ref=f2e1234]: "idf-overlap: 1.00"
+                      - text: "- IDF 加权重叠度"
+                    - listitem [ref=f2e1235]:
+                      - code [ref=f2e1236]: "title-terms: 2"
+                      - text: "- 标题中匹配 2 个词"
+                    - listitem [ref=f2e1237]:
+                      - code [ref=f2e1238]: "type: conceptx0.6"
+                      - text: "- concept 类型（注：这里显示 0.6 是 decay 后，原始是 1.5）"
+                  - paragraph [ref=f2e1239]:
+                    - text: 👉
+                    - link "查看完整演示" [ref=f2e1240] [cursor=pointer]:
+                      - /url: /1263-ux/open-knowledge-studio/blob/docs/best-practices-and-demo/examples/oh-my-research/demo/kimi-video-walkthrough.md#%E7%AC%AC-5-%E6%AD%A5%E6%B5%8B%E8%AF%95%E5%8F%AC%E5%9B%9E
+                  - separator [ref=f2e1241]
+                  - generic [ref=f2e1242]:
+                    - heading "完整案例：从 Kimi 视频到技术方案" [level=2] [ref=f2e1243]
+                    - 'link "Permalink: 完整案例：从 Kimi 视频到技术方案" [ref=f2e1244] [cursor=pointer]':
+                      - /url: "#完整案例从-kimi-视频到技术方案"
+                  - generic [ref=f2e1247]:
+                    - heading "真实演示（不是模拟）" [level=3] [ref=f2e1248]
+                    - 'link "Permalink: 真实演示（不是模拟）" [ref=f2e1249] [cursor=pointer]':
+                      - /url: "#真实演示不是模拟"
+                  - paragraph [ref=f2e1252]: 我们用 B 站的 Kimi K3 实测视频，完整跑通了 OKS 全流程：
+                  - paragraph [ref=f2e1253]:
+                    - strong [ref=f2e1254]: 时间线
+                    - text: ：
+                  - list [ref=f2e1255]:
+                    - listitem [ref=f2e1256]: 入库前：wiki 7 个，没有 Kimi 相关内容
+                    - listitem [ref=f2e1257]: 入库：B 站视频 → ASR 转写（220 段）→ Draft 生成
+                    - listitem [ref=f2e1258]: 审核：检查准确性和可复用性
+                    - listitem [ref=f2e1259]: 晋升：wiki 从 7 个增加到 8 个
+                    - listitem [ref=f2e1260]:
+                      - text: 召回：
+                      - code [ref=f2e1261]: oks recall "Kimi K3 成本"
+                      - text: → score=0.84
+                    - listitem [ref=f2e1262]: 应用：基于召回知识设计技术方案
+                    - listitem [ref=f2e1263]: 对比：有 OKS vs 无 OKS 的 6 维度对比
+                  - paragraph [ref=f2e1264]:
+                    - strong [ref=f2e1265]: 总耗时
+                    - text: ：~7 分钟（其中 5 分钟是看视频）
+                  - paragraph [ref=f2e1266]:
+                    - strong [ref=f2e1267]: 演示亮点
+                    - text: ：
+                  - list [ref=f2e1268]:
+                    - listitem [ref=f2e1269]: ✅ B 站视频自动转文字（faster-whisper）
+                    - listitem [ref=f2e1270]: ✅ AI 提取核心知识（成本数据、结论）
+                    - listitem [ref=f2e1271]: ✅ 召回准确（相关性 0.84）
+                    - listitem [ref=f2e1272]: ✅ 基于知识做技术选型（60,000元/月成本分析）
+                  - paragraph [ref=f2e1273]:
+                    - text: 👉
+                    - strong [ref=f2e1274]:
+                      - link "查看完整演示（7 步 + 截图）" [ref=f2e1275] [cursor=pointer]:
+                        - /url: /1263-ux/open-knowledge-studio/blob/docs/best-practices-and-demo/examples/oh-my-research/demo/kimi-video-walkthrough.md
+                  - generic [ref=f2e1276]:
+                    - heading "技术方案设计示例" [level=3] [ref=f2e1277]
+                    - 'link "Permalink: 技术方案设计示例" [ref=f2e1278] [cursor=pointer]':
+                      - /url: "#技术方案设计示例"
+                  - paragraph [ref=f2e1281]:
+                    - link [ref=f2e1282] [cursor=pointer]:
+                      - /url: /1263-ux/open-knowledge-studio/blob/docs/best-practices-and-demo/examples/oh-my-research/assets/screenshots/06-design-solution.png
+                      - img "技术方案" [ref=f2e1283]
+                  - paragraph [ref=f2e1284]:
+                    - strong [ref=f2e1285]: 问题
+                    - text: ："我要设计一个智能文档分析系统，Kimi K3 适合吗？"
+                  - paragraph [ref=f2e1286]:
+                    - strong [ref=f2e1287]: AI 回答（基于 OKS 召回）
+                    - text: ：
+                  - paragraph [ref=f2e1288]:
+                    - strong [ref=f2e1289]: 优势
+                    - text: （来自 OKS）：
+                  - list [ref=f2e1290]:
+                    - listitem [ref=f2e1291]: 效果强：2026 WAIC 发布，最强国产大模型
+                    - listitem [ref=f2e1292]: 应用开发能力：成功搭建律师事务所官网
+                  - paragraph [ref=f2e1293]:
+                    - strong [ref=f2e1294]: 关键风险
+                    - text: （来自 OKS）：
+                  - list [ref=f2e1295]:
+                    - listitem [ref=f2e1296]:
+                      - strong [ref=f2e1297]: 成本极高
+                      - text: ：20元/次
+                    - listitem [ref=f2e1298]:
+                      - strong [ref=f2e1299]: 消耗速度快
+                      - text: ：十几小时烧掉 300+ 元
+                    - listitem [ref=f2e1300]:
+                      - strong [ref=f2e1301]: 核心结论
+                      - text: ："普通用户我劝你别买，因为确实有点贵"
+                  - paragraph [ref=f2e1302]:
+                    - strong [ref=f2e1303]: 成本估算
+                    - text: ：
+                  - list [ref=f2e1304]:
+                    - listitem [ref=f2e1305]: 假设每天处理 100 个文档
+                    - listitem [ref=f2e1306]:
+                      - text: Kimi K3：20元/次 × 100 =
+                      - strong [ref=f2e1307]: 2,000元/天
+                      - text: =
+                      - strong [ref=f2e1308]: 60,000元/月
+                  - paragraph [ref=f2e1309]:
+                    - strong [ref=f2e1310]: 结论
+                    - text: ：❌ 不推荐作为主力模型，建议用 Claude/GPT-4 等成本可控方案。
+                  - paragraph [ref=f2e1311]:
+                    - strong [ref=f2e1312]: 知识来源标注
+                    - text: ：
+                  - list [ref=f2e1313]:
+                    - listitem [ref=f2e1314]: ✅ 成本数据、"我劝你别买"：来自 OKS wiki 召回
+                    - listitem [ref=f2e1315]:
+                      - generic [ref=f2e1316]: ⚠️
+                      - text: 替代方案（Claude/GPT-4）：基于通用知识
+                  - generic [ref=f2e1317]:
+                    - heading "效果对比" [level=3] [ref=f2e1318]
+                    - 'link "Permalink: 效果对比" [ref=f2e1319] [cursor=pointer]':
+                      - /url: "#效果对比"
+                  - paragraph [ref=f2e1322]:
+                    - link [ref=f2e1323] [cursor=pointer]:
+                      - /url: /1263-ux/open-knowledge-studio/blob/docs/best-practices-and-demo/examples/oh-my-research/assets/screenshots/07-comparison-table.png
+                      - img "有 OKS vs 没有 OKS" [ref=f2e1324]
+                  - table [ref=f2e1326]:
+                    - rowgroup [ref=f2e1327]:
+                      - row [ref=f2e1328]:
+                        - columnheader "维度" [ref=f2e1329]
+                        - columnheader "没有 OKS" [ref=f2e1330]
+                        - columnheader "有 OKS" [ref=f2e1331]
+                    - rowgroup [ref=f2e1332]:
+                      - row [ref=f2e1333]:
+                        - cell [ref=f2e1334]:
+                          - strong [ref=f2e1335]: 知识来源
+                        - cell "AI 训练数据（可能过时）" [ref=f2e1336]
+                        - cell "你看过的最新视频" [ref=f2e1337]
+                      - row [ref=f2e1338]:
+                        - cell [ref=f2e1339]:
+                          - strong [ref=f2e1340]: 成本数据
+                        - cell "模糊（\"可能比较贵\"）" [ref=f2e1341]
+                        - cell "具体（20元/次、300+元）" [ref=f2e1342]
+                      - row [ref=f2e1343]:
+                        - cell [ref=f2e1344]:
+                          - strong [ref=f2e1345]: 可追溯性
+                        - cell "无法验证" [ref=f2e1346]
+                        - cell "关联到原始视频 + Provider 链" [ref=f2e1347]
+                      - row [ref=f2e1348]:
+                        - cell [ref=f2e1349]:
+                          - strong [ref=f2e1350]: 时效性
+                        - cell "依赖模型更新" [ref=f2e1351]
+                        - cell "看完视频立即可用" [ref=f2e1352]
+                      - row [ref=f2e1353]:
+                        - cell [ref=f2e1354]:
+                          - strong [ref=f2e1355]: 个性化
+                        - cell "通用回答" [ref=f2e1356]
+                        - cell "基于你关注的特性" [ref=f2e1357]
+                      - row [ref=f2e1358]:
+                        - cell [ref=f2e1359]:
+                          - strong [ref=f2e1360]: 决策质量
+                        - cell "缺乏依据" [ref=f2e1361]
+                        - cell "有理有据，引用具体数据" [ref=f2e1362]
+                  - paragraph [ref=f2e1363]:
+                    - strong [ref=f2e1364]: 核心收获
+                    - text: ：从"看过这个视频"到"能用它做技术选型"，只需 7 分钟。
+                  - separator [ref=f2e1365]
+                  - generic [ref=f2e1366]:
+                    - heading "常见工作流" [level=2] [ref=f2e1367]
+                    - 'link "Permalink: 常见工作流" [ref=f2e1368] [cursor=pointer]':
+                      - /url: "#常见工作流"
+                  - generic [ref=f2e1371]:
+                    - heading "工作流 1：日常学习" [level=3] [ref=f2e1372]
+                    - 'link "Permalink: 工作流 1：日常学习" [ref=f2e1373] [cursor=pointer]':
+                      - /url: "#工作流-1日常学习"
+                  - paragraph [ref=f2e1376]:
+                    - strong [ref=f2e1377]: 场景
+                    - text: ：看技术文章、视频、课程，想把学到的东西记住。
+                  - paragraph [ref=f2e1378]:
+                    - strong [ref=f2e1379]: 流程
+                    - text: ：
+                  - generic [ref=f2e1380]:
+                    - code [ref=f2e1382]: 1. 看到好文章/视频 ↓ 2. 收录到 OKS（对 Agent 说"收录这篇文章"） ↓ 3. 周末集中审核 Drafts（15-30 分钟） ↓ 4. 写方案/回答问题时自动召回
+                    - button "Copy code to clipboard" [ref=f2e1384] [cursor=pointer]
+                  - paragraph [ref=f2e1388]:
+                    - strong [ref=f2e1389]: 技巧
+                    - text: ：
+                  - list [ref=f2e1390]:
+                    - listitem [ref=f2e1391]: 平时只收集，不审核（降低心理负担）
+                    - listitem [ref=f2e1392]: 每周固定时间审核（如周日晚上）
+                    - listitem [ref=f2e1393]: 审核时批量处理（一次处理 5-10 个）
+                  - paragraph [ref=f2e1394]:
+                    - strong [ref=f2e1395]: 示例
+                    - text: ：
+                  - list [ref=f2e1396]:
+                    - listitem [ref=f2e1397]: 看了 10 个技术视频
+                    - listitem [ref=f2e1398]: 收录到 Raw（10 分钟）
+                    - listitem [ref=f2e1399]: 周末审核，晋升 3 个高价值 Wiki（20 分钟）
+                    - listitem [ref=f2e1400]: 下周写方案时召回使用
+                  - generic [ref=f2e1401]:
+                    - heading "工作流 2：技术选型" [level=3] [ref=f2e1402]
+                    - 'link "Permalink: 工作流 2：技术选型" [ref=f2e1403] [cursor=pointer]':
+                      - /url: "#工作流-2技术选型"
+                  - paragraph [ref=f2e1406]:
+                    - strong [ref=f2e1407]: 场景
+                    - text: ：需要选择技术方案，需要对比多个候选方案。
+                  - paragraph [ref=f2e1408]:
+                    - strong [ref=f2e1409]: 流程
+                    - text: ：
+                  - generic [ref=f2e1410]:
+                    - code [ref=f2e1412]: 1. 列出候选方案（如 3 个 AI 模型） ↓ 2. 收集每个方案的资料（官网、评测、视频） ↓ 3. 沉淀每个方案的核心特性到 Wiki ↓ 4. 召回对比 → 制作对比表 → 做出决策
+                    - button "Copy code to clipboard" [ref=f2e1414] [cursor=pointer]
+                  - paragraph [ref=f2e1418]:
+                    - strong [ref=f2e1419]: 技巧
+                    - text: ：
+                  - list [ref=f2e1420]:
+                    - listitem [ref=f2e1421]: 为每个方案建立 goal（提升相关召回）
+                    - listitem [ref=f2e1422]: 用统一的结构记录（成本、性能、使用场景）
+                    - listitem [ref=f2e1423]:
+                      - text: 对比时用
+                      - code [ref=f2e1424]: oks recall "方案 A vs 方案 B"
+                  - paragraph [ref=f2e1425]:
+                    - strong [ref=f2e1426]: 示例
+                    - text: ：
+                  - list [ref=f2e1427]:
+                    - listitem [ref=f2e1428]: 候选：Kimi K3 / GPT-4 / Claude Opus
+                    - listitem [ref=f2e1429]: 每个方案收集 2-3 份资料
+                    - listitem [ref=f2e1430]: 沉淀为 3 个 Wiki 页面（核心特性 + 成本 + 场景）
+                    - listitem [ref=f2e1431]: 召回对比 → 选出最合适方案
+                  - generic [ref=f2e1432]:
+                    - heading "工作流 3：项目维护" [level=3] [ref=f2e1433]
+                    - 'link "Permalink: 工作流 3：项目维护" [ref=f2e1434] [cursor=pointer]':
+                      - /url: "#工作流-3项目维护"
+                  - paragraph [ref=f2e1437]:
+                    - strong [ref=f2e1438]: 场景
+                    - text: ：维护开源项目或团队代码库，需要记录决策和踩坑。
+                  - paragraph [ref=f2e1439]:
+                    - strong [ref=f2e1440]: 流程
+                    - text: ：
+                  - generic [ref=f2e1441]:
+                    - code [ref=f2e1443]: 1. 每次重要决策 → 写决策文档 → 收录 OKS ↓ 2. 踩坑后 → 补充 anti-pattern 到 Wiki ↓ 3. 新人 onboarding → 召回项目知识 ↓ 4. 定期审查 → 更新过时知识
+                    - button "Copy code to clipboard" [ref=f2e1445] [cursor=pointer]
+                  - paragraph [ref=f2e1449]:
+                    - strong [ref=f2e1450]: 技巧
+                    - text: ：
+                  - list [ref=f2e1451]:
+                    - listitem [ref=f2e1452]:
+                      - text: 用
+                      - code [ref=f2e1453]: supersedes
+                      - text: 更新过时决策
+                    - listitem [ref=f2e1454]:
+                      - text: 用
+                      - code [ref=f2e1455]: challenges
+                      - text: 记录争议点
+                    - listitem [ref=f2e1456]:
+                      - text: 建立项目 profile（在
+                      - code [ref=f2e1457]: profiles/projects/
+                      - text: 下）
+                  - paragraph [ref=f2e1458]:
+                    - strong [ref=f2e1459]: 示例
+                    - text: ：
+                  - list [ref=f2e1460]:
+                    - listitem [ref=f2e1461]: 决策：为什么选择 PostgreSQL 而不是 MySQL
+                    - listitem [ref=f2e1462]: 踩坑：PostgreSQL 在 Windows 上的性能问题
+                    - listitem [ref=f2e1463]: 新人问："为什么用 PostgreSQL？" → 召回决策文档
+                    - listitem [ref=f2e1464]: 半年后：PostgreSQL 15 解决了性能问题 → 更新 Wiki
+                  - generic [ref=f2e1465]:
+                    - heading "工作流 4：团队协作" [level=3] [ref=f2e1466]
+                    - 'link "Permalink: 工作流 4：团队协作" [ref=f2e1467] [cursor=pointer]':
+                      - /url: "#工作流-4团队协作"
+                  - paragraph [ref=f2e1470]:
+                    - strong [ref=f2e1471]: 场景
+                    - text: ：团队共享知识库，避免重复踩坑。
+                  - paragraph [ref=f2e1472]:
+                    - strong [ref=f2e1473]: 流程
+                    - text: ：
+                  - generic [ref=f2e1474]:
+                    - code [ref=f2e1476]: 1. 每个人维护自己的 OKS 实例 ↓ 2. 定期导出高价值 Wiki → 团队共享目录 ↓ 3. 其他人导入到自己的 OKS ↓ 4. 团队会议时召回相关知识
+                    - button "Copy code to clipboard" [ref=f2e1478] [cursor=pointer]
+                  - paragraph [ref=f2e1482]:
+                    - strong [ref=f2e1483]: 技巧
+                    - text: ：
+                  - list [ref=f2e1484]:
+                    - listitem [ref=f2e1485]: 用 git 管理知识库（OKS 是文件系统）
+                    - listitem [ref=f2e1486]:
+                      - text: 建立团队 profile（在
+                      - code [ref=f2e1487]: profiles/teams/
+                      - text: 下）
+                    - listitem [ref=f2e1488]: 定期同步（如每周 sync 一次）
+                  - paragraph [ref=f2e1489]:
+                    - strong [ref=f2e1490]: 注意
+                    - text: ：
+                  - list [ref=f2e1491]:
+                    - listitem [ref=f2e1492]: OKS 设计为单人使用，多人共享需要约定规范
+                    - listitem [ref=f2e1493]: 避免同时编辑同一个文件（用 git 解决冲突）
+                    - listitem [ref=f2e1494]: 敏感信息不要放进共享知识库
+                  - separator [ref=f2e1495]
+                  - generic [ref=f2e1496]:
+                    - heading "FAQ" [level=2] [ref=f2e1497]
+                    - 'link "Permalink: FAQ" [ref=f2e1498] [cursor=pointer]':
+                      - /url: "#faq"
+                  - generic [ref=f2e1501]:
+                    - 'heading "Q1: 为什么召回找不到我的知识？" [level=3] [ref=f2e1502]'
+                    - 'link "Permalink: Q1: 为什么召回找不到我的知识？" [ref=f2e1503] [cursor=pointer]':
+                      - /url: "#q1-为什么召回找不到我的知识"
+                  - paragraph [ref=f2e1506]:
+                    - strong [ref=f2e1507]: 检查清单
+                    - text: ：
+                  - list [ref=f2e1508]:
+                    - listitem [ref=f2e1509]:
+                      - paragraph [ref=f2e1510]:
+                        - text: ✅
+                        - strong [ref=f2e1511]: Draft 已晋升到 Wiki？
+                      - generic [ref=f2e1512]:
+                        - generic [ref=f2e1513]: oks wiki list
+                        - button "Copy code to clipboard" [ref=f2e1515] [cursor=pointer]
+                      - list [ref=f2e1519]:
+                        - listitem [ref=f2e1520]: 如果还在 Draft，先晋升
+                    - listitem [ref=f2e1521]:
+                      - paragraph [ref=f2e1522]:
+                        - text: ✅
+                        - strong [ref=f2e1523]: Query 用词合适？
+                      - list [ref=f2e1524]:
+                        - listitem [ref=f2e1525]: 尝试不同措辞（paraphrase）
+                        - listitem [ref=f2e1526]:
+                          - text: 用
+                          - code [ref=f2e1527]: "--explain"
+                          - text: 查看评分详情
+                    - listitem [ref=f2e1528]:
+                      - paragraph [ref=f2e1529]:
+                        - text: ✅
+                        - strong [ref=f2e1530]: 类型权重合理？
+                      - list [ref=f2e1531]:
+                        - listitem [ref=f2e1532]:
+                          - code [ref=f2e1533]: generic
+                          - text: 类型被降权 0.5
+                        - listitem [ref=f2e1534]:
+                          - text: 改为
+                          - code [ref=f2e1535]: concept
+                          - text: 或
+                          - code [ref=f2e1536]: strategy
+                    - listitem [ref=f2e1537]:
+                      - paragraph [ref=f2e1538]:
+                        - text: ✅
+                        - strong [ref=f2e1539]: Wiki 内容完整？
+                      - list [ref=f2e1540]:
+                        - listitem [ref=f2e1541]: 检查 Wiki 文件，确认关键词在正文中
+                        - listitem [ref=f2e1542]:
+                          - text: Node-BM25 匹配每个
+                          - code [ref=f2e1543]: "##"
+                          - text: heading 段落
+                  - paragraph [ref=f2e1544]:
+                    - strong [ref=f2e1545]: 解决方案
+                    - text: ：
+                  - generic [ref=f2e1546]:
+                    - generic [ref=f2e1547]:
+                      - generic [ref=f2e1548]: "# 查看评分详情"
+                      - text: oks recall
+                      - generic [ref=f2e1549]: "\"你的问题\""
+                      - text: "--explain"
+                      - generic [ref=f2e1550]: "# 测试不同措辞"
+                      - text: oks recall
+                      - generic [ref=f2e1551]: "\"Kimi 成本\""
+                      - text: oks recall
+                      - generic [ref=f2e1552]: "\"Kimi 价格\""
+                      - text: oks recall
+                      - generic [ref=f2e1553]: "\"Kimi 多少钱\""
+                      - generic [ref=f2e1554]: "# 限定范围"
+                      - text: oks recall
+                      - generic [ref=f2e1555]: "\"你的问题\""
+                      - text: "--scope computing"
+                    - button "Copy code to clipboard" [ref=f2e1557] [cursor=pointer]
+                  - generic [ref=f2e1561]:
+                    - 'heading "Q2: Draft 太多处理不过来？" [level=3] [ref=f2e1562]'
+                    - 'link "Permalink: Q2: Draft 太多处理不过来？" [ref=f2e1563] [cursor=pointer]':
+                      - /url: "#q2-draft-太多处理不过来"
+                  - paragraph [ref=f2e1566]:
+                    - strong [ref=f2e1567]: 现状
+                    - text: ：Draft 数量 > 20，不知道从哪开始。
+                  - paragraph [ref=f2e1568]:
+                    - strong [ref=f2e1569]: 策略
+                    - text: ：
+                  - list [ref=f2e1570]:
+                    - listitem [ref=f2e1571]:
+                      - paragraph [ref=f2e1572]:
+                        - strong [ref=f2e1573]: 用 A/B/C 分级
+                      - list [ref=f2e1574]:
+                        - listitem [ref=f2e1575]: A 级（核心）：必须审核
+                        - listitem [ref=f2e1576]: B 级（有用）：选择性审核
+                        - listitem [ref=f2e1577]: C 级（参考）：批量 reject
+                    - listitem [ref=f2e1578]:
+                      - paragraph [ref=f2e1579]:
+                        - strong [ref=f2e1580]: 批量 reject 明显不合适的
+                      - generic [ref=f2e1581]:
+                        - generic [ref=f2e1582]:
+                          - text: oks drafts list
+                          - generic [ref=f2e1583]: "# 找出不需要的"
+                          - text: oks drafts reject <slug1> oks drafts reject <slug2>
+                        - button "Copy code to clipboard" [ref=f2e1585] [cursor=pointer]
+                    - listitem [ref=f2e1589]:
+                      - paragraph [ref=f2e1590]:
+                        - strong [ref=f2e1591]: 定期清理
+                      - list [ref=f2e1592]:
+                        - listitem [ref=f2e1593]: 每周审核一次
+                        - listitem [ref=f2e1594]: 超过 1 个月的 Draft 要么晋升要么 reject
+                  - paragraph [ref=f2e1595]:
+                    - strong [ref=f2e1596]: 时间估算
+                    - text: ：
+                  - list [ref=f2e1597]:
+                    - listitem [ref=f2e1598]: 5-10 个 Draft：15-30 分钟
+                    - listitem [ref=f2e1599]: 20+ Draft：建议分两次审核
+                  - generic [ref=f2e1600]:
+                    - 'heading "Q3: 如何批量处理历史资料？" [level=3] [ref=f2e1601]'
+                    - 'link "Permalink: Q3: 如何批量处理历史资料？" [ref=f2e1602] [cursor=pointer]':
+                      - /url: "#q3-如何批量处理历史资料"
+                  - paragraph [ref=f2e1605]:
+                    - strong [ref=f2e1606]: 场景
+                    - text: ：有大量历史文档/视频/笔记，想全部导入 OKS。
+                  - paragraph [ref=f2e1607]:
+                    - strong [ref=f2e1608]: 建议
+                    - text: ：
+                  - paragraph [ref=f2e1609]:
+                    - text: ❌
+                    - strong [ref=f2e1610]: 不要一次性导入
+                  - list [ref=f2e1611]:
+                    - listitem [ref=f2e1612]: 会生成大量 Draft
+                    - listitem [ref=f2e1613]: 审核负担太重
+                    - listitem [ref=f2e1614]: 容易放弃
+                  - paragraph [ref=f2e1615]:
+                    - text: ✅
+                    - strong [ref=f2e1616]: 分批处理
+                  - list [ref=f2e1617]:
+                    - listitem [ref=f2e1618]:
+                      - paragraph [ref=f2e1619]:
+                        - strong [ref=f2e1620]: 优先处理最近 3 个月的
+                      - list [ref=f2e1621]:
+                        - listitem [ref=f2e1622]: 记忆最清晰
+                        - listitem [ref=f2e1623]: 最有可能用到
+                    - listitem [ref=f2e1624]:
+                      - paragraph [ref=f2e1625]:
+                        - strong [ref=f2e1626]: 旧资料可以只保留 Raw
+                      - list [ref=f2e1627]:
+                        - listitem [ref=f2e1628]: 不一定要生成 Wiki
+                        - listitem [ref=f2e1629]: 需要时再召回 Raw
+                    - listitem [ref=f2e1630]:
+                      - paragraph [ref=f2e1631]:
+                        - strong [ref=f2e1632]: 用主题分批
+                      - list [ref=f2e1633]:
+                        - listitem [ref=f2e1634]: 这周处理"AI 相关"
+                        - listitem [ref=f2e1635]: 下周处理"数据库相关"
+                  - paragraph [ref=f2e1636]:
+                    - strong [ref=f2e1637]: 时间安排
+                    - text: ：
+                  - list [ref=f2e1638]:
+                    - listitem [ref=f2e1639]: 每周处理 5-10 份资料
+                    - listitem [ref=f2e1640]: 3 个月处理 60-120 份
+                    - listitem [ref=f2e1641]: 比一次性处理更可持续
+                  - generic [ref=f2e1642]:
+                    - 'heading "Q4: 成本和性能如何？" [level=3] [ref=f2e1643]'
+                    - 'link "Permalink: Q4: 成本和性能如何？" [ref=f2e1644] [cursor=pointer]':
+                      - /url: "#q4-成本和性能如何"
+                  - paragraph [ref=f2e1647]:
+                    - strong [ref=f2e1648]: 存储成本
+                    - text: ：
+                  - list [ref=f2e1649]:
+                    - listitem [ref=f2e1650]: 视频转写：约 100KB/分钟（纯文本）
+                    - listitem [ref=f2e1651]: Wiki 页面：约 2-5KB/页
+                    - listitem [ref=f2e1652]: Raw Bundle：取决于资料类型
+                  - paragraph [ref=f2e1653]:
+                    - strong [ref=f2e1654]: 召回性能
+                    - text: ：
+                  - list [ref=f2e1655]:
+                    - listitem [ref=f2e1656]: 50 个 Wiki：< 100ms
+                    - listitem [ref=f2e1657]: 500 个 Wiki：< 500ms
+                    - listitem [ref=f2e1658]: Node-BM25 fts5 索引，不随 Wiki 数量线性增长
+                  - paragraph [ref=f2e1659]:
+                    - strong [ref=f2e1660]: ASR 成本
+                    - text: （视频转写）：
+                  - list [ref=f2e1661]:
+                    - listitem [ref=f2e1662]:
+                      - text: faster-whisper 本地运行：
+                      - strong [ref=f2e1663]: 免费
+                    - listitem [ref=f2e1664]: tiny 模型：快速，略有误差
+                    - listitem [ref=f2e1665]: base/small 模型：准确，较慢
+                  - paragraph [ref=f2e1666]:
+                    - strong [ref=f2e1667]: 推荐配置
+                    - text: （个人使用）：
+                  - list [ref=f2e1668]:
+                    - listitem [ref=f2e1669]: 知识库：1000-2000 个 Wiki
+                    - listitem [ref=f2e1670]: Raw 文件：无上限（按需保留）
+                    - listitem [ref=f2e1671]: 硬盘空间：10-50GB
+                  - generic [ref=f2e1672]:
+                    - 'heading "Q5: 如何处理知识更新？" [level=3] [ref=f2e1673]'
+                    - 'link "Permalink: Q5: 如何处理知识更新？" [ref=f2e1674] [cursor=pointer]':
+                      - /url: "#q5-如何处理知识更新"
+                  - paragraph [ref=f2e1677]:
+                    - strong [ref=f2e1678]: 场景
+                    - text: ：Kimi 发布新版本 K3.5，旧的 K3 知识怎么办？
+                  - paragraph [ref=f2e1679]:
+                    - strong [ref=f2e1680]: 策略
+                    - text: ：
+                  - list [ref=f2e1681]:
+                    - listitem [ref=f2e1682]:
+                      - paragraph [ref=f2e1683]:
+                        - strong [ref=f2e1684]:
+                          - text: 用
+                          - code [ref=f2e1685]: supersedes
+                          - text: 标注替代关系
+                      - generic [ref=f2e1686]:
+                        - generic [ref=f2e1687]: "--- title: Kimi K3.5 新特性 supersedes: kimi-k3-features ---"
+                        - button "Copy code to clipboard" [ref=f2e1689] [cursor=pointer]
+                      - list [ref=f2e1693]:
+                        - listitem [ref=f2e1694]:
+                          - text: 旧知识自动标记为
+                          - code [ref=f2e1695]: archived
+                        - listitem [ref=f2e1696]: 召回时优先返回新知识
+                    - listitem [ref=f2e1697]:
+                      - paragraph [ref=f2e1698]:
+                        - strong [ref=f2e1699]:
+                          - text: 用
+                          - code [ref=f2e1700]: enriches
+                          - text: 补充细节
+                      - generic [ref=f2e1701]:
+                        - generic [ref=f2e1702]: "--- title: Kimi K3 在法律场景的应用 enriches: kimi-k3-features ---"
+                        - button "Copy code to clipboard" [ref=f2e1704] [cursor=pointer]
+                      - list [ref=f2e1708]:
+                        - listitem [ref=f2e1709]:
+                          - text: 两个知识都保持
+                          - code [ref=f2e1710]: active
+                        - listitem [ref=f2e1711]: 召回时一起返回
+                    - listitem [ref=f2e1712]:
+                      - paragraph [ref=f2e1713]:
+                        - strong [ref=f2e1714]:
+                          - text: 用
+                          - code [ref=f2e1715]: challenges
+                          - text: 记录争议
+                      - generic [ref=f2e1716]:
+                        - generic [ref=f2e1717]: "--- title: Kimi K3 成本优化后可接受 challenges: kimi-k3-cost-warning ---"
+                        - button "Copy code to clipboard" [ref=f2e1719] [cursor=pointer]
+                      - list [ref=f2e1723]:
+                        - listitem [ref=f2e1724]: 两个观点并存
+                        - listitem [ref=f2e1725]:
+                          - text: 用
+                          - code [ref=f2e1726]: human_reviewed_at
+                          - text: 判断优先级
+                  - paragraph [ref=f2e1727]:
+                    - strong [ref=f2e1728]: 实践建议
+                    - text: ：
+                  - list [ref=f2e1729]:
+                    - listitem [ref=f2e1730]:
+                      - text: 不要删除旧知识（改为
+                      - code [ref=f2e1731]: archived
+                      - text: ）
+                    - listitem [ref=f2e1732]: 保留演进历史（可追溯）
+                    - listitem [ref=f2e1733]: 定期审查（每季度一次）
+                  - generic [ref=f2e1734]:
+                    - 'heading "Q6: OKS 适合团队使用吗？" [level=3] [ref=f2e1735]'
+                    - 'link "Permalink: Q6: OKS 适合团队使用吗？" [ref=f2e1736] [cursor=pointer]':
+                      - /url: "#q6-oks-适合团队使用吗"
+                  - paragraph [ref=f2e1739]:
+                    - strong [ref=f2e1740]: 设计定位
+                    - text: ：OKS 是
+                    - strong [ref=f2e1741]: 个人知识管理工具
+                    - text: ，设计为单人使用。
+                  - paragraph [ref=f2e1742]:
+                    - strong [ref=f2e1743]: 团队使用的挑战
+                    - text: ：
+                  - list [ref=f2e1744]:
+                    - listitem [ref=f2e1745]: ❌ 没有权限管理
+                    - listitem [ref=f2e1746]: ❌ 没有冲突解决机制
+                    - listitem [ref=f2e1747]: ❌ 没有协作审核流程
+                  - paragraph [ref=f2e1748]:
+                    - strong [ref=f2e1749]: 可行的团队模式
+                    - text: ：
+                  - list [ref=f2e1750]:
+                    - listitem [ref=f2e1751]:
+                      - paragraph [ref=f2e1752]:
+                        - strong [ref=f2e1753]: 各自维护 + 定期同步
+                      - list [ref=f2e1754]:
+                        - listitem [ref=f2e1755]: 每人维护自己的 OKS 实例
+                        - listitem [ref=f2e1756]: 定期导出高价值 Wiki → 共享目录
+                        - listitem [ref=f2e1757]: 其他人选择性导入
+                    - listitem [ref=f2e1758]:
+                      - paragraph [ref=f2e1759]:
+                        - strong [ref=f2e1760]: 用 git 管理共享知识库
+                      - list [ref=f2e1761]:
+                        - listitem [ref=f2e1762]: OKS 是文件系统，天然支持 git
+                        - listitem [ref=f2e1763]: 用 PR 流程审核知识
+                        - listitem [ref=f2e1764]: 用 git 解决冲突
+                    - listitem [ref=f2e1765]:
+                      - paragraph [ref=f2e1766]:
+                        - strong [ref=f2e1767]: 建立团队规范
+                      - list [ref=f2e1768]:
+                        - listitem [ref=f2e1769]: 统一的 Wiki 模板
+                        - listitem [ref=f2e1770]: 明确的审核标准
+                        - listitem [ref=f2e1771]: 定期的知识同步会议
+                  - paragraph [ref=f2e1772]:
+                    - strong [ref=f2e1773]: 推荐实践
+                    - text: ：
+                  - list [ref=f2e1774]:
+                    - listitem [ref=f2e1775]: 个人知识：自己的 OKS
+                    - listitem [ref=f2e1776]: 团队知识：共享 git repo（手动维护）
+                    - listitem [ref=f2e1777]: 不要把 OKS 当成团队 Wiki（用 Notion/Confluence）
+                  - generic [ref=f2e1778]:
+                    - 'heading "Q7: 如何备份和迁移？" [level=3] [ref=f2e1779]'
+                    - 'link "Permalink: Q7: 如何备份和迁移？" [ref=f2e1780] [cursor=pointer]':
+                      - /url: "#q7-如何备份和迁移"
+                  - paragraph [ref=f2e1783]:
+                    - strong [ref=f2e1784]: 备份
+                    - text: ：
+                  - list [ref=f2e1785]:
+                    - listitem [ref=f2e1786]: OKS 是纯文件系统
+                    - listitem [ref=f2e1787]: 直接备份整个目录即可
+                    - listitem [ref=f2e1788]: 推荐：用 git 版本管理
+                  - paragraph [ref=f2e1789]:
+                    - strong [ref=f2e1790]: 迁移
+                    - text: ：
+                  - generic [ref=f2e1791]:
+                    - generic [ref=f2e1792]:
+                      - generic [ref=f2e1793]: "# 导出整个知识库"
+                      - text: tar -czf my-oks-backup.tar.gz my-knowledge-base/
+                      - generic [ref=f2e1794]: "# 在新机器上"
+                      - text: tar -xzf my-oks-backup.tar.gz cd my-knowledge-base oks status
+                      - generic [ref=f2e1795]: "# 确认正常"
+                    - button "Copy code to clipboard" [ref=f2e1797] [cursor=pointer]
+                  - paragraph [ref=f2e1801]:
+                    - strong [ref=f2e1802]: 注意事项
+                    - text: ：
+                  - list [ref=f2e1803]:
+                    - listitem [ref=f2e1804]:
+                      - code [ref=f2e1805]: wiki/
+                      - text: 和
+                      - code [ref=f2e1806]: raw/
+                      - text: 是核心数据
+                    - listitem [ref=f2e1807]:
+                      - code [ref=f2e1808]: drafts/
+                      - text: 可以选择性备份
+                    - listitem [ref=f2e1809]:
+                      - code [ref=f2e1810]: .git/
+                      - text: 包含版本历史
+                  - paragraph [ref=f2e1811]:
+                    - strong [ref=f2e1812]: 云同步
+                    - text: ：
+                  - list [ref=f2e1813]:
+                    - listitem [ref=f2e1814]: 可以用 Dropbox/iCloud/OneDrive
+                    - listitem [ref=f2e1815]: 但要注意 git 冲突
+                    - listitem [ref=f2e1816]: 推荐：主动 push/pull，不要自动同步
+                  - separator [ref=f2e1817]
+                  - generic [ref=f2e1818]:
+                    - heading "延伸阅读" [level=2] [ref=f2e1819]
+                    - 'link "Permalink: 延伸阅读" [ref=f2e1820] [cursor=pointer]':
+                      - /url: "#延伸阅读"
+                  - generic [ref=f2e1823]:
+                    - heading "算法与架构" [level=3] [ref=f2e1824]
+                    - 'link "Permalink: 算法与架构" [ref=f2e1825] [cursor=pointer]':
+                      - /url: "#算法与架构"
+                  - list [ref=f2e1828]:
+                    - listitem [ref=f2e1829]:
+                      - strong [ref=f2e1830]:
+                        - link "Triple-Layer Recall" [ref=f2e1831] [cursor=pointer]:
+                          - /url: /1263-ux/open-knowledge-studio/blob/docs/best-practices-and-demo/docs/algorithms/recall-engine.md
+                      - text: "- Node-BM25 召回 + Soul Boost 注入 + Memory Curve 衰减"
+                    - listitem [ref=f2e1832]:
+                      - strong [ref=f2e1833]:
+                        - link "召回评估" [ref=f2e1834] [cursor=pointer]:
+                          - /url: /1263-ux/open-knowledge-studio/blob/docs/best-practices-and-demo/docs/algorithms/recall-evaluation.md
+                      - text: "- 50-case 消融实验，R@1=82.5%, MRR=0.907"
+                    - listitem [ref=f2e1835]:
+                      - strong [ref=f2e1836]:
+                        - link "CONSTITUTION" [ref=f2e1837] [cursor=pointer]:
+                          - /url: /1263-ux/open-knowledge-studio/blob/docs/best-practices-and-demo/docs/concepts/constitution.md
+                      - text: "- P0-P11 不变式，A1-A5 记忆架构"
+                  - generic [ref=f2e1838]:
+                    - heading "使用指南" [level=3] [ref=f2e1839]
+                    - 'link "Permalink: 使用指南" [ref=f2e1840] [cursor=pointer]':
+                      - /url: "#使用指南"
+                  - list [ref=f2e1843]:
+                    - listitem [ref=f2e1844]:
+                      - strong [ref=f2e1845]:
+                        - link "记忆管理" [ref=f2e1846] [cursor=pointer]:
+                          - /url: /1263-ux/open-knowledge-studio/blob/docs/best-practices-and-demo/docs/usage/memories.md
+                      - text: "- Wiki 生命周期、类型、衰减"
+                    - listitem [ref=f2e1847]:
+                      - strong [ref=f2e1848]:
+                        - link "上下文注入" [ref=f2e1849] [cursor=pointer]:
+                          - /url: /1263-ux/open-knowledge-studio/blob/docs/best-practices-and-demo/docs/usage/context-injection.md
+                      - text: "- Hook 机制、注入时机"
+                    - listitem [ref=f2e1850]:
+                      - strong [ref=f2e1851]:
+                        - link "CLI 命令" [ref=f2e1852] [cursor=pointer]:
+                          - /url: /1263-ux/open-knowledge-studio/blob/docs/best-practices-and-demo/docs/reference/cli.md
+                      - text: "- 完整命令参考"
+                  - generic [ref=f2e1853]:
+                    - heading "真实案例" [level=3] [ref=f2e1854]
+                    - 'link "Permalink: 真实案例" [ref=f2e1855] [cursor=pointer]':
+                      - /url: "#真实案例"
+                  - list [ref=f2e1858]:
+                    - listitem [ref=f2e1859]:
+                      - strong [ref=f2e1860]:
+                        - link "托管你的学习" [ref=f2e1861] [cursor=pointer]:
+                          - /url: /1263-ux/open-knowledge-studio/blob/docs/best-practices-and-demo/examples/oh-my-research
+                      - text: "- 新手入门，从 Kimi 视频到技术方案"
+                    - listitem [ref=f2e1862]:
+                      - strong [ref=f2e1863]:
+                        - link "托管你的 GitHub" [ref=f2e1864] [cursor=pointer]:
+                          - /url: /1263-ux/open-knowledge-studio/blob/docs/best-practices-and-demo/examples/oh-my-github
+                      - text: "- 技术决策沉淀"
+                    - listitem [ref=f2e1865]:
+                      - strong [ref=f2e1866]:
+                        - link "托管你的飞书" [ref=f2e1867] [cursor=pointer]:
+                          - /url: /1263-ux/open-knowledge-studio/blob/docs/best-practices-and-demo/examples/oh-my-feishu
+                      - text: "- 手机表单采集 + IM 审核"
+                  - separator [ref=f2e1868]
+                  - generic [ref=f2e1869]:
+                    - heading "社区与支持" [level=2] [ref=f2e1870]
+                    - 'link "Permalink: 社区与支持" [ref=f2e1871] [cursor=pointer]':
+                      - /url: "#社区与支持"
+                  - list [ref=f2e1874]:
+                    - listitem [ref=f2e1875]:
+                      - strong [ref=f2e1876]: GitHub Discussions
+                      - text: ":"
+                      - link "提问和讨论" [ref=f2e1877] [cursor=pointer]:
+                        - /url: https://github.com/open-agent-power/open-knowledge-studio/discussions
+                    - listitem [ref=f2e1878]:
+                      - strong [ref=f2e1879]: Issues
+                      - text: ":"
+                      - link "报告问题" [ref=f2e1880] [cursor=pointer]:
+                        - /url: https://github.com/open-agent-power/open-knowledge-studio/issues
+                    - listitem [ref=f2e1881]:
+                      - strong [ref=f2e1882]: 贡献指南
+                      - text: ":"
+                      - link "CONTRIBUTING.md" [ref=f2e1883] [cursor=pointer]:
+                        - /url: https://github.com/open-agent-power/open-knowledge-studio/blob/main/CONTRIBUTING.md
+                  - separator [ref=f2e1884]
+                  - paragraph [ref=f2e1885]:
+                    - strong [ref=f2e1886]: 最后提醒
+                    - text: ：OKS 不是魔法。它不会自动让你"记住所有东西"。它的价值在于：把你
+                    - strong [ref=f2e1887]: 真正看过、真正理解
+                    - text: 的内容，变成
+                    - strong [ref=f2e1888]: 未来能重新找到、实际能用
+                    - text: 的知识。
+                  - paragraph [ref=f2e1889]: 把时间花在阅读、理解、审核上，而不是收集和整理上。这才是知识管理的本质。
+  - alert [ref=f2e1893]
