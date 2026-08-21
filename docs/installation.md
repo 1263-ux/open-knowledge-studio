@@ -1,7 +1,6 @@
 ---
 title: 安装
-nav_order: 2
-parent: 开始使用
+nav_order: 3
 ---
 
 # 安装 OKS
