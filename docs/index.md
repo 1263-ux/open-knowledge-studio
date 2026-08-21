@@ -23,7 +23,7 @@ nav_order: 1
 |------|--------|------|
 | 1️⃣ | [安装 OKS](installation.md) | 2 分钟 |
 | 2️⃣ | [跑通第一个闭环](first-knowledge-loop.md) | 5 分钟 |
-| 3️⃣ | [看真实案例](../examples/oh-my-research/demo/kimi-video-walkthrough.md) | 10 分钟 |
+| 3️⃣ | [看真实案例](examples.md) | 10 分钟 |
 
 **总耗时**：17 分钟，完全理解 OKS
 
@@ -33,12 +33,12 @@ nav_order: 1
 
 | 场景 | 你在托管什么 | 演示 |
 |------|-------------|------|
-| **[托管你的学习](../examples/oh-my-research/)** | 文章、视频、课程 | [完整演示](../examples/oh-my-research/demo/kimi-video-walkthrough.md) |
-| **[托管你的 GitHub](../examples/oh-my-github/)** | 技术决策、踩坑 | - |
-| **[托管你的飞书](../examples/oh-my-feishu/)** | 手机表单 + IM 审核 | - |
-| **[托管你的书籍](../examples/oh-my-book/)** | 阅读笔记 | - |
+| **[托管你的学习](examples.md#托管你的学习)** | 文章、视频、课程 | [Kimi 视频演示](examples.md#kimi-k3-实测) |
+| **[托管你的 GitHub](examples.md#托管你的-github)** | 技术决策、踩坑 | - |
+| **[托管你的飞书](examples.md#托管你的飞书)** | 手机表单 + IM 审核 | - |
+| **[托管你的书籍](examples.md#托管你的书籍)** | 阅读笔记 | - |
 
-[更多案例](examples.md)
+[查看所有案例](examples.md)
 
 ---
 
