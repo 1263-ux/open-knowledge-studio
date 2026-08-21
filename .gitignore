@@ -98,3 +98,4 @@ drafts/*.md
 .claude/hooks/
 .qoder/settings.json
 .oks-treesearch-cache/
+records/file-edits.jsonl
