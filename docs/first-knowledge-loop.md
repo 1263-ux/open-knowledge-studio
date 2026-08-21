@@ -1,7 +1,6 @@
 ---
 title: 第一个知识闭环
-nav_order: 3
-parent: 开始使用
+nav_order: 4
 ---
 
 # 第一个知识闭环
