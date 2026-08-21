@@ -1,7 +1,6 @@
 ---
 title: 导入已有对话
-nav_order: 5
-parent: 开始使用
+nav_order: 6
 ---
 
 # 导入已有对话
