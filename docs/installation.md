@@ -110,7 +110,7 @@ oks init ~/my-knowledge
 
 ### Q: Python 版本太低
 
-需要 Python 3.10+：
+需要 Python 3.12+：
 
 ```bash
 python --version  # 检查版本
