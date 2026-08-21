@@ -358,13 +358,13 @@ Agent:
 
 ### 巩固理解
 
-- **[最佳实践](../best-practices.md)** - 三个阶段的核心原则
-- **[真实案例](../../examples/oh-my-research/demo/kimi-video-walkthrough.md)** - B 站视频 → 技术方案
+- **[最佳实践](best-practices.md)** - 三个阶段的核心原则
+- **[真实案例](examples.md)** - B 站视频 → 技术方案
 
 ### 进阶使用
 
-- **[配置 Goal](../usage/profiles.md)** - 提升特定领域召回
-- **[上下文注入](../usage/context-injection.md)** - Hook 机制详解
+- **[配置 Goal](usage/profiles.md)** - 提升特定领域召回
+- **[上下文注入](usage/context-injection.md)** - Hook 机制详解
 - **[批量导入](import-conversations.md)** - 导入已有对话
 
 ---
