@@ -99,3 +99,7 @@ drafts/*.md
 .qoder/settings.json
 .oks-treesearch-cache/
 records/file-edits.jsonl
+
+# Local agent workflow artifacts and recall trace output
+.agent/
+records/inject.jsonl
