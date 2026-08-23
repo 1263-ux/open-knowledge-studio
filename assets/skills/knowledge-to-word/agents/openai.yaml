@@ -1,0 +1,4 @@
+interface:
+  display_name: "Knowledge to Word"
+  short_description: "Generate reviewed Word documents from OKS knowledge"
+  default_prompt: "Use $knowledge-to-word to turn relevant OKS knowledge into a polished, cited Word document."

@@ -188,6 +188,10 @@ fs_app = typer.Typer(
 capability_app = typer.Typer(help="Optional modality capabilities; core dependencies stay lightweight.")
 schema_app = typer.Typer(help="Protocol document shapes an Agent must author.")
 security_app = typer.Typer(help="Credential redaction for provider raw output.")
+team_app = typer.Typer(
+    help="Shared team knowledge-base bootstrap and onboarding.",
+    no_args_is_help=True,
+)
 
 
 class _LegacyIngestGroup(typer.core.TyperGroup):
@@ -225,6 +229,7 @@ app.add_typer(capability_app, name="capability")
 app.add_typer(schema_app, name="schema")
 app.add_typer(security_app, name="security")
 app.add_typer(ingest_app, name="ingest")
+app.add_typer(team_app, name="team")
 
 _CAPABILITIES = {
     "watch": {
@@ -2056,6 +2061,145 @@ def init(
         f"  [dim]document - Office/HTML/文本 (markitdown)[/dim]\n"
         f"  [dim]pdf      - PDF (MinerU)[/dim]\n"
         f"  [dim]formula  - 公式 OCR (PaddleOCR)[/dim]"
+    )
+
+
+@team_app.command("init")
+def team_init(
+    path: str = typer.Argument(
+        "./team-knowledge-studio",
+        help="Target directory for the shared team knowledge instance",
+    ),
+    name: Optional[str] = typer.Option(
+        None,
+        "--name",
+        help="Human-readable team name (defaults to the folder name).",
+    ),
+    set_default: Optional[bool] = typer.Option(
+        None,
+        "--set-default/--no-set-default",
+        help="Register this folder as the active KB (default: only when none exists).",
+    ),
+    git: bool = typer.Option(
+        True,
+        "--git/--no-git",
+        help="Initialize a Git repository for shared team history.",
+    ),
+    upgrade: bool = typer.Option(
+        False,
+        "--upgrade",
+        help="Refresh bundled assets while keeping team knowledge files intact.",
+    ),
+    force: bool = typer.Option(
+        False,
+        "--force",
+        help="Scaffold into a non-empty directory that is not already a knowledge base.",
+    ),
+):
+    """Create a shared team instance on top of the normal OKS scaffold.
+
+    Team knowledge is still stored as tracked Markdown under profiles/, raw/,
+    wiki/, and drafts/. This command only adds an explicit team-oriented entry
+    point and labels the bundled team profile/goal for the new workspace.
+    """
+    root = Path(path).expanduser().resolve()
+    team_name = " ".join((name or root.name.replace("-", " ").replace("_", " ")).split())
+    if not team_name:
+        team_name = "Knowledge Studio Team"
+
+    # `oks init --upgrade` refreshes bundled assets. Protect the two team
+    # knowledge files before delegating so an upgrade cannot clobber edits.
+    preserved_team_files: dict[Path, str] = {}
+    if upgrade:
+        for relative in (Path("profiles/team.md"), Path("profiles/goals/team.md")):
+            candidate = root / relative
+            if candidate.is_file():
+                preserved_team_files[candidate] = candidate.read_text(encoding="utf-8")
+
+    # Reuse the well-tested personal scaffold so both modes share the same
+    # non-empty-directory guard, asset materialization, git setup, and active
+    # KB semantics.
+    init(
+        path=str(root),
+        set_default=set_default,
+        git=git,
+        upgrade=upgrade,
+        force=force,
+    )
+
+    for candidate, contents in preserved_team_files.items():
+        store._atomic_write(candidate, contents)
+
+    def write_team_file(path: Path, contents: str) -> None:
+        store._atomic_write(path, contents)
+
+    def yaml_string(value: str) -> str:
+        # JSON string quoting is a strict subset of YAML double-quoted syntax.
+        return json.dumps(value, ensure_ascii=False)
+
+    team_profile = root / "profiles" / "team.md"
+    team_goal = root / "profiles" / "goals" / "team.md"
+    if not team_profile.exists():
+        write_team_file(
+            team_profile,
+            "---\n"
+            f"title: {yaml_string(team_name)}\n"
+            "type: profile\n"
+            "tags: [team, knowledge-base]\n"
+            "status: active\n"
+            "source: team-init\n"
+            "---\n\n"
+            f"# {team_name}\n\n"
+            "Shared context for the team knowledge workspace.\n",
+        )
+    else:
+        profile_text = team_profile.read_text(encoding="utf-8")
+        # The bundled upstream profile is a useful seed, but its default title
+        # should not leak into a newly named team. Never rewrite a customized
+        # profile on a rerun.
+        if 'title: "Knowledge Studio Team"' in profile_text:
+            profile_text = profile_text.replace(
+                'title: "Knowledge Studio Team"',
+                f"title: {yaml_string(team_name)}",
+                1,
+            ).replace("# Knowledge Studio Team", f"# {team_name}", 1)
+            write_team_file(team_profile, profile_text)
+
+    if not team_goal.exists():
+        write_team_file(
+            team_goal,
+            "---\n"
+            f"title: {yaml_string(team_name + ' Goals')}\n"
+            "type: goal\n"
+            "owner: team\n"
+            "status: active\n"
+            "domains: [computing, AI]\n"
+            "keywords: [knowledge, collaboration, agent loop]\n"
+            "source: team-init\n"
+            "---\n\n"
+            f"# {team_name} Goals\n\n"
+            "Define the next shared outcome and keep it visible to every team member.\n",
+        )
+    else:
+        goal_text = team_goal.read_text(encoding="utf-8")
+        if "title: Team Goals 2026" in goal_text:
+            goal_text = goal_text.replace(
+                "title: Team Goals 2026",
+                f"title: {yaml_string(team_name + ' Goals')}",
+                1,
+            ).replace("# Team Goals 2026-Q3", f"# {team_name} Goals", 1)
+            write_team_file(team_goal, goal_text)
+
+    console.print(
+        f"\n[bold green]Team knowledge studio ready:[/bold green] {root}\n"
+        f"  team profile: profiles/team.md ({team_name})\n"
+        "  shared goal:   profiles/goals/team.md\n\n"
+        "Next steps:\n"
+        f"  1. Review the team profile and goal in {root}\n"
+        "  2. Commit and share this folder through your normal Git workflow\n"
+        "  3. Each member clones it, installs OKS skills, and binds their profile with:\n"
+        "     oks registry bind --profile <user-id> --goals team\n"
+        "  4. Use /query and the knowledge-to-word skill against the shared Wiki"
     )
 
 
