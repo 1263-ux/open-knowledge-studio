@@ -204,7 +204,7 @@ CLI 命令（`oks status`, `oks recall`）是：
    用自己的真实资料，完整走一遍
 
 2. **[看真实案例](examples.md)**  
-   B 站视频 → Wiki → 技术方案（7 分钟）
+   B 站视频 → Wiki → 技术方案
 
 3. **[学习最佳实践](best-practices.md)**  
    三个阶段，三个核心原则

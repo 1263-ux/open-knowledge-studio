@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
+import knowledge_studio.cli as cli_module
 from knowledge_studio.cli import app
 
 runner = CliRunner()
@@ -222,6 +223,101 @@ def test_init_rerun_on_existing_kb_is_idempotent(tmp_path):
     target = tmp_path / "kb"
     result = runner.invoke(app, ["init", str(target), "--no-git", "--no-set-default"])
     assert result.exit_code == 0, result.output
+
+
+def test_team_init_creates_shared_profile_and_goal(tmp_path):
+    target = tmp_path / "team-knowledge-studio"
+
+    result = runner.invoke(
+        app,
+        [
+            "team",
+            "init",
+            str(target),
+            "--name",
+            "Platform Knowledge Team",
+            "--no-git",
+            "--no-set-default",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    profile = (target / "profiles" / "team.md").read_text(encoding="utf-8")
+    goal = (target / "profiles" / "goals" / "team.md").read_text(encoding="utf-8")
+    assert 'title: "Platform Knowledge Team"' in profile
+    assert "# Platform Knowledge Team" in profile
+    assert "owner: team" in goal
+    assert "Platform Knowledge Team Goals" in goal
+    assert "oks registry bind" in result.output
+
+
+def test_team_init_rerun_preserves_custom_profile(tmp_path):
+    target = tmp_path / "team-knowledge-studio"
+    args = ["team", "init", str(target), "--no-git", "--no-set-default"]
+    assert runner.invoke(app, args).exit_code == 0
+
+    profile_path = target / "profiles" / "team.md"
+    goal_path = target / "profiles" / "goals" / "team.md"
+    profile_path.write_text("---\ntitle: Custom Team\n---\n\n# Custom Team\n", encoding="utf-8")
+    goal_path.write_text("---\ntitle: Custom Goal\n---\n\n# Custom Goal\n", encoding="utf-8")
+    result = runner.invoke(app, args)
+
+    assert result.exit_code == 0, result.output
+    assert profile_path.read_text(encoding="utf-8").startswith("---\ntitle: Custom Team")
+    assert goal_path.read_text(encoding="utf-8").startswith("---\ntitle: Custom Goal")
+
+
+def test_team_init_upgrade_preserves_custom_profile_and_goal(tmp_path):
+    target = tmp_path / "team-knowledge-studio"
+    args = ["team", "init", str(target), "--no-git", "--no-set-default"]
+    assert runner.invoke(app, args).exit_code == 0
+
+    profile_path = target / "profiles" / "team.md"
+    goal_path = target / "profiles" / "goals" / "team.md"
+    profile_path.write_text('---\ntitle: "Custom: Team"\n---\n\n# Custom Team\n', encoding="utf-8")
+    goal_path.write_text('---\ntitle: "Custom: Goal"\n---\n\n# Custom Goal\n', encoding="utf-8")
+    result = runner.invoke(app, [*args, "--upgrade"])
+
+    assert result.exit_code == 0, result.output
+    assert profile_path.read_text(encoding="utf-8").startswith('---\ntitle: "Custom: Team"')
+    assert goal_path.read_text(encoding="utf-8").startswith('---\ntitle: "Custom: Goal"')
+
+
+def test_team_init_quotes_yaml_unsafe_name(tmp_path):
+    target = tmp_path / "team-knowledge-studio"
+    result = runner.invoke(
+        app,
+        [
+            "team",
+            "init",
+            str(target),
+            "--name",
+            'Team: "Quoted"',
+            "--no-git",
+            "--no-set-default",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    import yaml
+
+    profile = yaml.safe_load((target / "profiles" / "team.md").read_text(encoding="utf-8").split("---")[1])
+    goal = yaml.safe_load((target / "profiles" / "goals" / "team.md").read_text(encoding="utf-8").split("---")[1])
+    assert profile["title"] == 'Team: "Quoted"'
+    assert goal["title"] == 'Team: "Quoted" Goals'
+
+
+def test_team_init_fallback_without_bundled_assets(tmp_path, monkeypatch):
+    monkeypatch.setattr(cli_module, "_asset_source", lambda: None)
+    target = tmp_path / "team-knowledge-studio"
+    result = runner.invoke(
+        app,
+        ["team", "init", str(target), "--no-git", "--no-set-default"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert (target / "profiles" / "team.md").is_file()
+    assert (target / "profiles" / "goals" / "team.md").is_file()
 
     # target now contains wiki/ → treated as an existing KB, no --force needed
     result = runner.invoke(app, ["init", str(target), "--no-git", "--no-set-default"])

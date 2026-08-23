@@ -33,10 +33,10 @@ nav_order: 1
 
 | 场景 | 你在托管什么 | 演示 |
 |------|-------------|------|
-| **[托管你的学习](examples.md#托管你的学习)** | 文章、视频、课程 | [Kimi 视频演示](examples.md#kimi-k3-实测) |
-| **[托管你的 GitHub](examples.md#托管你的-github)** | 技术决策、踩坑 | - |
-| **[托管你的飞书](examples.md#托管你的飞书)** | 手机表单 + IM 审核 | - |
-| **[托管你的书籍](examples.md#托管你的书籍)** | 阅读笔记 | - |
+| **[托管你的学习](../examples/oh-my-research/)** | 文章、视频、课程 | [学习案例](../examples/oh-my-research/) |
+| **[托管你的 GitHub](../examples/oh-my-github/)** | 技术决策、踩坑 | [GitHub 案例](../examples/oh-my-github/) |
+| **[托管你的飞书](../examples/oh-my-feishu/)** | 手机表单 + IM 审核 | [飞书案例](../examples/oh-my-feishu/) |
+| **[托管你的书籍](../examples/oh-my-book/)** | 阅读笔记 | [书籍案例](../examples/oh-my-book/) |
 
 [查看所有案例](examples.md)
 
@@ -61,7 +61,7 @@ nav_order: 1
 | 问题 | 解决 |
 |------|------|
 | 装不上 | [安装故障](reference/troubleshooting.md) |
-| 召回不准 | [召回调优](best-practices.md#阶段-3召回-recall) |
+| 召回不准 | [召回调优](best-practices.md#阶段-3召回-recall---用自然语言提问) |
 | Agent 报错 | [验证 OKS 状态](verify.md) |
 
 ---
@@ -105,7 +105,7 @@ nav_order: 1
 
 ---
 
-## 📊 召回质量（v0.6.4）
+## 📊 召回质量（v0.6.5）
 
 **OKS Triple-Layer Recall**：
 - Node-BM25 召回 + Soul Boost 注入 + Memory Curve 衰减

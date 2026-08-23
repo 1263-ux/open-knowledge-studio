@@ -7,7 +7,7 @@ nav_order: 4
 # 案例演示
 {: .no_toc }
 
-通过真实案例，看 OKS 如何帮助 Agent 获得可控的长期记忆。
+通过真实页面和可复现步骤，看 OKS 如何让 Agent 使用一套可审核、可追溯的长期知识。
 {: .fs-6 .fw-300 }
 
 ---
@@ -22,7 +22,7 @@ nav_order: 4
 
 ## 🎯 DSH-OKS 集成：Agent 原生知识管理
 
-> **DeepSeek Harness + OKS** = 浏览器界面一键开关知识召回
+> **DeepSeek Harness + OKS** = 在当前对话旁边查看知识库、召回轨迹和来源。
 
 ### 核心价值
 
@@ -30,15 +30,17 @@ nav_order: 4
 - ✅ 浏览器界面可视化管理知识库
 - ✅ 一键开关自动召回
 - ✅ Agent 对话时自动参考知识
-- ✅ 无需 CLI，完全对话式
+- ✅ 日常使用以对话为主，CLI 保留给初始化、调试和脚本集成
 
 ---
 
 ### 1. OKS 插件配置
 
-![OKS Settings](assets/examples/dsh-oks-settings-annotated.png)
+![Harness 中的 OKS 知识库](assets/examples/oks-harness-knowledge-library.png)
 
-**界面功能**：
+**截图说明**：这是一次真实 Harness 会话中的知识库快照；数字是该演示实例的当前数量，不代表所有安装都相同。
+
+**可以看到**：
 - **知识库状态**：Wiki 8 · 审核草稿 3 · Raw 证据包 16 · Raw 文件 167
 - **自动召回开关**：一键控制 Agent 是否参考知识库
 - **知识列表**：Kimi K3 实测、OKS E2E Audit、中国石油战略分析...
@@ -47,10 +49,10 @@ nav_order: 4
 
 ### 2. 开启自动召回
 
-![OKS Recall Enabled](assets/examples/dsh-oks-recall-enabled-annotated.png)
+![已开启自动召回的 Harness 概览](assets/examples/oks-harness-auto-recall-enabled.png)
 
 **效果**：
-- ✅ 开关已打开（蓝色）
+- ✅ 开关已打开
 - ✅ "回答时自动参考我的知识"已启用
 - ✅ Agent 对话时自动召回相关 Wiki
 
@@ -63,104 +65,57 @@ nav_order: 4
 "Kimi K3 适合用来做大规模文档分析吗？"
 ```
 
-![DSH Conversation](assets/examples/dsh-oks-conversation-annotated.png)
+![带 OKS 知识来源的回答和成本表](assets/examples/oks-harness-answer-with-context.png)
 
-**Agent 基于知识库回答**（自动召回 "Kimi K3 实测" Wiki）：
+**这张截图展示的结论**：Kimi K3 适合质量关键的长文档理解和复杂推理，但不应默认处理所有文档；更稳妥的方案是路由分级、缓存、压缩和预算治理。
 
-```
-❌ 不建议用于大规模文档分析
-
-原因：
-- 成本：20元/次，100 文档/天 = 2000元/天
-- 月成本：60,000 元
-- 性能：适合轻量使用，重度场景成本过高
-
-建议方案：
-- Claude Opus / GPT-4 Turbo（更适合大规模）
-- 或本地开源模型（成本可控）
-
-来源：B站 Ai小白Lab 实测视频
-```
+**证据边界**：单次约 20 元来自 Wiki 记录的实测，不是统一 API 价格；成本表中的价格和降幅是技术文档中的参考模型，使用前应以官方计费页和自己的输入输出量复核。
 
 **关键价值**：
 - ✅ 有理有据（基于真实测试）
 - ✅ 可追溯来源
-- ✅ 数据准确（20元/次、60,000元/月）
+- ✅ 实测、估算和判断分开标注
 - ✅ 自动召回，无需手动查询
 
 ---
 
 ### 4. 工作原理
 
-```
-┌─────────────┐
-│ 用户提问    │  "Kimi K3 适合大规模文档分析吗？"
-└──────┬──────┘
-       │
-       ▼
-┌─────────────────────────────────┐
-│ DSH-OKS 自动工作                │
-│  1. 检测关键词 "Kimi K3"       │
-│  2. 调用 oks recall 查找相关知识│
-│  3. 找到 "Kimi K3 实测" (0.84)  │
-└──────┬──────────────────────────┘
-       │
-       ▼
-┌─────────────────────────────────┐
-│ Agent 基于知识回答              │
-│  - 成本分析：60,000元/月        │
-│  - 建议方案：Claude/GPT-4       │
-│  - 来源：B站实测视频            │
-└─────────────────────────────────┘
-```
+![OKS 从原始资料到召回上下文的知识循环](assets/oks-knowledge-loop.svg)
+
+这条链路的关键门槛是 **人工审核**：Raw 只保存原始材料，Candidate 只是提案，只有审核后的 Wiki 才会进入长期召回。
 
 ---
 
-## 🎬 Kimi K3 视频演示：从素材到知识
+## 🎬 Kimi K3：从素材到知识
 
 > **从 B 站视频到 Wiki**：完整的知识沉淀流程
 
 ### 演示目标
 
-展示如何将 B 站视频转化为可召回的 Wiki 知识：
-1. 下载 B 站视频
-2. 提取关键帧 + 字幕
+展示一条可复现的 B 站视频入库路径。下面的数量和耗时取决于实例与素材，不把某次演示的状态写成固定承诺：
+1. 获取视频或可用字幕
+2. 提取可读文本与关键证据
 3. AI 分析生成 Draft
 4. 人工审核提升为 Wiki
 5. Agent 对话时自动召回
 
 ---
 
-### 1. 原始状态
+### 1. 保存原始资料
 
-![Before Status](assets/examples/01-before-status.png)
+把视频交给 `/ingest`，让 Agent 先保存 Raw 和证据，不要直接写入 Wiki：
 
-**初始状态**：
-- Wiki: 5 篇
-- Draft: 0 篇
-- Raw: 0 个视频
+```text
+请把这个视频作为原始资料收录到 OKS，并保留来源、转写和提取状态：
+https://www.bilibili.com/video/BV1qg3F6dEvm
+```
 
----
-
-### 2. Wiki 列表
-
-![Wiki List](assets/examples/04-wiki-list.png)
-
-**已有知识**：
-- Claude Code 最佳实践
-- OKS 架构设计
-- 研究论文要点
-- ...
-
----
-
-### 3. 知识提升成功
-
-![Promote Success](assets/examples/04-promote-success.png)
+### 2. 审核并提升
 
 **操作**：
 ```bash
-oks drafts promote kimi-k3-实测
+oks drafts promote <draft-slug>
 ```
 
 **结果**：
@@ -170,26 +125,20 @@ oks drafts promote kimi-k3-实测
 
 ---
 
-### 4. 召回测试
+### 3. 召回测试
 
-![Recall Test](assets/examples/05-recall.png)
+![Harness 中的 OKS 召回轨迹](assets/examples/oks-harness-answer-with-recall.png)
 
 **命令**：
 ```bash
 oks recall "Kimi K3 文档分析"
 ```
 
-**返回**：
-- 📄 **Kimi K3 实测** (评分: 0.84)
-- 类型: review
-- 域: ai-tools
-- 来源: B站视频 BV1xx4y1x7xx
+**返回内容会随知识库状态变化**，至少应能看到命中的 Wiki 标题、相关性和来源路径；不要把某一次分数复制成固定 SLA。
 
 ---
 
-### 5. 效果对比
-
-![Comparison](assets/examples/07-comparison.png)
+### 4. 对话中使用
 
 **Before（无知识库）**：
 ```
@@ -198,8 +147,8 @@ Agent: "Kimi K3 是什么？我不太了解这个产品..."
 
 **After（有知识库）**：
 ```
-Agent: "基于你的知识库（Kimi K3 实测），成本约 60,000元/月，
-不建议大规模文档分析。推荐 Claude Opus 或 GPT-4 Turbo。"
+Agent: "基于你的知识库，K3 更适合质量关键的复杂任务；
+批量、重复和低风险任务应优先走更便宜的模型，并设置预算墙。"
 ```
 
 ---
@@ -208,17 +157,17 @@ Agent: "基于你的知识库（Kimi K3 实测），成本约 60,000元/月，
 
 想深入了解？查看完整案例：
 
-### 🔬 [托管你的研究](../examples/oh-my-research/)
-- **场景**：AI 研究者管理论文和实验笔记
-- **知识源**：arXiv 论文、实验日志、技术博客
-- **核心技能**：批量摄取、主题追踪、文献综述
-- **用时**：30 分钟搭建，长期积累
+### 🔬 [托管你的学习](../examples/oh-my-research/)
+- **场景**：把文章、课程和视频变成可召回的学习知识
+- **知识源**：技术文章、课程笔记、视频转写
+- **核心技能**：逐条摄取、人工审核、主题追踪
+- **用时**：按素材长度和审核深度而定
 
-### 📖 [托管你的学习](../examples/oh-my-kimi/)
+### 📖 [Kimi 产品学习案例](../examples/oh-my-kimi/)
 - **场景**：从 B 站视频学习 AI 产品
 - **知识源**：B 站视频、技术评测、产品文档
 - **核心技能**：视频转文字、关键帧提取、知识沉淀
-- **用时**：15 分钟上手，边看边记
+- **用时**：按素材长度和审核深度而定
 
 ---
 
@@ -244,7 +193,7 @@ Agent: "基于你的知识库（Kimi K3 实测），成本约 60,000元/月，
 3. 查看本页 **DSH-OKS 演示** 理解实际效果
 
 ### 2️⃣ 深入实践（30 分钟）
-1. 选择一个案例（[托管你的研究](../examples/oh-my-research/) 或 [托管你的学习](../examples/oh-my-kimi/)）
+1. 选择一个案例（[托管你的学习](../examples/oh-my-research/) 或 [Kimi 产品学习](../examples/oh-my-kimi/)）
 2. 按照案例 README 完整走一遍流程
 3. 用 `oks recall` 测试召回效果
 
@@ -265,4 +214,4 @@ Agent: "基于你的知识库（Kimi K3 实测），成本约 60,000元/月，
 ---
 
 {: .note }
-> **提示**：所有截图都是真实演示，源文件在 `examples/oh-my-research/assets/screenshots/`。想要复现？查看 [托管你的研究案例](../examples/oh-my-research/)。
+> **提示**：本页展示图来自真实 Harness 会话，源文件在 `docs/assets/examples/`。想要复现？查看 [托管你的学习案例](../examples/oh-my-research/)。
