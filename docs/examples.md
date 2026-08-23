@@ -157,13 +157,13 @@ Agent: "基于你的知识库，K3 更适合质量关键的复杂任务；
 
 想深入了解？查看完整案例：
 
-### 🔬 [托管你的学习](../examples/oh-my-research/)
+### 🔬 [托管你的学习（仓库案例）](https://github.com/open-agent-power/open-knowledge-studio/tree/main/examples/oh-my-research/)
 - **场景**：把文章、课程和视频变成可召回的学习知识
 - **知识源**：技术文章、课程笔记、视频转写
 - **核心技能**：逐条摄取、人工审核、主题追踪
 - **用时**：按素材长度和审核深度而定
 
-### 📖 [Kimi 产品学习案例](../examples/oh-my-kimi/)
+### 📖 [Kimi 产品学习案例（仓库案例）](https://github.com/open-agent-power/open-knowledge-studio/tree/main/examples/oh-my-kimi/)
 - **场景**：从 B 站视频学习 AI 产品
 - **知识源**：B 站视频、技术评测、产品文档
 - **核心技能**：视频转文字、关键帧提取、知识沉淀
@@ -193,7 +193,7 @@ Agent: "基于你的知识库，K3 更适合质量关键的复杂任务；
 3. 查看本页 **DSH-OKS 演示** 理解实际效果
 
 ### 2️⃣ 深入实践（30 分钟）
-1. 选择一个案例（[托管你的学习](../examples/oh-my-research/) 或 [Kimi 产品学习](../examples/oh-my-kimi/)）
+1. 选择一个案例（[托管你的学习](https://github.com/open-agent-power/open-knowledge-studio/tree/main/examples/oh-my-research/) 或 [Kimi 产品学习](https://github.com/open-agent-power/open-knowledge-studio/tree/main/examples/oh-my-kimi/)）
 2. 按照案例 README 完整走一遍流程
 3. 用 `oks recall` 测试召回效果
 
@@ -208,10 +208,10 @@ Agent: "基于你的知识库，K3 更适合质量关键的复杂任务；
 
 - **安装 OKS**：[安装指南](installation.md)
 - **完成首个循环**：[首次知识循环](first-knowledge-loop.md)
-- **查看完整案例**：[examples/](../examples/)
+- **查看完整案例**：[真实案例](examples.html)
 - **了解最佳实践**：[最佳实践](best-practices.md)
 
 ---
 
 {: .note }
-> **提示**：本页展示图来自真实 Harness 会话，源文件在 `docs/assets/examples/`。想要复现？查看 [托管你的学习案例](../examples/oh-my-research/)。
+> **提示**：本页展示图来自真实 Harness 会话，源文件在 `docs/assets/examples/`。想要复现？查看 [托管你的学习案例（仓库目录）](https://github.com/open-agent-power/open-knowledge-studio/tree/main/examples/oh-my-research/)。

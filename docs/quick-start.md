@@ -192,9 +192,9 @@ AI: "基于你的知识库（Kimi K3 实测），我的建议是：
 - [最佳实践](best-practices.md) - 优化使用技巧
 
 ### 📚 查看案例
-- [托管你的学习](../examples/oh-my-research/) - 从资料沉淀可召回知识
-- [Kimi 产品学习案例](../examples/oh-my-kimi/) - 从视频学习 AI 产品
-- [更多案例](../examples/) - 案例索引
+- [托管你的学习（仓库案例）](https://github.com/open-agent-power/open-knowledge-studio/tree/main/examples/oh-my-research/) - 从资料沉淀可召回知识
+- [Kimi 产品学习案例（仓库案例）](https://github.com/open-agent-power/open-knowledge-studio/tree/main/examples/oh-my-kimi/) - 从视频学习 AI 产品
+- [更多案例](examples.html) - 案例索引
 
 ### 🛠️ 进阶功能
 - [导入对话记录](import-conversations.md) - 批量导入历史对话
