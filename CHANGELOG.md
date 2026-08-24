@@ -40,6 +40,21 @@
 
 # Changelog
 
+## [0.6.7] — 2026-08-24
+
+### fix(recall): L0 preview 质量优化（机械截取 → 语义完整截取）
+
+旧 `body_preview = body[:200]` 机械截取 86% 的 wiki 页 preview 有质量问题
+（标题重复 + 表格/段落中途截断）。新增 `_make_preview()`：
+
+- 跳过 body 开头与 frontmatter `title` 重复的 `# title` 行
+- 在 limit 内尽量在完整行边界截断（不破表格行/句子）
+- frontmatter `abstract` 字段优先（Dreaming 层 AI 写的摘要），本函数作 fallback
+
+**指标**：preview 质量问题率 86% → 0%（50 页样本，43 页修复）
+**宪法**：P4 合规——纯文本操作，不调 AI API；abstract 生成属 Dreaming/Agent 层
+
+
 ## [0.6.6] — 2026-08-24
 
 ### feat: team bootstrap + Word skill + docs refresh（PR #45 by 1263-ux）

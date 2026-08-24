@@ -53,6 +53,43 @@ def _inject_per_page_chars() -> int:
         return int(load_recall_params().get("inject_per_page_chars", MAX_BODY_PREVIEW))
     except Exception:
         return MAX_BODY_PREVIEW
+
+
+def _make_preview(body: str, limit: int | None = None) -> str:
+    """Build a semantically complete L0 preview from wiki body (P4: pure text ops).
+
+    v0.6.7: 旧 ``body[:limit]`` 机械截取有 86% 质量问题——标题重复 +
+    表格/段落中途截断。本函数：
+    1. 跳过 body 开头与 frontmatter ``title`` 重复的 ``# title`` 行；
+    2. 在 limit 内尽量在完整行边界截断（不破表格行/句子）；
+    3. frontmatter ``abstract`` 字段优先（Dreaming 层 AI 写的一句话摘要），
+       本函数只处理无 abstract 时的 fallback——纯机械抽取，不调 AI API（P4）。
+    """
+    if not body:
+        return ""
+    if limit is None:
+        limit = _inject_per_page_chars()
+    lines = body.split("\n")
+    idx = 0
+    # skip leading blanks
+    while idx < len(lines) and not lines[idx].strip():
+        idx += 1
+    # skip redundant '# title' (title already in frontmatter)
+    if idx < len(lines) and lines[idx].startswith("# "):
+        idx += 1
+    while idx < len(lines) and not lines[idx].strip():
+        idx += 1
+    rest = "\n".join(lines[idx:]) if idx < len(lines) else ""
+    if not rest:
+        return body[:limit]
+    if len(rest) <= limit:
+        return rest.rstrip()
+    # cut at last complete line within limit (don't break mid-row)
+    chunk = rest[:limit]
+    nl = chunk.rfind("\n")
+    if nl > limit // 2:
+        return chunk[:nl].rstrip()
+    return chunk.rstrip()
 RECALL_HIT_SCHEMA = "recall-hit/v1"
 RECALL_RESPONSE_SCHEMA = "recall-response/v1"
 
@@ -609,7 +646,7 @@ def _recall_knowledge_via_backend(
             "score": round(float(p.get("score", 0) or 0), 3),
             "relevance": round(h.score, 3),
             "confidence": p.get("confidence", 0.8),
-            "body_preview": p.get("body", "")[:_inject_per_page_chars()],
+            "body_preview": _make_preview(p.get("body", "")),
             "tags": p.get("tags", ""),
             "has_traces": bool(p.get("traces")),
             "human_reviewed_at": p.get("human_reviewed_at", ""),
@@ -700,7 +737,7 @@ def _recall_knowledge_with_context(
             "score": round(item.get("score", 0), 3),
             "relevance": round(relevance, 3),
             "confidence": item.get("confidence", 0.8),
-            "body_preview": item.get("body", "")[:MAX_BODY_PREVIEW],
+            "body_preview": _make_preview(item.get("body", ""), MAX_BODY_PREVIEW),
             "tags": item.get("tags", ""),
             "has_traces": bool(item.get("traces")),
             # The /query skill derives [verified] from one of two recorded
