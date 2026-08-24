@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+body {
+    margin: 0;
+    padding: 20px;
+    background: #1e1e1e;
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+.terminal {
+    background: #1e1e1e;
+    color: #d4d4d4;
+    padding: 20px;
+    border-radius: 8px;
+    max-width: 1400px;
+    margin: 0 auto;
+}
+
+.section {
+    margin: 30px 0;
+    padding: 20px 0;
+}
+
+h2 {
+    color: #569cd6;
+    margin-bottom: 15px;
+}
+
+.conversation {
+    background: #252526;
+    padding: 20px;
+    border-radius: 8px;
+    margin: 10px 0;
+}
+
+.user-message {
+    color: #4ec9b0;
+    font-weight: bold;
+    margin-bottom: 10px;
+}
+
+.ai-response {
+    color: #d4d4d4;
+    margin-bottom: 15px;
+}
+
+.highlight {
+    color: #ce9178;
+    font-weight: bold;
+}
+
+.success {
+    color: #4ec9b0;
+}
+
+.warning {
+    color: #dcdcaa;
+}
+
+.badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-size: 12px;
+    margin-right: 5px;
+}
+
+.badge-oks {
+    background: #0e639c;
+    color: #fff;
+}
+
+.badge-general {
+    background: #5a5a5a;
+    color: #d4d4d4;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 15px 0;
+}
+
+th, td {
+    border: 1px solid #3e3e3e;
+    padding: 10px;
+    text-align: left;
+}
+
+th {
+    background: #2d2d30;
+    color: #4ec9b0;
+    font-weight: bold;
+}
+
+.cost-high {
+    color: #f48771;
+    font-weight: bold;
+}
+
+.cost-low {
+    color: #4ec9b0;
+    font-weight: bold;
+}
+
+ul {
+    list-style: none;
+    padding-left: 0;
+}
+
+li:before {
+    content: "✓ ";
+    color: #4ec9b0;
+    font-weight: bold;
+    margin-right: 5px;
+}
+
+li.risk:before {
+    content: "⚠ ";
+    color: #dcdcaa;
+}
+</style>
+</head>
+<body>
+
+<div class="terminal">
+
+<div class="section" id="step6-design">
+<h2>第 6 步：基于召回知识设计技术方案</h2>
+
+<div class="conversation">
+<div class="user-message">💬 用户问：</div>
+<div class="ai-response">
+我要设计一个智能文档分析系统，考虑使用 Kimi K3。<br>
+请帮我评估是否合适，并给出技术方案。
+</div>
+
+<div class="user-message" style="margin-top: 20px;">🤖 AI 回答（基于 OKS 召回）：</div>
+
+<div class="ai-response" style="margin-top: 15px;">
+<h3 style="color: #569cd6;">适用性分析</h3>
+
+<p><strong style="color: #4ec9b0;">优势</strong> <span class="badge badge-oks">来自 OKS</span></p>
+<ul>
+<li>效果强：2026 WAIC 发布，最强国产大模型</li>
+<li>应用开发能力：成功搭建律师事务所官网</li>
+<li>跑分表现优异</li>
+</ul>
+
+<p><strong style="color: #dcdcaa;">关键风险</strong> <span class="badge badge-oks">来自 OKS</span></p>
+<ul class="risk">
+<li class="risk"><span class="cost-high">成本极高</span>：单次官网生成约 <span class="highlight">20 元</span></li>
+<li class="risk"><span class="cost-high">消耗速度快</span>：十几小时烧掉 <span class="highlight">300+ 元</span></li>
+<li class="risk">核心结论："<span class="highlight">普通用户我劝你别买，因为确实有点贵</span>"</li>
+</ul>
+
+<h3 style="color: #569cd6; margin-top: 20px;">成本估算</h3>
+<table>
+<tr>
+<th>场景</th>
+<th>处理量</th>
+<th>Kimi K3 成本</th>
+<th>说明</th>
+</tr>
+<tr>
+<td>智能文档分析</td>
+<td>100 个文档/天</td>
+<td class="cost-high">~2,000 元/天<br>60,000 元/月</td>
+<td><span class="badge badge-oks">基于 OKS 数据</span><br>20元/次 × 100</td>
+</tr>
+<tr>
+<td>对比：官网订阅</td>
+<td>-</td>
+<td>300 元/月<br><span style="color: #858585;">(已暂停)</span></td>
+<td>API 成本是订阅的<br><span class="cost-high">200 倍</span></td>
+</tr>
+</table>
+
+<h3 style="color: #569cd6; margin-top: 20px;">技术方案建议</h3>
+
+<p><strong style="color: #f48771;">❌ 不推荐</strong> 将 Kimi K3 作为主力模型，除非：</p>
+<ul>
+<li>客户是大型企业，对成本不敏感</li>
+<li>文档分析的商业价值远超 API 成本</li>
+</ul>
+
+<p style="margin-top: 15px;"><strong style="color: #4ec9b0;">✓ 推荐方案</strong> <span class="badge badge-general">基于通用知识</span></p>
+<div style="background: #2d2d30; padding: 15px; border-radius: 5px; margin-top: 10px;">
+<pre style="margin: 0; color: #d4d4d4;">混合模型策略：
+├── 日常文档：GPT-3.5 / Claude Haiku (低成本)
+├── 复杂分析：GPT-4 / Claude Opus (可控成本)
+└── 演示功能：Kimi K3 (展示最优效果)</pre>
+</div>
+
+<p style="margin-top: 15px; color: #858585; font-size: 12px;">
+<strong>知识来源标注</strong>：<br>
+<span class="badge badge-oks">来自 OKS</span> 成本数据（20元/次、300+元）、"我劝你别买"结论<br>
+<span class="badge badge-general">通用知识</span> 替代方案（GPT-4/Claude）
+</p>
+
+</div>
+</div>
+
+</div>
+
+</div>
+
+</body>
+</html>

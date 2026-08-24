@@ -1,0 +1,22 @@
+# OKS recall 参数 — managed by dsh-oks plugin
+recall:
+  floor: 0.7
+  topn: 3
+  minlen: 6
+  cooldown: 10
+posttool:
+  floor: 0.9
+  topn: 2
+  mode: signal
+  recall: 1
+  signal_rel_floor: 2.5
+userprompt:
+  floor: 0.7
+  topn: 3
+  cooldown: 10
+conflict:
+  window: 300
+search_backend: native
+mail_topn: 3
+prestep:
+  enabled: true

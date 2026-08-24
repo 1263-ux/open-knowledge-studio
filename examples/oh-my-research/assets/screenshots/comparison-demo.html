@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+body {
+    margin: 0;
+    padding: 40px;
+    background: #f5f5f5;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+}
+
+.comparison {
+    max-width: 1200px;
+    margin: 0 auto;
+    background: white;
+    padding: 40px;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+h1 {
+    color: #333;
+    text-align: center;
+    margin-bottom: 40px;
+    font-size: 32px;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 20px 0;
+}
+
+th {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 15px;
+    text-align: left;
+    font-weight: 600;
+    font-size: 16px;
+}
+
+th:first-child {
+    border-top-left-radius: 8px;
+}
+
+th:last-child {
+    border-top-right-radius: 8px;
+}
+
+td {
+    padding: 15px;
+    border-bottom: 1px solid #e0e0e0;
+    color: #555;
+    line-height: 1.6;
+}
+
+tr:last-child td {
+    border-bottom: none;
+}
+
+tr:hover td {
+    background: #f9f9f9;
+}
+
+td:first-child {
+    font-weight: 600;
+    color: #333;
+    width: 150px;
+}
+
+.badge {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 600;
+    margin-right: 5px;
+}
+
+.badge-without {
+    background: #ffebee;
+    color: #c62828;
+}
+
+.badge-with {
+    background: #e8f5e9;
+    color: #2e7d32;
+}
+
+.highlight-bad {
+    color: #c62828;
+    font-weight: 600;
+}
+
+.highlight-good {
+    color: #2e7d32;
+    font-weight: 600;
+}
+
+.highlight-neutral {
+    color: #f57c00;
+    font-weight: 600;
+}
+
+.icon {
+    font-size: 20px;
+    margin-right: 5px;
+}
+
+.summary {
+    background: linear-gradient(135deg, #667eea15 0%, #764ba215 100%);
+    padding: 25px;
+    border-radius: 8px;
+    margin-top: 30px;
+    border-left: 4px solid #667eea;
+}
+
+.summary h3 {
+    color: #333;
+    margin-top: 0;
+    margin-bottom: 15px;
+}
+
+.summary p {
+    color: #555;
+    line-height: 1.8;
+    margin: 10px 0;
+}
+
+.metric {
+    display: inline-block;
+    background: white;
+    padding: 10px 20px;
+    border-radius: 6px;
+    margin: 5px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.metric-value {
+    font-size: 24px;
+    font-weight: bold;
+    color: #667eea;
+}
+
+.metric-label {
+    font-size: 13px;
+    color: #888;
+    margin-top: 5px;
+}
+</style>
+</head>
+<body>
+
+<div class="comparison" id="comparison-table">
+<h1>📊 有 OKS vs 没有 OKS</h1>
+
+<table>
+<thead>
+<tr>
+<th>维度</th>
+<th><span class="icon">❌</span>没有 OKS</th>
+<th><span class="icon">✅</span>有 OKS</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><span class="icon">📚</span>知识来源</td>
+<td>
+<span class="badge badge-without">训练数据</span><br>
+AI 训练数据<br>
+<span class="highlight-bad">可能已过时</span>
+</td>
+<td>
+<span class="badge badge-with">最新视频</span><br>
+你看过的最新视频<br>
+<span class="highlight-good">2026年7月发布</span>
+</td>
+</tr>
+<tr>
+<td><span class="icon">💰</span>成本数据</td>
+<td>
+<span class="highlight-bad">模糊</span><br>
+"可能比较贵"<br>
+"具体不清楚"
+</td>
+<td>
+<span class="highlight-good">具体</span><br>
+<strong>20元/次</strong><br>
+<strong>300+元/十几小时</strong>
+</td>
+</tr>
+<tr>
+<td><span class="icon">🔍</span>可追溯性</td>
+<td>
+<span class="highlight-bad">无法验证</span><br>
+信息来源不明<br>
+不知道是否准确
+</td>
+<td>
+<span class="highlight-good">完全可追溯</span><br>
+关联到原始视频<br>
+Provider 链可见
+</td>
+</tr>
+<tr>
+<td><span class="icon">⏱️</span>时效性</td>
+<td>
+<span class="highlight-bad">依赖模型更新</span><br>
+训练截止日期之前的信息<br>
+新功能可能未知
+</td>
+<td>
+<span class="highlight-good">即时可用</span><br>
+看完视频立即入库<br>
+当天就能召回
+</td>
+</tr>
+<tr>
+<td><span class="icon">🎯</span>个性化</td>
+<td>
+<span class="highlight-neutral">通用回答</span><br>
+所有人得到相同答案<br>
+不考虑你的关注点
+</td>
+<td>
+<span class="highlight-good">高度个性化</span><br>
+基于你看过的内容<br>
+你关注的特性优先
+</td>
+</tr>
+<tr>
+<td><span class="icon">📝</span>决策质量</td>
+<td>
+<span class="highlight-bad">缺乏依据</span><br>
+难以说服团队<br>
+"AI 这么说的"
+</td>
+<td>
+<span class="highlight-good">有理有据</span><br>
+引用具体数据<br>
+"视频里实测的"
+</td>
+</tr>
+</tbody>
+</table>
+
+<div class="summary">
+<h3>📈 效果总结</h3>
+<p>
+<span class="metric">
+<div class="metric-value">7 分钟</div>
+<div class="metric-label">完成知识闭环</div>
+</span>
+<span class="metric">
+<div class="metric-value">0.84</div>
+<div class="metric-label">召回相关性评分</div>
+</span>
+<span class="metric">
+<div class="metric-value">&lt; 100ms</div>
+<div class="metric-label">召回延迟</div>
+</span>
+</p>
+<p style="margin-top: 20px;">
+<strong>从"看过这个视频"到"能用它做技术选型"</strong>，OKS 帮你把零散的视频内容转化为结构化、可召回的知识。
+不用重新找视频、不用记在脑子里、不用担心忘记关键数字。
+</p>
+<p style="margin-top: 15px; color: #667eea; font-weight: 600;">
+💡 关键收获：知识不再丢失，决策有据可依。
+</p>
+</div>
+
+</div>
+
+</body>
+</html>

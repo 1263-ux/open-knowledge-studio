@@ -40,6 +40,24 @@
 
 # Changelog
 
+## [0.6.5] — 2026-08-21
+
+### feat(vfs): 只读 oks:// 虚拟文件系统（PR #43 by Huxc2020）
+
+新增 canonical `oks://` URI + 6 个只读 `oks fs` 命令（ls/tree/stat/read/overview/find）:
+- 7 个只读 mount scope: profiles/raw/wiki/drafts/mail/skills/traces
+- recall 命中项新增 canonical uri 字段（保留 slug/source_path 兼容）
+- 安全: 严格只读（禁止 write/mv/rm 防绕过 raw-commit/draft/wiki 门控）
+  + 目录穿越防护 + 符号链接逃逸检测
+- 不引入新依赖（无向量库/LLM/OpenViking 代码）
+- +62 测试（199→261 passed）
+
+### docs: Agent-Native rewrite + DSH-OKS demo（PR #42 by 1263-ux）
+
+- 71 docs + 26 截图（DSH-OKS 集成真实演示）
+- maintainer rebase + 清理 raw-bundles/file-edits 残留后 merge
+
+
 ## [0.6.4] — 2026-08-18
 
 ### embedding fallback 策略
