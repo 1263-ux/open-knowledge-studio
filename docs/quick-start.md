@@ -1,7 +1,8 @@
 ---
 layout: default
 title: 快速开始
-nav_order: 2
+parent: 从这里开始
+nav_order: 1
 ---
 
 # 快速开始
@@ -33,6 +34,26 @@ https://raw.githubusercontent.com/open-agent-power/open-knowledge-studio/main/SK
 
 ---
 
+## 团队工作区
+
+个人知识库用 `oks init`；需要多人共享、提交和审核同一套知识时，用团队入口：
+
+```bash
+oks team init ./team-knowledge-studio --name "Platform Knowledge Team"
+cd ./team-knowledge-studio
+oks status
+```
+
+它仍然使用 `profiles/`、`raw/`、`drafts/` 和 `wiki/` 这套目录。团队画像在 `profiles/team.md`，共享目标在 `profiles/goals/team.md`；成员加入后再绑定自己的 profile 和团队目标。
+
+```bash
+oks registry bind --profile <user-id> --goals team
+```
+
+团队初始化的详细边界见 [Profiles 画像](usage/profiles.md)。
+
+---
+
 ## DeepSeek Harness 集成
 
 如果你使用 DeepSeek Harness（DSH），可以安装可视化插件：
@@ -51,7 +72,7 @@ dsh plugin add github:open-agent-power/dsh-oks
 
 ### 功能预览
 
-![DSH-OKS Settings](assets/examples/dsh-oks-settings-annotated.png)
+![Harness 中的 OKS 知识库](assets/examples/oks-harness-knowledge-library.png)
 
 **可视化管理**：
 - 查看 Wiki / Draft / Raw 统计
@@ -69,7 +90,7 @@ dsh plugin add github:open-agent-power/dsh-oks
 找一个 B 站视频，比如：
 ```
 《Kimi K3 实测：20元一次，适合大规模文档分析吗？》
-https://www.bilibili.com/video/BV1xx4y1x7xx
+https://www.bilibili.com/video/BV1qg3F6dEvm
 ```
 
 ### 步骤 2：入库
@@ -77,7 +98,7 @@ https://www.bilibili.com/video/BV1xx4y1x7xx
 在 Codex 或 DSH 对话框中说：
 ```
 请帮我从这个视频提取知识并保存到 OKS：
-https://www.bilibili.com/video/BV1xx4y1x7xx
+https://www.bilibili.com/video/BV1qg3F6dEvm
 ```
 
 **Agent 会自动**：
@@ -106,7 +127,7 @@ oks drafts promote kimi-k3-实测
 - 打开 DSH OKS 设置
 - 启用 "回答时自动参考我的知识"
 
-![Auto Recall Enabled](assets/examples/dsh-oks-recall-enabled-annotated.png)
+![已开启自动召回的 Harness 概览](assets/examples/oks-harness-auto-recall-enabled.png)
 
 **Codex 用户**：
 - Hook 已在安装时自动配置
@@ -131,56 +152,35 @@ AI: "我不太了解 Kimi K3 的具体定价和性能表现..."
 ```
 AI: "基于你的知识库（Kimi K3 实测），我的建议是：
 
-❌ 不建议用于大规模文档分析
+不要把 K3 作为所有文档的默认模型
 
 原因：
-- 成本：20元/次，100 文档/天 = 2,000元/天
-- 月成本：60,000 元
-- 性能：适合轻量使用，重度场景成本过高
+- 长上下文和 reasoning 会放大单次成本
+- 批量、重复和低风险任务不需要最高档模型
+- 需要路由、缓存、压缩和预算墙
 
 建议方案：
-- Claude Opus / GPT-4 Turbo（更适合大规模）
-- 或本地开源模型（成本可控）
+- 复杂、质量关键的任务再路由到 K3
+- 低风险任务走更便宜的模型或本地模型
 
 来源：B站 Ai小白Lab 实测视频"
 ```
 
-![Conversation Demo](assets/examples/dsh-oks-conversation-annotated.png)
+![带 OKS 知识来源的回答和成本表](assets/examples/oks-harness-answer-with-context.png)
 
 **关键价值**：
 - ✅ 有理有据（基于真实测试）
 - ✅ 可追溯来源
-- ✅ 数据准确（20元/次、60,000元/月）
+- ✅ 实测、估算和判断分开标注
 - ✅ 自动召回，无需手动查询
 
 ---
 
 ## 工作原理
 
-```
-┌─────────────┐
-│ 用户提问    │  "Kimi K3 适合大规模文档分析吗？"
-└──────┬──────┘
-       │
-       ▼
-┌─────────────────────────────────┐
-│ OKS 自动召回                    │
-│  1. 检测关键词 "Kimi K3"       │
-│  2. Triple-Layer 召回           │
-│     - BM25 字面匹配             │
-│     - Soul Boost 主题追踪       │
-│     - Memory Curve 时间衰减     │
-│  3. 找到 "Kimi K3 实测" (0.84)  │
-└──────┬──────────────────────────┘
-       │
-       ▼
-┌─────────────────────────────────┐
-│ Agent 基于知识回答              │
-│  - 成本分析：60,000元/月        │
-│  - 建议方案：Claude/GPT-4       │
-│  - 来源：B站实测视频            │
-└─────────────────────────────────┘
-```
+![OKS 从原始资料到召回上下文的知识循环](assets/oks-knowledge-loop.svg)
+
+提问时，Agent 先从审核后的 Wiki 中召回相关知识，再把命中内容和来源注入当前上下文。Raw 和 Draft 不会因为“被读过”就自动成为长期记忆。
 
 ---
 
@@ -192,9 +192,9 @@ AI: "基于你的知识库（Kimi K3 实测），我的建议是：
 - [最佳实践](best-practices.md) - 优化使用技巧
 
 ### 📚 查看案例
-- [托管你的研究](../examples/oh-my-research/) - AI 研究者的论文管理
-- [托管你的学习](../examples/oh-my-kimi/) - 从视频学习 AI 产品
-- [更多案例](../examples/) - 案例索引
+- [托管你的学习（仓库案例）](https://github.com/open-agent-power/open-knowledge-studio/tree/main/examples/oh-my-research/) - 从资料沉淀可召回知识
+- [Kimi 产品学习案例（仓库案例）](https://github.com/open-agent-power/open-knowledge-studio/tree/main/examples/oh-my-kimi/) - 从视频学习 AI 产品
+- [更多案例](examples.html) - 案例索引
 
 ### 🛠️ 进阶功能
 - [导入对话记录](import-conversations.md) - 批量导入历史对话

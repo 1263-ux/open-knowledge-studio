@@ -35,6 +35,14 @@ cd ./my-knowledge-base
 oks status
 ```
 
+For a shared team workspace, initialize a team instance instead:
+
+```bash
+oks team init ./team-knowledge-studio --name "Platform Knowledge Team"
+cd ./team-knowledge-studio
+oks status
+```
+
 In Claude Code, Codex, or another compatible Agent host, give the Agent a real
 source and ask it to ingest it:
 
@@ -104,10 +112,12 @@ See [Recall Evaluation](docs/algorithms/recall-evaluation.md).
 
 ### Learn More
 
-- [Real-world examples](examples/) — copyable scenarios: learning, books, Feishu, GitHub, maintenance, resume
-- [Start here](docs/start-here.md)
-- [Complete your first knowledge loop](docs/first-knowledge-loop.md)
-- [Verify that OKS works](docs/verify.md)
+- [Project home](https://open-agent-power.github.io/open-knowledge-studio/)
+- [Best practices](https://open-agent-power.github.io/open-knowledge-studio/best-practices.html)
+- [Complete your first knowledge loop](https://open-agent-power.github.io/open-knowledge-studio/first-knowledge-loop.html)
+- [Real-world examples](https://open-agent-power.github.io/open-knowledge-studio/examples.html)
+- [Knowledge to Word skill](assets/skills/knowledge-to-word/SKILL.md) — create source-traceable `.docx` files from OKS knowledge
+- [Verify that OKS works](https://open-agent-power.github.io/open-knowledge-studio/verify.html)
 
 *Advanced:*
 
@@ -135,6 +145,14 @@ Open Knowledge Studio（OKS）是一个 Agent-native、文件系统优先的知�
 pipx install open-knowledge-studio
 oks init ./my-knowledge-base
 cd ./my-knowledge-base
+oks status
+```
+
+需要共享团队知识库时，使用团队初始化入口：
+
+```bash
+oks team init ./team-knowledge-studio --name "Platform Knowledge Team"
+cd ./team-knowledge-studio
 oks status
 ```
 
@@ -196,10 +214,12 @@ Node-BM25 R@1 较 native +57%；fusion re-rank 反而*降*精度——灵魂因�
 
 ### 继续阅读
 
-- [真实案例](examples/) — 可复制的场景：学习、书籍、飞书、GitHub、维护、简历
-- [从这里开始](docs/start-here.md)
-- [完成第一个知识闭环](docs/first-knowledge-loop.md)
-- [确认 OKS 正在工作](docs/verify.md)
+- [项目首页](https://open-agent-power.github.io/open-knowledge-studio/)
+- [最佳实践](https://open-agent-power.github.io/open-knowledge-studio/best-practices.html)
+- [完成第一个知识闭环](https://open-agent-power.github.io/open-knowledge-studio/first-knowledge-loop.html)
+- [真实案例](https://open-agent-power.github.io/open-knowledge-studio/examples.html)
+- [Knowledge to Word skill](assets/skills/knowledge-to-word/SKILL.md) — 从 OKS 知识生成带来源说明的 `.docx`
+- [确认 OKS 正在工作](https://open-agent-power.github.io/open-knowledge-studio/verify.html)
 
 *进阶内容：*
 
