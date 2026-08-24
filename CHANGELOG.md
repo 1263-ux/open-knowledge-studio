@@ -40,6 +40,21 @@
 
 # Changelog
 
+## [0.6.6] — 2026-08-24
+
+### feat: team bootstrap + Word skill + docs refresh（PR #45 by 1263-ux）
+
+- 新增 `oks team init` 命令——共享团队知识库 bootstrap（多人协作场景）
+- 新增 `knowledge-to-word` skill（`build_docx.py` 把 wiki 导出 Word 文档）
+- health.py: `WIKI_STATUSES` 兼容旧实例的 `published` 状态（lint 不再误报）
+- fts5.py: makedirs 注释（无逻辑改动）
+- +8 测试（261→269 passed）
+
+### docs: GitHub Pages broken links 修复（PR #44 by 1263-ux）
+
+- 修复 docs/ 下 12 文件的失效链接
+
+
 ## [0.6.5] — 2026-08-21
 
 ### feat(vfs): 只读 oks:// 虚拟文件系统（PR #43 by Huxc2020）
