@@ -4,7 +4,8 @@
 
 # Open Knowledge Studio
 
-Turn sources into reviewed, traceable knowledge that your Agent can recall later.
+Host your learning. Train a reviewable knowledge model that helps your Agent stay
+grounded across long-running work.
 
 [English](#english) · [中文](#chinese) · [Documentation](https://open-agent-power.github.io/open-knowledge-studio/)
 
@@ -16,9 +17,11 @@ Turn sources into reviewed, traceable knowledge that your Agent can recall later
 
 ## English
 
-Open Knowledge Studio (OKS) is an Agent-native, filesystem-first knowledge
-workspace. It preserves source evidence, lets an Agent draft reusable knowledge,
-keeps a human in control of promotion, and recalls the result in later work.
+Open Knowledge Studio (OKS) explores one question: how can an Agent keep learning
+through human collaboration and remain stable across long-running work? It does
+not train model weights. It builds a filesystem-first external knowledge model:
+humans set goals and approve knowledge; Agents collect evidence, execute work,
+propose Candidates, and recall reviewed decisions later.
 
 ```text
 your source → Candidate → human review → Wiki → Recall
@@ -32,6 +35,14 @@ Requirements: Python 3.12+, Git, and pipx.
 pipx install open-knowledge-studio
 oks init ./my-knowledge-base
 cd ./my-knowledge-base
+oks status
+```
+
+For a shared team workspace, initialize a team instance instead:
+
+```bash
+oks team init ./team-knowledge-studio --name "Platform Knowledge Team"
+cd ./team-knowledge-studio
 oks status
 ```
 
@@ -104,10 +115,12 @@ See [Recall Evaluation](docs/algorithms/recall-evaluation.md).
 
 ### Learn More
 
-- [Real-world examples](examples/) — copyable scenarios: learning, books, Feishu, GitHub, maintenance, resume
-- [Start here](docs/start-here.md)
-- [Complete your first knowledge loop](docs/first-knowledge-loop.md)
-- [Verify that OKS works](docs/verify.md)
+- [Project home](https://open-agent-power.github.io/open-knowledge-studio/)
+- [Daily workflow](https://open-agent-power.github.io/open-knowledge-studio/usage/)
+- [Complete your first knowledge loop](https://open-agent-power.github.io/open-knowledge-studio/first-knowledge-loop.html)
+- [托管你的学习](https://open-agent-power.github.io/open-knowledge-studio/oh-my/study.html)
+- [Knowledge to Word skill](assets/skills/knowledge-to-word/SKILL.md) — create source-traceable `.docx` files from OKS knowledge
+- [Verify that OKS works](https://open-agent-power.github.io/open-knowledge-studio/verify.html)
 
 *Advanced:*
 
@@ -120,8 +133,10 @@ See [Recall Evaluation](docs/algorithms/recall-evaluation.md).
 
 ## 中文
 
-Open Knowledge Studio（OKS）是一个 Agent-native、文件系统优先的知识工作台：
-它保存来源证据，让 Agent 起草可复用知识，由人决定是否晋升，并在未来任务中重新召回。
+**托管你的学习。** Open Knowledge Studio（OKS）研究一个问题：Agent 如何在人机协同中
+持续学习，并保证长任务执行的稳定？它不训练模型权重，而是构建一套文件化的外部知识模型：
+人类设定目标、边界并审核知识，Agent 收集证据、执行任务、提出 Candidate，并在后续任务中
+召回经过确认的判断。
 
 ```text
 你的资料 → Candidate → 人工审核 → Wiki → Recall
@@ -135,6 +150,14 @@ Open Knowledge Studio（OKS）是一个 Agent-native、文件系统优先的知�
 pipx install open-knowledge-studio
 oks init ./my-knowledge-base
 cd ./my-knowledge-base
+oks status
+```
+
+需要共享团队知识库时，使用团队初始化入口：
+
+```bash
+oks team init ./team-knowledge-studio --name "Platform Knowledge Team"
+cd ./team-knowledge-studio
 oks status
 ```
 
@@ -196,10 +219,12 @@ Node-BM25 R@1 较 native +57%；fusion re-rank 反而*降*精度——灵魂因�
 
 ### 继续阅读
 
-- [真实案例](examples/) — 可复制的场景：学习、书籍、飞书、GitHub、维护、简历
-- [从这里开始](docs/start-here.md)
-- [完成第一个知识闭环](docs/first-knowledge-loop.md)
-- [确认 OKS 正在工作](docs/verify.md)
+- [项目首页](https://open-agent-power.github.io/open-knowledge-studio/)
+- [日常使用](https://open-agent-power.github.io/open-knowledge-studio/usage/)
+- [完成第一个知识闭环](https://open-agent-power.github.io/open-knowledge-studio/first-knowledge-loop.html)
+- [托管你的学习](https://open-agent-power.github.io/open-knowledge-studio/oh-my/study.html)
+- [Knowledge to Word skill](assets/skills/knowledge-to-word/SKILL.md) — 从 OKS 知识生成带来源说明的 `.docx`
+- [确认 OKS 正在工作](https://open-agent-power.github.io/open-knowledge-studio/verify.html)
 
 *进阶内容：*
 

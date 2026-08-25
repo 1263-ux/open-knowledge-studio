@@ -1,12 +1,14 @@
 ---
-title: 概念
-nav_order: 7
+title: 工作原理
+nav_order: 5
 has_children: true
 ---
-# 概念
 
-- [架构总览](architecture.md) — 三层架构：摄入流水线 → 知识桶 → 召回注入
-- [哲学](philosophy.md) — P0-P11 工程原则
-- [宪法](constitution.md) — A1-A5 架构不变量
-- [记忆模型](memory-model.md) — 六类记忆 + 认知桶 + 双层架构
-- [文件系统范式](file-system-paradigm.md) — 为什么是 markdown 文件不是向量库
+# 工作原理
+
+这些页面解释 OKS 为什么这样工作。你不需要先读懂它们才能完成第一次学习循环。
+
+- [知识即模型](philosophy.html)：人类反馈如何塑造 Agent 使用的外部心智模型。
+- [架构总览](architecture.html)：摄入、文件桶、Recall、只读 VFS 与可选集成的关系。
+
+命令参数和协议字段属于[参考手册](../reference/)，算法与宪法属于[维护者](../maintainers/)。

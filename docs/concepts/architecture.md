@@ -1,7 +1,7 @@
 ---
 title: 架构总览
-nav_order: 3
-parent: 概念
+nav_order: 2
+parent: 工作原理
 ---
 
 # 架构总览
@@ -31,6 +31,8 @@ classDef recallStrong fill:#FFECDB,stroke:#EA580C,stroke-width:2px,color:#172033
 classDef optional fill:#FCF7FF,stroke:#9B51E0,stroke-width:1.5px,stroke-dasharray:6 5,color:#5B2391;
 classDef note fill:#FFF9E8,stroke:#D8B04C,stroke-width:1px,color:#594A1A;
 classDef hook fill:#F7F8FA,stroke:#98A2B3,stroke-width:1px,stroke-dasharray:5 4,color:#475467;
+classDef vfs fill:#EEF2FF,stroke:#6366F1,stroke-width:1.5px,color:#312E81;
+classDef vfsStrong fill:#E0E7FF,stroke:#4F46E5,stroke-width:2px,color:#312E81;
 
 
 %% =========================================================
@@ -105,6 +107,28 @@ W0 --> WIKI
 
 
 %% =========================================================
+%% 只读访问层：VFS 在桶之上，不是新桶
+%% =========================================================
+
+subgraph VFS_LAYER["只读 VFS 访问层 · 桶之上的访问视图"]
+direction LR
+
+VFS["oks:// · oks fs<br/><small>只读访问 · 不写回</small>"]:::vfsStrong
+VFS_SCOPE["公开 scope<br/><small>profiles · raw · wiki · drafts · mail<br/>skills · traces</small>"]:::vfs
+VFS_OPS["ls · tree · stat · read<br/><small>overview · find</small>"]:::vfs
+
+VFS --> VFS_SCOPE --> VFS_OPS
+
+end
+
+PRO -.-> VFS
+RAW -.-> VFS
+WIKI -.-> VFS
+DRAFT -.-> VFS
+MAIL -.-> VFS
+
+
+%% =========================================================
 %% 第 3 层：召回 + 注入
 %% =========================================================
 
@@ -153,7 +177,7 @@ H2 -. "冲突记录" .-> MAIL
 subgraph FEISHU["可选集成 · 飞书"]
 direction TB
 
-F0["examples/oh-my-feishu/<br/><small>可选 · 不随 oks CLI 分发</small>"]:::optional
+F0["reference-implementations/oh-my-feishu/<br/><small>可选 · 不随 oks CLI 分发</small>"]:::optional
 F1["手机表单采集"]:::optional
 F2["IM 审核"]:::optional
 
@@ -184,4 +208,4 @@ WIKI -.-> TRUST
 - **召回**：fts5 node-level（默认）+ 可插拔 backend（native / fts5 / fusion / connector），floor + cooldown 过滤去重后注入 `<recalled-memory>`。
 - **Hooks（可选注入）**：UserPromptSubmit（用户 prompt → recall 注入）+ PostToolUse（recall 补位 + 文件冲突检测），`oks hook install` 显式安装。
 - **信任语义**：`[verified]` 只来自 trace 证据或 `human_reviewed_at`，绝不来自使用次数。
-- **飞书**：可选参考集成（`examples/oh-my-feishu/`），提供手机表单采集 + IM 审核的替代前端，不随 `oks` CLI 分发。
+- **飞书**：可选参考集成（`reference-implementations/oh-my-feishu/`），提供手机表单采集 + IM 审核的替代前端，不随 `oks` CLI 分发。
