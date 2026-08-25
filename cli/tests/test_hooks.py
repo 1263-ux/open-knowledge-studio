@@ -10,6 +10,7 @@ from pathlib import Path
 
 from typer.testing import CliRunner
 
+from knowledge_studio import cli as cli_module
 from knowledge_studio.cli import app
 
 
@@ -382,3 +383,86 @@ def test_non_codex_posttool_keeps_plain_text_conflict_output(tmp_path):
     assert result.returncode == 0, result.stderr
     assert result.stdout.startswith("[oks] 文件冲突:")
     assert not result.stdout.startswith("{")
+
+
+def test_hook_recall_cli_reuses_policy_and_history_without_prompt_leakage(tmp_path):
+    target = _init_instance(tmp_path)
+    page = target / "wiki" / "computing" / "concepts" / "recall-bridge.md"
+    page.parent.mkdir(parents=True, exist_ok=True)
+    page.write_text(
+        "---\n"
+        "title: Recall bridge\n"
+        "type: concept\n"
+        "area: architecture\n"
+        "status: active\n"
+        "importance: 0.9\n"
+        "confidence: 0.9\n"
+        "created: 2026-08-20T00:00:00+00:00\n"
+        "tags: recall, bridge, architecture\n"
+        "pinned: false\n"
+        "archived: false\n"
+        "access_count: 0\n"
+        "---\n\n"
+        "The recall bridge keeps DSH as a thin adapter over OKS policy.\n",
+        encoding="utf-8",
+    )
+    # The Hook contract is independent of an optional FTS index. Exercise the
+    # deterministic native backend here; FTS lifecycle has its own test suite.
+    recall_config = target / "settings" / "recall.yaml"
+    recall_config.write_text(
+        recall_config.read_text(encoding="utf-8").replace("search_backend: fts5", "search_backend: native"),
+        encoding="utf-8",
+    )
+    args = [
+        "hook", "recall", "recall bridge architecture", "--format", "json",
+        "--path", str(target), "--session-id", "dsh-oks", "--cwd", "C:/dsh-host",
+    ]
+
+    first = runner.invoke(app, args)
+    assert first.exit_code == 0, first.output
+    payload = json.loads(first.output)
+    assert payload["schema"] == "hook-recall-response/v1"
+    assert payload["status"] == "injected"
+    assert payload["trace"]["matches"] == ["recall-bridge"], payload
+    assert "recall bridge architecture" not in json.dumps(payload)
+
+    second = runner.invoke(app, args)
+    assert second.exit_code == 0, second.output
+    assert json.loads(second.output)["status"] == "skipped_cooldown"
+
+    history = runner.invoke(
+        app,
+        [
+            "hook", "history", "--format", "json", "--path", str(target),
+            "--session-id", "dsh-oks", "--cwd", "C:/dsh-host",
+        ],
+    )
+    assert history.exit_code == 0, history.output
+    records = json.loads(history.output)
+    assert records["schema"] == "hook-recall-history/v1"
+    assert records["items"][0]["matches"] == ["recall-bridge"]
+    assert "C:/dsh-host" not in history.output
+
+
+def test_hook_recall_cli_rejects_malformed_success_envelope(tmp_path, monkeypatch):
+    target = _init_instance(tmp_path)
+
+    class Completed:
+        returncode = 0
+        stdout = json.dumps({
+            "schema": "hook-recall-response/v1",
+            "status": "invalid",
+            "context": 123,
+            "trace": None,
+        })
+
+    monkeypatch.setattr(cli_module.subprocess, "run", lambda *args, **kwargs: Completed())
+    result = cli_module._run_hook_recall(target, "safe prompt", "session", "C:/host", "dsh-oks")
+
+    assert result == {
+        "schema": "hook-recall-response/v1",
+        "status": "error",
+        "context": "",
+        "trace": {"candidate_count": 0, "matches": [], "top_relevance": None, "threshold": None},
+        "reason": "hook_bridge_failed",
+    }
