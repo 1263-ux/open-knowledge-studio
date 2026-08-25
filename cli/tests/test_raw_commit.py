@@ -1045,6 +1045,53 @@ def test_failed_overwrite_keeps_the_previous_bundle(monkeypatch):
     )
 
 
+def test_atomic_bundle_replacement_restores_previous_bundle_on_publish_failure(monkeypatch, tmp_path):
+    """A failure after moving the old directory must roll it back."""
+    from knowledge_studio import raw_commit as rc
+
+    final = tmp_path / "bundle"
+    staging = tmp_path / "staging"
+    final.mkdir()
+    staging.mkdir()
+    (final / "bundle.json").write_text('{"old": true}', encoding="utf-8")
+    (staging / "bundle.json").write_text('{"new": true}', encoding="utf-8")
+
+    real_replace = rc._os.replace
+    calls = 0
+
+    def fail_publish(source, destination):
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise OSError("simulated publish failure")
+        return real_replace(source, destination)
+
+    monkeypatch.setattr(rc._os, "replace", fail_publish)
+
+    with pytest.raises(OSError, match="simulated publish failure"):
+        rc._replace_bundle_directory(staging, final)
+
+    assert (final / "bundle.json").read_text(encoding="utf-8") == '{"old": true}'
+    assert staging.is_dir(), "the staged bundle remains available for cleanup/retry"
+
+
+def test_atomic_bundle_replacement_cleans_backup_after_success(tmp_path):
+    from knowledge_studio import raw_commit as rc
+
+    final = tmp_path / "bundle"
+    staging = tmp_path / "staging"
+    final.mkdir()
+    staging.mkdir()
+    (final / "bundle.json").write_text('{"old": true}', encoding="utf-8")
+    (staging / "bundle.json").write_text('{"new": true}', encoding="utf-8")
+
+    rc._replace_bundle_directory(staging, final)
+
+    assert (final / "bundle.json").read_text(encoding="utf-8") == '{"new": true}'
+    assert not staging.exists()
+    assert not list(tmp_path.glob(".bundle.backup-*"))
+
+
 def test_partial_step_must_also_persist_its_output():
     """A verified bypass: every step declared ``partial`` skipped the check.
 
