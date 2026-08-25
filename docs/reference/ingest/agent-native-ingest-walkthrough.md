@@ -1,7 +1,7 @@
 ---
 title: Agent-Native Ingest 操作手册
 nav_order: 1
-parent: 收录资料
+parent: 摄入协议
 ---
 
 # Agent-Native Ingest 操作手册
@@ -233,6 +233,7 @@ relationship: ""              # enriches | supersedes | confirms | challenges
 
 ```bash
 oks drafts list              # 查看所有草稿
+oks drafts get <slug>        # 阅读完整 Candidate
 oks drafts promote <slug>    # 提升到 wiki/
 oks drafts reject <slug>     # 拒绝并保留 review receipt
 ```

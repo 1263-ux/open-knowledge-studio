@@ -1,372 +1,93 @@
 ---
-title: 第一个知识闭环
+title: 第一次学习循环
 nav_order: 2
 parent: 从这里开始
 ---
 
-# 第一个知识闭环
+# 第一次学习循环
 
-> 用你自己的真实资料，完整跑通一次
+目标不是“导入很多资料”，而是验证一条知识能否沿着完整路径流动：
 
-**重要**：不要用测试文件。选一份你**真正想保存**的资料。
-
----
-
-## 你需要准备
-
-- ✅ 一份真实资料（文章 / 视频 / PDF）
-- ✅ 已安装 OKS（[安装指南](installation.md)）
-- ✅ 打开 Agent（Claude Code / Codex / Cursor）
-
-**时间**：5-10 分钟
-
----
-
-## 步骤 1: 收录资料
-
-### 对话示例
-
-```
-你: "收录这篇文章：https://blog.example.com/deep-learning-guide
-     保留来源，生成 Candidate 后让我审核"
-
-Agent:
-  正在收录...
-  
-  ✓ 下载文章内容
-  ✓ 提取元数据（标题、作者、日期）
-  ✓ 生成 Candidate
-  
-  → Candidate 已保存
-     位置：drafts/20260820-deep-learning-guide.md
-  
-  下一步：审核 Candidate 内容
+```text
+Source → Evidence / Raw → Candidate → Human Review → Wiki → Recall
 ```
 
-### Agent 做了什么
+## 准备一条真实判断
 
-```
-资料来源
-  ↓
-[Agent 读取 /ingest Skill]
-  ↓
-保存 Raw Bundle
-  ├─ 原文内容
-  ├─ 元数据
-  └─ 证据链
-  ↓
-生成 Candidate
-  └─ drafts/xxx.md
+在知识库外准备一个文本文件，例如 `first-source.md`：
+
+```markdown
+# 项目知识审核原则
+
+所有准备长期复用的项目知识，在进入 Wiki 前必须人工审核。
+原因是未经核验的错误会被后续任务反复召回，扩大影响范围。
 ```
 
-### 成功信号
+使用你自己的真实材料更好，但第一次请保持内容短小、来源明确。
 
-- ✅ 看到 "Candidate 已保存"
-- ✅ 告诉你文件位置（`drafts/xxx.md`）
+## 1. 让 Agent 收录来源
 
-### 遇到问题？
+在支持 Skill 的 Agent 中说：
 
-| 现象 | 原因 | 解决 |
-|------|------|------|
-| Agent 说"找不到 Skill" | 不在 OKS 目录 | `cd` 到知识库目录 |
-| 下载失败 | URL 无法访问 | 检查链接是否有效 |
-| 没有生成 Candidate | Agent 权限不足 | 检查文件写入权限 |
-
----
-
-## 步骤 2: 审核 Candidate
-
-### 对话示例
-
-```
-你: "看看刚才生成的 Candidate"
-
-Agent:
-  [显示 Candidate 内容]
-  
-  ---
-  title: 深度学习入门指南
-  type: concept
-  area: computing
-  ---
-  
-  # 深度学习入门指南
-  
-  ## 核心概念
-  - 神经网络基础
-  - 反向传播算法
-  - 梯度下降优化
-  
-  ## 应用场景
-  ...
-
-你: "内容准确，晋升到 Wiki"
-
-Agent:
-  ✓ 已晋升
-  
-  → wiki/computing/concepts/20260820-deep-learning-guide.md
-  → 现在可以被召回了
+```text
+请使用 /ingest 收录 first-source.md。保留来源，不要直接写入 Wiki；
+完成后告诉我 Raw Bundle、Candidate 和仍需人工判断的内容。
 ```
 
-### 审核要点
+Agent 会调用 OKS 的摄入能力，保存 Evidence 和 Raw Bundle，并提出 Candidate。文本来源的机械步骤也可以用下面的命令检查：
 
-检查三个维度：
-
-1. **准确性**
-   - ✅ 事实是否正确
-   - ✅ 有没有 AI 幻觉（编造的内容）
-   - ✅ 核心信息是否完整
-
-2. **可复用性**
-   - ✅ 三个月后还能用吗
-   - ✅ 信息是否具体、可操作
-   - ✅ 有没有时效性问题
-
-3. **可追溯性**
-   - ✅ 能找回原始资料吗
-   - ✅ 来源是否清晰
-
-**快速判断**：问自己"三个月后我会用到吗？如果用到，这个 Candidate 够用吗？"
-
-### 决策选项
-
-| 决策 | 什么时候用 | 对话示例 |
-|------|-----------|---------|
-| **晋升** | 内容准确，值得长期保留 | "晋升到 Wiki" |
-| **编辑** | 方向对，但需要补充/修改 | "这个 Candidate 需要补充 XX 内容" |
-| **拒绝** | 不值得长期保留 | "这个不需要，删除" |
-
-### 成功信号
-
-- ✅ 看到 "已晋升"
-- ✅ 告诉你 Wiki 文件位置
-- ✅ 说明"现在可以被召回"
-
----
-
-## 步骤 3: 召回知识
-
-### 对话示例（几天后）
-
-```
-你: "帮我设计一个深度学习训练平台，
-     需要考虑模型并行和数据并行"
-
-Agent:
-  🔍 正在召回相关知识...
-  
-  找到 2 个相关 Wiki:
-  ├─ deep-learning-guide.md (相关性 0.85)
-  └─ distributed-training.md (相关性 0.78)
-  
-  基于你的知识库，我建议：
-  
-  ### 训练平台架构
-  
-  1. **模型并行**（来自 deep-learning-guide.md）
-     - 层间切分策略
-     - 通信优化方案
-  
-  2. **数据并行**（来自 distributed-training.md）
-     - AllReduce 梯度同步
-     - 批次大小调整
-  
-  ### 具体实现
-  ...
-  [基于你收录的知识给出详细方案]
+```bash
+oks ingest prepare first-source.md
+oks status
+oks drafts list
 ```
 
-### 召回机制
+成功信号：能定位来源和 Raw Bundle，并且新内容仍停留在 `drafts/`，没有自动进入 `wiki/`。
 
-```
-你提问
-  ↓
-Agent 自动调用 Recall
-  ↓
-OKS 搜索 Wiki
-  ├─ Node-BM25 召回
-  ├─ Soul Boost 加权
-  └─ Memory Curve 衰减
-  ↓
-返回相关 Wiki
-  ↓
-Agent 基于知识回答
+## 2. 人工审核 Candidate
+
+先读内容，不要只看标题：
+
+```bash
+oks drafts list
+oks drafts get <slug>
 ```
 
-### 成功信号
+检查：
 
-- ✅ 看到 "🔍 正在召回..." 或 "找到 X 个相关 Wiki"
-- ✅ Agent 引用具体知识内容
-- ✅ 回答基于你的知识库，不是通用知识
+- 是否忠实表达来源；
+- 是否把来源主张误写成事实；
+- 是否保留来源路径；
+- 是否与已有知识重复、补充或冲突；
+- 是否值得长期召回。
 
-### 召回不准？
+确认后再执行：
 
-| 问题 | 检查 | 解决 |
-|------|------|------|
-| 找不到知识 | Candidate 晋升了吗 | 说"列出所有 Wiki" |
-| 召回不相关 | 用词是否匹配 | 换个措辞重新问 |
-| 相关性太低 | 类型权重问题 | 看 [召回调优](best-practices.md#阶段-3召回-recall---用自然语言提问) |
-
-**调试技巧**：
-
-```
-你: "手动召回'深度学习'相关知识，显示评分"
-
-Agent:
-  [调用 oks recall "深度学习" --explain]
-  
-  → deep-learning-guide.md (score=0.85)
-    原因：token-overlap=5, title-match=2
+```bash
+oks drafts promote <slug>
 ```
 
----
+不接受时使用 `/promote` Skill 走拒绝流程并填写理由。拒绝同样是一条有价值的人类反馈。
 
-## 完整闭环检查清单
+## 3. 在新问题中召回
 
-### ✅ Raw 层
-
-- [ ] `raw/` 目录下有 Bundle
-- [ ] Bundle 包含原始内容
-- [ ] 元数据完整（来源、时间）
-
-**验证**：
-
-```
-你: "显示 Raw Bundle 列表"
-
-Agent:
-  [列出 raw/2026/08/20/... 目录内容]
+```bash
+oks recall "为什么知识进入 Wiki 前需要审核？" --explain
 ```
 
----
+成功信号：结果命中刚审核的 Wiki 页面，并能解释来源和相关性。安装了 Hook 后，也可以在新会话直接提问，检查 `<recalled-memory>` 是否出现。
 
-### ✅ Candidate 层
+## 验收清单
 
-- [ ] Draft 生成了
-- [ ] 你实际阅读了内容
-- [ ] 做出了决策（晋升/编辑/拒绝）
+- [ ] 原始来源可以定位。
+- [ ] Candidate 没有绕过人工审核。
+- [ ] Promote 后存在 `human_reviewed_at`。
+- [ ] Recall 命中的是审核后的知识，而不是把 Raw 当作已验证结论。
+- [ ] 召回结果不足时，Agent 会说明缺口而不是补写事实。
 
-**验证**：
+## 下一步
 
-```
-你: "列出所有 Candidates"
-
-Agent:
-  → 当前有 0 个待审核
-  （如果你晋升或拒绝了，应该是 0）
-```
-
----
-
-### ✅ Wiki 层
-
-- [ ] Wiki 文件存在
-- [ ] 文件有 `human_reviewed_at` 标记
-- [ ] 能被召回找到
-
-**验证**：
-
-```
-你: "列出所有 Wiki，显示最新的 3 个"
-
-Agent:
-  → 20260820-deep-learning-guide.md (今天)
-  → ...
-```
-
----
-
-### ✅ Recall 层
-
-- [ ] 提问时能召回相关知识
-- [ ] Agent 引用了 Wiki 内容
-- [ ] 回答基于你的知识库
-
-**验证**：
-
-```
-你: "用我的知识库回答：什么是深度学习？"
-
-Agent:
-  🔍 召回了 deep-learning-guide.md
-  
-  [基于你收录的文章回答，不是通用知识]
-```
-
----
-
-## 某一步失败了？
-
-### 步骤 1 失败：收录不了
-
-1. **确认在 OKS 目录**
-   ```
-   你: "显示当前目录"
-   ```
-
-2. **确认 OKS 已初始化**
-   ```
-   你: "运行 oks status"
-   ```
-
-3. **查看详细错误**
-   ```
-   你: "收录时显示详细日志"
-   ```
-
-> **还是不行？** 看 [确认 OKS 正在工作](verify.md)
-
----
-
-### 步骤 2 失败：晋升不了
-
-1. **确认 Candidate 存在**
-   ```
-   你: "列出所有 Candidates"
-   ```
-
-2. **查看文件权限**
-   ```
-   你: "检查 wiki/ 目录写入权限"
-   ```
-
----
-
-### 步骤 3 失败：召回不准
-
-1. **确认 Wiki 存在**
-   ```
-   你: "列出所有 Wiki"
-   ```
-
-2. **测试手动召回**
-   ```
-   你: "手动召回'深度学习'，显示评分"
-   ```
-
-3. **查看召回详情**
-   ```
-   你: "用 --explain 参数召回"
-   ```
-
-> **召回调优技巧**：[最佳实践 - 阶段 3](best-practices.md#阶段-3召回-recall---用自然语言提问)
-
----
-
-## 完成了！下一步
-
-### 巩固理解
-
-- **[最佳实践](best-practices.md)** - 三个阶段的核心原则
-- **[真实案例](examples.md)** - B 站视频 → 技术方案
-
-### 进阶使用
-
-- **[配置 Goal](usage/profiles.md)** - 提升特定领域召回
-- **[上下文注入](usage/context-injection.md)** - Hook 机制详解
-- **[批量导入](import-conversations.md)** - 导入已有对话
-
----
-
-**记住**：每次完整闭环都强化了 OKS 的价值。从今天开始，把看过的资料都变成可召回的知识。
+- [确认 OKS 正在工作](verify.html)
+- [审核 Candidate](usage/review.html)
+- [理解 Recall 与上下文注入](usage/recall.html)
+- [查看 Oh My Study](oh-my/study.html)

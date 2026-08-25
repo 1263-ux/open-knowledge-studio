@@ -171,4 +171,4 @@ The profile + goals are plain markdown — hand-edit any time; `/assess` is just
 
 - [召回引擎](../../docs/algorithms/recall-engine.md) — 6+1 factor scoring, goal boost mechanics
 - [衰减系统](../../docs/algorithms/decay-system.md) — importance + access_count + decay
-- [上下文注入](../../docs/usage/context-injection.md) — hook auto-inject + tunable env (FLOOR / TOPN / MINLEN / COOLDOWN)
+- [召回与注入](../../docs/usage/recall.md) — hook auto-inject + tunable env (FLOOR / TOPN / MINLEN / COOLDOWN)

@@ -6,120 +6,67 @@ parent: 从这里开始
 
 # 安装 OKS
 
-> 一个命令，2 分钟完成
+OKS 需要 Python 3.12 或更高版本。推荐用 pipx 隔离安装 CLI。
 
----
-
-## 推荐方式：pipx
+## 安装并创建实例
 
 ```bash
-# 1. 安装 OKS
 pipx install open-knowledge-studio
-
-# 2. 初始化知识库
+pipx ensurepath
 oks init ./my-knowledge
-
-# 3. 进入目录
 cd ./my-knowledge
-
-# 4. 验证
 oks status
 ```
 
-✅ **成功信号**：看到状态面板，显示 Wiki / Drafts 数量
+重新打开终端后，`oks --help` 应显示当前命令树，`oks status` 应指向刚创建的实例。
 
----
+个人知识应该保存在独立实例中，不要长期写进 OKS 源码仓库。
 
-## 系统要求
-
-| 项目 | 要求 |
-|------|------|
-| **Python** | 3.12+ |
-| **pipx** | 推荐 |
-| **磁盘** | 至少 100 MB |
-| **Agent** | Claude Code / Codex / Cursor |
-
----
-
-## 第一次装 pipx？
-
-**macOS**:
-```bash
-brew install pipx && pipx ensurepath
-```
-
-**Ubuntu**:
-```bash
-sudo apt install pipx && pipx ensurepath
-```
-
-**Windows**:
-```bash
-py -m pip install --user pipx && py -m pipx ensurepath
-```
-
-安装后**重启终端**，再运行 `oks --version`。
-
----
-
-## 验证安装
-
-### 通过 Agent（推荐）
-
-打开 Claude Code / Codex，说：
-
-```
-"检查 OKS 是否正常工作"
-```
-
-Agent 会自动检查所有组件。
-
----
-
-### 手动验证
+## 团队实例
 
 ```bash
-oks --version  # 返回版本号
-oks status     # 显示知识库状态
+oks team init ./team-knowledge-studio --name "Platform Knowledge Team"
+cd ./team-knowledge-studio
+oks status
 ```
 
----
+初始化只创建结构和模板。请人工审阅 `profiles/team.md` 与 `profiles/goals/team.md`，再把它们当作团队事实使用。
 
-## 常见问题
+## 安装 pipx
 
-### Q: pipx: command not found
-
-**重启终端**后再试。如果还是不行：
+macOS：
 
 ```bash
-# 手动添加到 PATH
-export PATH="$HOME/.local/bin:$PATH"
+brew install pipx
+pipx ensurepath
 ```
 
----
-
-### Q: Permission denied
-
-不要用 `sudo`，改用用户目录：
+Ubuntu：
 
 ```bash
-oks init ~/my-knowledge
+sudo apt install pipx
+pipx ensurepath
 ```
 
----
+Windows：
 
-### Q: Python 版本太低
+```powershell
+py -m pip install --user pipx
+py -m pipx ensurepath
+```
 
-需要 Python 3.12+：
+若终端仍找不到 `pipx` 或 `oks`，先重新打开终端，再检查 PATH 和 Python 版本。
+
+## 从源码开发
 
 ```bash
-python --version  # 检查版本
+pipx install ./cli --force
+oks --help
 ```
 
----
+这条路径用于维护者验证当前 checkout，不是普通用户的默认安装方式。
 
 ## 下一步
 
-✅ **安装完成**：[第一个知识闭环](first-knowledge-loop.md)
-
-⚠️ **遇到问题**：[确认 OKS 正在工作](verify.md)
+- [完成第一次学习循环](first-knowledge-loop.html)
+- [确认 OKS 正在工作](verify.html)

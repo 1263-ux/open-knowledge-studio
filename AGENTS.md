@@ -82,7 +82,8 @@ open-knowledge-studio/
 ├── security/         # Credential redaction + sensitive field detection
 ├── cli/              # Python CLI tool (oks); packaged assets come from assets/
 ├── docs/             # GitHub Pages site — every .md here is a published page
-├── records/          # Versioned acceptance evidence — never in docs/
+├── reference-implementations/ # Optional integrations; not shipped with oks
+├── records/          # Versioned acceptance + reproducible experiments
 ├── CONSTITUTION.md   # Memory architecture design
 ├── CLAUDE.md         # Claude Code project instructions
 ├── CHANGELOG.md      # Release history
@@ -117,6 +118,8 @@ oks skills-install [--force]
 
 # Raw ingestion
 oks raw-commit <manifest-dir> [--output/-o <dir>] [--overwrite] [--json/--text]
+oks ingest prepare <source>
+oks ingest run <source>   # compatibility entry point; no Wiki promotion
 
 # Recall (the single retrieval entry — Agent-facing, injected via hook)
 oks recall <query> [--topic-id ID] [--limit 5] [--scope AREA] [--type strategy] [--knowledge-only] [--goal active|none|SLUG] [--format table|json] [--explain]
@@ -129,8 +132,11 @@ oks wiki pin <slug> | archive <slug>
 oks wiki use <slug>   # explicit "this page was used" signal
 
 # Drafts
-oks drafts list | promote <slug> | reject <slug>
+oks drafts list | get <slug> | promote <slug> | reject <slug>
 oks distill [--dry-run]
+
+# Read-only VFS
+oks fs ls|tree|stat|read|overview|find <uri-or-query>
 
 # Maintenance
 oks lint | status | metrics [--html] | decay
@@ -144,9 +150,14 @@ oks capability guide <provider-id>
 # Optional coordination
 oks mail send|inbox|read|count
 oks registry list|bind|remove
+oks team init <path> [--name NAME]
 
-# Feishu (参考实现，已从核心迁出 → examples/oh-my-feishu/)
-# 不再随 oks CLI 分发；见 examples/oh-my-feishu/code/ 的 feishu_base_worker.py / feishu_setup.py
+# Protocol and security
+oks schema show <document-kind>
+oks security sanitize <file>
+
+# Feishu (参考实现，已从核心迁出 → reference-implementations/oh-my-feishu/)
+# 不再随 oks CLI 分发；见 reference-implementations/oh-my-feishu/code/ 的 feishu_base_worker.py / feishu_setup.py
 
 # Hooks (opt-in auto-recall + post-tool conflict detection)
 oks hook install [--editor claude|qoder|codex|both] [--path DIR]
