@@ -1,10 +1,10 @@
 ---
-title: Oh My Feishu
+title: 托管你的移动审核
 nav_order: 3
-parent: Oh My
+parent: 案例
 ---
 
-# Oh My Feishu：把人工审核带到手机
+# 托管你的移动审核
 
 {: .warning }
 > **类型：参考集成。** 飞书不随 `oks` CLI 分发，也不是 OKS 核心依赖。参考代码位于仓库的 `reference-implementations/oh-my-feishu/`。
@@ -28,6 +28,6 @@ parent: Oh My
 - 调度由外部 cron、launchd 或任务计划负责；OKS 不内置常驻调度器。
 - 飞书凭据由用户环境管理，不能写入仓库或知识库。
 
-不配置飞书时，`/ingest`、`oks drafts list` 与 `oks drafts promote` 的本地路径仍然完整可用。
+不配置飞书时，Agent 仍然可以在本地完成来源收集、候选展示和人审后的知识保存。飞书只改变人提供反馈的位置，不改变知识审核规则。
 
 代码和运行说明见 [reference-implementations/oh-my-feishu](https://github.com/open-agent-power/open-knowledge-studio/tree/main/reference-implementations/oh-my-feishu)。

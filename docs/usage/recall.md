@@ -8,30 +8,19 @@ parent: 日常使用
 
 Recall 的作用是把与当前问题有关的知识带回任务上下文，不是替 Agent 判断答案。
 
-## 手动召回
+## 在任务中召回
 
-```bash
-oks recall "为什么选择这个架构？"
-oks recall "为什么选择这个架构？" --explain
-oks recall "为什么选择这个架构？" --knowledge-only
-```
+先用自然语言描述任务，再告诉 Agent：“先查找与这个问题有关的已审核知识，说明命中了什么、为什么相关、哪些内容可能过时。”结果太宽时，再补充项目范围、知识类型或当前目标，不需要自己组合过滤参数。
 
-先用自然语言描述任务，再在结果过宽时增加 `--scope`、`--type` 或 `--goal`。不要一开始堆叠过滤条件。
-
-## 自动注入
-
-```bash
-oks hook install --editor claude
-oks hook status
-```
+## 自动带回知识
 
 Hook 是可选入口：
 
-- UserPromptSubmit 在提交问题时运行 Recall；
-- PostToolUse 可以补充召回并检测文件冲突；
-- 注入内容放在 `<recalled-memory>` 中，并保留来源标签。
+- 提交问题时，Agent 可以先查找相关知识；
+- 修改文件后，Agent 可以补充召回并检测冲突；
+- 带回任务的知识保留来源和审核状态。
 
-没有 Hook 时，`oks recall` CLI 仍然有效。
+自动召回是可选入口。没有启用时，Agent 仍可以按用户要求主动查询知识。
 
 ## 如何判断结果是否可信
 
@@ -44,10 +33,10 @@ Hook 是可选入口：
 
 ## 结果不好时
 
-1. 用 `--explain` 查看命中了什么。
+1. 要求 Agent 解释命中了什么。
 2. 检查 Wiki 是否真的存在相关页面。
 3. 检查查询是否描述了任务，而不是只给产品名。
-4. 检查 active goal 是否把结果带偏。
+4. 检查当前目标是否把结果带偏。
 5. 对过时或冲突知识补充新 Evidence，走一次新的审核循环。
 
 算法细节见[召回引擎](../algorithms/recall-engine.html)。

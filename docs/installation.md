@@ -1,72 +1,35 @@
 ---
-title: 安装
+title: 交给 Agent 安装
 nav_order: 1
 parent: 从这里开始
 ---
 
-# 安装 OKS
+# 交给 Agent 安装
 
-OKS 需要 Python 3.12 或更高版本。推荐用 pipx 隔离安装 CLI。
+OKS 是 Agent 的知识工作空间，不应该先变成用户需要背诵的一组命令。把安装任务直接交给你正在使用的编码 Agent：
 
-## 安装并创建实例
+> 请为我安装 Open Knowledge Studio，并为个人知识创建一个独立实例。不要把个人知识写进 OKS 源码仓库。完成后检查当前实例、可用能力和审核流程，再用自然语言向我报告结果与任何失败项。
 
-```bash
-pipx install open-knowledge-studio
-pipx ensurepath
-oks init ./my-knowledge
-cd ./my-knowledge
-oks status
-```
+## Agent 应该完成什么
 
-重新打开终端后，`oks --help` 应显示当前命令树，`oks status` 应指向刚创建的实例。
+1. 检查本机环境是否满足当前版本要求。
+2. 安装或更新 OKS，并创建独立知识库实例。
+3. 确认 Agent 能找到这个实例，而不是误用源码仓库。
+4. 检查收集、候选审核和召回能力是否可用。
+5. 把失败、缺失和降级状态如实告诉你。
 
-个人知识应该保存在独立实例中，不要长期写进 OKS 源码仓库。
+如果是团队使用，再补充团队名称、成员边界和负责人。Agent 可以创建团队资料模板，但模板内容必须由团队成员确认后才能视为事实。
 
-## 团队实例
+## 安装完成后你应该看到什么
 
-```bash
-oks team init ./team-knowledge-studio --name "Platform Knowledge Team"
-cd ./team-knowledge-studio
-oks status
-```
+Agent 的报告至少应包括：
 
-初始化只创建结构和模板。请人工审阅 `profiles/team.md` 与 `profiles/goals/team.md`，再把它们当作团队事实使用。
+- 知识库实例保存在哪里；
+- 当前是否存在待审核知识；
+- 哪些来源类型可以处理，哪些能力尚未安装；
+- 自动召回是否启用；
+- 下一步如何完成第一条知识闭环。
 
-## 安装 pipx
+需要手工安装、CI 配置或排错时，再查看[命令参考](reference/cli.html)和[故障排除](reference/troubleshooting.html)。普通使用不从命令行开始。
 
-macOS：
-
-```bash
-brew install pipx
-pipx ensurepath
-```
-
-Ubuntu：
-
-```bash
-sudo apt install pipx
-pipx ensurepath
-```
-
-Windows：
-
-```powershell
-py -m pip install --user pipx
-py -m pipx ensurepath
-```
-
-若终端仍找不到 `pipx` 或 `oks`，先重新打开终端，再检查 PATH 和 Python 版本。
-
-## 从源码开发
-
-```bash
-pipx install ./cli --force
-oks --help
-```
-
-这条路径用于维护者验证当前 checkout，不是普通用户的默认安装方式。
-
-## 下一步
-
-- [完成第一次学习循环](first-knowledge-loop.html)
-- [确认 OKS 正在工作](verify.html)
+下一步：[完成第一次学习循环](first-knowledge-loop.html)。

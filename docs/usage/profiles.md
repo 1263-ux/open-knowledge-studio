@@ -36,10 +36,4 @@ Goal 不是口号。Active Goal 会给匹配领域的 Wiki 页面增加召回相
 
 ## 团队初始化
 
-```bash
-oks team init ./team-knowledge-studio --name "Platform Knowledge Team"
-cd ./team-knowledge-studio
-oks status
-```
-
-初始化后先审阅 `profiles/team.md` 与 `profiles/goals/team.md`，不要把生成模板直接视为团队事实。
+把团队名称、知识库位置和负责人告诉 Agent，让它创建团队实例并展示团队资料与目标模板。团队成员确认之前，这些模板只是待填写结构，不能直接视为团队事实。
