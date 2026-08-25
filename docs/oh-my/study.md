@@ -1,10 +1,10 @@
 ---
-title: Oh My Study
+title: 托管你的学习
 nav_order: 1
-parent: Oh My
+parent: 案例
 ---
 
-# Oh My Study：托管你的学习
+# 托管你的学习
 
 {: .important }
 > **状态：部分验证。** 本案例的两个来源已经形成 Raw Bundle，并生成待审核 Candidate；正式实例尚未把这些 Candidate 晋升为 Wiki。页面展示的是学习流程和审核边界，不是对 Kimi 产品主张的背书。
@@ -33,7 +33,7 @@ Agent 如何在**人机协同**中持续学习，并保证**长任务执行**的
 
 开始前先确认 Agent 现在知道什么，避免把演示环境已有页面误当成本轮新知识。
 
-![学习前的 OKS 状态，Wiki、Draft 和 Raw 计数清晰分开](../assets/oh-my-study/01-before-learning.png)
+![学习前的 OKS 状态，Wiki、Draft 和 Raw 计数清晰分开](../assets/hosted-learning/01-before-learning.png)
 
 图 1：DSH 连接到一个本地 OKS 实例。Wiki、Draft、Raw 是不同状态，计数不能相互替代。
 
@@ -46,7 +46,7 @@ Agent 如何在**人机协同**中持续学习，并保证**长任务执行**的
 
 B 站没有提供可直接使用的平台字幕，因此实际路径是本地媒体 → 音频 → 本地 ASR → 关键帧 → Raw Bundle。YouTube 来源使用了用户提供的转写文本。ASR 中的同音词、专有名词错误保留在 Raw；人工修正只能作为带说明的 Candidate 提议。
 
-![两个来源形成 Raw Bundle 后的列表](../assets/oh-my-study/02-evidence-raw.png)
+![两个来源形成 Raw Bundle 后的列表](../assets/hosted-learning/02-evidence-raw.png)
 
 图 2：Raw Bundle 证明来源和提取结果被保存，但不证明其中的主张为真。
 
@@ -60,7 +60,7 @@ Candidate 需要明确区分：
 - 哪些能力判断需要固定数据集 benchmark；
 - 哪些 ASR 内容需要人工听校。
 
-![待审核 Candidate 保留证据范围和待核验主张](../assets/oh-my-study/03-candidate-review.png)
+![待审核 Candidate 保留证据范围和待核验主张](../assets/hosted-learning/03-candidate-review.png)
 
 图 3：页面顶部明确提示“AI 生成候选，等待人工审核，不会自动晋升为正式召回知识”。
 
@@ -74,17 +74,13 @@ Candidate 需要明确区分：
 4. 决定新材料是 `enriches`、`confirms`、`challenges` 还是新知识；
 5. 只晋升足以支持后续决策的部分。
 
-```bash
-oks drafts list
-oks drafts get <slug>
-oks drafts promote <slug>
-```
+审核时，人只需要告诉 Agent：“把待审核的知识提议逐条展示给我，同时显示来源、证据范围和仍未核验的内容。”人确认接受、修改或拒绝后，Agent 再执行对应操作，并保留这次决定的记录。
 
 ## 5. Recall：没有审核知识时就说没有
 
 隔离验收副本曾用于测试 Promote 与 Recall 的界面流转，但它不替代正式实例的人审。下面的召回结果反而展示了正确边界：已有 Kimi 页面只覆盖视频中的模型介绍，不足以支持“智能文档分析系统”的设计结论；其余命中是噪声，不应采信。
 
-![召回结果明确指出已审核知识不足，并排除无关命中](../assets/oh-my-study/04-recall-boundary.png)
+![召回结果明确指出已审核知识不足，并排除无关命中](../assets/hosted-learning/04-recall-boundary.png)
 
 图 4：稳定的 Agent 不是永远给出答案，而是在证据不足时停止外推。
 

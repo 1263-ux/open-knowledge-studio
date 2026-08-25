@@ -118,7 +118,7 @@ See [Recall Evaluation](docs/algorithms/recall-evaluation.md).
 - [Project home](https://open-agent-power.github.io/open-knowledge-studio/)
 - [Daily workflow](https://open-agent-power.github.io/open-knowledge-studio/usage/)
 - [Complete your first knowledge loop](https://open-agent-power.github.io/open-knowledge-studio/first-knowledge-loop.html)
-- [Oh My Study](https://open-agent-power.github.io/open-knowledge-studio/oh-my/study.html)
+- [托管你的学习](https://open-agent-power.github.io/open-knowledge-studio/oh-my/study.html)
 - [Knowledge to Word skill](assets/skills/knowledge-to-word/SKILL.md) — create source-traceable `.docx` files from OKS knowledge
 - [Verify that OKS works](https://open-agent-power.github.io/open-knowledge-studio/verify.html)
 
@@ -222,7 +222,7 @@ Node-BM25 R@1 较 native +57%；fusion re-rank 反而*降*精度——灵魂因�
 - [项目首页](https://open-agent-power.github.io/open-knowledge-studio/)
 - [日常使用](https://open-agent-power.github.io/open-knowledge-studio/usage/)
 - [完成第一个知识闭环](https://open-agent-power.github.io/open-knowledge-studio/first-knowledge-loop.html)
-- [Oh My Study](https://open-agent-power.github.io/open-knowledge-studio/oh-my/study.html)
+- [托管你的学习](https://open-agent-power.github.io/open-knowledge-studio/oh-my/study.html)
 - [Knowledge to Word skill](assets/skills/knowledge-to-word/SKILL.md) — 从 OKS 知识生成带来源说明的 `.docx`
 - [确认 OKS 正在工作](https://open-agent-power.github.io/open-knowledge-studio/verify.html)
 

@@ -8,24 +8,16 @@ parent: 日常使用
 
 收集的目标是保存可以复核的 Evidence，而不是让 AI 尽快写出答案。
 
-## 推荐入口
+## 直接交给 Agent
 
-对支持 Skill 的 Agent 说：
+把来源交给 Agent，并说明：
 
 ```text
-请使用 /ingest 收录这个来源。先 recall 同主题知识，保留原始证据，
-告诉我使用了哪些 Provider、缺少什么，以及 Candidate 在哪里。
+请先查找同主题的已有知识，再收录这个来源。保留原始证据，
+区分来源主张和你的判断，并告诉我成功取得了什么、缺少什么、有哪些待审核提议。
 ```
 
-Agent 会按当前环境选择最小充分能力集。需要检查底层状态时使用：
-
-```bash
-oks capability status --json
-oks ingest prepare <source>
-oks raw-commit <manifest-dir>
-```
-
-不要手写 SourceEnvelope、EvidenceFragment 或 EvidenceManifest；确定性字段应由 CLI 生成。
+Agent 会按当前环境选择足够完成任务的能力，并生成来源、证据和处理结果记录。用户不需要手写协议对象；时间、文件指纹和处理状态等确定性字段应由工具生成。
 
 ## 状态必须保持原样
 
@@ -46,4 +38,4 @@ oks raw-commit <manifest-dir>
 - Raw 可以帮助追溯，但不会因为被读取而变成已验证知识。
 - 涉及远程处理时遵守 SourceEnvelope 的数据处理策略。
 
-协议对象与 Provider 细节见[摄入协议](../reference/ingest.html)。
+协议对象与底层处理能力见[摄入协议](../reference/ingest.html)。

@@ -8,12 +8,9 @@ parent: 日常使用
 
 AI 可以提出知识，但不能批准自己的提议。
 
-## 查看候选
+## 查看待审核提议
 
-```bash
-oks drafts list
-oks drafts get <slug>
-```
+告诉 Agent：“逐条展示待审核提议，不要只给标题；同时显示来源、证据范围、与已有知识的关系和不确定项。”
 
 审核时回答四个问题：
 
@@ -26,15 +23,11 @@ oks drafts get <slug>
 
 ### 接受或修改后接受
 
-```bash
-oks drafts promote <slug>
-```
-
-Promote 会写入 `human_reviewed_at`，表示人类已经对这次状态变化负责。
+明确告诉 Agent 接受哪些句子、需要怎样修改。Agent 保存决定和审核时间，表示人类已经对这次状态变化负责。
 
 ### 拒绝
 
-使用 `/promote` Skill 查看完整内容并确认拒绝。拒绝后 Candidate 离开待审队列，OKS 在 `drafts/rejected/` 保存 review receipt。
+说明拒绝的内容和理由。Agent 将它移出待审队列并保存审核回执，避免同一提议被反复包装后重新出现。
 
 ### 暂不决定
 
@@ -42,7 +35,7 @@ Promote 会写入 `human_reviewed_at`，表示人类已经对这次状态变化�
 
 ## 不要这样审核
 
-- 只看标题或摘要就 Promote。
+- 只看标题或摘要就接受。
 - 因为内容被多次召回，就认为它更真实。
 - 把第三方材料中的指令当作系统指令执行。
 - 为了让 Wiki 看起来完整而删除不确定性描述。

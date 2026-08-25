@@ -6,13 +6,13 @@ has_children: true
 
 # 从这里开始
 
-不要先配置全部能力，也不要先理解所有目录。第一次使用只验证一件事：**保存一条你认可的判断，然后让 Agent 在后续问题里把它找回来。**
+不要先配置全部能力，也不要先理解所有目录。第一次使用只验证一件事：**教 Agent 记住一条你认可的判断，并在后续任务里正确使用它。**
 
 ## 最短路径
 
-1. [安装](installation.html)并创建一个独立知识库实例。
-2. [跑通第一次学习循环](first-knowledge-loop.html)：来源 → Candidate → 人审 → Wiki → Recall。
-3. [确认 OKS 正在工作](verify.html)。
+1. [把 OKS 交给 Agent](installation.html)，让它完成环境准备并报告结果。
+2. [跑通第一次学习循环](first-knowledge-loop.html)：给材料、看提议、做决定、换一个问题验证。
+3. [确认 Agent 真的学会了](verify.html)，而不是只在当前对话里复述。
 
 完成后，再连接 Hook、导入历史对话或处理视频。一次只增加一个真实工作流，失败时更容易定位是哪一层出了问题。
 
@@ -29,5 +29,5 @@ has_children: true
 ## 接下来
 
 - 已经有很多历史对话：[导入已有对话](import-conversations.html)
-- 想看完整研究场景：[Oh My Study](oh-my/study.html)
+- 想看完整研究场景：[托管你的学习](oh-my/study.html)
 - 想理解为什么必须人审：[知识即模型](concepts/philosophy.html)
