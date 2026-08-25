@@ -40,6 +40,17 @@
 
 # Changelog
 
+## [0.6.8] — 2026-08-25
+
+### fix(vfs): canonical uri 不再强制 .md 后缀
+
+旧 `resolve()` 要求 uri 必须带 `.md` 后缀（如 `oks://wiki/.../slug.md`），否则 PATH_NOT_FOUND。recall 返回的 slug 字段不带 .md，用户/Agent 用 slug 构造 uri 会找不到文件。
+
+**修复**：`resolve()` 在 candidate 不存在且无后缀时，透明尝试 `.md` sibling——canonical uri 可不带 .md（不暴露磁盘文件格式），带 .md 的旧 uri 向后兼容。
+
+**指标**：vfs 测试 45→46 passed（+1 新测试 `test_stat_and_read_accept_uri_without_md_suffix`），全测试 270 passed。
+
+
 ## [0.6.7] — 2026-08-24
 
 ### fix(recall): L0 preview 质量优化（机械截取 → 语义完整截取）

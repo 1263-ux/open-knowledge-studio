@@ -144,6 +144,34 @@ def test_ls_and_stat_return_canonical_nodes(vfs_root):
     assert stat["mount"] == "profiles"
 
 
+def test_stat_and_read_accept_uri_without_md_suffix(vfs_root):
+    """Canonical URIs should not expose the on-disk ``.md`` format.
+
+    A URI without the suffix must still stat/read the ``.md`` file, while a
+    URI *with* the suffix keeps working (backward compatibility)."""
+    from knowledge_studio.vfs import VfsResolver, VfsService
+
+    service = VfsService(VfsResolver(vfs_root))
+
+    # Chinese slug without .md suffix resolves to the .md file transparently.
+    bare = "oks://wiki/computing/concepts/中文 页面"
+    stat = service.stat(bare)
+    assert stat["type"] == "file"
+    assert stat["size"] == (vfs_root / "wiki/computing/concepts/中文 页面.md").stat().st_size
+
+    # read() also works without the suffix and returns the same content.
+    bare_content = service.read(bare)["content"]
+    md_content = service.read(bare + ".md")["content"]
+    assert bare_content == md_content == "# 中文页面\n"
+
+    # A genuinely missing path (no .md sibling) still raises PATH_NOT_FOUND.
+    from knowledge_studio.vfs import VfsError
+
+    with pytest.raises(VfsError) as exc:
+        service.stat("oks://wiki/computing/concepts/does-not-exist")
+    assert exc.value.code == "PATH_NOT_FOUND"
+
+
 def test_root_ls_is_synthetic_and_physical_ls_hides_exclusions(vfs_root):
     from knowledge_studio.vfs import MOUNTS, VfsResolver, VfsService
 

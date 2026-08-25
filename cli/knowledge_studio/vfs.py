@@ -132,7 +132,14 @@ class VfsResolver:
         if not resolved_candidate.is_relative_to(resolved_root):
             raise VfsError("INVALID_URI", "URI escapes its public scope")
         if must_exist and not candidate.exists():
-            raise VfsError("PATH_NOT_FOUND", f"Path not found: {uri.render()}")
+            # Allow canonical URIs to omit the ``.md`` suffix so they do not
+            # expose the on-disk file format: when the bare candidate is missing
+            # and a ``.md`` sibling exists, transparently resolve to it.
+            md_candidate = candidate.with_suffix(".md")
+            if candidate.suffix == "" and md_candidate.exists():
+                candidate = md_candidate
+            else:
+                raise VfsError("PATH_NOT_FOUND", f"Path not found: {uri.render()}")
         return ResolvedNode(uri=uri, path=candidate, mount=mount)
 
     def uri_for_path(self, path: Path) -> str:
