@@ -233,12 +233,11 @@ relationship: ""              # enriches | supersedes | confirms | challenges
 
 ```bash
 oks drafts list              # 查看所有草稿
-oks drafts get <slug>        # 阅读完整 Candidate
 oks drafts promote <slug>    # 提升到 wiki/
 oks drafts reject <slug>     # 拒绝并保留 review receipt
 ```
 
-或用 `/promote` 技能交互式审查。
+使用 `/promote` 技能读取完整 Candidate 并交互式审查；不要只看列表摘要就做决定。
 
 ### Step 9: 验证召回
 
