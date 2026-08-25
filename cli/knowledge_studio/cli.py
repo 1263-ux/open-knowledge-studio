@@ -2859,6 +2859,9 @@ def _validate_hook_recall_response(data: object) -> Optional[dict]:
 
 
 def _hook_recall_script() -> Path:
+    assets = _asset_source()
+    if assets is not None:
+        return assets / "hooks" / "user-prompt-recall.py"
     return Path(__file__).resolve().parent / "_assets" / "hooks" / "user-prompt-recall.py"
 
 
