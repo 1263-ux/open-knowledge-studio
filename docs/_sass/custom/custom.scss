@@ -29,7 +29,7 @@
   min-height: 3rem !important;
 }
 
-// ===== 导航分组由 Just the Docs 的 expander 状态控制，避免所有分组同时展开 =====
+// ===== 导航分组可独立展开；展开状态会跨页面保留 =====
 .nav-list > .nav-list-item > .nav-list-link {
   color: #2c2c2c !important;
   font-weight: 700 !important;
