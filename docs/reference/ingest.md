@@ -1,5 +1,5 @@
 ---
-title: 收录资料
+title: 摄入协议
 nav_order: 2
 parent: 参考
 has_children: true

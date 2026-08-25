@@ -1,0 +1,31 @@
+<!-- Render kramdown's Mermaid code fences on GitHub Pages. -->
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+
+  const renderOksMermaid = async () => {
+    const blocks = document.querySelectorAll("pre > code.language-mermaid");
+    if (!blocks.length) return;
+
+    const nodes = [];
+    blocks.forEach((block) => {
+      const container = document.createElement("div");
+      container.className = "mermaid oks-mermaid";
+      container.textContent = block.textContent;
+      block.parentElement.replaceWith(container);
+      nodes.push(container);
+    });
+
+    mermaid.initialize({
+      startOnLoad: false,
+      securityLevel: "strict",
+      theme: "base",
+    });
+    await mermaid.run({ nodes });
+  };
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", renderOksMermaid, { once: true });
+  } else {
+    renderOksMermaid();
+  }
+</script>
