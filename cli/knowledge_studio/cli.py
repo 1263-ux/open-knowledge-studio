@@ -99,7 +99,7 @@ def _vfs_error(operation: str, uri: str, exc: VfsError) -> dict:
 
 def _render_vfs_text(operation: str, uri: str, result: dict[str, Any]) -> None:
     console.print(f"[bold]{escape(operation)}[/bold] {escape(uri)}")
-    rows = result.get("entries") or result.get("matches")
+    rows = result.get("entries") or result.get("matches") or result.get("items")
     if isinstance(rows, list):
         table = Table(show_header=True)
         columns = list(rows[0]) if rows else ["uri"]
@@ -319,6 +319,28 @@ def fs_read(
         uri,
         output_format,
         lambda service: service.read(uri, offset=offset, limit=limit),
+    )
+
+
+@fs_app.command("read-many")
+def fs_read_many(
+    uris: list[str] = typer.Argument(..., help="Canonical oks:// file URIs."),
+    limit: int = typer.Option(20_000, "--limit", help="Maximum characters per file."),
+    max_total_chars: int = typer.Option(
+        8 * 1024 * 1024,
+        "--max-total-chars",
+        help="Maximum characters returned across all files.",
+    ),
+    output_format: str = typer.Option("table", "--format", help="table or json"),
+):
+    """Read multiple bounded UTF-8 text files in one CLI invocation."""
+    _run_vfs(
+        "read-many",
+        "oks://",
+        output_format,
+        lambda service: service.read_many(
+            uris, limit=limit, max_total_chars=max_total_chars
+        ),
     )
 
 
