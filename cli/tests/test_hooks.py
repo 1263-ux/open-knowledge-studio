@@ -423,7 +423,10 @@ def test_hook_recall_cli_reuses_policy_and_history_without_prompt_leakage(tmp_pa
     assert first.exit_code == 0, first.output
     payload = json.loads(first.output)
     assert payload["schema"] == "hook-recall-response/v1"
-    assert payload["status"] == "injected", payload
+    assert payload["status"] == "injected", {
+        "reason": payload.get("reason"),
+        "diagnostic": payload.get("diagnostic"),
+    }
     assert payload["trace"]["matches"] == ["recall-bridge"], payload
     assert "recall bridge architecture" not in json.dumps(payload)
 
