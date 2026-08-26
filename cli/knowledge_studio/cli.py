@@ -2801,8 +2801,8 @@ _HOOK_RECALL_STATUSES = {
 }
 
 
-def _hook_recall_error(reason: str) -> dict:
-    return {
+def _hook_recall_error(reason: str, *, diagnostic: str = "") -> dict:
+    result = {
         "schema": _HOOK_RECALL_SCHEMA,
         "status": "error",
         "context": "",
@@ -2814,6 +2814,11 @@ def _hook_recall_error(reason: str) -> dict:
         },
         "reason": reason,
     }
+    if diagnostic and os.environ.get("OKS_HOOK_DIAGNOSTICS", "").lower() in {
+        "1", "true", "yes"
+    }:
+        result["diagnostic"] = diagnostic[-1000:]
+    return result
 
 
 def _valid_hook_number(value: object, *, allow_none: bool = False) -> bool:
@@ -2897,13 +2902,20 @@ def _run_hook_recall(
             check=False,
         )
         if completed.returncode != 0:
-            raise RuntimeError(f"hook exited {completed.returncode}")
+            detail = f"hook exited {completed.returncode}"
+            stderr = str(getattr(completed, "stderr", "") or "").strip()
+            if stderr:
+                detail += f": {stderr[-1000:]}"
+            raise RuntimeError(detail)
         data = _validate_hook_recall_response(json.loads(completed.stdout))
         if data is None:
             raise ValueError("invalid hook response")
         return data
-    except Exception:
-        return _hook_recall_error("hook_bridge_failed")
+    except Exception as exc:
+        return _hook_recall_error(
+            "hook_bridge_failed",
+            diagnostic=f"{type(exc).__name__}: {exc}",
+        )
 
 
 def _read_hook_history(root: Path, limit: int, session_id: str, cwd: str) -> dict:

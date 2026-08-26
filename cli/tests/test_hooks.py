@@ -385,7 +385,8 @@ def test_non_codex_posttool_keeps_plain_text_conflict_output(tmp_path):
     assert not result.stdout.startswith("{")
 
 
-def test_hook_recall_cli_reuses_policy_and_history_without_prompt_leakage(tmp_path):
+def test_hook_recall_cli_reuses_policy_and_history_without_prompt_leakage(tmp_path, monkeypatch):
+    monkeypatch.setenv("OKS_HOOK_DIAGNOSTICS", "1")
     target = _init_instance(tmp_path)
     page = target / "wiki" / "computing" / "concepts" / "recall-bridge.md"
     page.parent.mkdir(parents=True, exist_ok=True)
@@ -422,7 +423,7 @@ def test_hook_recall_cli_reuses_policy_and_history_without_prompt_leakage(tmp_pa
     assert first.exit_code == 0, first.output
     payload = json.loads(first.output)
     assert payload["schema"] == "hook-recall-response/v1"
-    assert payload["status"] == "injected"
+    assert payload["status"] == "injected", payload
     assert payload["trace"]["matches"] == ["recall-bridge"], payload
     assert "recall bridge architecture" not in json.dumps(payload)
 
@@ -466,3 +467,26 @@ def test_hook_recall_cli_rejects_malformed_success_envelope(tmp_path, monkeypatc
         "trace": {"candidate_count": 0, "matches": [], "top_relevance": None, "threshold": None},
         "reason": "hook_bridge_failed",
     }
+
+
+def test_hook_recall_diagnostics_are_opt_in(tmp_path, monkeypatch):
+    target = _init_instance(tmp_path)
+
+    class Completed:
+        returncode = 7
+        stdout = ""
+        stderr = "child hook failed: import error"
+
+    monkeypatch.setattr(cli_module.subprocess, "run", lambda *args, **kwargs: Completed())
+    without_diagnostics = cli_module._run_hook_recall(
+        target, "safe prompt", "session", "C:/host", "dsh-oks"
+    )
+    assert "diagnostic" not in without_diagnostics
+
+    monkeypatch.setenv("OKS_HOOK_DIAGNOSTICS", "1")
+    with_diagnostics = cli_module._run_hook_recall(
+        target, "safe prompt", "session", "C:/host", "dsh-oks"
+    )
+    assert with_diagnostics["diagnostic"] == (
+        "RuntimeError: hook exited 7: child hook failed: import error"
+    )
