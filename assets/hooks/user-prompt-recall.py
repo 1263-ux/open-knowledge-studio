@@ -305,7 +305,9 @@ def _hook_response(
 def _finish_hook(result: dict) -> int:
     """Keep editor hooks fail-open while the CLI bridge gets JSON status."""
     if os.environ.get("OKS_HOOK_OUTPUT", "").lower() == "json":
-        sys.stdout.write(json.dumps(result, ensure_ascii=False) + "\n")
+        # The bridge is consumed as JSON, so ASCII escaping keeps stdout safe
+        # when a Windows host inherits a legacy ``charmap`` encoding.
+        sys.stdout.write(json.dumps(result, ensure_ascii=True) + "\n")
     elif result.get("context"):
         sys.stdout.write(str(result["context"]) + "\n")
     return 0

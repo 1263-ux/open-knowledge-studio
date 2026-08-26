@@ -387,6 +387,9 @@ def test_non_codex_posttool_keeps_plain_text_conflict_output(tmp_path):
 
 def test_hook_recall_cli_reuses_policy_and_history_without_prompt_leakage(tmp_path, monkeypatch):
     monkeypatch.setenv("OKS_HOOK_DIAGNOSTICS", "1")
+    # Reproduce Windows runners whose child stdout defaults to a legacy
+    # ``charmap`` encoding. The structured bridge must remain ASCII-safe.
+    monkeypatch.setenv("PYTHONIOENCODING", "cp1252")
     target = _init_instance(tmp_path)
     page = target / "wiki" / "computing" / "concepts" / "recall-bridge.md"
     page.parent.mkdir(parents=True, exist_ok=True)
