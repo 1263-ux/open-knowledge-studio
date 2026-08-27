@@ -5,9 +5,10 @@
 | 目录 | 内容 |
 |---|---|
 | `acceptance/` | 各版本的验收证据（场景、安全检查、产物索引） |
+| `experiments/` | 可重复运行的数据集、基线和候选结果 |
 
 PR 说明、交接文档、重构计划和探索笔记由 Git 历史、Issue 或 PR 保存，不再复制到这里。
-可复用的产品案例放入 `examples/oh-my-*`，当前产品说明放入 `docs/`。
+公开案例位于 `docs/oh-my/`；可执行参考集成位于 `reference-implementations/`。
 
 用户实例运行时生成的 `records/*.jsonl`（如注入、反馈和文件编辑记录）是另一项持久化契约，
 不属于仓库中的历史工程档案，本次整理不改变其语义。
@@ -26,6 +27,6 @@ PR 说明、交接文档、重构计划和探索笔记由 Git 历史、Issue 或
 测试数量都可能已经过期。当前口径以
 [`CONSTITUTION.md`](../CONSTITUTION.md) 与 [`docs/`](../docs/) 为准。
 
-只有维护者明确要求长期保存版本验收证据时才新增文件。文件不要添加 `title` /
-`nav_order` front matter，也不要从 `docs/` 页面使用相对路径链接这里；需要引用时使用
-仓库 URL。
+只有维护者明确要求长期保存版本验收或可复现实验时才新增文件。`records/` 根目录除
+本 README 外不新增报告。文件不要添加 `title` / `nav_order` front matter，也不要从
+`docs/` 页面使用相对路径链接这里；需要引用时使用仓库 URL。

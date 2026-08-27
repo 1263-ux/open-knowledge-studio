@@ -1,202 +1,38 @@
 ---
-title: 确认 OKS 正在工作
+title: 确认 Agent 真的学会了
 nav_order: 3
 parent: 从这里开始
 ---
 
-# 确认 OKS 正在工作
+# 确认 Agent 真的学会了
 
-> 某一步失败了？逐步排查
+页面正常、文件存在，都不能证明学习闭环已经成立。让 Agent 用结果回答下面四个问题。
 
----
+## 1. 你现在使用哪个知识库？
 
-## 快速诊断
+要求 Agent 报告当前实例的位置、其中的来源数量、待审核提议和已审核知识。个人知识不应落在 OKS 源码仓库里。
 
-对 Agent 说：
+## 2. 新材料有没有绕过审核？
 
-```
-"诊断 OKS 状态，检查所有组件"
-```
+要求 Agent 同时展示最近收集的来源、待审核提议和已审核知识。刚收集的内容应先等待人的决定，不应自动成为长期知识。
 
-Agent 会自动检查：
-- ✓ OKS 是否安装
-- ✓ 知识库是否初始化
-- ✓ Skill 是否可用
-- ✓ 权限是否正常
+## 3. 这次回答用了什么知识？
 
----
+换一个真实问题，要求 Agent 展示召回结果、来源标签和相关性说明。命中原始材料只能证明材料存在；只有经过人审的知识才能作为已确认判断使用。
 
-## 手动检查清单
+## 4. 不知道时会不会停下来？
 
-### ✅ 检查 1: OKS 已安装
+故意问一个超出现有证据的问题。合格的 Agent 会说明知识缺口、提出下一步取证建议，而不是把相似内容拼成事实。
 
-```bash
-oks --version
-```
+## 按失败位置排查
 
-**期望**：返回版本号（如 `0.6.x`）
+| 现象 | 让 Agent 先检查 |
+|---|---|
+| 找不到知识库 | 安装结果、当前实例与全局配置 |
+| 来源没有保存 | 获取方式、证据清单与真实执行状态 |
+| 没有待审核提议 | 缺失证据、处理能力与降级说明 |
+| 审核后没有长期知识 | 审核记录、内容结构与保存目标 |
+| 新任务没有召回 | 已审核知识、问题描述、当前目标与召回入口 |
+| Agent 自动引用失败 | 自动召回是否启用，以及宿主是否已重新加载 |
 
-**失败**：看 [安装指南](installation.md)
-
----
-
-### ✅ 检查 2: 在知识库目录
-
-```bash
-pwd
-ls -la | grep ".oks"
-```
-
-**期望**：当前目录包含 `.oks/`
-
-**失败**：
-```bash
-cd ./my-knowledge  # 进入知识库
-```
-
----
-
-### ✅ 检查 3: 状态正常
-
-```bash
-oks status
-```
-
-**期望**：显示状态面板（Wiki / Drafts 数量）
-
----
-
-### ✅ 检查 4: Skill 可用
-
-```bash
-ls .claude/skills/
-```
-
-**期望**：包含 Skill 文件
-
----
-
-## 按失败环节排查
-
-### 收录失败
-
-**现象**：Agent 说"找不到 Skill"或"命令失败"
-
-**检查**：
-1. 在正确目录？`pwd`
-2. Skill 存在？`ls .claude/skills/`
-3. 权限正常？`oks status`
-
-**解决**：
-```bash
-cd /path/to/my-knowledge
-```
-
----
-
-### Candidate 不生成
-
-**现象**：下载成功但没有生成 Candidate
-
-**原因**：
-
-| 问题 | 检查 | 解决 |
-|------|------|------|
-| AI API 不可用 | Agent 能正常回复吗 | 检查 Agent 配置 |
-| 写入权限不足 | `touch drafts/test.md` | 修复权限 |
-
----
-
-### 晋升失败
-
-**现象**：Agent 说"文件不存在"或"权限错误"
-
-**检查**：
-```bash
-# Candidate 存在？
-ls drafts/
-
-# Wiki 目录可写？
-touch wiki/test.md && rm wiki/test.md
-```
-
----
-
-### 召回不准
-
-**现象**：找不到相关知识，或找到的不相关
-
-**检查**：
-```bash
-# Wiki 存在？
-oks wiki list
-
-# 手动测试
-oks recall "关键词"
-```
-
-**常见原因**：
-
-| 问题 | 原因 | 解决 |
-|------|------|------|
-| 找不到 | 未晋升 | `oks wiki list` 确认 |
-| 不相关 | 用词不匹配 | 换个措辞 |
-| 评分低 | 类型权重低 | 改 frontmatter `type` |
-
-**调优**：
-```bash
-oks recall "关键词" --explain
-```
-
-> [召回调优指南](best-practices.md#阶段-3召回-recall---用自然语言提问)
-
----
-
-## 状态解读
-
-### oks status 输出
-
-```
-┌────────────────────────────────────────┐
-│ Open Knowledge Studio — Status         │
-│ Root: /path/to/knowledge               │
-│                                        │
-│ Wiki pages: 7  Domains: 2  Drafts: 4   │
-│ Raw files: 167  Profiles: 0            │
-└────────────────────────────────────────┘
-```
-
-| 字段 | 含义 | 正常范围 |
-|------|------|---------|
-| **Wiki pages** | Wiki 数量 | 0+ |
-| **Drafts** | 待审核 | < 20 |
-| **Raw files** | 原始资料 | 任意 |
-
-### 异常信号
-
-| 现象 | 问题 |
-|------|------|
-| Drafts > 50 | 堆积太多 |
-| Wiki = 0 | 从没晋升过 |
-
----
-
-## 还是不行？
-
-### 寻求帮助
-
-- **GitHub Issues**: https://github.com/open-agent-power/open-knowledge-studio/issues
-- **Discussions**: https://github.com/open-agent-power/open-knowledge-studio/discussions
-
-**提供信息**：
-- `oks status` 输出
-- 失败的具体步骤
-- 错误信息
-
----
-
-## 下一步
-
-✅ **排查完成**：回到 [第一个知识闭环](first-knowledge-loop.md)
-
-📚 **学习更多**：[最佳实践](best-practices.md)
+仍无法定位时，让 Agent 打开[故障排除](reference/troubleshooting.html)，并保留原始错误，不要只记录“失败了”。

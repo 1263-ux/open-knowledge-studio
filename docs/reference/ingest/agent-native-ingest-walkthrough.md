@@ -1,7 +1,7 @@
 ---
 title: Agent-Native Ingest 操作手册
 nav_order: 1
-parent: 收录资料
+parent: 摄入协议
 ---
 
 # Agent-Native Ingest 操作手册
@@ -237,7 +237,7 @@ oks drafts promote <slug>    # 提升到 wiki/
 oks drafts reject <slug>     # 拒绝并保留 review receipt
 ```
 
-或用 `/promote` 技能交互式审查。
+使用 `/promote` 技能读取完整 Candidate 并交互式审查；不要只看列表摘要就做决定。
 
 ### Step 9: 验证召回
 

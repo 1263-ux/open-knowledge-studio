@@ -1,7 +1,7 @@
 ---
 title: 宪法
-nav_order: 2
-parent: 概念
+nav_order: 1
+parent: 维护者
 ---
 # 宪法（A1-A5 架构不变量）
 

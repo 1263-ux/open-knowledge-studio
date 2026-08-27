@@ -1,7 +1,7 @@
 ---
 title: 协议对象关系
 nav_order: 2
-parent: 收录资料
+parent: 摄入协议
 ---
 
 # 协议对象关系

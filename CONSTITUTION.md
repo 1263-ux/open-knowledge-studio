@@ -90,7 +90,7 @@ downloading. The Agent selects the lowest-cost available capability at runtime
 (API → system CLI → install on demand → remote Worker).
 
 **飞书作为可选集成（已从核心迁出）：**
-飞书集成作为参考实现位于 `examples/oh-my-feishu/`，不随 CLI 命令分发。其 `feishu_setup.py` 自动创建 Base、采集表、表单；`feishu_base_worker.py` 处理采集→Raw→Candidate→IM 审核闭环。`oks ingest` 与 CLI 主循环不依赖飞书，独立可用。
+飞书集成作为参考实现位于 `reference-implementations/oh-my-feishu/`，不随 CLI 命令分发。其 `feishu_setup.py` 自动创建 Base、采集表、表单；`feishu_base_worker.py` 处理采集→Raw→Candidate→IM 审核闭环。`oks ingest` 与 CLI 主循环不依赖飞书，独立可用。
 
 **Do not** add AI API calls to the CLI core — `oks` handles only file
 system operations and recall scoring. External tools (L1/L2) may use AI
