@@ -1,6 +1,8 @@
 # MarkItDown Provider
 
-Office 文档→Markdown 转换。DOCX/PPTX/XLSX 已验证。
+Office 文档→Markdown 转换。基础提取路径可用；复杂 DOCX/PPTX/XLSX 的结构、
+公式、嵌入媒体和真实版式仍应按原文件复核。Word 与 XLSX 的真实样本验收尚未完成，
+不得把提取结果宣传为完整 Office 保真。
 
 ## 调用
 
@@ -12,8 +14,8 @@ Office 文档→Markdown 转换。DOCX/PPTX/XLSX 已验证。
 
 ## 输出
 
-- 成功 → `status: complete`，evidence kind=text
-- 复杂结构 → `status: partial`，需 firecrawl parse 或 agent-runtime 补充
+- 文本提取成功 → `status: complete`，evidence kind=text；这不等于版式验收
+- 复杂结构 → `status: partial`，需原文件复核或 agent-runtime 视觉补充
 
 ## 降级
 

@@ -117,6 +117,7 @@ See [Recall Evaluation](docs/algorithms/recall-evaluation.md).
 - [Complete your first knowledge loop](https://open-agent-power.github.io/open-knowledge-studio/first-knowledge-loop.html)
 - [Real-world examples](https://open-agent-power.github.io/open-knowledge-studio/examples.html)
 - [Knowledge to Word skill](assets/skills/knowledge-to-word/SKILL.md) — create source-traceable `.docx` files from OKS knowledge
+- [OKS Office skill](assets/skills/office/SKILL.md) — for explicit Word, Excel, PowerPoint, or PDF requests: research, combine OKS context, and deliver a checked editable artifact
 - [Verify that OKS works](https://open-agent-power.github.io/open-knowledge-studio/verify.html)
 
 *Advanced:*
@@ -219,6 +220,7 @@ Node-BM25 R@1 较 native +57%；fusion re-rank 反而*降*精度——灵魂因�
 - [完成第一个知识闭环](https://open-agent-power.github.io/open-knowledge-studio/first-knowledge-loop.html)
 - [真实案例](https://open-agent-power.github.io/open-knowledge-studio/examples.html)
 - [Knowledge to Word skill](assets/skills/knowledge-to-word/SKILL.md) — 从 OKS 知识生成带来源说明的 `.docx`
+- [OKS Office skill](assets/skills/office/SKILL.md) — 仅在明确要求 Word、Excel、PowerPoint 或 PDF 时：固定调研、补充 OKS 上下文并交付经检查的可编辑成品
 - [确认 OKS 正在工作](https://open-agent-power.github.io/open-knowledge-studio/verify.html)
 
 *进阶内容：*

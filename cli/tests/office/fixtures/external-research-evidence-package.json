@@ -1,0 +1,72 @@
+{
+  "schema_version": "oks-office-evidence/v1",
+  "request": {
+    "title": "OKS Office 适配器调研样例",
+    "audience": "产品与工程评审",
+    "deliverables": ["docx"]
+  },
+  "recall": {
+    "query": "Office workflow adapter decision",
+    "items": []
+  },
+  "summary": {
+    "text": "成熟 Office 工作流可作为可选运行时能力；OKS 保持证据、路由和质量门职责。",
+    "claim_refs": ["claim-1", "claim-2"]
+  },
+  "claims": [
+    {
+      "id": "claim-1",
+      "text": "Anthropic 的 DOCX skill 将其许可证标为 Proprietary，因此 OKS 只能在宿主独立安装时调用它，不能随包复制。",
+      "source_refs": ["src-anthropic"],
+      "confidence": "high",
+      "review_status": "provisional"
+    },
+    {
+      "id": "claim-2",
+      "text": "ExcelMcp 的 CLI 面向 coding agent 与自动化场景，并通过真实 Excel COM API 执行工作簿操作。",
+      "source_refs": ["src-excel"],
+      "confidence": "medium",
+      "review_status": "provisional"
+    }
+  ],
+  "sections": [
+    {
+      "id": "section-1",
+      "title": "路由结论",
+      "claim_refs": ["claim-1", "claim-2"],
+      "blocks": [
+        {
+          "type": "paragraph",
+          "text": "Office 应优先使用宿主已具备的成熟能力，并对缺失 Adapter 明确降级。",
+          "claim_refs": ["claim-1", "claim-2"]
+        },
+        {
+          "type": "bullets",
+          "items": [
+            "DOCX 调用独立安装的上游 skill，不复制其专有内容。",
+            "原生 Excel 能力只在合格工作站上按需启用。"
+          ],
+          "claim_refs": ["claim-1", "claim-2"]
+        }
+      ]
+    }
+  ],
+  "sources": [
+    {
+      "id": "src-anthropic",
+      "kind": "research",
+      "label": "Research: Anthropic DOCX Skill",
+      "locator": "https://github.com/anthropics/skills/blob/main/skills/docx/SKILL.md",
+      "retrieved_at": "2026-08-27T10:00:00+08:00",
+      "status": "unverified"
+    },
+    {
+      "id": "src-excel",
+      "kind": "research",
+      "label": "Research: ExcelMcp README",
+      "locator": "https://github.com/sbroenne/mcp-server-excel",
+      "retrieved_at": "2026-08-27T10:00:00+08:00",
+      "status": "unverified"
+    }
+  ]
+}
