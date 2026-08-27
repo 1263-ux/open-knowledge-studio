@@ -40,6 +40,16 @@
 
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- 保留旧版 recall 环境变量作为临时覆盖，同时以 `settings/recall.yaml` 作为持久配置来源。
+- 改进 recall preview，优先使用已有摘要，并尽量在完整行边界截断。
+- 让并发访问计数在读改写期间保持一致，并在 Raw Bundle 发布失败时保留原内容。
+- 补齐 Candidate 读取、人工审核覆盖与 Raw Bundle 成功后的临时文件清理测试。
+
+
 ## [0.6.8] — 2026-08-25
 
 ### fix(vfs): canonical uri 不再强制 .md 后缀

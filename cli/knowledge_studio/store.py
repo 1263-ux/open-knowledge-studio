@@ -480,9 +480,14 @@ def record_access(slug: str) -> None:
     raise confidence or promote provisional pages would mean a page nobody
     reviewed gets injected as ``[verified]`` after three reads.
     """
-    counts = _load_access_counts()
-    counts[slug] = counts.get(slug, 0) + 1
-    _save_access_counts(counts)
+    path = _access_log_path()
+    # Keep the lock across the complete read/modify/write transaction. The
+    # snapshot writer is atomic by itself, but locking only the final write
+    # would still let concurrent readers overwrite one another's increments.
+    with _file_lock(path.with_name(f".{path.name}.lock")):
+        counts = _load_access_counts()
+        counts[slug] = counts.get(slug, 0) + 1
+        _save_access_counts(counts)
 
 
 def make_slug(title: str, fallback: str = "untitled") -> str:
@@ -706,6 +711,26 @@ def list_drafts() -> list[dict]:
             "body": meta.get("body", ""),
         })
     return drafts
+
+
+def read_draft(slug: str) -> str:
+    """Return a draft's original Markdown for human review.
+
+    Review must happen against the exact Candidate artifact, including its
+    frontmatter and provenance fields.  Keep this read-only helper separate
+    from ``list_drafts`` so callers do not have to reconstruct Markdown from
+    parsed YAML and lose fields they need to inspect.
+    """
+    draft_path = _draft_path(slug)
+    if not draft_path.exists():
+        raise FileNotFoundError(f"Draft not found: {slug}")
+    content = draft_path.read_text(encoding="utf-8")
+    if not parse_wiki_file(draft_path):
+        raise ValueError(
+            f"Draft '{slug}' has no valid YAML frontmatter. "
+            f"Drafts must start with '---' and contain title, type, and area fields."
+        )
+    return content
 
 
 def _draft_path(slug: str) -> Path:

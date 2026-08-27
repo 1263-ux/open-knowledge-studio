@@ -204,6 +204,85 @@ def test_drafts_list_renders_yaml_date(monkeypatch):
     assert "2026-07-28" in result.stdout
 
 
+def test_drafts_get_prints_exact_candidate_markdown(tmp_path, monkeypatch):
+    from knowledge_studio import cli
+
+    monkeypatch.setenv("OKS_ROOT", str(tmp_path))
+    draft = tmp_path / "drafts" / "candidate-one.md"
+    draft.parent.mkdir()
+    source = """---
+title: Candidate one
+draft_type: concept
+draft_area: computing
+status: pending
+source_bundle: raw/example
+---
+
+# Candidate body
+
+Keep the provenance visible during review.
+"""
+    draft.write_text(source, encoding="utf-8")
+
+    result = CliRunner().invoke(cli.app, ["drafts", "get", "candidate-one"])
+
+    assert result.exit_code == 0
+    assert result.stdout == source
+
+
+def test_drafts_promote_accepts_review_overrides(tmp_path, monkeypatch):
+    from knowledge_studio import cli
+    from knowledge_studio import store
+
+    monkeypatch.setenv("OKS_ROOT", str(tmp_path))
+    draft = tmp_path / "drafts" / "candidate-one.md"
+    draft.parent.mkdir()
+    draft.write_text(
+        """---
+title: Candidate one 待审核
+draft_type: concept
+draft_area: computing
+status: pending
+---
+
+Reviewed body.
+""",
+        encoding="utf-8",
+    )
+
+    result = CliRunner().invoke(
+        cli.app,
+        [
+            "drafts",
+            "promote",
+            "candidate-one",
+            "--title",
+            "Candidate one",
+            "--type",
+            "strategy",
+            "--area",
+            "ai-models",
+            "--slug-hint",
+            "candidate-one-reviewed",
+            "--tag",
+            "kimi",
+            "--tag",
+            "reviewed",
+        ],
+    )
+
+    assert result.exit_code == 0, result.stdout
+    pages = store.list_wiki_pages()
+    assert len(pages) == 1
+    page = pages[0]
+    assert page is not None
+    assert page["title"] == "Candidate one"
+    assert page["type"] == "strategy"
+    assert page["area"] == "ai-models"
+    assert page["tags"] == "kimi, reviewed"
+    assert page["human_reviewed_at"]
+
+
 # ── Strategy config round-trip ────────────────────────────────────
 
 _MOCK_STRATEGY_STORE: dict = {}

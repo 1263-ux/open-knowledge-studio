@@ -55,7 +55,11 @@ def _inject_per_page_chars() -> int:
         return MAX_BODY_PREVIEW
 
 
-def _make_preview(body: str, limit: int | None = None) -> str:
+def _make_preview(
+    body: str,
+    limit: int | None = None,
+    abstract: str | None = None,
+) -> str:
     """Build a semantically complete L0 preview from wiki body (P4: pure text ops).
 
     v0.6.7: 旧 ``body[:limit]`` 机械截取有 86% 质量问题——标题重复 +
@@ -65,10 +69,14 @@ def _make_preview(body: str, limit: int | None = None) -> str:
     3. frontmatter ``abstract`` 字段优先（Dreaming 层 AI 写的一句话摘要），
        本函数只处理无 abstract 时的 fallback——纯机械抽取，不调 AI API（P4）。
     """
-    if not body:
-        return ""
     if limit is None:
         limit = _inject_per_page_chars()
+    if abstract and abstract.strip():
+        summary = abstract.strip()
+        if len(summary) <= limit:
+            return summary
+    if not body:
+        return ""
     lines = body.split("\n")
     idx = 0
     # skip leading blanks
@@ -130,8 +138,6 @@ def set_recall_yaml_param(kb_root: Path, location: tuple[str | None, str], value
     # coerce value type
     if value.lower() in ("true", "false"):
         v: int | float | bool | str = value.lower() == "true"
-    elif value.lower() in ("true", "false"):
-        v: int | float | bool | str = value.lower() == "true"
     else:
         try:
             v = float(value) if "." in value else int(value)
@@ -146,7 +152,17 @@ def set_recall_yaml_param(kb_root: Path, location: tuple[str | None, str], value
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             _yaml.safe_dump(data, f, allow_unicode=True, sort_keys=False)
+            f.flush()
+            os.fsync(f.fileno())
         os.replace(tmp, ypath)
+        try:
+            dir_fd = os.open(str(ypath.parent), os.O_RDONLY)
+            try:
+                os.fsync(dir_fd)
+            finally:
+                os.close(dir_fd)
+        except OSError:
+            pass
     finally:
         if os.path.exists(tmp):
             os.unlink(tmp)
@@ -215,23 +231,40 @@ def load_recall_params(root=None):
     except Exception:
         pass
 
-    # env 已废弃——settings/recall.yaml 是唯一真源（git 同步，走到哪带到哪）。
-    # 临时调参用 CLI flag（oks recall --floor 0.9），不污染持久状态。
-    # 迁移：检测到旧 OKS_ env 时警告，提示迁移到 yaml + unset。
-    _legacy_env = [
-        "OKS_RECALL_FLOOR", "OKS_RECALL_TOPN", "OKS_RECALL_MINLEN",
-        "OKS_RECALL_COOLDOWN", "OKS_POSTTOOL_FLOOR", "OKS_POSTTOOL_TOPN",
-        "OKS_POSTTOOL_MODE", "OKS_POSTTOOL_RECALL", "OKS_POSTTOOL_SIGNAL_REL_FLOOR",
-        "OKS_CONFLICT_WINDOW", "OKS_SEARCH_BACKEND", "OKS_MAIL_TOPN",
-    ]
+    # Legacy environment variables remain readable for compatibility.
+    # YAML remains the durable default; env overrides are warned about so
+    # existing hosts do not silently change behavior during migration.
+    _legacy_env = {
+        "OKS_RECALL_FLOOR": ("recall_floor", float),
+        "OKS_RECALL_TOPN": ("recall_topn", int),
+        "OKS_RECALL_MINLEN": ("recall_minlen", int),
+        "OKS_RECALL_COOLDOWN": ("recall_cooldown", int),
+        "OKS_POSTTOOL_FLOOR": ("posttool_floor", float),
+        "OKS_POSTTOOL_TOPN": ("posttool_topn", int),
+        "OKS_POSTTOOL_MODE": ("posttool_mode", str),
+        "OKS_POSTTOOL_RECALL": ("posttool_recall", int),
+        "OKS_POSTTOOL_SIGNAL_REL_FLOOR": ("posttool_signal_rel_floor", float),
+        "OKS_CONFLICT_WINDOW": ("conflict_window", int),
+        "OKS_SEARCH_BACKEND": ("search_backend", str),
+        "OKS_MAIL_TOPN": ("mail_topn", int),
+    }
     import os as _os
-    _found = [k for k in _legacy_env if _os.environ.get(k)]
+    _found = []
+    for env_name, (param_name, converter) in _legacy_env.items():
+        raw_value = _os.environ.get(env_name)
+        if not raw_value:
+            continue
+        try:
+            params[param_name] = converter(raw_value)
+            _found.append(env_name)
+        except (TypeError, ValueError):
+            _found.append(env_name + "=invalid")
     if _found and not getattr(load_recall_params, "_warned", False):
         load_recall_params._warned = True
         import sys
         print(
-            "⚠ OKS: 检测到旧环境变量 " + ", ".join(_found) + "，已废弃。\n"
-            "  settings/recall.yaml 是唯一参数真源（git 同步）。\n"
+            "⚠ OKS: 检测到旧环境变量 " + ", ".join(_found) + "，已弃用但仍兼容。\n"
+            "  settings/recall.yaml 是持久配置源；旧 env 仅作为临时覆盖。\n"
             "  请把值迁移到 settings/recall.yaml，然后 unset 这些 env。\n"
             "  临时调参用 CLI flag: oks recall --floor 0.9",
             file=sys.stderr,
@@ -646,7 +679,10 @@ def _recall_knowledge_via_backend(
             "score": round(float(p.get("score", 0) or 0), 3),
             "relevance": round(h.score, 3),
             "confidence": p.get("confidence", 0.8),
-            "body_preview": _make_preview(p.get("body", "")),
+            "body_preview": _make_preview(
+                p.get("body", ""),
+                abstract=p.get("abstract"),
+            ),
             "tags": p.get("tags", ""),
             "has_traces": bool(p.get("traces")),
             "human_reviewed_at": p.get("human_reviewed_at", ""),
@@ -737,7 +773,11 @@ def _recall_knowledge_with_context(
             "score": round(item.get("score", 0), 3),
             "relevance": round(relevance, 3),
             "confidence": item.get("confidence", 0.8),
-            "body_preview": _make_preview(item.get("body", ""), MAX_BODY_PREVIEW),
+            "body_preview": _make_preview(
+                item.get("body", ""),
+                MAX_BODY_PREVIEW,
+                abstract=item.get("abstract"),
+            ),
             "tags": item.get("tags", ""),
             "has_traces": bool(item.get("traces")),
             # The /query skill derives [verified] from one of two recorded
