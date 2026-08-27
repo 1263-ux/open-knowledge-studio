@@ -162,6 +162,7 @@ def test_init_materializes_shareable_assets(tmp_path):
 
     # skills + templates arrive so the Claude Code experience works out of the box
     assert (target / ".claude" / "skills" / "ingest").is_dir()
+    assert (target / ".claude" / "skills" / "office" / "SKILL.md").is_file()
     assert (target / ".claude" / "settings.json").is_file()
     assert (target / "templates").is_dir()
     for schema in ("recall-case.schema.json", "trace-event.schema.json", "run-manifest.schema.json"):

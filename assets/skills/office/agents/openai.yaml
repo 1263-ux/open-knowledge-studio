@@ -1,0 +1,4 @@
+interface:
+  display_name: "OKS Office"
+  short_description: "Explicit Office-file work: research, generate, and check"
+  default_prompt: "Use $office only for this explicit Word, Excel, PowerPoint, or PDF request. Research the topic, combine it with relevant OKS knowledge, then create and check the requested Office file."
