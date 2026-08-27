@@ -451,6 +451,73 @@ def test_hook_recall_cli_reuses_policy_and_history_without_prompt_leakage(tmp_pa
     assert "C:/dsh-host" not in history.output
 
 
+def test_hook_recall_cli_forces_utf8_for_chinese_bridge(tmp_path, monkeypatch):
+    monkeypatch.setenv("PYTHONIOENCODING", "cp1252")
+    monkeypatch.setenv("PYTHONUTF8", "0")
+    target = _init_instance(tmp_path)
+    page = target / "wiki" / "computing" / "concepts" / "promotion-declaration.md"
+    page.parent.mkdir(parents=True, exist_ok=True)
+    page.write_text(
+        "---\n"
+        "title: 晋升技术申报书\n"
+        "type: concept\n"
+        "area: architecture\n"
+        "status: active\n"
+        "importance: 0.9\n"
+        "confidence: 0.9\n"
+        "created: 2026-08-20T00:00:00+00:00\n"
+        "tags: 晋升, 技术申报书\n"
+        "pinned: false\n"
+        "archived: false\n"
+        "access_count: 0\n"
+        "---\n\n"
+        "晋升 Wiki 可以帮助生成技术申报书。\n",
+        encoding="utf-8",
+    )
+    recall_config = target / "settings" / "recall.yaml"
+    recall_config.write_text(
+        recall_config.read_text(encoding="utf-8").replace("search_backend: fts5", "search_backend: native"),
+        encoding="utf-8",
+    )
+
+    result = cli_module._run_hook_recall(
+        target,
+        "请基于晋升 Wiki 生成技术申报书",
+        "dsh-oks",
+        "C:/dsh-host",
+        "dsh-oks",
+    )
+
+    assert result["status"] == "injected", result
+    assert result["trace"]["candidate_count"] >= 1, result
+    assert "晋升技术申报书" in result["context"]
+
+
+def test_hook_recall_cli_forces_utf8_child_environment(tmp_path, monkeypatch):
+    target = _init_instance(tmp_path)
+    captured = {}
+
+    class Completed:
+        returncode = 0
+        stdout = json.dumps({
+            "schema": "hook-recall-response/v1",
+            "status": "skipped_minlen",
+            "context": "",
+            "trace": {"candidate_count": 0, "matches": [], "top_relevance": None, "threshold": None},
+        })
+
+    def fake_run(*args, **kwargs):
+        captured.update(kwargs["env"])
+        return Completed()
+
+    monkeypatch.setattr(cli_module.subprocess, "run", fake_run)
+    result = cli_module._run_hook_recall(target, "中文提示", "session", "C:/host", "dsh-oks")
+
+    assert result["status"] == "skipped_minlen"
+    assert captured["PYTHONIOENCODING"] == "utf-8"
+    assert captured["PYTHONUTF8"] == "1"
+
+
 def test_hook_recall_cli_rejects_malformed_success_envelope(tmp_path, monkeypatch):
     target = _init_instance(tmp_path)
 
