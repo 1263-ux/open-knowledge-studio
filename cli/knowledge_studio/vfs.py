@@ -8,6 +8,8 @@ from urllib.parse import quote, unquote, urlsplit
 from knowledge_studio.config import get_kb_root
 
 FS_RESPONSE_SCHEMA = "oks-fs-response/v1"
+MAX_READ_MANY_FILES = 250
+MAX_READ_MANY_TOTAL_CHARS = 8 * 1024 * 1024
 
 
 class VfsError(ValueError):
@@ -323,6 +325,47 @@ class VfsService:
             "total_chars": len(content),
             "truncated": truncated,
             "next_offset": next_offset if truncated else None,
+        }
+
+    def read_many(
+        self,
+        uris: list[str],
+        *,
+        limit: int = 20_000,
+        max_total_chars: int = MAX_READ_MANY_TOTAL_CHARS,
+    ) -> dict[str, object]:
+        """Read several public UTF-8 files within per-file and total bounds."""
+        _validate_slice(0, limit)
+        if not uris or len(uris) > MAX_READ_MANY_FILES:
+            raise VfsError(
+                "INVALID_ARGUMENT",
+                f"uris must contain 1..{MAX_READ_MANY_FILES} items",
+            )
+        if not 1 <= max_total_chars <= MAX_READ_MANY_TOTAL_CHARS:
+            raise VfsError(
+                "INVALID_ARGUMENT",
+                f"max_total_chars must be 1..{MAX_READ_MANY_TOTAL_CHARS}",
+            )
+
+        items: list[dict[str, object]] = []
+        remaining = max_total_chars
+        truncated = False
+        for uri in uris:
+            if remaining <= 0:
+                truncated = True
+                break
+            item = self.read(uri, limit=min(limit, remaining))
+            items.append(item)
+            remaining -= int(item["returned_chars"])
+            truncated = truncated or bool(item["truncated"])
+
+        return {
+            "uri": "oks://",
+            "items": items,
+            "requested_count": len(uris),
+            "returned_count": len(items),
+            "returned_chars": max_total_chars - remaining,
+            "truncated": truncated or len(items) < len(uris),
         }
 
     def tree(
