@@ -139,17 +139,19 @@ h4 { font-weight: 500; }
   justify-content: center;
 }
 
-.oks-actions .btn-primary {
-  border-color: #0f4c81;
-  background: #0f4c81;
-  color: #ffffff;
+.oks-actions a.btn.btn-primary {
+  border-color: #1d4ed8 !important;
+  background-color: #1d4ed8 !important;
+  background-image: none !important;
+  color: #ffffff !important;
   font-weight: 700;
 }
 
-.oks-actions .btn-primary:hover {
-  border-color: #0b3b65;
-  background: #0b3b65;
-  color: #ffffff;
+.oks-actions a.btn.btn-primary:hover {
+  border-color: #1e40af !important;
+  background-color: #1e40af !important;
+  background-image: none !important;
+  color: #ffffff !important;
 }
 
 .oks-actions .btn:focus-visible {
