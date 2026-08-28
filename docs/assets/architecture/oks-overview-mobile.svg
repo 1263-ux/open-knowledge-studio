@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 1700" role="img" aria-labelledby="title desc">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 1780" role="img" aria-labelledby="title desc">
   <title id="title">Open Knowledge Studio 完整工作架构，手机端</title>
   <desc id="desc">用户与 Agent、知识工作区、运行时能力和交付关系的垂直架构图。</desc>
   <defs>
@@ -8,7 +8,7 @@
     <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10Z" fill="#91a0b8"/></marker>
     <marker id="green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10Z" fill="#16a34a"/></marker>
   </defs>
-  <rect width="420" height="1700" rx="20" fill="#f6f8fc"/>
+  <rect width="420" height="1780" rx="20" fill="#f6f8fc"/>
   <text x="26" y="44" class="title">OKS 完整工作架构</text>
   <text x="26" y="68" class="sub">Agent 编排，人审核；文件化知识能在下一次任务复用。</text>
 
@@ -42,19 +42,21 @@
   <text x="232" y="994" class="tag">执行轨迹</text><text x="232" y="1022" class="head">Trace</text><text x="232" y="1044" class="body">可追溯，不回灌</text>
 
   <path d="M210 1080v30" fill="none" stroke="#2563eb" stroke-width="3" marker-end="url(#arrow)"/>
-  <rect x="22" y="1128" width="376" height="422" rx="16" fill="#fff" stroke="#d9e2ef" stroke-width="2"/>
+  <rect x="22" y="1128" width="376" height="500" rx="16" fill="#fff" stroke="#d9e2ef" stroke-width="2"/>
   <text x="42" y="1158" class="zone">OKS 运行时与能力层</text>
-  <rect x="42" y="1180" width="336" height="84" rx="12" fill="#eef4ff" stroke="#93c5fd" stroke-width="2"/>
-  <text x="58" y="1207" class="tag">核心 CLI（API-free）</text><text x="58" y="1235" class="head">oks：文件操作、召回与状态</text><text x="58" y="1255" class="body">raw-commit · drafts · wiki · recall · trace</text>
-  <rect x="42" y="1282" width="336" height="92" rx="12" fill="#effaf2" stroke="#86efac" stroke-width="2"/>
-  <text x="58" y="1309" class="tag">能力选择与收录</text><text x="58" y="1337" class="head">Recipe + Provider / Capability</text><text x="58" y="1359" class="body">网页、PDF、Office、图像、音频、视频等。</text>
-  <rect x="42" y="1392" width="336" height="74" rx="12" fill="#f8fafc" stroke="#cbd5e1" stroke-width="2"/>
-  <text x="58" y="1419" class="tag">安全、契约与入口</text><text x="58" y="1447" class="body">settings · schema · security · Hooks · 只读 VFS</text>
-  <rect x="42" y="1482" width="336" height="48" rx="12" fill="#fff7ed" stroke="#fdba74" stroke-width="2"/>
-  <text x="58" y="1513" class="body">明确要求交付时：Office → Word / PDF / PPT / Excel</text>
+  <rect x="42" y="1180" width="336" height="76" rx="12" fill="#eef4ff" stroke="#93c5fd" stroke-width="2"/>
+  <text x="58" y="1207" class="tag">核心 CLI（API-free）</text><text x="58" y="1235" class="head">oks：文件操作、召回与状态</text><text x="58" y="1251" class="body">raw-commit · drafts · wiki · recall · trace</text>
+  <rect x="42" y="1272" width="336" height="86" rx="12" fill="#effaf2" stroke="#86efac" stroke-width="2"/>
+  <text x="58" y="1299" class="tag">能力选择与收录</text><text x="58" y="1327" class="head">Recipe + Provider / Capability</text><text x="58" y="1349" class="body">网页、PDF、Office、图像、音频、视频等。</text>
+  <rect x="42" y="1374" width="336" height="64" rx="12" fill="#f8fafc" stroke="#cbd5e1" stroke-width="2"/>
+  <text x="58" y="1401" class="tag">安全、契约与入口</text><text x="58" y="1427" class="body">settings · schema · security · Hooks · 只读 VFS</text>
+  <rect x="42" y="1454" width="336" height="64" rx="12" fill="#f3efff" stroke="#c4b5fd" stroke-width="2"/>
+  <text x="58" y="1481" class="tag">可选参考实现（不随核心 CLI 分发）</text><text x="58" y="1507" class="body">飞书：Base · 表单 · IM 审核入口</text>
+  <rect x="42" y="1534" width="336" height="82" rx="12" fill="#fff7ed" stroke="#fdba74" stroke-width="2"/>
+  <text x="58" y="1561" class="tag">明确要求交付时才启用</text><text x="58" y="1589" class="head">Office 工作流</text><text x="58" y="1611" class="body">Word / PDF / PPT / Excel → 渲染检查</text>
 
-  <rect x="22" y="1580" width="376" height="92" rx="14" fill="#10213d"/>
-  <text x="42" y="1614" fill="#fff" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="14" font-weight="700">不跨越：</text>
-  <text x="42" y="1640" fill="#dbeafe" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="13">Raw ≠ 结论 · Candidate ≠ 长期知识</text>
-  <text x="42" y="1662" fill="#dbeafe" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="13">相关性 ≠ 真实性 · 自动化 ≠ 代替人的决定</text>
+  <rect x="22" y="1650" width="376" height="92" rx="14" fill="#10213d"/>
+  <text x="42" y="1684" fill="#fff" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="14" font-weight="700">不跨越：</text>
+  <text x="42" y="1710" fill="#dbeafe" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="13">Raw ≠ 结论 · Candidate ≠ 长期知识</text>
+  <text x="42" y="1732" fill="#dbeafe" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="13">相关性 ≠ 真实性 · 自动化 ≠ 代替人的决定</text>
 </svg>

@@ -44,12 +44,14 @@
   <rect x="84" y="402" width="384" height="112" rx="14" fill="#eef4ff" stroke="#93c5fd" stroke-width="2"/>
   <text x="108" y="435" class="tag">稳定上下文</text>
   <text x="108" y="466" class="node-title">profiles/</text>
-  <text x="108" y="491" class="node-body">用户、项目、Recipe、Goal；直接读取，Goal 只影响相关性。</text>
+  <text x="108" y="491" class="node-body">用户、项目、Recipe、Goal；直接读取。</text>
+  <text x="108" y="511" class="node-body">Goal 只影响相关性，不升级信任。</text>
 
   <rect x="532" y="402" width="384" height="112" rx="14" fill="#effaf2" stroke="#86efac" stroke-width="2"/>
   <text x="556" y="435" class="tag" fill="#15803d">来源与证据</text>
   <text x="556" y="466" class="node-title">raw/</text>
-  <text x="556" y="491" class="node-body">原文、转换结果、对话；保留来源，不把材料当结论。</text>
+  <text x="556" y="491" class="node-body">原文、转换结果、对话；保留来源。</text>
+  <text x="556" y="511" class="node-body">材料本身不等于结论。</text>
 
   <rect x="84" y="566" width="384" height="132" rx="14" fill="#fff7ed" stroke="#fdba74" stroke-width="2"/>
   <text x="108" y="599" class="tag" fill="#c2410c">Agent 的提议</text>
@@ -66,12 +68,14 @@
   <rect x="84" y="750" width="384" height="110" rx="14" fill="#f8fafc" stroke="#cbd5e1" stroke-width="2"/>
   <text x="108" y="783" class="tag" fill="#475569">协作证据</text>
   <text x="108" y="814" class="node-title">mail/</text>
-  <text x="108" y="839" class="node-body">短期 Agent 协作、冲突通知与人工反馈；不当作长期知识。</text>
+  <text x="108" y="839" class="node-body">短期 Agent 协作、冲突通知与人工反馈；</text>
+  <text x="108" y="859" class="node-body">不当作长期知识。</text>
 
   <rect x="532" y="750" width="384" height="110" rx="14" fill="#f8fafc" stroke="#cbd5e1" stroke-width="2"/>
   <text x="556" y="783" class="tag" fill="#475569">可追溯发生过什么</text>
   <text x="556" y="814" class="node-title">raw/executions/ 与 Trace</text>
-  <text x="556" y="839" class="node-body">执行记录与评判；可被证据链接，不被当成知识回灌。</text>
+  <text x="556" y="839" class="node-body">执行记录与评判；可被证据链接，</text>
+  <text x="556" y="859" class="node-body">不被当成知识回灌。</text>
 
   <!-- Review gate -->
   <path d="M468 632H516" fill="none" stroke="#f97316" stroke-width="4" marker-end="url(#green-arrow)"/>
@@ -84,41 +88,46 @@
   <text x="1010" y="349" class="zone">OKS 运行时与能力层</text>
   <text x="1010" y="374" class="small">核心不调用 AI API；Agent 通过可用工具完成编排。</text>
 
-  <rect x="1010" y="402" width="406" height="112" rx="14" fill="#eef4ff" stroke="#93c5fd" stroke-width="2"/>
+  <rect x="1010" y="402" width="406" height="94" rx="14" fill="#eef4ff" stroke="#93c5fd" stroke-width="2"/>
   <text x="1034" y="435" class="tag">核心 CLI（API-free）</text>
   <text x="1034" y="466" class="node-title">oks：文件操作、召回与状态</text>
-  <text x="1034" y="491" class="node-body">init · raw-commit · drafts · wiki · recall · trace · lint</text>
+  <text x="1034" y="488" class="node-body">init · raw-commit · drafts · wiki · recall · trace · lint</text>
 
-  <rect x="1010" y="540" width="406" height="120" rx="14" fill="#effaf2" stroke="#86efac" stroke-width="2"/>
-  <text x="1034" y="573" class="tag" fill="#15803d">能力选择与收录</text>
-  <text x="1034" y="604" class="node-title">Recipe + Provider / Capability</text>
-  <text x="1034" y="629" class="node-body">文本、网页、PDF、Office、图片、音频、视频；</text>
-  <text x="1034" y="653" class="node-body">按可用性、成本与完成条件选择，状态如实保留。</text>
+  <rect x="1010" y="516" width="406" height="106" rx="14" fill="#effaf2" stroke="#86efac" stroke-width="2"/>
+  <text x="1034" y="549" class="tag" fill="#15803d">能力选择与收录</text>
+  <text x="1034" y="580" class="node-title">Recipe + Provider / Capability</text>
+  <text x="1034" y="605" class="node-body">文本、网页、PDF、Office、图片、音频、视频。</text>
+  <text x="1034" y="627" class="node-body">按可用性、成本与完成条件选择；状态如实保留。</text>
 
-  <rect x="1010" y="686" width="406" height="120" rx="14" fill="#f8fafc" stroke="#cbd5e1" stroke-width="2"/>
-  <text x="1034" y="719" class="tag" fill="#475569">安全、契约与可选入口</text>
-  <text x="1034" y="750" class="node-title">settings/ · _meta/ · security</text>
-  <text x="1034" y="775" class="node-body">配置、Schema、脱敏；Hooks、只读 VFS、移动审核</text>
-  <text x="1034" y="799" class="node-body">只改变入口，不绕过审核与来源边界。</text>
+  <rect x="1010" y="642" width="406" height="86" rx="14" fill="#f8fafc" stroke="#cbd5e1" stroke-width="2"/>
+  <text x="1034" y="675" class="tag" fill="#475569">安全、契约与可选入口</text>
+  <text x="1034" y="706" class="node-title">settings/ · _meta/ · security</text>
+  <text x="1034" y="728" class="node-body">配置、Schema、脱敏；Hooks 与只读 VFS。</text>
 
-  <rect x="1010" y="832" width="406" height="96" rx="14" fill="#fff7ed" stroke="#fdba74" stroke-width="2"/>
-  <text x="1034" y="865" class="tag" fill="#c2410c">明确要求交付时才启用</text>
-  <text x="1034" y="896" class="node-title">Office 工作流</text>
-  <text x="1034" y="920" class="node-body">已审核知识 + 来源约束 → Word / PDF / PPT / Excel → 渲染检查</text>
+  <rect x="1010" y="748" width="406" height="90" rx="14" fill="#f3efff" stroke="#c4b5fd" stroke-width="2"/>
+  <text x="1034" y="781" class="tag" fill="#7e22ce">可选参考实现（不随核心 CLI 分发）</text>
+  <text x="1034" y="812" class="node-title">飞书：Base · 表单 · IM 审核</text>
+  <text x="1034" y="834" class="node-body">采集 / 审核入口：来源 → Raw → Candidate → 人工决定。</text>
+
+  <rect x="1010" y="858" width="406" height="96" rx="14" fill="#fff7ed" stroke="#fdba74" stroke-width="2"/>
+  <text x="1034" y="891" class="tag" fill="#c2410c">明确要求交付时才启用</text>
+  <text x="1034" y="922" class="node-title">Office 工作流</text>
+  <text x="1034" y="944" class="node-body">已审核知识 + 来源约束 → Word / PDF / PPT / Excel</text>
+  <text x="1034" y="964" class="node-body">→ 渲染检查，再继续修改或交付。</text>
 
   <!-- Cross-plane flows -->
   <path d="M658 280V390" fill="none" stroke="#16a34a" stroke-width="4" marker-end="url(#green-arrow)"/>
   <text x="675" y="328" class="edge">收录来源</text>
-  <path d="M1114 514V530" fill="none" stroke="#2563eb" stroke-width="3" marker-end="url(#blue-arrow)"/>
-  <path d="M1010 600H948V458H928" fill="none" stroke="#16a34a" stroke-width="3" marker-end="url(#green-arrow)"/>
+  <path d="M1114 496V506" fill="none" stroke="#2563eb" stroke-width="3" marker-end="url(#blue-arrow)"/>
+  <path d="M1010 570H948V458H928" fill="none" stroke="#16a34a" stroke-width="3" marker-end="url(#green-arrow)"/>
   <text x="842" y="446" class="edge">提取后进入 Raw</text>
-  <path d="M468 458V900H980V514H1010" fill="none" stroke="#2563eb" stroke-width="3" stroke-dasharray="7 7" marker-end="url(#blue-arrow)"/>
+  <path d="M468 458V900H980V496H1010" fill="none" stroke="#2563eb" stroke-width="3" stroke-dasharray="7 7" marker-end="url(#blue-arrow)"/>
   <path d="M916 458V900" fill="none" stroke="#2563eb" stroke-width="3" stroke-dasharray="7 7"/>
   <path d="M916 632V900" fill="none" stroke="#2563eb" stroke-width="3" stroke-dasharray="7 7"/>
   <text x="584" y="932" class="edge">召回：Profile + Wiki + 必要的 Raw</text>
   <path d="M1214 402V280" fill="none" stroke="#2563eb" stroke-width="3" stroke-dasharray="7 7" marker-end="url(#blue-arrow)"/>
   <text x="1230" y="326" class="edge">带回任务上下文</text>
-  <path d="M1350 254V822" fill="none" stroke="#f97316" stroke-width="3" stroke-dasharray="7 7" marker-end="url(#arrow)"/>
+  <path d="M1350 254V848" fill="none" stroke="#f97316" stroke-width="3" stroke-dasharray="7 7" marker-end="url(#arrow)"/>
   <text x="1366" y="530" class="edge">明确要求文件时交付</text>
 
   <!-- Guardrail strip -->

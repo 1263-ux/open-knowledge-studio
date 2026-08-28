@@ -45,6 +45,17 @@ Agent 的正确动作是：
 | 你的长期经历与已确认判断 | 优先召回；它们是本次简历的可复用基础。 |
 | 新找到的岗位要求 | 作为本次投递的外部来源，用来判断匹配与缺口；不会自动变成你的能力。 |
 
+## OKS 当前推荐的岗位
+
+以下是按本例材料检索到的**可打开核验的外部岗位来源**。它们是这次“找工作”任务的输入，不会被写进你的长期经历；岗位是否仍开放、地点和实习时长是否合适，仍要由你打开页面确认。
+
+| 推荐 | 为什么从现有材料中命中 | 需要如实提示的缺口 |
+| --- | --- | --- |
+| [百度「智能体应用开发实习生（J99649）」](https://talent.baidu.com/jobs/detail/INTERN/e3cec5b8-b7a3-4946-99fc-b292b749cd53) | 面向在校生，接受 Java / Python / Go；岗位涉及 RAG、知识表示、Agent 工程化与 AI Coding。现有 Java、RAG、模型 API 与 Docker 实践可以作为起点。 | 岗位还希望熟悉 LangChain / LlamaIndex 或平台，以及代码分析 / CodeAgent 实践；不能把这些写成已有能力。 |
+| [百度在招 Java 后端实习岗位（AI Agent / RAG 为加分项）](https://talent.baidu.com/jobs/detail/INTERN/ef30e579-2d3d-4539-ad90-884521b815c9) | 当前材料中的 Java、Spring Boot、MySQL、Redis、JWT 与 Docker 更直接对应；AI 应用实践可以成为区分度，而不是硬凑“算法岗”标签。 | 仍需看清具体团队、地点与时长；如果投递，优先补一条可复现的 Agent / Tool Calling 小项目。 |
+
+Agent 在这里给的是“为什么值得你看”的解释，不是替你投递。你可以点开岗位后说：“针对第一条做 Candidate，先告诉我哪些经历该保留、哪些缺口不该遮掩。”
+
 ## 本次岗位的 Candidate
 
 本例以 **Agent 应用开发** 为目标。结合这份真实 Word 中已有的项目和技能，Candidate 可以写成：

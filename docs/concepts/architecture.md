@@ -25,7 +25,7 @@ OKS 不是一个单独的“记忆插件”。它是一套让 **用户、Agent�
 - `wiki/` 只放人审后的可复用知识；
 - `mail/` 与 Trace 留下协作和执行证据，但不冒充长期知识。
 
-右侧是运行时：`oks` CLI 负责文件操作、召回和状态，不在核心中调用模型 API；Agent 根据 Recipe、Provider 和 Capability 选择网页、PDF、Office、图片、音视频等处理能力。明确要交付文件时，Office 工作流才会接手 Word、PDF、PPT 或 Excel。
+右侧是运行时：`oks` CLI 负责文件操作、召回和状态，不在核心中调用模型 API；Agent 根据 Recipe、Provider 和 Capability 选择网页、PDF、Office、图片、音视频等处理能力。明确要交付文件时，Office 工作流才会接手 Word、PDF、PPT 或 Excel。飞书的 Base、表单与 IM 审核则是一个**可选参考实现**：它可以承担采集和移动审核入口，但不属于 CLI 核心，也不会绕开人审门。
 
 最后回到上方：新任务由 `profiles/`、已审核 `wiki/` 和必要的 `raw/` 召回支持。相关性只能影响排序，不能把材料升级为事实。
 
