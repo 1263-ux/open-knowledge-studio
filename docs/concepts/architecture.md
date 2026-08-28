@@ -8,7 +8,10 @@ parent: 理解 OKS
 
 如果你只是使用 OKS，只需要先理解这一件事：**来源先被保留，Agent 只能提出候选，人审核后才会成为下一次任务可以使用的知识。**
 
-![OKS 从来源、Raw 材料、Candidate、人工审核，到 Wiki 与召回的主链路；Profile、Goal、配置和可选接入在下方提供支持。](../assets/architecture/oks-overview.svg)
+<picture>
+  <source media="(max-width: 50rem)" srcset="../assets/architecture/oks-overview-mobile.svg">
+  <img src="../assets/architecture/oks-overview.svg" alt="OKS 从来源、Raw 材料、Candidate、人工审核，到 Wiki 与召回的主链路；Profile、Goal、配置和可选接入在下方提供支持。">
+</picture>
 
 ## 怎样读这张图
 

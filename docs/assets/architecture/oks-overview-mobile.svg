@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 1040" role="img" aria-labelledby="title desc">
+  <title id="title">Open Knowledge Studio 从材料到下一次任务的手机端主链路</title>
+  <desc id="desc">来源、Raw 材料、Candidate、人工审核、Wiki 与召回按顺序垂直排列。</desc>
+  <defs>
+    <style>
+      .title { fill: #0f172a; font: 700 21px -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif; }
+      .sub { fill: #64748b; font: 400 13px -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif; }
+      .step { fill: #2563eb; font: 700 12px -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif; letter-spacing: .7px; }
+      .card-title { fill: #0f172a; font: 700 18px -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif; }
+      .card-body { fill: #475569; font: 400 14px -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif; }
+      .support-title { fill: #334155; font: 700 15px -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif; }
+      .support-body { fill: #64748b; font: 400 13px -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif; }
+    </style>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0 0 L10 5 L0 10z" fill="#94a3b8"/>
+    </marker>
+  </defs>
+  <rect width="420" height="1040" rx="20" fill="#f8fafc"/>
+  <text x="30" y="48" class="title">从材料到下一次任务</text>
+  <text x="30" y="74" class="sub">每一步都保留下一步需要判断的证据。</text>
+
+  <g transform="translate(30 110)">
+    <text y="-12" class="step">01 留下材料</text>
+    <rect width="360" height="124" rx="15" fill="#eef4ff" stroke="#93c5fd" stroke-width="2"/>
+    <text x="22" y="42" class="card-title">来源</text>
+    <text x="22" y="70" class="card-body">文件、网页、视频或对话</text>
+    <text x="22" y="94" class="card-body">先保留来源与提取结果</text>
+  </g>
+  <path d="M210 242v28" stroke="#94a3b8" stroke-width="3" marker-end="url(#arrow)"/>
+
+  <g transform="translate(30 286)">
+    <text y="-12" class="step">02 保留证据</text>
+    <rect width="360" height="124" rx="15" fill="#effaf2" stroke="#86efac" stroke-width="2"/>
+    <text x="22" y="42" class="card-title">Raw 材料</text>
+    <text x="22" y="70" class="card-body">原文、转写、关键帧</text>
+    <text x="22" y="94" class="card-body">材料不等于结论</text>
+  </g>
+  <path d="M210 418v28" stroke="#94a3b8" stroke-width="3" marker-end="url(#arrow)"/>
+
+  <g transform="translate(30 462)">
+    <text y="-12" class="step">03 Agent 提议</text>
+    <rect width="360" height="124" rx="15" fill="#fff7ed" stroke="#fdba74" stroke-width="2"/>
+    <text x="22" y="42" class="card-title">Candidate</text>
+    <text x="22" y="70" class="card-body">主张、来源范围与证据缺口</text>
+    <text x="22" y="94" class="card-body">只是一份待审核提议</text>
+  </g>
+  <path d="M210 594v28" stroke="#94a3b8" stroke-width="3" marker-end="url(#arrow)"/>
+
+  <g transform="translate(30 638)">
+    <text y="-12" class="step">04 人做决定</text>
+    <rect width="360" height="124" rx="15" fill="#fdf4ff" stroke="#e9a8f2" stroke-width="2"/>
+    <text x="22" y="42" class="card-title">人工审核</text>
+    <text x="22" y="70" class="card-body">接受、修改或拒绝</text>
+    <text x="22" y="94" class="card-body">决定知识的边界</text>
+  </g>
+  <path d="M210 770v28" stroke="#94a3b8" stroke-width="3" marker-end="url(#arrow)"/>
+
+  <g transform="translate(30 814)">
+    <text y="-12" class="step">05 接着做事</text>
+    <rect width="360" height="124" rx="15" fill="#eef2ff" stroke="#a5b4fc" stroke-width="2"/>
+    <text x="22" y="42" class="card-title">Wiki 与召回</text>
+    <text x="22" y="70" class="card-body">只复用已审核知识</text>
+    <text x="22" y="94" class="card-body">并说明依据与缺口</text>
+  </g>
+
+  <rect x="30" y="966" width="360" height="48" rx="12" fill="#fff" stroke="#e2e8f0" stroke-width="2"/>
+  <text x="48" y="995" class="support-title">Profile、Goal、Trace 与可选入口贯穿全程</text>
+</svg>
