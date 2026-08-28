@@ -6,23 +6,32 @@ parent: 理解 OKS
 
 # 架构总览
 
-如果你只是使用 OKS，只需要先理解这一件事：**来源先被保留，Agent 只能提出候选，人审核后才会成为下一次任务可以使用的知识。**
+OKS 不是一个单独的“记忆插件”。它是一套让 **用户、Agent、文件化知识、收录能力和交付能力**各自做对的事的工作架构。
 
 <picture>
   <source media="(max-width: 50rem)" srcset="../assets/architecture/oks-overview-mobile.svg">
-  <img src="../assets/architecture/oks-overview.svg" alt="OKS 从来源、Raw 材料、Candidate、人工审核，到 Wiki 与召回的主链路；Profile、Goal、配置和可选接入在下方提供支持。">
+  <img src="../assets/architecture/oks-overview.svg" alt="OKS 完整架构：用户和 Agent 在上方发起任务；profiles、raw、drafts、wiki、mail 构成文件化知识工作区；右侧是 API-free CLI、能力目录、安全契约与 Office 交付；人审门控制 Candidate 进入 Wiki，召回将资料带回下一次任务。">
 </picture>
 
 ## 怎样读这张图
 
-1. **来源与 Raw**：文章、文件、视频或对话先作为材料保存。提取完成不代表其中的主张已经成立。
-2. **Candidate**：Agent 从材料中提出“哪些内容值得留下”，同时标出来源和证据缺口。
-3. **人工审核**：人接受、修改或拒绝 Candidate。这是唯一让内容进入长期知识的门。
-4. **Wiki 与召回**：新任务只复用已审核内容；当证据不足时，正确结果是说明不足，而不是编出确定答案。
+先看上方：用户提出任务、提供来源、设定目标，并决定审核与交付；Agent 是编排器，它调用能力、解释依据、提出 Candidate，但不拥有最终决定权。
+
+中间左侧是实例里的五个桶：
+
+- `profiles/` 放稳定的用户、项目、Recipe 和 Goal；
+- `raw/` 放原始来源与机械提取结果；
+- `drafts/` 放 Agent 的 Candidate；
+- `wiki/` 只放人审后的可复用知识；
+- `mail/` 与 Trace 留下协作和执行证据，但不冒充长期知识。
+
+右侧是运行时：`oks` CLI 负责文件操作、召回和状态，不在核心中调用模型 API；Agent 根据 Recipe、Provider 和 Capability 选择网页、PDF、Office、图片、音视频等处理能力。明确要交付文件时，Office 工作流才会接手 Word、PDF、PPT 或 Excel。
+
+最后回到上方：新任务由 `profiles/`、已审核 `wiki/` 和必要的 `raw/` 召回支持。相关性只能影响排序，不能把材料升级为事实。
 
 ## 需要深入时
 
-这张图刻意没有塞进协议名、索引算法或内部目录。它们仍然存在，只是属于不同读者：
+这张图把系统层级和实际能力放在一起，但没有展开协议字段与评分公式。需要进一步实现或排障时：
 
 - 想收集不同类型的材料，阅读[收集来源](../usage/ingest.html)。
 - 想理解审核和晋升，阅读[审核候选](../usage/review.html)。
