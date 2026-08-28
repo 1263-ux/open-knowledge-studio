@@ -6,6 +6,9 @@ parent: 摄入协议
 
 # 协议对象关系
 
+{: .warning }
+> **这是维护者参考页。** 如果你只是想开始使用 OKS，请先完成[第一次学习循环](../../first-knowledge-loop.html)。本文解释协议对象和文件字段，不是日常收集资料的前置阅读。
+
 Agent-Native Ingest 路径涉及四个协议对象和一个产物。本文说明它们的层级关系、
 各自包含什么字段、谁负责填什么，以及它们如何被 `oks raw-commit` 验证和组装。
 
@@ -40,7 +43,7 @@ flowchart LR
 {
   "schema_version": "oks-source-envelope/v0.1",
   "source_id": "src-abc123",
-  "source_uri": "https://example.com/page",
+  "source_uri": "<example-source-uri>",
   "source_modality": "web",
   "access_mode": "public_url",
   "captured_at": "2026-08-07T12:00:00Z",

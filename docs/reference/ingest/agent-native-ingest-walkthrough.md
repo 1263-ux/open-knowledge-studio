@@ -6,6 +6,9 @@ parent: 摄入协议
 
 # Agent-Native Ingest 操作手册
 
+{: .warning }
+> **这是维护者参考页。** 如果你只是想开始使用 OKS，请先完成[第一次学习循环](../../first-knowledge-loop.html)。本文用于排查或实现 Agent-Native Ingest 协议，不是日常收集资料的前置阅读。
+
 从一条 URL 或本地文件出发，走完 Recall → Source → Evidence → Commit → Grade → Review 的
 完整链路。本手册按你实际会遇到的顺序写，每个步骤标出常见错误和解决方法。
 

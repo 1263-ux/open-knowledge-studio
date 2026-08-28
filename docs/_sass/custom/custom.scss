@@ -29,7 +29,7 @@
   min-height: 3rem !important;
 }
 
-// ===== 导航分组由 Just the Docs 的 expander 状态控制，避免所有分组同时展开 =====
+// ===== 导航分组可独立展开；展开状态会跨页面保留 =====
 .nav-list > .nav-list-item > .nav-list-link {
   color: #2c2c2c !important;
   font-weight: 700 !important;
@@ -139,6 +139,24 @@ h4 { font-weight: 500; }
   justify-content: center;
 }
 
+.oks-actions .btn-primary {
+  border-color: #0f4c81;
+  background: #0f4c81;
+  color: #ffffff;
+  font-weight: 700;
+}
+
+.oks-actions .btn-primary:hover {
+  border-color: #0b3b65;
+  background: #0b3b65;
+  color: #ffffff;
+}
+
+.oks-actions .btn:focus-visible {
+  outline: 3px solid #f59e0b;
+  outline-offset: 3px;
+}
+
 .oks-card-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -243,7 +261,7 @@ h4 { font-weight: 500; }
 .toc-right li { margin: 0.2rem 0; }
 .toc-right a { color: #64748b; text-decoration: none; display: block; }
 .toc-right a:hover { color: #1d4ed8; }
-@media (min-width: 75rem) {
+@media (min-width: 96rem) {
   .toc-right { display: block; }
   .main-content { padding-right: 15rem; }
 }

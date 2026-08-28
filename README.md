@@ -7,7 +7,11 @@
 Host your learning. Train a reviewable knowledge model that helps your Agent stay
 grounded across long-running work.
 
-[English](#english) · [中文](#chinese) · [Documentation](https://open-agent-power.github.io/open-knowledge-studio/)
+[English](#english) · [中文](#chinese)
+
+[项目首页](https://open-agent-power.github.io/open-knowledge-studio/) · [完成第一条知识闭环](https://open-agent-power.github.io/open-knowledge-studio/first-knowledge-loop.html) · [真实案例](https://open-agent-power.github.io/open-knowledge-studio/oh-my/)
+
+**OKS Office：** [从已审核知识生成 Word、PDF、PPT 和 Excel](https://open-agent-power.github.io/open-knowledge-studio/usage/office.html)
 
 </div>
 
@@ -22,6 +26,9 @@ through human collaboration and remain stable across long-running work? It does
 not train model weights. It builds a filesystem-first external knowledge model:
 humans set goals and approve knowledge; Agents collect evidence, execute work,
 propose Candidates, and recall reviewed decisions later.
+
+Start with one real source and one reviewed decision; the technical architecture
+and protocol references remain available when you need them.
 
 ```text
 your source → Candidate → human review → Wiki → Recall
@@ -120,6 +127,7 @@ See [Recall Evaluation](docs/algorithms/recall-evaluation.md).
 - [Complete your first knowledge loop](https://open-agent-power.github.io/open-knowledge-studio/first-knowledge-loop.html)
 - [托管你的学习](https://open-agent-power.github.io/open-knowledge-studio/oh-my/study.html)
 - [Knowledge to Word skill](assets/skills/knowledge-to-word/SKILL.md) — create source-traceable `.docx` files from OKS knowledge
+- [OKS Office skill](assets/skills/office/SKILL.md) — recall into one evidence package, then preflight and render source-traceable Word, PDF, or PowerPoint
 - [Verify that OKS works](https://open-agent-power.github.io/open-knowledge-studio/verify.html)
 
 *Advanced:*
@@ -137,6 +145,8 @@ See [Recall Evaluation](docs/algorithms/recall-evaluation.md).
 持续学习，并保证长任务执行的稳定？它不训练模型权重，而是构建一套文件化的外部知识模型：
 人类设定目标、边界并审核知识，Agent 收集证据、执行任务、提出 Candidate，并在后续任务中
 召回经过确认的判断。
+
+从一份真实材料和一条经审核的判断开始；需要时再阅读技术架构和协议参考。
 
 ```text
 你的资料 → Candidate → 人工审核 → Wiki → Recall
@@ -224,6 +234,7 @@ Node-BM25 R@1 较 native +57%；fusion re-rank 反而*降*精度——灵魂因�
 - [完成第一个知识闭环](https://open-agent-power.github.io/open-knowledge-studio/first-knowledge-loop.html)
 - [托管你的学习](https://open-agent-power.github.io/open-knowledge-studio/oh-my/study.html)
 - [Knowledge to Word skill](assets/skills/knowledge-to-word/SKILL.md) — 从 OKS 知识生成带来源说明的 `.docx`
+- [OKS Office skill](assets/skills/office/SKILL.md) — 将一次召回的知识整理成证据包，经 preflight 后按同一事实生成 Word、PDF 或 PowerPoint
 - [确认 OKS 正在工作](https://open-agent-power.github.io/open-knowledge-studio/verify.html)
 
 *进阶内容：*

@@ -1,14 +1,14 @@
 ---
-title: 交给 Agent 安装
+title: 从零上手
 nav_order: 1
-parent: 从这里开始
+parent: 开始使用
 ---
 
-# 交给 Agent 安装
+# 从零上手
 
 OKS 是 Agent 的知识工作空间，不应该先变成用户需要背诵的一组命令。把安装任务直接交给你正在使用的编码 Agent：
 
-> 请为我安装 Open Knowledge Studio，并为个人知识创建一个独立实例。不要把个人知识写进 OKS 源码仓库。完成后检查当前实例、可用能力和审核流程，再用自然语言向我报告结果与任何失败项。
+> 请先阅读并按照 [OKS 上游安装 Skill](https://raw.githubusercontent.com/open-agent-power/open-knowledge-studio/main/SKILL.md) 操作，然后为我安装 Open Knowledge Studio，并为个人知识创建一个独立实例。不要把个人知识写进 OKS 源码仓库。完成后检查当前实例、可用能力和审核流程，再用自然语言向我报告结果与任何失败项。
 
 ## Agent 应该完成什么
 

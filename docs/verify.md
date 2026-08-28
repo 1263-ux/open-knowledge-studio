@@ -1,7 +1,7 @@
 ---
 title: 确认 Agent 真的学会了
 nav_order: 3
-parent: 从这里开始
+parent: 开始使用
 ---
 
 # 确认 Agent 真的学会了

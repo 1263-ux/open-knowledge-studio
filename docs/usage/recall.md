@@ -1,7 +1,7 @@
 ---
 title: 召回与注入
 nav_order: 3
-parent: 日常使用
+parent: 日常任务
 ---
 
 # 召回与注入

@@ -1,7 +1,7 @@
 ---
 title: 架构总览
 nav_order: 2
-parent: 工作原理
+parent: 理解 OKS
 ---
 
 # 架构总览

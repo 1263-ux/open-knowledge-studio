@@ -1,7 +1,7 @@
 ---
 title: 第一次学习循环
 nav_order: 2
-parent: 从这里开始
+parent: 开始使用
 ---
 
 # 第一次学习循环

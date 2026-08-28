@@ -1,16 +1,16 @@
 ---
-title: 从这里开始
-nav_order: 2
+title: 开始使用
+nav_order: 1
 has_children: true
 ---
 
-# 从这里开始
+# 开始使用
 
 不要先配置全部能力，也不要先理解所有目录。第一次使用只验证一件事：**教 Agent 记住一条你认可的判断，并在后续任务里正确使用它。**
 
 ## 最短路径
 
-1. [把 OKS 交给 Agent](installation.html)，让它完成环境准备并报告结果。
+1. [从零上手](installation.html)，让 Agent 完成环境准备并报告结果。
 2. [跑通第一次学习循环](first-knowledge-loop.html)：给材料、看提议、做决定、换一个问题验证。
 3. [确认 Agent 真的学会了](verify.html)，而不是只在当前对话里复述。
 

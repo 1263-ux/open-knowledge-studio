@@ -1,7 +1,7 @@
 ---
 title: 审核候选
 nav_order: 2
-parent: 日常使用
+parent: 日常任务
 ---
 
 # 审核候选

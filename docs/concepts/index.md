@@ -1,10 +1,10 @@
 ---
-title: 工作原理
-nav_order: 5
+title: 理解 OKS
+nav_order: 4
 has_children: true
 ---
 
-# 工作原理
+# 理解 OKS
 
 这些页面解释 OKS 为什么这样工作。你不需要先读懂它们才能完成第一次学习循环。
 

@@ -1,7 +1,7 @@
 ---
 title: 收集来源
 nav_order: 1
-parent: 日常使用
+parent: 日常任务
 ---
 
 # 收集来源
