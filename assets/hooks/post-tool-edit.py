@@ -322,17 +322,23 @@ def _should_signal(tool_name: str, query: str, hits: list) -> bool:
     """Smart selectivity: not every tool call deserves a signal.
 
     Only signal when ALL hold:
-    1. Tool type is knowledge-relevant (Edit/Write/Grep/Glob, not Bash/Read)
+    1. Tool type is knowledge-relevant (Edit/Write/Grep/Glob/Bash, not Read)
     2. Query is domain-specific (not generic words like git/status/ls)
     3. Top hit has very high relevance (> 2.5)
 
-    Rationale: PostToolUse fires after every tool. Bash ops (git/ls/cd) and
-    Read (AI already reading) don't need signals — they generate 85% noise.
-    Only Edit/Write code + Grep/Glob search + high-rel + domain query signal.
+    Rationale: PostToolUse fires after every tool. Read (AI already reading)
+    doesn't need signals. Bash ops (git/ls/cd) are filtered by rule 2 (generic
+    words) + rule 3 (relevance>2.5), but knowledge-bearing Bash (download/
+    embedding/recall/test/distributed) SHOULD signal — excluding Bash entirely
+    caused "tool 调用时总是遗忘": agent forgot to recall browser-extractor
+    strategy during network failures because the diagnostic Bash was silenced.
+    v0.6.9: Bash re-added; generic noise (git/ls/cd/status) still blocked by
+    rule 2, low-relevance noise by rule 3.
     """
-    # 1. Tool type: only Edit/Write/MultiEdit/Grep/Glob
+    # 1. Tool type: Edit/Write/MultiEdit/Grep/Glob/Bash (Read excluded — AI already reading)
     signal_tools = {"Edit", "Write", "MultiEdit", "edit", "write", "multiedit",
-                   "Grep", "Glob", "grep", "glob"}
+                   "Grep", "Glob", "grep", "glob",
+                   "Bash", "bash"}  # v0.6.9: Bash re-added (generic noise filtered by rule 2+3)
     if tool_name not in signal_tools:
         return False
     # 2. Query quality: generic words don't signal
