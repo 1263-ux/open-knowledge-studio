@@ -9,10 +9,16 @@ nav_exclude: true
   <h1>让 Agent 记住团队已经确认的判断</h1>
   <p class="oks-lead">OKS 是面向 Agent 的可审核外部知识库：保存来源、审核结果和可复用知识，让下一次任务直接沿用已经确认的经验，而不是重新解释背景。</p>
   <div class="oks-actions">
-    <a class="btn btn-primary" href="{{ '/first-knowledge-loop.html' | relative_url }}">完成第一条知识闭环</a>
+    <a class="btn btn-primary" href="{{ '/installation.html' | relative_url }}">让 Agent 安装 OKS</a>
     <a class="btn" href="{{ '/oh-my/' | relative_url }}">查看真实案例</a>
   </div>
 </div>
+
+## 把这句话交给 Agent
+
+> 请按 [OKS 上游安装 Skill](https://raw.githubusercontent.com/open-agent-power/open-knowledge-studio/main/SKILL.md) 为我安装 Open Knowledge Studio：把个人知识放进独立实例，不要写入源码仓库；完成后用自然语言告诉我实例位置、可用能力和所有未完成项。
+
+不需要先打开终端或记住命令。Agent 会检查环境、完成安装与实例隔离，并如实报告任何失败或限制。
 
 <div class="oks-card-grid">
   <div class="oks-card">
@@ -44,4 +50,4 @@ nav_exclude: true
 - 证据不足时，系统应说明缺口，而不是补出一个确定答案。
 - 发布、合并、删除和外部发送等高风险动作，仍需要人的明确授权。
 
-从[第一次学习循环](first-knowledge-loop.html)开始，或先看案例[托管你的学习](oh-my/study.html)。需要把已审核知识交付为文件时，阅读 [Office 工作流](usage/office.html)。
+安装完成后，从[第一次学习循环](first-knowledge-loop.html)开始，或先看案例[托管你的学习](oh-my/study.html)。需要把已审核知识交付为文件时，阅读 [Office 工作流](usage/office.html)。

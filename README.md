@@ -34,49 +34,23 @@ and protocol references remain available when you need them.
 your source → Candidate → human review → Wiki → Recall
 ```
 
-### Quick Start
+### Install with an Agent
 
-Requirements: Python 3.12+, Git, and pipx.
+You do not need to open a terminal or memorize commands. Give your coding Agent
+this one request:
 
-```bash
-pipx install open-knowledge-studio
-oks init ./my-knowledge-base
-cd ./my-knowledge-base
-oks status
-```
+> Follow the [OKS setup skill](https://raw.githubusercontent.com/open-agent-power/open-knowledge-studio/main/SKILL.md) to install Open Knowledge Studio for me: create a separate knowledge-base instance, never write my personal knowledge into the source repository, then report the instance location, available capabilities, and every incomplete step in plain language.
 
-For a shared team workspace, initialize a team instance instead:
+The Agent checks the environment, installs or connects OKS, creates the
+separate instance, and reports any failure or limitation honestly. For a team,
+add the team name and the boundaries its members must confirm.
 
-```bash
-oks team init ./team-knowledge-studio --name "Platform Knowledge Team"
-cd ./team-knowledge-studio
-oks status
-```
+### Complete one useful loop
 
-In Claude Code, Codex, or another compatible Agent host, give the Agent a real
-source and ask it to ingest it:
-
-> Ingest this PDF into my OKS knowledge base.
-
-The Agent follows the installed `/ingest` skill, records evidence, and creates a
-Candidate in `drafts/`. Review it before promotion:
-
-```bash
-oks drafts list
-oks drafts promote <slug>
-oks recall "what did we decide?"
-```
-
-Without an Agent, prepare a run workspace explicitly:
-
-```bash
-oks ingest prepare <file-or-url>
-```
-
-`prepare` does not call an Agent. It creates the protocol workspace and prints
-the next steps. For connector-managed acquisition, use
-`oks ingest run <file-or-url>`; that compatibility path delegates extraction to
-the separately packaged `oks-connector` runtime.
+Give the Agent one real source and ask it to preserve the source, distinguish
+evidence from interpretation, and propose reviewable knowledge rather than
+silently saving a conclusion. You review the Candidate; a later task then
+confirms whether the reviewed knowledge is useful and still within evidence.
 
 ### Product Boundaries
 
@@ -132,6 +106,7 @@ See [Recall Evaluation](docs/algorithms/recall-evaluation.md).
 
 *Advanced:*
 
+- [Manual installation, CI, and troubleshooting](docs/reference/cli.md)
 - [Architecture principles](docs/concepts/constitution.md)
 - [Ingest boundaries](docs/reference/ingest.md)
 
@@ -152,47 +127,17 @@ See [Recall Evaluation](docs/algorithms/recall-evaluation.md).
 你的资料 → Candidate → 人工审核 → Wiki → Recall
 ```
 
-### 快速开始
+### 交给 Agent 安装
 
-要求：Python 3.12+、Git、pipx。
+不需要打开终端或记忆命令。把这一句话交给你正在使用的编码 Agent：
 
-```bash
-pipx install open-knowledge-studio
-oks init ./my-knowledge-base
-cd ./my-knowledge-base
-oks status
-```
+> 请按 [OKS 上游安装 Skill](https://raw.githubusercontent.com/open-agent-power/open-knowledge-studio/main/SKILL.md) 为我安装 Open Knowledge Studio：把个人知识放进独立实例，不要写入源码仓库；完成后用自然语言告诉我实例位置、可用能力和所有未完成项。
 
-需要共享团队知识库时，使用团队初始化入口：
+Agent 会检查环境、安装或连接 OKS、创建独立实例，并如实报告失败和限制。团队使用时，再补充团队名称和成员必须确认的边界。
 
-```bash
-oks team init ./team-knowledge-studio --name "Platform Knowledge Team"
-cd ./team-knowledge-studio
-oks status
-```
+### 跑通一条有用的闭环
 
-在 Claude Code、Codex 或兼容 Agent 中，把一份自己的真实资料交给 Agent：
-
-> 把这份 PDF 收录到我的 OKS 知识库。
-
-Agent 会按已安装的 `/ingest` Skill 保存证据，并在 `drafts/` 生成 Candidate。
-审核后再晋升：
-
-```bash
-oks drafts list
-oks drafts promote <slug>
-oks recall "我们当时做了什么决定？"
-```
-
-没有 Agent 时，可以显式准备 Run Workspace：
-
-```bash
-oks ingest prepare <文件或URL>
-```
-
-`prepare` 不会自行调用 Agent，只创建协议工作区并输出下一步说明。需要 connector
-托管采集时，使用 `oks ingest run <文件或URL>`；这条兼容路径把提取交给独立发布的
-`oks-connector`。
+把一份真实材料交给 Agent，并要求它保留来源、区分证据与解释、只提出待审核知识而不自行保存结论。你审核 Candidate；后续任务再验证这些经过审核的知识是否真正有用、是否仍在证据范围内。
 
 ### 召回架构 — OKS Triple-Layer Recall
 
@@ -239,6 +184,7 @@ Node-BM25 R@1 较 native +57%；fusion re-rank 反而*降*精度——灵魂因�
 
 *进阶内容：*
 
+- [手动安装、CI 与排错](docs/reference/cli.md)
 - [架构原则](docs/concepts/constitution.md)
 - [摄入边界](docs/reference/ingest.md)
 

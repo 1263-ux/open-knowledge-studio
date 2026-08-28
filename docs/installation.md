@@ -8,7 +8,7 @@ parent: 开始使用
 
 OKS 是 Agent 的知识工作空间，不应该先变成用户需要背诵的一组命令。把安装任务直接交给你正在使用的编码 Agent：
 
-> 请先阅读并按照 [OKS 上游安装 Skill](https://raw.githubusercontent.com/open-agent-power/open-knowledge-studio/main/SKILL.md) 操作，然后为我安装 Open Knowledge Studio，并为个人知识创建一个独立实例。不要把个人知识写进 OKS 源码仓库。完成后检查当前实例、可用能力和审核流程，再用自然语言向我报告结果与任何失败项。
+> 请按 [OKS 上游安装 Skill](https://raw.githubusercontent.com/open-agent-power/open-knowledge-studio/main/SKILL.md) 为我安装 Open Knowledge Studio：把个人知识放进独立实例，不要写入源码仓库；完成后用自然语言告诉我实例位置、可用能力和所有未完成项。
 
 ## Agent 应该完成什么
 
