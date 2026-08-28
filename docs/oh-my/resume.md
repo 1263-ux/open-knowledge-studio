@@ -9,6 +9,17 @@ parent: 真实案例
 {: .important }
 > **状态：真实材料已对照公开岗位。** 这不是一份“AI 润色的万能简历”，而是把一份真实的 Java 后端与 RAG 学习实践材料，重新组织成 Agent 应用开发的候选表达。姓名、联系方式、学校、公司、地点、精确时间与薪资均已脱敏。
 
+## 改好的 Word，先看正文
+
+这不是重新编的一页案例文案。已在原 Word 的**副本**中把求职意向、个人简介、技能组织和医疗知识问答项目改为 Agent 应用开发版本；原文件没有修改。
+
+<figure class="case-figure">
+  <img src="../assets/cases/resume/agent-app-resume-preview.svg" alt="Agent 应用开发版简历的脱敏公开预览，显示求职意向、核心技能与基于 RAG 的医疗知识问答助手项目。">
+  <figcaption>脱敏公开预览：展示已编辑 Word 的实际候选内容。身份、联系方式、学校、机构与精确时间没有进入公开站点。</figcaption>
+</figure>
+
+这张预览只证明“现有材料已被改成一份能投 Agent 应用开发岗位的简历版本”；它不证明候选人已有生产级 Agent 平台、MCP / Tool Calling 或大规模运维经验。
+
 ## 这份材料里原本有什么
 
 目标岗位：**初级 / 校招 Agent 应用开发**。

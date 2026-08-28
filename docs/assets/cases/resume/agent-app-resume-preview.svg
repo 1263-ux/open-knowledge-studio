@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 1260" role="img" aria-labelledby="title desc">
+  <title id="title">Agent 应用开发版简历的脱敏公开预览</title>
+  <desc id="desc">经过定向编辑的简历正文预览，显示 Agent 应用开发求职意向、技术栈和医疗知识问答项目。个人身份与联系方式没有公开。</desc>
+  <style>
+    .page { fill: #fff; }
+    .ink { fill: #172033; font-family: "Noto Sans SC", "Microsoft YaHei", sans-serif; }
+    .muted { fill: #667085; font-family: "Noto Sans SC", "Microsoft YaHei", sans-serif; }
+    .label { fill: #2563eb; font-family: "Noto Sans SC", "Microsoft YaHei", sans-serif; font-weight: 700; letter-spacing: .8px; }
+    .body { fill: #344054; font-family: "Noto Sans SC", "Microsoft YaHei", sans-serif; font-size: 18px; }
+    .small { fill: #667085; font-family: "Noto Sans SC", "Microsoft YaHei", sans-serif; font-size: 15px; }
+    .section { fill: #172033; font-family: "Noto Sans SC", "Microsoft YaHei", sans-serif; font-size: 21px; font-weight: 700; }
+  </style>
+  <rect width="900" height="1260" fill="#eef3fb"/>
+  <rect class="page" x="60" y="40" width="780" height="1180" rx="4"/>
+  <rect x="61" y="41" width="778" height="13" fill="#2563eb"/>
+  <rect x="690" y="76" width="105" height="32" rx="16" fill="#e8f0ff"/>
+  <text x="742" y="98" text-anchor="middle" class="label" font-size="14">公开脱敏预览</text>
+  <rect x="106" y="92" width="168" height="33" rx="3" fill="#172033"/>
+  <rect x="106" y="139" width="318" height="15" rx="2" fill="#d6dce7"/>
+  <rect x="106" y="166" width="254" height="15" rx="2" fill="#d6dce7"/>
+  <line x1="106" y1="208" x2="794" y2="208" stroke="#d9e1ee"/>
+  <text x="106" y="246" class="label" font-size="15">求职意向</text>
+  <text x="205" y="246" class="ink" font-size="19" font-weight="700">Agent 应用开发</text>
+  <text x="106" y="292" class="section">个人简介</text>
+  <text x="106" y="326" class="body">具备 Java 后端与 AI 应用实践经历，目标方向为 Agent 应用开发。</text>
+  <text x="106" y="357" class="body">完成过 LangChain4j + OpenAI API 医疗知识问答实践；接触 RAG、</text>
+  <text x="106" y="388" class="body">Embedding、向量检索与 Agent 工作流，并完成 Docker 化运行配置。</text>
+  <text x="106" y="444" class="section">核心技能</text>
+  <text x="106" y="478" class="body"><tspan font-weight="700">后端基础：</tspan>Java、Spring Boot、MyBatis Plus、MySQL、Redis、Maven、Git</text>
+  <text x="106" y="510" class="body"><tspan font-weight="700">AI 应用：</tspan>LangChain4j、OpenAI API、RAG、Embedding、向量检索、Agent 工作流</text>
+  <text x="106" y="542" class="body"><tspan font-weight="700">工程化：</tspan>Docker 容器化部署、Linux、Swagger / OpenAPI</text>
+  <text x="106" y="598" class="section">项目经历</text>
+  <text x="106" y="634" class="ink" font-size="20" font-weight="700">基于 RAG 的医疗知识问答助手</text>
+  <text x="106" y="663" class="muted" font-size="16">核心开发（后端与 RAG）</text>
+  <circle cx="117" cy="700" r="4" fill="#2563eb"/>
+  <text x="134" y="706" class="body">搭建 Spring Boot 后端服务，完成基础问答接口与调用链路。</text>
+  <circle cx="117" cy="740" r="4" fill="#2563eb"/>
+  <text x="134" y="746" class="body">集成 LangChain4j 与 OpenAI API，实现基础医疗问答功能。</text>
+  <circle cx="117" cy="780" r="4" fill="#2563eb"/>
+  <text x="134" y="786" class="body">完成 RAG 知识检索与回答增强；调研并实践向量检索。</text>
+  <circle cx="117" cy="820" r="4" fill="#2563eb"/>
+  <text x="134" y="826" class="body">完成 Docker 容器化运行配置与环境部署。</text>
+  <rect x="106" y="874" width="688" height="104" rx="8" fill="#f5f8ff"/>
+  <text x="132" y="910" class="label" font-size="14">事实边界</text>
+  <text x="132" y="940" class="body">这份预览证明材料已被组织为 Agent 应用开发的候选表达；</text>
+  <text x="132" y="968" class="body">不证明生产规模、效果指标、MCP / Tool Calling 或复杂编排经验。</text>
+  <line x1="106" y1="1065" x2="794" y2="1065" stroke="#d9e1ee"/>
+  <text x="106" y="1100" class="small">个人身份、联系方式、学校、项目时间与机构信息均未公开。</text>
+  <text x="106" y="1144" class="small">Open Knowledge Studio · Resume case</text>
+</svg>
