@@ -18,7 +18,7 @@
 
 不必先读一堆文档。这里有一个真实记录：两段 Kimi 视频被保存为来源和 Raw，Agent 据此提出待审核的知识 Candidate。
 
-[看「托管你的学习」这个案例 →](https://open-agent-power.github.io/open-knowledge-studio/oh-my/study.html)
+[看「托管你的研究」这个案例 →](https://open-agent-power.github.io/open-knowledge-studio/oh-my/study.html)
 
 案例页面也会直接说明它**没有**证明什么：Candidate 尚未晋升为 Wiki，Kimi 的参数和能力结论仍需要官方资料或 benchmark 复核。这正是 OKS 想保留的边界。
 

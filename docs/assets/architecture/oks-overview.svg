@@ -1,0 +1,89 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 720" role="img" aria-labelledby="title desc">
+  <title id="title">Open Knowledge Studio 从材料到下一次任务的主链路</title>
+  <desc id="desc">来源进入原始材料，Agent 提出候选，人审核后进入可复用知识，新任务召回这些知识。目标、配置和可选集成在主链路之外提供支持。</desc>
+  <defs>
+    <style>
+      .title { fill: #0f172a; font: 700 28px -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif; }
+      .subtitle { fill: #64748b; font: 400 15px -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif; }
+      .step { fill: #2563eb; font: 700 13px -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif; letter-spacing: 1px; }
+      .card-title { fill: #0f172a; font: 700 19px -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif; }
+      .card-body { fill: #475569; font: 400 14px -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif; }
+      .support-title { fill: #334155; font: 700 15px -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif; }
+      .support-body { fill: #64748b; font: 400 13px -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif; }
+    </style>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#94a3b8"/>
+    </marker>
+  </defs>
+
+  <rect width="1200" height="720" rx="24" fill="#f8fafc"/>
+  <text x="60" y="74" class="title">从材料到下一次任务</text>
+  <text x="60" y="106" class="subtitle">OKS 的核心不是“记得更多”，而是让每一次可复查的判断有机会被下一次任务复用。</text>
+
+  <g transform="translate(60 158)">
+    <text x="0" y="-18" class="step">01 留下材料</text>
+    <rect width="182" height="174" rx="16" fill="#eef4ff" stroke="#93c5fd" stroke-width="2"/>
+    <circle cx="28" cy="31" r="12" fill="#2563eb"/>
+    <path d="M22 31h12M28 25v12" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
+    <text x="24" y="75" class="card-title">来源</text>
+    <text x="24" y="104" class="card-body">文件、网页、视频、对话</text>
+    <text x="24" y="128" class="card-body">先保留来源与提取结果</text>
+  </g>
+
+  <g transform="translate(282 158)">
+    <text x="0" y="-18" class="step">02 保留证据</text>
+    <rect width="182" height="174" rx="16" fill="#effaf2" stroke="#86efac" stroke-width="2"/>
+    <path d="M27 20h21l7 7v29H27z" fill="#16a34a" opacity=".16" stroke="#16a34a" stroke-width="2"/>
+    <path d="M48 20v9h9" fill="none" stroke="#16a34a" stroke-width="2"/>
+    <text x="24" y="75" class="card-title">Raw 材料</text>
+    <text x="24" y="104" class="card-body">原文、转写、关键帧</text>
+    <text x="24" y="128" class="card-body">材料不等于结论</text>
+  </g>
+
+  <g transform="translate(504 158)">
+    <text x="0" y="-18" class="step">03 Agent 提议</text>
+    <rect width="182" height="174" rx="16" fill="#fff7ed" stroke="#fdba74" stroke-width="2"/>
+    <path d="M29 22h30v30H29z" fill="#f97316" opacity=".14" stroke="#f97316" stroke-width="2"/>
+    <path d="M36 31h16M36 39h10" stroke="#f97316" stroke-width="2" stroke-linecap="round"/>
+    <text x="24" y="75" class="card-title">Candidate</text>
+    <text x="24" y="104" class="card-body">主张、来源范围、缺口</text>
+    <text x="24" y="128" class="card-body">只是一份待审核提议</text>
+  </g>
+
+  <g transform="translate(726 158)">
+    <text x="0" y="-18" class="step">04 人做决定</text>
+    <rect width="182" height="174" rx="16" fill="#fdf4ff" stroke="#e9a8f2" stroke-width="2"/>
+    <circle cx="43" cy="35" r="17" fill="#a855f7" opacity=".14" stroke="#a855f7" stroke-width="2"/>
+    <path d="M35 35l6 6 11-13" fill="none" stroke="#9333ea" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="24" y="75" class="card-title">人工审核</text>
+    <text x="24" y="104" class="card-body">接受、修改或拒绝</text>
+    <text x="24" y="128" class="card-body">决定知识的边界</text>
+  </g>
+
+  <g transform="translate(948 158)">
+    <text x="0" y="-18" class="step">05 接着做事</text>
+    <rect width="182" height="174" rx="16" fill="#eef2ff" stroke="#a5b4fc" stroke-width="2"/>
+    <path d="M31 22h26v26H31z" fill="#4f46e5" opacity=".14" stroke="#4f46e5" stroke-width="2"/>
+    <path d="M37 35h14M45 28l7 7-7 7" fill="none" stroke="#4f46e5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="24" y="75" class="card-title">Wiki 与召回</text>
+    <text x="24" y="104" class="card-body">只复用已审核知识</text>
+    <text x="24" y="128" class="card-body">并说明依据与缺口</text>
+  </g>
+
+  <path d="M244 245h28M464 245h28M686 245h28M908 245h28" fill="none" stroke="#94a3b8" stroke-width="3" marker-end="url(#arrow)"/>
+
+  <rect x="60" y="404" width="1070" height="124" rx="16" fill="#fff" stroke="#e2e8f0" stroke-width="2"/>
+  <text x="88" y="442" class="support-title">贯穿主链路的治理</text>
+  <text x="88" y="472" class="support-body">Profile / Goal 决定任务范围与优先级</text>
+  <text x="88" y="496" class="support-body">settings 与 _meta 约束配置和协议；Trace 留下发生过什么的记录</text>
+  <path d="M490 428v74M766 428v74" stroke="#e2e8f0" stroke-width="2"/>
+  <text x="522" y="460" class="support-title">不自动跨越</text>
+  <text x="522" y="486" class="support-body">来源 ≠ 结论</text>
+  <text x="522" y="508" class="support-body">Candidate ≠ 长期知识</text>
+  <text x="798" y="460" class="support-title">可选接入</text>
+  <text x="798" y="486" class="support-body">Hooks、只读 VFS、移动审核</text>
+  <text x="798" y="508" class="support-body">只改变入口，不改变人审规则</text>
+
+  <path d="M151 366v26M373 366v26M595 366v26M817 366v26M1039 366v26" stroke="#cbd5e1" stroke-width="2" stroke-dasharray="5 6"/>
+  <text x="60" y="614" class="subtitle">需要协议、索引、Hooks 或可选集成的维护者，可继续阅读页面下方的技术说明。</text>
+</svg>

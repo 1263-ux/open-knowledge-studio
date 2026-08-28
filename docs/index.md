@@ -50,4 +50,4 @@ nav_exclude: true
 - 证据不足时，系统应说明缺口，而不是补出一个确定答案。
 - 发布、合并、删除和外部发送等高风险动作，仍需要人的明确授权。
 
-安装完成后，从[第一次学习循环](first-knowledge-loop.html)开始，或先看案例[托管你的学习](oh-my/study.html)。需要把已审核知识交付为文件时，阅读 [Office 工作流](usage/office.html)。
+安装完成后，从[第一次学习循环](first-knowledge-loop.html)开始，或先看案例[托管你的研究](oh-my/study.html)。需要把已审核知识交付为文件时，阅读 [Office 工作流](usage/office.html)。

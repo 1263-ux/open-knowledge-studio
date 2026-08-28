@@ -50,4 +50,4 @@ parent: 开始使用
 - [ ] 新任务使用的是已审核知识，不是把原始材料当作结论。
 - [ ] 证据不足时，Agent 会说明缺口。
 
-下一步：[确认 Agent 真的学会了](verify.html)，或查看案例[托管你的学习](oh-my/study.html)。
+下一步：[确认 Agent 真的学会了](verify.html)，或查看案例[托管你的研究](oh-my/study.html)。
