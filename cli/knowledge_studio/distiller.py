@@ -12,7 +12,6 @@ This module handles:
 from __future__ import annotations
 
 import logging
-import re
 from collections import defaultdict
 from datetime import UTC, datetime
 from pathlib import Path
@@ -23,7 +22,6 @@ from knowledge_studio.store import (
     DEFAULT_CONFIG,
     _atomic_write,
     _load_access_counts,
-    _update_frontmatter_field,
     apply_decay,
     compute_score,
     drafts_dir,
