@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/assets/oks-logo-readme.png" width="420" alt="Open Knowledge Studio">
+<img src="images/oks-logo-readme.png" width="420" alt="Open Knowledge Studio">
 
 # Open Knowledge Studio
 

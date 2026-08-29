@@ -2454,8 +2454,9 @@ def mail_send(
     # A1/P6: CONSTITUTION 要求 sent/{agent-id}/{ts}.md outbox archive per agent.
     # 之前只写 inbox, sent/ 从未写入 = P6 违规 (CONSTITUTION 写的路径实现不存在).
     # v0.6.11: 补 sent/ 写入 + 用 _atomic_write (P2/A5 原子写, 不再裸 write_text).
+    # inbox 是被 inbox/count/read 并发读的一侧, 必须与 sent/ 同强度持久化.
     from .store import _atomic_write
-    (inbox / f"{slug}.md").write_text(content, encoding="utf-8")
+    _atomic_write(inbox / f"{slug}.md", content)
     sent_dir = root / "mail" / "sent" / from_id
     sent_dir.mkdir(parents=True, exist_ok=True)
     _atomic_write(sent_dir / f"{ts}.md", content)
@@ -2502,10 +2503,30 @@ def mail_read(
     if not f.exists():
         console.print(f"[red]Mail not found:[/red] {id}")
         raise typer.Exit(1)
-    content = f.read_text(encoding="utf-8")
-    content = content.replace("read: false", "read: true", 1)
-    f.write_text(content, encoding="utf-8")
-    console.print(f"[green]Marked read:[/green] {id}")
+
+    # P7: 只改 frontmatter。此前用全文 replace(...,1)，对已读信件重复执行会命中
+    # 正文里的 "read: false" 并静默改写正文，同时仍报 Marked read。
+    # P2/A5: 读改写必须同一把锁 + 原子替换快照，不能裸 write_text。
+    def update(current: str) -> str | None:
+        if not current.startswith("---"):
+            return None
+        parts = current.split("---", 2)
+        if len(parts) < 3:
+            return None
+        meta, body = parts[1], parts[2]
+        if "read: false" not in meta:
+            return None
+        return f"---{meta.replace('read: false', 'read: true', 1)}---{body}"
+
+    changed = store._locked_atomic_update(
+        f,
+        update,
+        lock_path=root / ".oks" / "locks" / "mail.lock",
+    )
+    if changed:
+        console.print(f"[green]Marked read:[/green] {id}")
+    else:
+        console.print(f"[dim]Already read (no change):[/dim] {id}")
 
 
 @mail_app.command("count")
