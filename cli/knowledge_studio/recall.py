@@ -681,7 +681,9 @@ def _recall_knowledge_via_backend(
             "confidence": p.get("confidence", 0.8),
             "body_preview": _make_preview(
                 p.get("body", ""),
-                abstract=p.get("abstract"),
+                # L0 零 read: fts5 hit 带的 abstract 优先 (来自 SQLite, 不读文件);
+                # fallback 到 page frontmatter abstract (list_wiki_pages 已读).
+                abstract=h.abstract or p.get("abstract"),
             ),
             "tags": p.get("tags", ""),
             "has_traces": bool(p.get("traces")),

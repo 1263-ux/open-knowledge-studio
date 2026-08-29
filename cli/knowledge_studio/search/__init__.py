@@ -31,6 +31,7 @@ class SearchHit:
     slug: str
     title: str
     score: float
+    abstract: str | None = None  # L0 零 read: fts5 返 SQLite abstract (CV OpenViking tiers L0)
     backend: str = "native"
     extra: dict[str, Any] = field(default_factory=dict)
 
