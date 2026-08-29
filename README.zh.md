@@ -99,6 +99,28 @@ OKS 在一个 50-case 语义改写数据集上做过评估（严格精确 slug �
 | 去 Node-BM25 | 召回 fts5→native | 0.525 | 0.630 | Node-BM25 是精度主力（−36%） |
 | 去 Soul Boost（fusion 误用） | 灵魂搬到召回层 re-rank | 0.805 | 0.900 | 灵魂在注入层才对，召回层 re-rank 是负优化 |
 
+### LoCoMo 长对话召回 —— vs OpenViking（1540 case）
+
+我们适配了公开的 [LoCoMo](https://github.com/snap-research/locomo) 评测（ACL 2024，10 段长对话，1540 个 QA，4 个类别，排除 adversarial）：每段对话 → 一个 wiki 页，每个 QA question → 一个 eval case，期望命中是对话 slug。完整报告：[locomo-pk-report.md](./records/experiments/locomo-pk-report.md)。
+
+| 指标 | OKS fts5 recall@1 (Node-BM25) | OpenViking QA accuracy (最佳, Hermes) |
+|--------|-------------------------------|-------------------------------------|
+| 数值 | **0.920** | 0.8286 |
+| p50 延迟 | 31ms | — |
+| cases | 1540 | (LoCoMo 4 类) |
+
+- **OKS recall@1 = 92.0%** —— 1540 个 LoCoMo question 里 92% 在 top-1 召回到正确对话。
+- **指标诚实说明**：OKS 报*召回命中*（正确对话被召回到）；OpenViking 报*完整 QA accuracy*（召回 + LLM answer + LLM judge）。召回是 QA 的上界——召不到就答不对。OKS core 无 API（P4）评到召回为止；完整 QA accuracy 取决于宿主 Agent 的 LLM。
+- **为什么 OKS 召回强**：Node-BM25 按 `##` 分 node，question 里的实体（人名/日期/事件）匹配到对话出现的那个 turn；SQLite 持久索引 + abstract 零读给到 31ms p50。
+- **vs OKS 50-case**：LoCoMo R@1（0.920）> 50-case R@1（0.825）—— LoCoMo question 含对话里的实体；50-case 是语义改写（无关键词重合），更难。
+
+复现：
+```bash
+git clone https://github.com/snap-research/locomo.git
+python3 scripts/locomo_to_oks.py locomo/data/locomo10.json wiki/conversations/locomo records/locomo-eval.yaml
+oks eval recall records/locomo-eval.yaml --output locomo-fts5.json --search-backend fts5
+```
+
 ### Abstract 零读 & tier 降级（v0.6.10 / v0.6.12）
 
 - **Abstract 零读**：fts5 schema `node-v2` 加了 `abstract` 列；`body_preview` 从 SQLite 读——**召回过程零文件读**。R@1 持平（0.429），p50 121ms（略快）。

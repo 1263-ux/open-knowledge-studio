@@ -1,9 +1,9 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 460" font-family="system-ui,-apple-system,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" role="img" aria-label="OKS Triple-Layer Recall benchmark: Node-BM25 R@1=82.5% vs native 52.5% vs fusion 80.5%; embedding R@1=61.7% at 197× latency; layer ablation shows Node-BM25 is the precision engine.">
-  <rect width="880" height="460" fill="#0d1117"/>
-  <rect x="150" y="4" width="14" height="14" rx="3" fill="#22c55e"/><text x="170" y="15" font-size="12" fill="#8b949e">fts5 (full Triple-Layer, default)</text>
-  <rect x="330" y="4" width="14" height="14" rx="3" fill="#6e7681"/><text x="350" y="15" font-size="12" fill="#8b949e">ablated backend</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 580" font-family="system-ui,-apple-system,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" role="img" aria-label="OKS benchmark: 50-case ablation R@1 82.5% (fts5) vs 52.5% (native); LoCoMo 1540-case recall@1 92.0% vs OpenViking QA accuracy 82.86%; embedding 61.7% at 197× latency.">
+  <rect width="880" height="580" fill="#0d1117"/>
+  <rect x="150" y="4" width="14" height="14" rx="3" fill="#22c55e"/><text x="170" y="15" font-size="12" fill="#8b949e">OKS fts5 (Node-BM25, default)</text>
+  <rect x="330" y="4" width="14" height="14" rx="3" fill="#6e7681"/><text x="350" y="15" font-size="12" fill="#8b949e">ablated / other system</text>
 
-  <text x="150" y="48" font-size="13" font-weight="600" fill="#e6edf3">Retrieval ablation — 50-case semantic-paraphrase, strict exact-slug match · R@1</text>
+  <text x="150" y="48" font-size="13" font-weight="600" fill="#e6edf3">Retrieval ablation — 50-case semantic-paraphrase · R@1</text>
   <line x1="150.0" y1="62" x2="150.0" y2="215" stroke="#30363d" stroke-width="1"/>
   <text x="150.0" y="231" font-size="10" fill="#8b949e" text-anchor="middle">0%</text>
   <line x1="312.5" y1="62" x2="312.5" y2="215" stroke="#21262d" stroke-width="1"/>
@@ -27,7 +27,7 @@
   <path d="M150,154 L150,136 L471.5,136 Q475.5,136 475.5,140 L475.5,150 Q475.5,154 471.5,154 Z" fill="#6e7681"/>
   <text x="482.5" y="149" font-size="11" fill="#8b949e">52.5%</text>
 
-  <text x="150" y="267" font-size="13" font-weight="600" fill="#e6edf3">Embedding vs literal — semantic recall · R@1 and p50 latency</text>
+  <text x="150" y="267" font-size="13" font-weight="600" fill="#e6edf3">LoCoMo long-conversation — 1540-case recall vs OpenViking QA accuracy</text>
   <line x1="150.0" y1="281" x2="150.0" y2="395" stroke="#30363d" stroke-width="1"/>
   <text x="150.0" y="411" font-size="10" fill="#8b949e" text-anchor="middle">0%</text>
   <line x1="312.5" y1="281" x2="312.5" y2="395" stroke="#21262d" stroke-width="1"/>
@@ -39,13 +39,29 @@
   <line x1="800.0" y1="281" x2="800.0" y2="395" stroke="#21262d" stroke-width="1"/>
   <text x="800.0" y="411" font-size="10" fill="#8b949e" text-anchor="middle">100%</text>
 
-  <text x="138" y="306" font-size="12" fill="#8b949e" text-anchor="end">fts5 (literal)</text>
-  <path d="M150,299 L150,281 L809,281 Q813,281 813,285 L813,295 Q813,299 809,299 Z" fill="#22c55e"/>
-  <text x="820" y="294" font-size="11" font-weight="600" fill="#e6edf3">82.5% · 93ms</text>
+  <text x="138" y="306" font-size="12" fill="#8b949e" text-anchor="end">OKS recall@1</text>
+  <path d="M150,299 L150,281 L891.2,281 Q895.2,281 895.2,285 L895.2,295 Q895.2,299 891.2,299 Z" fill="#22c55e"/>
+  <text x="820" y="294" font-size="11" font-weight="600" fill="#e6edf3">92.0% · 31ms</text>
 
-  <text x="138" y="343" font-size="12" fill="#8b949e" text-anchor="end">embedding (MiniLM)</text>
-  <path d="M150,336 L150,318 L626.8,318 Q630.8,318 630.8,322 L630.8,332 Q630.8,336 626.8,336 Z" fill="#6e7681"/>
-  <text x="637.8" y="331" font-size="11" fill="#8b949e">61.7% · 18304ms (197×)</text>
+  <text x="138" y="343" font-size="12" fill="#8b949e" text-anchor="end">OpenViking QA acc (best)</text>
+  <path d="M150,336 L150,318 L805.2,318 Q809.2,318 809.2,322 L809.2,332 Q809.2,336 805.2,336 Z" fill="#2a78d6"/>
+  <text x="820" y="331" font-size="11" fill="#8b949e">82.86%</text>
 
-  <text x="150" y="448" font-size="11" fill="#8b949e">Historical baseline · one KB · 50 semantic-paraphrase queries · not a universal SLA. Reproduce: oks eval recall records/experiments/eval-50.yaml</text>
+  <text x="150" y="368" font-size="10" fill="#8b949e">Note: OKS = recall hit (recall upper-bounds QA); OpenViking = full QA (recall + LLM answer + judge). Not identical metrics.</text>
+
+  <text x="150" y="448" font-size="13" font-weight="600" fill="#e6edf3">Embedding vs literal — 50-case · R@1 and p50 latency</text>
+  <line x1="150.0" y1="462" x2="150.0" y2="545" stroke="#30363d" stroke-width="1"/>
+  <text x="150.0" y="561" font-size="10" fill="#8b949e" text-anchor="middle">0%</text>
+  <line x1="475.0" y1="462" x2="475.0" y2="545" stroke="#21262d" stroke-width="1"/>
+  <text x="475.0" y="561" font-size="10" fill="#8b949e" text-anchor="middle">50%</text>
+  <line x1="800.0" y1="462" x2="800.0" y2="545" stroke="#21262d" stroke-width="1"/>
+  <text x="800.0" y="561" font-size="10" fill="#8b949e" text-anchor="middle">100%</text>
+
+  <text x="138" y="487" font-size="12" fill="#8b949e" text-anchor="end">fts5 (literal)</text>
+  <path d="M150,480 L150,462 L809,462 Q813,462 813,466 L813,476 Q813,480 809,480 Z" fill="#22c55e"/>
+  <text x="820" y="475" font-size="11" font-weight="600" fill="#e6edf3">82.5% · 93ms</text>
+
+  <text x="138" y="524" font-size="12" fill="#8b949e" text-anchor="end">embedding (MiniLM)</text>
+  <path d="M150,517 L150,499 L626.8,499 Q630.8,499 630.8,503 L630.8,513 Q630.8,517 626.8,517 Z" fill="#6e7681"/>
+  <text x="637.8" y="512" font-size="11" fill="#8b949e">61.7% · 18304ms (197×)</text>
 </svg>

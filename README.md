@@ -99,6 +99,28 @@ Queries are semantic paraphrases — the query does not contain the slug's keywo
 | Remove Node-BM25 | retrieval fts5→native | 0.525 | 0.630 | Node-BM25 is the precision engine (−36%) |
 | Remove Soul Boost (fusion misuse) | soul moved to retrieval re-rank | 0.805 | 0.900 | soul in injection = right; re-rank in retrieval = negative optimization |
 
+### LoCoMo long-conversation recall — vs OpenViking (1540-case)
+
+We adapted the public [LoCoMo](https://github.com/snap-research/locomo) benchmark (ACL 2024, 10 long conversations, 1540 QA across 4 categories, excluding adversarial) to OKS: each conversation → one wiki page, each QA question → an eval case with the expected conversation slug. Full report: [locomo-pk-report.md](./records/experiments/locomo-pk-report.md).
+
+| metric | OKS fts5 recall@1 (Node-BM25) | OpenViking QA accuracy (best, Hermes) |
+|--------|-------------------------------|-------------------------------------|
+| value | **0.920** | 0.8286 |
+| latency p50 | 31ms | — |
+| cases | 1540 | (LoCoMo 4 categories) |
+
+- **OKS recall@1 = 92.0%** — 92% of 1540 LoCoMo questions retrieved the correct conversation in top-1.
+- **Metric caveat (honest)**: OKS reports *recall hit* (the correct conversation is retrieved); OpenViking reports *full QA accuracy* (recall + LLM answer + LLM judge). Recall upper-bounds QA — if you can't retrieve it, you can't answer it. OKS core is API-free (P4) and stops at recall; full QA accuracy depends on the host Agent's LLM.
+- **Why OKS recall is strong**: Node-BM25 over `##` headings matches question entities (names/dates/events) to the dialogue turn where they appear; SQLite persistent index + abstract zero-read gives 31ms p50.
+- **vs OKS 50-case**: LoCoMo R@1 (0.920) > 50-case R@1 (0.825) — LoCoMo questions contain entities that appear verbatim in dialogue; the 50-case is semantic-paraphrase (no keyword overlap), harder.
+
+Reproduce:
+```bash
+git clone https://github.com/snap-research/locomo.git
+python3 scripts/locomo_to_oks.py locomo/data/locomo10.json wiki/conversations/locomo records/locomo-eval.yaml
+oks eval recall records/locomo-eval.yaml --output locomo-fts5.json --search-backend fts5
+```
+
 ### Abstract zero-read & tier degradation (v0.6.10 / v0.6.12)
 
 - **Abstract zero-read**: fts5 schema `node-v2` added an `abstract` column; `body_preview` reads it from SQLite — **zero file reads during retrieval**. R@1 held (0.429), p50 121ms (slightly faster).
