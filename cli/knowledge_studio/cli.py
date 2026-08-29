@@ -2455,8 +2455,15 @@ def mail_send(
         f"{body}\n"
     )
     slug = f"{ts}-{from_id}"
+    # A1/P6: CONSTITUTION 要求 sent/{agent-id}/{ts}.md outbox archive per agent.
+    # 之前只写 inbox, sent/ 从未写入 = P6 违规 (CONSTITUTION 写的路径实现不存在).
+    # v0.6.11: 补 sent/ 写入 + 用 _atomic_write (P2/A5 原子写, 不再裸 write_text).
+    from .store import _atomic_write
     (inbox / f"{slug}.md").write_text(content, encoding="utf-8")
-    console.print(f"[green]Sent mail:[/green] {slug} -> {to_field}")
+    sent_dir = root / "mail" / "sent" / from_id
+    sent_dir.mkdir(parents=True, exist_ok=True)
+    _atomic_write(sent_dir / f"{ts}.md", content)
+    console.print(f"[green]Sent mail:[/green] {slug} -> {to_field} (archived: sent/{from_id}/{ts}.md)")
 
 
 @mail_app.command("inbox")
