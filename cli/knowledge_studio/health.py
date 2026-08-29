@@ -98,6 +98,8 @@ def run_health_check() -> dict:
     coverage = (active_pages / total_pages * 100) if total_pages > 0 else 0
     info.append(f"Active coverage: {coverage:.0f}%")
 
+    _check_recall_params_audit(errors, warnings)
+
     return {
         "errors": errors,
         "warnings": warnings,
@@ -166,3 +168,52 @@ def _check_wiki_page(md: Path, errors: list, warnings: list) -> str:
     except Exception as e:
         errors.append(f"Wiki page unreadable: {md.name} — {e}")
         return "orphan"
+
+
+def _check_recall_params_audit(errors: list[str], warnings: list[str]) -> None:
+    """P6 audit: recall.yaml 每个 section/key 必须被 load_recall_params 读取.
+
+    抓'定义参数但不实现'的 P6 形状 (mail/sent + budget_chars + title_only_floor
+    + userprompt section 同类). v0.6.0 budget_chars 定义 6 版本后才实现 —
+    本 audit 能在 v0.6.0 就抓到. v0.6.13: 抓到 userprompt section 未被读取.
+    """
+    ypath = Path(repo_root()) / "settings" / "recall.yaml"
+    if not ypath.is_file():
+        return  # 无 recall.yaml, 用 default, 不审
+
+    try:
+        data = yaml.safe_load(ypath.read_text(encoding="utf-8")) or {}
+    except Exception as e:
+        warnings.append(f"recall.yaml unreadable: {e}")
+        return
+
+    # 读 load_recall_params 源码, 找所有 data.get("section") 读取
+    import inspect
+    try:
+        from knowledge_studio import recall
+        src = inspect.getsource(recall.load_recall_params)
+    except Exception:
+        return  # 源码不可读, 跳过
+
+    def _section_read(section: str) -> bool:
+        # load_recall_params 用 data.get("section") 读 section
+        return f'data.get("{section}"' in src
+
+    def _topkey_read(key: str) -> bool:
+        return f'.get("{key}"' in src
+
+    for key, val in data.items():
+        if isinstance(val, dict):
+            # nested section: 检查 section 是否被 load 读
+            if not _section_read(key):
+                warnings.append(
+                    f"P6: recall.yaml section '{key}' 定义但 load_recall_params 未读取 "
+                    f"(参数无效果, 应实现或删 section)"
+                )
+        else:
+            # 顶层 key
+            if not _topkey_read(key):
+                warnings.append(
+                    f"P6: recall.yaml key '{key}' 定义但 load_recall_params 未读取 "
+                    f"(参数无效果, 应实现或删 key)"
+                )
