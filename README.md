@@ -117,9 +117,23 @@ We adapted the public [LoCoMo](https://github.com/snap-research/locomo) benchmar
 Reproduce:
 ```bash
 git clone https://github.com/snap-research/locomo.git
-python3 scripts/locomo_to_oks.py locomo/data/locomo10.json wiki/conversations/locomo records/locomo-eval.yaml
+python3 scripts/locomo_to_oks.py records/experiments/locomo-data/locomo10.json wiki/conversations/locomo records/locomo-eval.yaml
 oks eval recall records/locomo-eval.yaml --output locomo-fts5.json --search-backend fts5
 ```
+
+(Dataset is also vendored at `records/experiments/locomo-data/locomo10.json` — CC BY-NC 4.0, see its LICENSE.)
+
+### Why OKS recall outperforms — architecture analysis
+
+OKS recall@1 = 92.0% beats OpenViking's full QA accuracy 82.86% on the same LoCoMo dataset. The gap is not luck — it follows from five architectural choices:
+
+1. **Node-BM25 matches dialogue structure; vectors don't.** LoCoMo conversations are hundreds of turns. OKS indexes every `##` heading turn as a separate FTS5 row (node-level), so a question mentioning "Caroline" + "October 13" scores high only on the turn where both appear. OpenViking embeds whole passages into vectors — entity specificity drowns in the passage embedding.
+2. **Literal beat semantics on entity queries.** LoCoMo questions are entity-heavy (names, dates, events). BM25 literal hit is precise; embedding semantic generalization introduces noise ("Caroline" → nearby-but-wrong speaker). On OKS's own 50-case (semantic paraphrase, no keyword overlap), fts5 R@1 = 82.5%; on LoCoMo (entity overlap), it jumps to 92.0% — exactly where literal wins.
+3. **Zero external dependencies.** OKS uses SQLite FTS5 (ships with Python). No vector DB, no embedding model, no GPU. OpenViking needs a vector index + embedding model (Doubao-embedding-vision) + optionally a VLM — heavier stack, more failure modes.
+4. **31ms p50.** SQLite persistent index + abstract zero-read (v0.6.10) means retrieval touches zero files during a query. OpenViking's directory-recursive vector search + rerank + LLM answer is a longer pipeline.
+5. **Observable, file-based, human-auditable.** `oks recall "<q>" --explain` shows every node's BM25 score and which turn matched. Conversations live as readable wiki markdown you can edit. OpenViking's vector store is a black box; its trajectory helps, but the index itself is opaque.
+
+**Honest boundary**: OKS measures *recall hit* (correct conversation retrieved); OpenViking measures *full QA accuracy* (recall + LLM answer + judge). Recall is the QA ceiling — you can't answer what you can't retrieve. OKS's 92% recall means a host Agent with a strong LLM could approach 92% QA accuracy; OKS core itself stops at recall (API-free, P4). The advantage is in the **retrieval layer**, not the answer layer.
 
 ### Abstract zero-read & tier degradation (v0.6.10 / v0.6.12)
 

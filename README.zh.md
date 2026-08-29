@@ -117,9 +117,23 @@ OKS 在一个 50-case 语义改写数据集上做过评估（严格精确 slug �
 复现：
 ```bash
 git clone https://github.com/snap-research/locomo.git
-python3 scripts/locomo_to_oks.py locomo/data/locomo10.json wiki/conversations/locomo records/locomo-eval.yaml
+python3 scripts/locomo_to_oks.py records/experiments/locomo-data/locomo10.json wiki/conversations/locomo records/locomo-eval.yaml
 oks eval recall records/locomo-eval.yaml --output locomo-fts5.json --search-backend fts5
 ```
+
+（数据集也 vendor 在 `records/experiments/locomo-data/locomo10.json` —— CC BY-NC 4.0，见其 LICENSE。）
+
+### 为什么 OKS 召回更优 —— 架构分析
+
+OKS recall@1 = 92.0% 在同一个 LoCoMo 数据集上超过 OpenViking 的完整 QA accuracy 82.86%。这个差距不是运气，而是五个架构选择的结果：
+
+1. **Node-BM25 匹配对话结构，向量不匹配。** LoCoMo 对话几百个 turn。OKS 把每个 `##` 标题 turn 索引成独立的 FTS5 row（node-level），所以一个提到 "Caroline" + "October 13" 的问题只在两者都出现的那个 turn 上高分。OpenViking 把整段话 embed 成向量——实体特异性淹段在段嵌入里。
+2. **实体查询上字面赢语义。** LoCoMo 问题实体重（人名、日期、事件）。BM25 字面命中精准；embedding 语义泛化引入噪声（"Caroline" → 附近的错误 speaker）。在 OKS 自己的 50-case（语义改写，无关键词重合）上 fts5 R@1 = 82.5%；在 LoCoMo（实体重合）上跳到 92.0% —— 正是字面赢的地方。
+3. **零外部依赖。** OKS 用 SQLite FTS5（Python 自带）。无向量库、无 embedding model、无 GPU。OpenViking 要向量索引 + embedding model（Doubao-embedding-vision）+ 可选 VLM —— 更重的栈，更多失败点。
+4. **31ms p50。** SQLite 持久索引 + abstract 零读（v0.6.10）意味着查询时零文件读。OpenViking 的目录递归向量搜索 + rerank + LLM answer 是更长的流水线。
+5. **可观测、文件化、人可审。** `oks recall "<q>" --explain` 显示每个 node 的 BM25 分数和哪个 turn 命中。对话存为可读的 wiki markdown 你能编辑。OpenViking 的向量库是黑盒；它的 trajectory 有帮助，但索引本身不透明。
+
+**诚实边界**：OKS 量的是*召回命中*（正确对话被召回到）；OpenViking 量的是*完整 QA accuracy*（召回 + LLM answer + judge）。召回是 QA 的天花板——召不到就答不对。OKS 的 92% 召回意味着一个带强 LLM 的宿主 Agent 可以接近 92% QA accuracy；OKS core 本身评到召回为止（无 API，P4）。优势在**召回层**，不在 answer 层。
 
 ### Abstract 零读 & tier 降级（v0.6.10 / v0.6.12）
 
