@@ -369,7 +369,7 @@ def _recall_supplement(
 ) -> str:
     """PostToolUse recall — inject relevant memory after tool calls.
 
-    Higher floor (0.9) + lower topn (2) than UserPromptSubmit (0.7 / 3) —
+    Unified recall.floor + recall.topn (v0.6.14) — posttool relies on signal_rel_floor (2.5) for noise control;
     PostToolUse fires often, we only surface high-confidence hits to avoid
     drowning the agent's execution flow.
     """
