@@ -23,7 +23,6 @@ RELATIONSHIPS = {"supersedes", "enriches", "confirms", "challenges"}
 
 def run_health_check() -> dict:
     """Run all health checks. Returns {errors, warnings, info, summary}."""
-    root = repo_root()
 
     errors: list[str] = []
     warnings: list[str] = []
