@@ -1,238 +1,196 @@
 <div align="center">
 
-<img src="images/oks-logo-readme.png" width="420" alt="Open Knowledge Studio">
+<img src="images/oks-logo-readme.png" width="360" alt="Open Knowledge Studio">
 
-# Open Knowledge Studio
+### Open Knowledge Studio: A Filesystem-First External Memory for Coding Agents
 
-Host your learning. Train a reviewable knowledge model that helps your Agent stay
-grounded across long-running work.
+English / [中文](README.zh.md)
 
-[English](#english) · [中文](#chinese) · [Documentation](https://open-agent-power.github.io/open-knowledge-studio/)
+[![](https://img.shields.io/github/v/release/open-agent-power/open-knowledge-studio?color=369eff\&labelColor=black\&logo=github\&style=flat-square)](https://github.com/open-agent-power/open-knowledge-studio/releases)
+[![](https://img.shields.io/github/stars/open-agent-power/open-knowledge-studio?labelColor\&style=flat-square\&color=ffcb47)](https://github.com/open-agent-power/open-knowledge-studio)
+[![](https://img.shields.io/github/issues/open-agent-power/open-knowledge-studio?labelColor=black\&style=flat-square\&color=ff80eb)](https://github.com/open-agent-power/open-knowledge-studio/issues)
+[![](https://img.shields.io/badge/license-MIT-white?labelColor=black\&style=flat-square)](./LICENSE)
+[![](https://img.shields.io/github/last-commit/open-agent-power/open-knowledge-studio?color=c4f042\&labelColor=black\&style=flat-square)](https://github.com/open-agent-power/open-knowledge-studio/commits/main)
+
+[Documentation](https://open-agent-power.github.io/open-knowledge-studio/) · [Experiments](#proof-it-works) · [Reproduce](#reproduce) · [Changelog](./CHANGELOG.md)
 
 </div>
 
----
+***
 
-<a id="english"></a>
+## What is Open Knowledge Studio
 
-## English
+Open Knowledge Studio (OKS) is an open-source **filesystem-first external memory** for coding agents. Instead of a black-box vector store, it stores knowledge as a human-reviewable, git-versioned filesystem — `profiles/`, `raw/`, `wiki/`, `drafts/`, `mail/` — that an Agent browses with `oks recall`, `oks wiki list`, and `oks trace`. Content moves through a reviewable pipeline (Source → EvidenceFragment → Manifest → Raw → Candidate → human review → Wiki), decays like real memory, and is recalled on demand. Full introduction: [Start here](https://open-agent-power.github.io/open-knowledge-studio/).
 
-Open Knowledge Studio (OKS) explores one question: how can an Agent keep learning
-through human collaboration and remain stable across long-running work? It does
-not train model weights. It builds a filesystem-first external knowledge model:
-humans set goals and approve knowledge; Agents collect evidence, execute work,
-propose Candidates, and recall reviewed decisions later.
-
-```text
-your source → Candidate → human review → Wiki → Recall
+```
+your source → Candidate → human review → Wiki → Recall → injected into Agent context
 ```
 
-### Quick Start
+## Why Open Knowledge Studio
 
-Requirements: Python 3.12+, Git, and pipx.
+- **One filesystem for all memory.** Profiles, raw materials, curated wiki, drafts, and agent mail each get a directory with a different trust boundary. An Agent locates and manipulates context deterministically, like a developer working with files. → [File-system paradigm](https://open-agent-power.github.io/open-knowledge-studio/concepts/file-system-paradigm/) · [Memory model](https://open-agent-power.github.io/open-knowledge-studio/concepts/memory-model/)
+- **Human review is the gate.** Raw material ≠ conclusion; Candidate ≠ long-term knowledge. Nothing auto-promotes to Wiki — every durable memory is human-approved. → [Dreaming cycle](https://open-agent-power.github.io/open-knowledge-studio/concepts/memory-model/#dreaming)
+- **Triple-Layer Recall cuts hallucination.** Node-BM25 retrieves *what* matches, Soul Boost reorders *what reaches* the Agent (anti-pattern ×1.5, review bonus, generic demotion), Memory Curve scores *how fresh* — so confidence never outranks truth. → [Recall engine](https://open-agent-power.github.io/open-knowledge-studio/algorithms/recall-engine/)
+- **Knowledge decays like real memory.** Unused pages cool down through hot → warm → cold → evictable tiers; used pages resurface. `importance × e^(-λ×days) + ln(1+access) + pin_bonus`. → [Decay system](https://open-agent-power.github.io/open-knowledge-studio/algorithms/decay-system/)
+- **Every recall is observable.** Each query preserves its factor scores and match path (`oks recall "<q>" --explain`); every injection is logged to `records/inject.jsonl`. When a result looks wrong, you see exactly which factor produced it. → [Evaluation](https://open-agent-power.github.io/open-knowledge-studio/algorithms/recall-evaluation/)
+
+How the pieces fit together: [Architecture](https://open-agent-power.github.io/open-knowledge-studio/architecture/oks-core-architecture/). The thinking behind the design: [CONSTITUTION.md](./CONSTITUTION.md).
+
+```
+open-knowledge-studio/
+├── profiles/              # team, users, projects, recipes, goals — stable context
+├── raw/                    # human-collected sources, date-based {YYYY}/{MM}/{DD}/{source}/
+├── wiki/                   # human-reviewed memory: concept, strategy, anti-pattern
+├── drafts/                 # Candidate proposals, awaiting review
+├── mail/                   # agent-to-agent: inbox/ + sent/ — never long-term knowledge
+├── settings/               # recall.yaml (single param source), tool registry
+├── _meta/                  # schema layer: raw evidence, recall case, trace event
+└── records/                # versioned acceptance evidence + experiment runs
+```
+
+The three recall layers:
+
+- **Node-BM25 (retrieval)**: SQLite FTS5 + BM25 over markdown `##` headings, column weights title 5× > tags 3× > body 1× > code 0.5×. No file reads during retrieval (abstract zero-read, v0.6.10).
+- **Soul Boost (injection)**: type_boost + review_bonus + generic_demotion reorder hits before they reach the Agent — failure lessons rank higher than generic concepts.
+- **Memory Curve (decay)**: type-specific λ, access_count ln-growth, pin_bonus — independent of backend, runs in `store.py`.
+
+## Proof it works
+
+OKS has been evaluated on a 50-case semantic-paraphrase dataset (strict exact-slug match). Full results, ablation tables, and reproduction scripts are in [docs/algorithms/recall-evaluation.md](./docs/algorithms/recall-evaluation.md); the dataset and run JSONs live in [./records/experiments](./records/experiments).
+
+### Triple-Layer ablation — 50-case, strict exact-slug match
+
+Queries are semantic paraphrases — the query does not contain the slug's keyword, testing synonym/rewrite recall. Match is strict: the expected slug must appear in top-k.
+
+| backend | R@1 | R@3 | MRR | nDCG@5 | p50 |
+|---------|------|------|------|---------|------|
+| **fts5 (full Triple-Layer)** | **0.825** | **0.925** | **0.907** | **0.893** | 93ms |
+| native (page-level 6+1, no Node-BM25) | 0.525 | 0.647 | 0.630 | 0.624 | 137ms |
+| fusion (fts5 + native re-rank) | 0.805 | 0.905 | 0.900 | 0.887 | 226ms |
+
+- **Node-BM25 dominates page-level 6+1**: R@1 +57% (0.525→0.825), MRR +44% (0.630→0.907). Multi-word same-section BM25 scores high; synonym/rewrite recall is precise.
+- **Soul Boost must live in injection, not retrieval**: native 6+1's memory curve / goal boost / review bonus applied as retrieval re-rank *lowers* precision (R@1 0.825→0.805) — irrelevant pages score high and displace exact matches.
+- **fts5 is also faster**: 93ms vs native 137ms vs fusion 226ms. SQLite persistent index beats live traversal.
+
+### Embedding backend — semantic recall comparison (v0.6.2)
+
+| backend | R@1 | MRR | p50ms |
+|---------|------|------|-------|
+| **fts5 (Node-BM25 literal)** | **0.825** | **0.907** | 93 |
+| embedding (MiniLM cosine) | 0.617 | 0.733 | 18304 |
+
+- On a small Chinese-term-heavy KB, BM25 literal already hits (terms overlap with wiki); embedding's semantic generalization introduces noise — and is 197× slower.
+- **Decision**: fts5 stays default. Embedding is a **fallback** for fts5-miss cases, not a replacement. Embedding's real value is large KBs + cross-lingual + synonym-heavy domains.
+
+### Layer-by-layer ablation
+
+| Ablation | Remove what | R@1 | MRR | Proves |
+|---------|-------------|------|------|--------|
+| Full Triple-Layer | — | 0.825 | 0.907 | baseline |
+| Remove Node-BM25 | retrieval fts5→native | 0.525 | 0.630 | Node-BM25 is the precision engine (−36%) |
+| Remove Soul Boost (fusion misuse) | soul moved to retrieval re-rank | 0.805 | 0.900 | soul in injection = right; re-rank in retrieval = negative optimization |
+
+### Abstract zero-read & tier degradation (v0.6.10 / v0.6.12)
+
+- **Abstract zero-read**: fts5 schema `node-v2` added an `abstract` column; `body_preview` reads it from SQLite — **zero file reads during retrieval**. R@1 held (0.429), p50 121ms (slightly faster).
+- **Tier degradation**: `_apply_budget()` degrades hits by tier when a token budget is hit — L2 (full, 200c) → L1 (overview, 100c) → L0 (abstract, 50c) → title-only (0c, rel < `0.5`) → truncate. Verified: 5×200c under 300c budget → 150c ≤ 300.
+
+> These numbers are historical baselines from one knowledge base at one point in time, not a universal SLA. Re-run any of them — see [Reproduce](#reproduce).
+
+## Quick start
+
+> 💡 **New to OKS?** Read [start-here](https://open-agent-power.github.io/open-knowledge-studio/) first — it walks through the memory lifecycle and where OKS fits in your Agent stack.
+
+Requires Python 3.10+.
 
 ```bash
-pipx install open-knowledge-studio
-oks init ./my-knowledge-base
-cd ./my-knowledge-base
-oks status
+pipx install open-knowledge-studio && pipx ensurepath
+oks init my-knowledge-base
+cd my-knowledge-base
+oks status          # wiki count, tier distribution, drafts, quality
+oks recall "git branch"   # Triple-Layer recall → injects matched memory
 ```
 
-For a shared team workspace, initialize a team instance instead:
+Optional auto-recall hooks (wire recall into your Agent host):
 
 ```bash
-oks team init ./team-knowledge-studio --name "Platform Knowledge Team"
-cd ./team-knowledge-studio
-oks status
+oks hook install --editor claude   # or: qoder | codex | both
+oks skills-install                # bundle skills + agent-config into .claude/.qoder/.pi/.codex
 ```
 
-In Claude Code, Codex, or another compatible Agent host, give the Agent a real
-source and ask it to ingest it:
+Next steps:
 
-> Ingest this PDF into my OKS knowledge base.
+- CLI reference, hook configuration, and evaluation: [CLI docs](https://open-agent-power.github.io/open-knowledge-studio/reference/cli/) · [Context injection](https://open-agent-power.github.io/open-knowledge-studio/usage/context-injection/)
+- Backup, export, and conversations: [Backup & export](https://open-agent-power.github.io/open-knowledge-studio/connect/backup-export/)
 
-The Agent follows the installed `/ingest` skill, records evidence, and creates a
-Candidate in `drafts/`. Review it before promotion:
+## Use it with your agent
+
+OKS injects reviewed memory into your Agent's context on every prompt (UserPromptSubmit) and detects conflicts after each tool call (PostToolUse → `mail/`):
+
+- [Claude Code](https://open-agent-power.github.io/open-knowledge-studio/usage/context-injection/) — `.claude/hooks/` + `settings.json`
+- [Codex](https://open-agent-power.github.io/open-knowledge-studio/usage/context-injection/) — `.codex/hooks.json`
+- [qoder](https://open-agent-power.github.io/open-knowledge-studio/usage/context-injection/) — `.qoder/settings.json` (shares `.claude/hooks/`)
+- [pi](https://open-agent-power.github.io/open-knowledge-studio/usage/context-injection/) — `.pi/extensions/*.ts` (TS extension, shares `.claude/hooks/`)
+- [Other shells](https://open-agent-power.github.io/open-knowledge-studio/usage/context-injection/) — any host that runs a shell hook
+
+Setup for each: `oks hook install --editor <claude|qoder|codex|both>` then `oks skills-install`.
+
+## Product boundaries
+
+**The open-source edition is not crippled.** OKS in this repo is fully open source under MIT: no feature gates, no account, no activation key. The CLI core is API-free (CONSTITUTION P4) — `oks` does file operations only; no remote AI API calls from core. AI lives in optional providers/skills you wire yourself.
+
+- **OKS does not train model weights.** The "knowledge model" is the filesystem.
+- **OKS does not auto-promote raw → Wiki.** Humans approve.
+- **OKS does not replace your Agent.** It provides a Recall primitive; the host Agent decides.
+- **Git is the migration.** No database; schema changes versioned through `_meta/`. Atomic writes throughout.
+
+<a id="reproduce"></a>
+## Reproduce
+
+The 50-case dataset and all run JSONs are archived:
+
+```
+records/experiments/
+├── eval-50.yaml                 # 50 semantic-paraphrase queries + expected slugs
+└── runs/
+    ├── eval-50-fts5.json        # R@1=0.825, MRR=0.907
+    ├── eval-50-native.json      # R@1=0.525, MRR=0.630
+    ├── eval-50-fusion.json      # R@1=0.805, MRR=0.900
+    └── eval-50-embedding.json   # R@1=0.617, MRR=0.733
+```
+
+Re-run any backend:
 
 ```bash
-oks drafts list
-oks drafts promote <slug>
-oks recall "what did we decide?"
+oks eval recall records/experiments/eval-50.yaml \
+  --output my-run.json \
+  --search-backend {fts5|native|fusion}
+
+oks eval compare records/experiments/runs/eval-50-fts5.json my-run.json
 ```
 
-Without an Agent, prepare a run workspace explicitly:
+Per-query breakdown: `oks recall "<query>" --explain` shows every factor score.
 
-```bash
-oks ingest prepare <file-or-url>
-```
+**Caveat:** OKS has no official labeled dataset — the 50-case set is one KB's history. Metrics are comparable across backends *on that dataset*; they are not a universal SLA. Build your own labeled set and re-run.
 
-`prepare` does not call an Agent. It creates the protocol workspace and prints
-the next steps. For connector-managed acquisition, use
-`oks ingest run <file-or-url>`; that compatibility path delegates extraction to
-the separately packaged `oks-connector` runtime.
+## Roadmap
 
-### Product Boundaries
+- **AI abstract generation** (Dreaming layer) — LLM writes `abstract:` frontmatter, lifting abstract zero-read quality beyond mechanical first-paragraph.
+- **RecallLedger** — cross-turn dedup, so the same page is not re-injected within cooldown.
+- **Query expansion** — synonyms / EN↔ZH translation to bridge the synonym gap at retrieval, not via embedding.
+- **native→fts5 dispatch unification** — currently two paths (native carries Soul Boost, fts5 does not); unify so fts5 wires the Soul Boost layer too.
 
-- Core owns filesystem protocols, validation, human review, and Recall; it does
-  not call AI APIs.
-- `oks-connector` owns acquisition and mechanical extraction.
-- Providers create evidence, not Wiki knowledge. Candidate promotion always
-  requires human review.
-- Evidence and execution states remain traceable, including `partial`,
-  `failed`, `skipped`, and `environment_limited`.
+## Community & contributing
 
-### Recall Architecture — OKS Triple-Layer Recall
+- **Docs**: [open-agent-power.github.io/open-knowledge-studio](https://open-agent-power.github.io/open-knowledge-studio/)
+- **Design contract**: [CONSTITUTION.md](./CONSTITUTION.md) — the memory architecture (A1–A5)
+- **Changelog**: [CHANGELOG.md](./CHANGELOG.md) — full release history
+- **Contribute**: bug fixes and new features both welcome — fork a branch, open a PR
 
-Recall and injection are decoupled across three layers:
+## Security and privacy
 
-- **Node-BM25** (retrieval) — fts5 node-level BM25 (one FTS5 row per `##`
-  heading, multi-word same-section scores high). 50-case ablation: R@1=82.5%,
-  MRR=0.907 (vs native 6+1 R@1=52.5%).
-- **Soul Boost** (injection) — goal re-rank + `injection_boost` annotation
-  (type×1.5/0.8/0.6 + review×1.2 + generic×0.5). Does not change retrieval
-  order; visible in `--explain`.
-- **Memory Curve** (decay) — type-specific λ → tier `hot/warm/cold/evictable`,
-  an independent subsystem in `store.py`.
-
-Ablation proves the layering: adding native 6+1 re-rank back into retrieval
-(fusion) *lowers* R@1 0.825→0.805 — the "soul" belongs in the injection layer,
-not the retrieval layer.
-
-#### 50-case ablation (semantic-paraphrase queries, strict exact-slug match)
-
-| backend | R@1 | R@3 | R@5 | MRR | nDCG@5 | p50 |
-|---------|------|------|------|------|---------|------|
-| **fts5 (full Triple-Layer)** | **0.825** | **0.925** | 0.927 | **0.907** | **0.893** | 93ms |
-| native (−Node-BM25, 6+1 page-level) | 0.525 | 0.647 | 0.689 | 0.630 | 0.624 | 137ms |
-| fusion (fts5 + native re-rank) | 0.805 | 0.905 | 0.927 | 0.900 | 0.887 | 226ms |
-
-Node-BM25 lifts R@1 +57% over native; fusion re-rank *lowers* precision — the
-soul factors must live in the injection layer, never in retrieval. Runs archived
-in `records/experiments/runs/`. Reproduce:
-`oks eval recall records/experiments/eval-50.yaml -o run.json --search-backend fts5`.
-
-See [Recall Evaluation](docs/algorithms/recall-evaluation.md).
-
-### Learn More
-
-- [Project home](https://open-agent-power.github.io/open-knowledge-studio/)
-- [Daily workflow](https://open-agent-power.github.io/open-knowledge-studio/usage/)
-- [Complete your first knowledge loop](https://open-agent-power.github.io/open-knowledge-studio/first-knowledge-loop.html)
-- [托管你的学习](https://open-agent-power.github.io/open-knowledge-studio/oh-my/study.html)
-- [Knowledge to Word skill](assets/skills/knowledge-to-word/SKILL.md) — create source-traceable `.docx` files from OKS knowledge
-- [OKS Office skill](assets/skills/office/SKILL.md) — for explicit Word, Excel, PowerPoint, or PDF requests: research, combine OKS context, and deliver a checked editable artifact
-- [Verify that OKS works](https://open-agent-power.github.io/open-knowledge-studio/verify.html)
-
-*Advanced:*
-
-- [Architecture principles](docs/concepts/constitution.md)
-- [Ingest boundaries](docs/reference/ingest.md)
-
----
-
-<a id="chinese"></a>
-
-## 中文
-
-**托管你的学习。** Open Knowledge Studio（OKS）研究一个问题：Agent 如何在人机协同中
-持续学习，并保证长任务执行的稳定？它不训练模型权重，而是构建一套文件化的外部知识模型：
-人类设定目标、边界并审核知识，Agent 收集证据、执行任务、提出 Candidate，并在后续任务中
-召回经过确认的判断。
-
-```text
-你的资料 → Candidate → 人工审核 → Wiki → Recall
-```
-
-### 快速开始
-
-要求：Python 3.12+、Git、pipx。
-
-```bash
-pipx install open-knowledge-studio
-oks init ./my-knowledge-base
-cd ./my-knowledge-base
-oks status
-```
-
-需要共享团队知识库时，使用团队初始化入口：
-
-```bash
-oks team init ./team-knowledge-studio --name "Platform Knowledge Team"
-cd ./team-knowledge-studio
-oks status
-```
-
-在 Claude Code、Codex 或兼容 Agent 中，把一份自己的真实资料交给 Agent：
-
-> 把这份 PDF 收录到我的 OKS 知识库。
-
-Agent 会按已安装的 `/ingest` Skill 保存证据，并在 `drafts/` 生成 Candidate。
-审核后再晋升：
-
-```bash
-oks drafts list
-oks drafts promote <slug>
-oks recall "我们当时做了什么决定？"
-```
-
-没有 Agent 时，可以显式准备 Run Workspace：
-
-```bash
-oks ingest prepare <文件或URL>
-```
-
-`prepare` 不会自行调用 Agent，只创建协议工作区并输出下一步说明。需要 connector
-托管采集时，使用 `oks ingest run <文件或URL>`；这条兼容路径把提取交给独立发布的
-`oks-connector`。
-
-### 召回架构 — OKS Triple-Layer Recall
-
-召回与注入解耦，三层架构：
-
-- **Node-BM25**（召回层）—— fts5 node-level BM25（每个 `##` heading 段一个 FTS5
-  row，多词同段高分）。50-case 消融：R@1=82.5%，MRR=0.907（vs native 6+1 R@1=52.5%）。
-- **Soul Boost**（注入层）—— goal 重排 + `injection_boost` 标注
-  （type×1.5/0.8/0.6 + review×1.2 + generic×0.5）。不改召回顺序，`--explain` 可见。
-- **Memory Curve**（衰减层）—— type-specific λ → tier `hot/warm/cold/evictable`，
-  `store.py` 独立子系统。
-
-#### 50-case 消融实验（语义改写 query，严格精确 slug 匹配）
-
-| backend | R@1 | R@3 | R@5 | MRR | nDCG@5 | p50 |
-|---------|------|------|------|------|---------|------|
-| **fts5（完整 Triple-Layer）** | **0.825** | **0.925** | 0.927 | **0.907** | **0.893** | 93ms |
-| native（去 Node-BM25，6+1 page-level） | 0.525 | 0.647 | 0.689 | 0.630 | 0.624 | 137ms |
-| fusion（fts5 + native re-rank） | 0.805 | 0.905 | 0.927 | 0.900 | 0.887 | 226ms |
-
-Node-BM25 R@1 较 native +57%；fusion re-rank 反而*降*精度——灵魂因子必须留在注入层，
-不能放召回层。run json 归档 `records/experiments/runs/`。复现：
-`oks eval recall records/experiments/eval-50.yaml -o run.json --search-backend fts5`。
-
-详见 [召回评估](docs/algorithms/recall-evaluation.md)。
-
-### 产品边界
-
-- Core 负责文件协议、校验、人工审核和 Recall，不调用 AI API。
-- `oks-connector` 负责资料获取与机械提取。
-- Provider 产生证据，不直接产生 Wiki 知识；Candidate 晋升必须经过人工审核。
-- 证据与执行状态必须可追溯，包括 `partial`、`failed`、`skipped` 和
-  `environment_limited`。
-
-### 继续阅读
-
-- [项目首页](https://open-agent-power.github.io/open-knowledge-studio/)
-- [日常使用](https://open-agent-power.github.io/open-knowledge-studio/usage/)
-- [完成第一个知识闭环](https://open-agent-power.github.io/open-knowledge-studio/first-knowledge-loop.html)
-- [托管你的学习](https://open-agent-power.github.io/open-knowledge-studio/oh-my/study.html)
-- [Knowledge to Word skill](assets/skills/knowledge-to-word/SKILL.md) — 从 OKS 知识生成带来源说明的 `.docx`
-- [OKS Office skill](assets/skills/office/SKILL.md) — 仅在明确要求 Word、Excel、PowerPoint 或 PDF 时：固定调研、补充 OKS 上下文并交付经检查的可编辑成品
-- [确认 OKS 正在工作](https://open-agent-power.github.io/open-knowledge-studio/verify.html)
-
-*进阶内容：*
-
-- [架构原则](docs/concepts/constitution.md)
-- [摄入边界](docs/reference/ingest.md)
+OKS runs entirely on your local filesystem. No telemetry, no remote calls from core (CONSTITUTION P4). Your knowledge base stays under your git remote (or no remote at all).
 
 ## License
 
-MIT
+[MIT](./LICENSE)
