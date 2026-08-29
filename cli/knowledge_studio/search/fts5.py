@@ -88,6 +88,27 @@ def _parse_md(text: str) -> tuple[str, str, str]:
     return front_matter, body, "\n".join(code_parts)
 
 
+def _extract_abstract(body: str, abstract: str | None = None) -> str:
+    """L0 abstract: frontmatter ``abstract`` 优先, 无则机械抽首段 (~200 字符).
+
+    CV from OpenViking ``tiers.py`` L0 — abstract 存 SQLite 元数据, 召回 +
+    body_preview 零 read body 文件. P4: 纯文本操作, 不调 AI (Dreaming 层
+    可写 AI abstract 到 frontmatter, 本函数只处理无 abstract fallback).
+    abstract 进 content_hash → frontmatter abstract 变了会触发重 index.
+    """
+    if abstract and abstract.strip():
+        return abstract.strip()[:200]
+    if not body:
+        return ""
+    lines = body.split("\n")
+    idx = 0
+    while idx < len(lines) and (
+        not lines[idx].strip() or lines[idx].lstrip().startswith("#")
+    ):
+        idx += 1
+    return (lines[idx].strip()[:200] if idx < len(lines) else "")
+
+
 # v0.6.0: 吸收 TreeSearch 的 markdown tree parser（node-level 拆分）。
 # CV source: TreeSearch `_extract_md_headings` + `_cut_md_text`。
 # 把 body 按 `#` heading 切成 nodes；每个 node = heading + 该段正文。
@@ -170,17 +191,17 @@ class FTS5Backend:
         cur = self._conn.execute(
             "SELECT value FROM meta WHERE key='schema_version'"
         ).fetchone()
-        if cur and cur[0] != "node-v1":
+        if cur and cur[0] != "node-v2":
             # 旧 schema（flat page-level），DROP 重建
             self._conn.execute("DROP TABLE IF EXISTS wiki_fts")
             self._conn.execute("DROP TABLE IF EXISTS pages")
             self._conn.execute("DELETE FROM meta WHERE key='schema_version'")
         self._conn.execute(
-            "INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', 'node-v1')"
+            "INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', 'node-v2')"
         )
         # pages 表存 content_hash 做 diff（不存全文，全文在 fts 表）
         self._conn.execute(
-            "CREATE TABLE IF NOT EXISTS pages (slug TEXT PRIMARY KEY, content_hash TEXT)"
+            "CREATE TABLE IF NOT EXISTS pages (slug TEXT PRIMARY KEY, content_hash TEXT, abstract TEXT)"
         )
         self._conn.execute(
             "CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT)"
@@ -208,7 +229,8 @@ class FTS5Backend:
                 tags = " ".join(str(t) for t in tags)
 
             front, md_body, code = _parse_md(f"{title}\n\n{body}")
-            content = f"{title}\n{body}\n{tags}\n{code}"
+            abstract = _extract_abstract(md_body, page.get("abstract"))
+            content = f"{title}\n{body}\n{tags}\n{code}\n{abstract}"
             content_hash = hashlib.md5(content.encode()).hexdigest()[:16]
 
             row = self._conn.execute(
@@ -223,8 +245,8 @@ class FTS5Backend:
                     self._conn.execute("DELETE FROM wiki_fts WHERE slug=?", (slug,))
 
             self._conn.execute(
-                "INSERT OR REPLACE INTO pages (slug, content_hash) VALUES (?, ?)",
-                (slug, content_hash),
+                "INSERT OR REPLACE INTO pages (slug, content_hash, abstract) VALUES (?, ?, ?)",
+                (slug, content_hash, abstract),
             )
             if self._use_fts5:
                 # v0.6.0: node-level 索引——吸收 TreeSearch tree parser，
@@ -330,22 +352,26 @@ class FTS5Backend:
         # v0.6.0: bm25 列序对应建表 (slug, node_idx, title, body, tags, code_blocks)
         # slug/node_idx UNINDEXED 权重 0。按 slug 聚合取最高分 node（node-level）。
         sql = (
-            f"SELECT f.slug, f.title, "
+            f"SELECT f.slug, f.title, p.abstract, "
             f"bm25(wiki_fts, 0, 0, {w['title']}, {w['body']}, {w['tags']}, {w['code_blocks']}) AS rank "
-            f"FROM wiki_fts f WHERE wiki_fts MATCH ? ORDER BY rank LIMIT ?"
+            f"FROM wiki_fts f JOIN pages p ON f.slug = p.slug "
+            f"WHERE wiki_fts MATCH ? ORDER BY rank LIMIT ?"
         )
         rows = self._conn.execute(sql, (match_expr, limit * 4)).fetchall()
         # node-level：同 slug 可能多 row（每个 heading 段一 row），取最高分那个去重
-        best: dict[str, tuple[str, float]] = {}
+        best: dict[str, tuple[str, str, float]] = {}
         order: list[str] = []
-        for slug, title, rank in rows:
+        for slug, title, abstract, rank in rows:
             score = float(-rank)
-            if slug not in best or score > best[slug][1]:
-                best[slug] = (title or slug, score)
+            if slug not in best or score > best[slug][2]:
+                best[slug] = (title or slug, abstract or "", score)
                 if slug not in order:
                     order.append(slug)
         hits = [
-            SearchHit(slug=slug, title=best[slug][0], score=best[slug][1], backend="fts5")
+            SearchHit(
+                slug=slug, title=best[slug][0], score=best[slug][2],
+                abstract=best[slug][1] or None, backend="fts5",
+            )
             for slug in order
         ]
         # scope 硬过滤（FTS5 不存 area，需后过滤——若要 FTS5 内过滤，扩展 schema 加 area 列）
@@ -363,12 +389,15 @@ class FTS5Backend:
     def _search_like(self, query: str, limit: int = 10) -> list[SearchHit]:
         """FTS5 不可用时的 LIKE fallback（保证可用性，不崩）。"""
         ql = query.lower()
-        rows = self._conn.execute("SELECT slug, title FROM pages").fetchall()
+        rows = self._conn.execute("SELECT slug, title, abstract FROM pages").fetchall()
         hits = []
-        for slug, title in rows:
+        for slug, title, abstract in rows:
             if ql in (title or "").lower() or ql in slug.lower():
                 hits.append(
-                    SearchHit(slug=slug, title=title or slug, score=0.1, backend="fts5")
+                    SearchHit(
+                        slug=slug, title=title or slug, score=0.1,
+                        abstract=abstract or None, backend="fts5",
+                    )
                 )
         return hits[:limit]
 

@@ -1,6 +1,6 @@
 remote_theme: just-the-docs/just-the-docs
 title: Open Knowledge Studio
-description: 面向 AI Agent 的知识工程工作区 — raw → wiki → recall
+description: 托管你的学习 — 维护一套 Agent 可使用、可审核的外部文件化知识模型
 baseurl: "/open-knowledge-studio"
 url: "https://open-agent-power.github.io"
 lang: zh-CN

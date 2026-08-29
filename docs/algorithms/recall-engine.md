@@ -1,7 +1,7 @@
 ---
 title: 召回引擎
-nav_order: 1
-parent: 算法
+nav_order: 3
+parent: 维护者
 ---
 # 召回引擎（OKS Triple-Layer Recall）
 
@@ -16,7 +16,7 @@ parent: 算法
 - **语义召回**（embedding 相似度）——效果好，但 CLI 核心不调 AI API（P4），本地跑 embedding 模型成本高。
 - **关键词召回**（字面匹配）——轻量，但跨表述召回差（搜"design patterns"命中不了只写"architectural approaches"的页）。
 
-OKS 选了关键词召回，并用 **node-level BM25**（吸收 TreeSearch）把召回精度做到 **R@1 = 82.5% / MRR = 0.907**（50-case 消融实测）。
+OKS 选了关键词召回，并用 **node-level BM25**（吸收 TreeSearch）在固定 50-case 数据集上达到 **R@1 = 82.5% / MRR = 0.907**（历史消融基准；不是通用 SLA）。
 
 ## 三层架构（v0.6.0+）
 
@@ -108,7 +108,7 @@ OKS 不学主流 RAG 的稠密嵌入 / 神经重排序，是 P4（CLI 核心不�
 
 ## 指标
 
-`oks eval recall <dataset.yaml> --output <run.json>` 支持 recall@k / MRR / nDCG。v0.6.0 有 50-case 数据集（`records/experiments/eval-50.yaml`），三后端对比见 [召回评估](recall-evaluation.md)。
+`oks eval recall <dataset.yaml> --output <run.json>` 支持 recall@k / MRR / nDCG。v0.6.0 有 50-case 数据集（`records/experiments/eval-50.yaml`），三后端对比见 [召回评估](recall-evaluation.html)。
 
 `oks recall "<q>" --explain` 给每个 hit 的 `score_components`（fts5_score + injection_boost + backend + node）。
 

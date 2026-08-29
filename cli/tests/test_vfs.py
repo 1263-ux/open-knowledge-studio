@@ -144,6 +144,34 @@ def test_ls_and_stat_return_canonical_nodes(vfs_root):
     assert stat["mount"] == "profiles"
 
 
+def test_stat_and_read_accept_uri_without_md_suffix(vfs_root):
+    """Canonical URIs should not expose the on-disk ``.md`` format.
+
+    A URI without the suffix must still stat/read the ``.md`` file, while a
+    URI *with* the suffix keeps working (backward compatibility)."""
+    from knowledge_studio.vfs import VfsResolver, VfsService
+
+    service = VfsService(VfsResolver(vfs_root))
+
+    # Chinese slug without .md suffix resolves to the .md file transparently.
+    bare = "oks://wiki/computing/concepts/中文 页面"
+    stat = service.stat(bare)
+    assert stat["type"] == "file"
+    assert stat["size"] == (vfs_root / "wiki/computing/concepts/中文 页面.md").stat().st_size
+
+    # read() also works without the suffix and returns the same content.
+    bare_content = service.read(bare)["content"]
+    md_content = service.read(bare + ".md")["content"]
+    assert bare_content == md_content == "# 中文页面\n"
+
+    # A genuinely missing path (no .md sibling) still raises PATH_NOT_FOUND.
+    from knowledge_studio.vfs import VfsError
+
+    with pytest.raises(VfsError) as exc:
+        service.stat("oks://wiki/computing/concepts/does-not-exist")
+    assert exc.value.code == "PATH_NOT_FOUND"
+
+
 def test_root_ls_is_synthetic_and_physical_ls_hides_exclusions(vfs_root):
     from knowledge_studio.vfs import MOUNTS, VfsResolver, VfsService
 
@@ -213,6 +241,60 @@ def test_read_validates_pagination(vfs_root, offset, limit):
             "oks://profiles/team.md", offset=offset, limit=limit
         )
     assert exc.value.code == "INVALID_ARGUMENT"
+
+
+def test_read_many_preserves_order_and_total_bound(vfs_root):
+    from knowledge_studio.vfs import VfsResolver, VfsService
+
+    first = vfs_root / "wiki/first.md"
+    second = vfs_root / "wiki/second.md"
+    first.write_text("abcdef", encoding="utf-8")
+    second.write_text("uvwxyz", encoding="utf-8")
+
+    result = VfsService(VfsResolver(vfs_root)).read_many(
+        ["oks://wiki/first.md", "oks://wiki/second.md"],
+        limit=5,
+        max_total_chars=8,
+    )
+
+    assert [item["uri"] for item in result["items"]] == [
+        "oks://wiki/first.md",
+        "oks://wiki/second.md",
+    ]
+    assert [item["content"] for item in result["items"]] == ["abcde", "uvw"]
+    assert result["returned_chars"] == 8
+    assert result["returned_count"] == 2
+    assert result["truncated"] is True
+
+
+@pytest.mark.parametrize(
+    ("uris", "limit", "max_total_chars"),
+    [
+        ([], 20_000, 10),
+        (["oks://profiles/team.md"] * 251, 20_000, 10),
+        (["oks://profiles/team.md"], 0, 10),
+        (["oks://profiles/team.md"], 20_000, 0),
+        (["oks://profiles/team.md"], 20_000, 8 * 1024 * 1024 + 1),
+    ],
+)
+def test_read_many_validates_bounds(vfs_root, uris, limit, max_total_chars):
+    from knowledge_studio.vfs import VfsError, VfsResolver, VfsService
+
+    with pytest.raises(VfsError) as exc:
+        VfsService(VfsResolver(vfs_root)).read_many(
+            uris, limit=limit, max_total_chars=max_total_chars
+        )
+    assert exc.value.code == "INVALID_ARGUMENT"
+
+
+def test_read_many_fails_closed_on_invalid_uri(vfs_root):
+    from knowledge_studio.vfs import VfsError, VfsResolver, VfsService
+
+    with pytest.raises(VfsError) as exc:
+        VfsService(VfsResolver(vfs_root)).read_many(
+            ["oks://profiles/team.md", "oks://wiki/missing.md"]
+        )
+    assert exc.value.code == "PATH_NOT_FOUND"
 
 
 def test_tree_honors_depth_and_entry_limit(vfs_root):
@@ -414,6 +496,7 @@ def test_basic_vfs_operations_do_not_change_files(vfs_root):
     service.ls("oks://wiki/computing/concepts/")
     service.stat("oks://profiles/team.md")
     service.read("oks://profiles/team.md")
+    service.read_many(["oks://profiles/team.md"])
     service.tree("oks://wiki/")
     service.overview("oks://wiki/")
     service.find("team", under="oks://profiles/")

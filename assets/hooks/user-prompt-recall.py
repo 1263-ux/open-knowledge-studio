@@ -17,13 +17,12 @@ added in Phase 2b.
 
 Fails open: any error or empty result prints nothing and exits 0.
 
-Tunables via env:
-  OKS_AGENT_ID         agent identity (default: cwd basename)
-  OKS_RECALL_FLOOR     min knowledge relevance to inject (default 0.7)
-  OKS_RECALL_TOPN      max knowledge memories injected (default 3)
-  OKS_RECALL_MINLEN    skip prompts shorter than this many chars (default 6)
-  OKS_RECALL_COOLDOWN  turns before the same slug may be re-injected (default 10)
-  OKS_MAIL_TOPN        max unread mail injected (default 3)
+Parameters are read from OKS ``settings/recall.yaml`` through
+``knowledge_studio.recall.load_recall_params``. Legacy ``OKS_RECALL_*`` and
+related environment variables remain temporary compatibility overrides;
+``OKS_AGENT_ID`` remains an identity override. ``OKS_HOOK_OUTPUT=json`` is an
+internal CLI bridge mode; it emits a safe structured result instead of editor
+context text.
 """
 import hashlib
 import json
@@ -34,6 +33,21 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from _persistence import append_jsonl, atomic_write_text, file_lock
+
+
+def _configure_utf8_stdio() -> None:
+    """Keep the JSON bridge stable when a Windows host uses a legacy code page."""
+    for stream in (sys.stdin, sys.stdout):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if callable(reconfigure):
+            try:
+                reconfigure(encoding="utf-8", errors="replace")
+            except (OSError, ValueError):
+                pass
+
+
+_configure_utf8_stdio()
+
 
 _TRIVIAL = {
     "你好", "谢谢", "多谢", "ok", "okay", "好", "好的", "嗯", "行", "继续",
@@ -228,12 +242,36 @@ def _load_unread_mail(kb_root: Path, limit: int = 3) -> list:
 
 
 def _mark_mail_read(path: Path) -> None:
+    """Mark a mail file as read (frontmatter only, atomic, idempotent).
+
+    P7/P2/P8 fix (qoder 发现): 旧实现是裸全文 replace + write_text +
+    silent except — 对已读信件重复执行会命中正文里的 "read: false"
+    字面量并静默改坏正文，且高频路径（每个 user prompt 都跑）。
+    现复用 store._locked_atomic_update（与 CLI mail_read 同一把锁），
+    只改 frontmatter，幂等（已读返回 None）。
+    """
+    from knowledge_studio import store as _store
+    from knowledge_studio.config import get_kb_root
+
+    def update(current: str) -> str | None:
+        if not current.startswith("---"):
+            return None
+        parts = current.split("---", 2)
+        if len(parts) < 3:
+            return None
+        meta, body = parts[1], parts[2]
+        if "read: false" not in meta:
+            return None
+        return f"---{meta.replace('read: false', 'read: true', 1)}---{body}"
+
     try:
-        text = path.read_text(encoding="utf-8")
-        text = text.replace("read: false", "read: true", 1)
-        path.write_text(text, encoding="utf-8")
+        kb_root = get_kb_root()
+        _store._locked_atomic_update(
+            path, update,
+            lock_path=kb_root / ".oks" / "locks" / "mail.lock",
+        )
     except Exception:
-        pass
+        pass  # fail-open: hook 不应阻塞 user prompt
 
 
 # ── Inject trace (records/inject.jsonl, git-shared training signal) ──
@@ -268,19 +306,72 @@ def _write_inject_trace(kb_root: Path, session_id: str, turn: int,
         pass
 
 
+_HOOK_RESPONSE_SCHEMA = "hook-recall-response/v1"
+
+
+def _hook_response(
+    status: str,
+    *,
+    context: str = "",
+    candidates: list | None = None,
+    picked: list | None = None,
+    threshold: float | None = None,
+    reason: str = "",
+) -> dict:
+    """Return the small, prompt-free contract consumed by ``oks hook recall``."""
+    candidates = candidates or []
+    picked = picked or []
+    rels = [float(h.get("relevance", 0)) for h in candidates if isinstance(h, dict)]
+    matches = [
+        str(h.get("slug", "")).strip()
+        for h in picked
+        if isinstance(h, dict) and str(h.get("slug", "")).strip()
+    ]
+    return {
+        "schema": _HOOK_RESPONSE_SCHEMA,
+        "status": status,
+        "context": context,
+        "trace": {
+            "candidate_count": len(candidates),
+            "matches": matches,
+            "top_relevance": max(rels) if rels else None,
+            "threshold": threshold,
+        },
+        "reason": reason,
+    }
+
+
+def _finish_hook(result: dict) -> int:
+    """Keep editor hooks fail-open while the CLI bridge gets JSON status."""
+    if os.environ.get("OKS_HOOK_OUTPUT", "").lower() == "json":
+        # The bridge is consumed as JSON, so ASCII escaping keeps stdout safe
+        # when a Windows host inherits a legacy ``charmap`` encoding.
+        sys.stdout.write(json.dumps(result, ensure_ascii=True) + "\n")
+    elif result.get("context"):
+        sys.stdout.write(str(result["context"]) + "\n")
+    return 0
+
+
 def main() -> int:
     payload = _load_payload()
     prompt = str(payload.get("prompt", "") or "").strip()
     if not prompt:
-        return 0
-
-    minlen = int(os.environ.get("OKS_RECALL_MINLEN", "6"))
-    if len(prompt) < minlen or prompt.lower() in _TRIVIAL:
-        return 0
+        return _finish_hook(_hook_response("empty", reason="empty_prompt"))
 
     kb_root = _kb_root()
     if kb_root is None:
-        return 0
+        return _finish_hook(_hook_response("error", reason="knowledge_base_unavailable"))
+
+    try:
+        from knowledge_studio.recall import load_recall_params
+        params = load_recall_params(kb_root)
+    except Exception:
+        params = {}
+
+    minlen = int(params.get("recall_minlen", 6))
+    if len(prompt) < minlen or prompt.lower() in _TRIVIAL:
+        reason = "trivial_prompt" if prompt.lower() in _TRIVIAL else "below_minlen"
+        return _finish_hook(_hook_response("skipped_minlen", reason=reason))
 
     session_id = str(payload.get("session_id", "") or "")
     cwd = str(payload.get("cwd", "") or "") or str(os.getcwd())
@@ -294,8 +385,6 @@ def main() -> int:
     reg_entry = _find_registry_entry(kb_root, agent_id, cwd)
     reg_goals = reg_entry.get("goal_slugs", []) if reg_entry else []
     goals_all = _load_active_goals(kb_root)
-    has_goals = len(goals_all) > 0
-
     # ── Knowledge section (6+1 recall + cooldown) ──
     try:
         from knowledge_studio.recall import recall
@@ -303,14 +392,15 @@ def main() -> int:
         recall = None
 
     picked: list = []
+    candidates: list = []
     goal_relevant = False
+    recall_failed = recall is None
+    floor = float(params.get("recall_floor", 0.7))
+    topn = int(params.get("recall_topn", 3))
+    cooldown = int(params.get("recall_cooldown", 10))
+    search_backend = str(params.get("search_backend", "native"))
 
     if recall is not None:
-        floor = float(os.environ.get("OKS_RECALL_FLOOR", "0.7"))
-        topn = int(os.environ.get("OKS_RECALL_TOPN", "3"))
-        cooldown = int(os.environ.get("OKS_RECALL_COOLDOWN", "10"))
-        search_backend = os.environ.get("OKS_SEARCH_BACKEND", "native")
-
         state["n"] += 1
         turn = state["n"]
 
@@ -322,10 +412,10 @@ def main() -> int:
             hits = recall(query=prompt, limit=max(topn * 3, 10), goal=goal_param, scope=scope_param, search_backend=search_backend).get("knowledge", [])
         except Exception:
             hits = []
+            recall_failed = True
+        candidates = [h for h in hits if float(h.get("relevance", 0)) >= floor]
 
-        for h in hits:
-            if float(h.get("relevance", 0)) < floor:
-                continue
+        for h in candidates:
             slug = str(h.get("slug", "")).strip()
             last = state["seen"].get(slug)
             if slug and last is not None and turn - int(last) < cooldown:
@@ -398,7 +488,7 @@ def main() -> int:
         sections.append("\n".join(lines))
 
     # Mail section
-    mail_topn = int(os.environ.get("OKS_MAIL_TOPN", "3"))
+    mail_topn = int(params.get("mail_topn", 3))
     mails = _load_unread_mail(kb_root, limit=mail_topn)
     if mails:
         lines = [f"## 通信（{len(mails)} 未读）"]
@@ -423,7 +513,11 @@ def main() -> int:
         )
 
     if not sections:
-        return 0
+        if recall_failed:
+            return _finish_hook(_hook_response("error", candidates=candidates, threshold=floor, reason="recall_failed"))
+        if candidates:
+            return _finish_hook(_hook_response("skipped_cooldown", candidates=candidates, threshold=floor, reason="cooldown"))
+        return _finish_hook(_hook_response("empty", candidates=candidates, threshold=floor, reason="no_match"))
 
     out = ['<recalled-memory source="oks">']
     out.extend(sections)
@@ -438,8 +532,13 @@ def main() -> int:
             "无用忽略——下次 cooldown 换别的。信号都在对话里，你代人类完成。"
         )
     out.append("</recalled-memory>")
-    sys.stdout.write("\n".join(out) + "\n")
-    return 0
+    return _finish_hook(_hook_response(
+        "injected",
+        context="\n".join(out),
+        candidates=candidates,
+        picked=picked,
+        threshold=floor,
+    ))
 
 
 if __name__ == "__main__":

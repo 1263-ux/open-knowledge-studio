@@ -3,116 +3,72 @@ title: 概述
 nav_order: 1
 ---
 
-<div align="center">
-  <img src="assets/oks-logo-readme.png" width="360" alt="Open Knowledge Studio">
+<div class="oks-hero">
+  <p class="oks-eyebrow">OPEN KNOWLEDGE STUDIO</p>
+  <h1>托管你的学习</h1>
+  <p class="oks-lead">你给目标、材料和反馈，Agent 负责执行与整理。OKS 把经过确认的判断保存下来，让下一次任务接着做，而不是从头解释。</p>
+  <div class="oks-actions">
+    <a class="btn btn-primary" href="{{ '/first-knowledge-loop.html' | relative_url }}">教 Agent 学会一件事</a>
+    <a class="btn" href="{{ '/oh-my/' | relative_url }}">查看真实案例</a>
+  </div>
 </div>
 
-# Open Knowledge Studio
+## Agent 会做事，但不会自然记住你的判断
 
-> Agent 把资料变成知识，人审核，未来能召回
+一次任务里，你会纠正事实、说明边界、否决方案，也会告诉 Agent 什么结果才算完成。会话结束、上下文压缩或执行者切换后，这些判断很容易消失。下一次任务于是又从解释背景开始。
 
-**流程**：`资料 → Candidate → 人工审核 → Wiki → Recall 注入`
+OKS 要解决的问题是：
 
----
+> Agent 如何在人机协同中持续学习，并保持长任务执行的稳定？
 
-## 🚀 快速开始
+这里的“学习”不是修改模型权重，而是让 Agent 使用一套由人类反馈持续校准、能够追溯来源的外部知识模型。
 
-### 第一次使用？
+## 你负责判断，Agent 负责执行
 
-| 步骤 | 做什么 | 时间 |
-|------|--------|------|
-| 1️⃣ | [安装 OKS](installation.md) | 2 分钟 |
-| 2️⃣ | [跑通第一个闭环](first-knowledge-loop.md) | 5 分钟 |
-| 3️⃣ | [看真实案例](examples.md) | 10 分钟 |
+<div class="oks-card-grid">
+  <div class="oks-card">
+    <h3>你给方向</h3>
+    <p>说明要解决的问题、什么不能做、哪些证据可信，并决定一条经验是否值得长期保留。</p>
+  </div>
+  <div class="oks-card">
+    <h3>Agent 做工作</h3>
+    <p>查找已有知识、处理材料、记录执行过程、暴露冲突，并把可能有用的经验整理成待审核提议。</p>
+  </div>
+  <div class="oks-card">
+    <h3>OKS 保持连续</h3>
+    <p>保存来源、提议、审核结果和使用反馈，让后续 Agent 能沿用已经确认的判断。</p>
+  </div>
+</div>
 
-**总耗时**：17 分钟，完全理解 OKS
+## 一次学习如何发生
 
----
+```mermaid
+flowchart LR
+    H1["人类提出目标与边界"] --> R["Agent 召回已有知识"]
+    R --> A["Agent 执行并收集证据"]
+    A --> C["Agent 提出可复用的经验"]
+    C --> H2{"人类审核"}
+    H2 -->|接受或修改| K["成为长期知识"]
+    H2 -->|拒绝| F["保留反馈"]
+    K --> N["下一次任务继续使用"]
+    F --> N
+```
 
-## 📚 真实案例
+Agent 可以提出知识，但不能批准自己的提议。被使用很多次也只能说明它常被需要，不能证明它一定正确。
 
-| 场景 | 你在托管什么 | 演示 |
-|------|-------------|------|
-| **托管你的学习** | 文章、视频、课程 | [真实案例](examples.html) |
-| **托管你的 GitHub** | 技术决策、踩坑 | [真实案例](examples.html) |
-| **托管你的飞书** | 手机表单 + IM 审核 | [真实案例](examples.html) |
-| **托管你的书籍** | 阅读笔记 | [真实案例](examples.html) |
+## 使用时，你只需要做三件事
 
-[查看所有案例](examples.md)
+1. 告诉 Agent 你正在解决什么，以及哪些决定必须由你做。
+2. 提供材料，或允许 Agent 在约定范围内收集证据。
+3. 审核 Agent 提出的长期知识：接受、修改、拒绝，或者暂时不决定。
 
----
+安装、收录、整理、保存和召回都由 Agent 调用 OKS 完成。你不需要记住命令，也不需要理解目录结构才能开始。
 
-## 💡 已经装好？开始用
+## 它不会替你做什么
 
-**常用操作**：
-- 📥 **收录资料** - 对 Agent 说"收录这个"
-- ✅ **审核 Candidate** - [审核指南](review-candidates.md)
-- 🔍 **召回知识** - Agent 自动注入，或 `oks recall`
+- 来源被保存，不代表来源中的主张已经证实。
+- Agent 写出的总结，不会自动变成长期知识。
+- 证据不足时，系统应说明缺口，而不是补出一个确定答案。
+- 发布、合并、删除和外部发送等高风险动作，仍需要人的明确授权。
 
-**进阶指南**：
-- [最佳实践 - 三个阶段](best-practices.md)
-- [上下文注入机制](usage/context-injection.md)
-- [配置 Goal 和 Profile](usage/profiles.md)
-
----
-
-## 🔧 遇到问题？
-
-| 问题 | 解决 |
-|------|------|
-| 装不上 | [安装故障](reference/troubleshooting.md) |
-| 召回不准 | [召回调优](best-practices.md#阶段-3召回-recall---用自然语言提问) |
-| Agent 报错 | [验证 OKS 状态](verify.md) |
-
----
-
-## 📖 深入了解
-
-<details>
-<summary><strong>概念和原理</strong></summary>
-
-- [设计哲学](concepts/philosophy.md) - 为什么这样设计
-- [记忆模型](concepts/memory-model.md) - Raw vs Wiki
-- [Triple-Layer Recall](algorithms/recall-engine.md) - R@1=82.5%
-- [文件系统范式](concepts/file-system-paradigm.md)
-
-</details>
-
-<details>
-<summary><strong>技术参考</strong></summary>
-
-- [CLI 命令](reference/cli.md)
-- [Ingest 协议](reference/ingest.md)
-- [召回评估数据](algorithms/recall-evaluation.md)
-- [故障排查](reference/troubleshooting.md)
-
-</details>
-
----
-
-## 🎯 OKS 核心边界
-
-**OKS 做什么**：
-- ✅ 保留来源（Raw + 可追溯证据）
-- ✅ 提出知识（Agent 生成 Candidate）
-- ✅ 人工审核（Candidate → Wiki）
-- ✅ 自动召回（Hook 注入会话）
-
-**OKS 不做什么**：
-- ❌ Core 不调用 AI API
-- ❌ 不包装失败为成功
-- ❌ 不由模型自行声称 `[verified]`
-
----
-
-## 📊 召回质量（v0.6.5）
-
-**OKS Triple-Layer Recall**：
-- Node-BM25 召回 + Soul Boost 注入 + Memory Curve 衰减
-- 50-case 消融实测：**R@1=82.5%** / R@3=92.5% / MRR=0.907
-
-详见 [召回评估](algorithms/recall-evaluation.md)
-
----
-
-**Agent-native、文件系统优先的知识工作台**
+从[第一次学习循环](first-knowledge-loop.html)开始，或直接阅读案例[托管你的学习](oh-my/study.html)。

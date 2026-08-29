@@ -94,7 +94,8 @@ open-knowledge-studio/
 ├── security/         # Credential redaction + sensitive field detection
 ├── cli/              # Python CLI tool (oks); packaged assets come from assets/
 ├── docs/             # GitHub Pages site — every .md here is a published page
-├── records/          # Versioned acceptance evidence — never in docs/
+├── reference-implementations/ # Optional integrations; not shipped with oks
+├── records/          # Versioned acceptance + reproducible experiments
 ├── CONSTITUTION.md   # Memory architecture design
 ├── CHANGELOG.md      # Release history
 └── CLAUDE.md         # This file
@@ -127,6 +128,8 @@ oks skills-install [--force]
 
 # Raw ingestion
 oks raw-commit <manifest-dir> [--output/-o <dir>] [--overwrite] [--json/--text]
+oks ingest prepare <source>
+oks ingest run <source>   # compatibility entry point; no Wiki promotion
 
 # Recall (the single retrieval entry — Agent-facing, injected via hook)
 oks recall <query> [--topic-id ID] [--limit 5] [--scope AREA] [--type strategy] [--knowledge-only] [--goal active|none|SLUG] [--format table|json] [--explain]
@@ -135,9 +138,10 @@ oks wiki get <slug>
 oks wiki create --title "..." --type concept --area computing --importance 0.7
 oks wiki pin <slug> | archive <slug>
 oks wiki use <slug>   # explicit "this page was used" signal (recall is read-only)
-oks drafts list | promote <slug> | reject <slug>
+oks drafts list | get <slug> | promote <slug> | reject <slug>
 oks distill [--dry-run]
 oks lint | status | metrics | decay
+oks fs ls|tree|stat|read|overview|find <uri-or-query>  # read-only VFS
 oks capability list | status [--json/--text] | guide <provider-id>
 oks capability install <name> [--yes]
 oks hook install [--editor claude|qoder|codex|both] [--path DIR]   # prompt recall + post-tool conflict detection
@@ -152,13 +156,16 @@ oks trace propose <run-id> --kind wiki|skill --title "..." --summary "..."
 oks trace finish <run-id> --result '{"outcome":"success"}'
 oks trace validate <run-id> [--completed]
 oks config init | show | set <key> <value>
+oks team init <path> [--name NAME]
+oks schema show <document-kind>
+oks security sanitize <file>
 ```
 
 ## Conventions
 
 - **raw/** is human-collected or tool-processed. Tools preserve maximum fidelity — they convert format, not knowledge. LLM does not write knowledge to raw/.
 - **wiki/** is LLM-written, human-approved via drafts/ review.
-- **Intake is agent-direct** — OKS does not wrap tool calls. Agent checks tool availability via Bash (`which curl`, etc.).
+- **Intake is Agent-orchestrated** — `/ingest` is the recommended path. `oks ingest run` is a compatibility entry point that delegates mechanical acquisition and extraction to the separately packaged `oks-connector`.
 - **Global config** (`~/.oks/config.json`) enables cross-project access — `oks recall` works from any directory (resolution: `OKS_ROOT` env → config `knowledge_base_path` → cwd).
 - **Code repo vs instance repo** — THIS repo is the reusable tool/template: it ships clean (wiki/ & drafts/ gitignored) so others can use it. Your personal knowledge lives in a separate instance created by `oks init <path>`, which TRACKS memory in git. Practices proven in an instance flow back here as PRs.
 - **Git IS the migration** — no database, schema changes versioned through _meta/.

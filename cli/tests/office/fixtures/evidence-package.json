@@ -1,0 +1,49 @@
+{
+  "schema_version": "oks-office-evidence/v1",
+  "request": {
+    "title": "OKS Office 证据包回归",
+    "audience": "本地验收",
+    "deliverables": ["docx", "pdf", "pptx"]
+  },
+  "recall": {
+    "query": "Office evidence workflow",
+    "items": [{"slug": "office-output", "score": 0.9, "explain": "workflow match"}]
+  },
+  "summary": {
+    "text": "同一证据包进入三种格式适配器。",
+    "claim_refs": ["claim-1"]
+  },
+  "claims": [
+    {
+      "id": "claim-1",
+      "text": "证据映射在格式转换后仍可回溯。",
+      "source_refs": ["src-2"],
+      "confidence": "high",
+      "review_status": "reviewed"
+    },
+    {
+      "id": "claim-2",
+      "text": "复杂输入中的 0、False 和中文长文本应保持。",
+      "source_refs": ["src-1"],
+      "confidence": "medium",
+      "review_status": "provisional"
+    }
+  ],
+  "sections": [
+    {
+      "id": "section-1",
+      "title": "证据保真",
+      "claim_refs": ["claim-1", "claim-2"],
+      "blocks": [
+        {"type": "paragraph", "text": "归一化器只改变结构，不改变 claim 文本。", "claim_refs": ["claim-1"]},
+        {"type": "bullets", "items": ["来源状态保留", "长文本分片但不丢失"], "claim_refs": ["claim-1", "claim-2"]},
+        {"type": "table", "rows": [["字段", "值"], ["count", 0], ["enabled", false]], "claim_refs": ["claim-2"]}
+        ,{"type": "table", "rows": [["状态", "说明"], ["review", "保留"]], "claim_refs": ["claim-1"]}
+      ]
+    }
+  ],
+  "sources": [
+    {"id": "src-1", "kind": "research", "label": "Research: office-output", "locator": "https://example.org/office-output", "retrieved_at": "2026-08-27T10:00:00+08:00", "status": "unverified"},
+    {"id": "src-2", "kind": "wiki", "label": "Wiki: office-page", "locator": "wiki/office.md", "status": "partial"}
+  ]
+}

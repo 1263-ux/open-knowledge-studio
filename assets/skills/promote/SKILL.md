@@ -11,10 +11,11 @@ List drafts in `drafts/`, let user review, promote accepted ones to `wiki/` or r
 ## Steps
 
 1. **List drafts** — `oks drafts list`
-2. **For each draft** — Show content, ask: `promote`, `reject`, or `edit`
-3. **Promote** — `oks drafts promote <slug>` (optionally with --title, --type, --area)
-4. **Reject** — `oks drafts reject <slug>` (confirm first; the Candidate leaves the pending queue)
-5. **Edit** — Open for editing, then promote or reject
+2. **Read the exact Candidate** — `oks drafts get <slug>`
+3. **For each draft** — Show content, ask: `promote`, `reject`, or `edit`
+4. **Promote** — `oks drafts promote <slug>` (optionally with `--title`, `--type`, `--area`, `--slug-hint`, repeated `--tag`)
+5. **Reject** — `oks drafts reject <slug>` (confirm first; the Candidate leaves the pending queue)
+6. **Edit** — Open for editing, then promote or reject
 
 ## Rules
 

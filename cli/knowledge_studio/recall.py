@@ -47,12 +47,120 @@ DEFAULT_RECALL_LIMIT = 5
 MAX_BODY_PREVIEW = 200  # fallback; v0.6.0 实际用 inject_per_page_chars
 
 
+def _apply_budget(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Tier degradation: total body_preview > budget 时降级 L2→L1→L0→截断.
+
+    CV from OpenViking ``tiers.py`` — token 超预算自动降级到更浅 tier.
+    v0.6.12: ``budget_chars`` + ``title_only_floor`` 之前定义但没用 (P6 形状,
+    和 mail/sent/ 同), 现在生效.
+
+    Tier 顺序:
+    - L2 full: ``per_page_chars`` (200) — 默认, 不超 budget 不动
+    - L1 overview: ``per_page_chars`` // 2 (100) — 超预算缩半
+    - L0 abstract: ``per_page_chars`` // 4 (50) + rel<title_only_floor 降 title-only
+    - 截断: 保留 top-N 直到 total < budget
+    """
+    try:
+        params = load_recall_params()
+        budget = int(params.get("inject_budget_chars", 4000))
+        per_page = int(params.get("inject_per_page_chars", MAX_BODY_PREVIEW))
+        title_floor = float(params.get("inject_title_only_floor", 0.5))
+    except Exception:
+        budget, per_page, title_floor = 4000, MAX_BODY_PREVIEW, 0.5
+
+    def _total() -> int:
+        return sum(len(r.get("body_preview", "")) for r in results)
+
+    if not results or _total() <= budget:
+        return results  # 不超预算, 不降级
+
+    # Tier 1: L2→L1 缩半 (overview 级)
+    for r in results:
+        r["body_preview"] = r.get("body_preview", "")[: max(1, per_page // 2)]
+    if _total() <= budget:
+        _tag_budget(results, "l1_overview")
+        return results
+
+    # Tier 0: abstract (~50) + low-relevance 降 title-only
+    l0_cap = max(1, per_page // 4)
+    for r in results:
+        if float(r.get("relevance", 0)) < title_floor:
+            r["body_preview"] = ""  # title only (slug+title 仍在 entry)
+        else:
+            r["body_preview"] = r.get("body_preview", "")[:l0_cap]
+    if _total() <= budget:
+        _tag_budget(results, "l0_abstract")
+        return results
+
+    # 截断: 保留 top-N 直到 total < budget (recall 已按 relevance 排序)
+    acc, kept = 0, []
+    for r in results:
+        pl = len(r.get("body_preview", ""))
+        if acc + pl > budget and kept:
+            break
+        acc += pl
+        kept.append(r)
+    _tag_budget(kept, "truncated")
+    return kept
+
+
+def _tag_budget(results: list[dict[str, Any]], tier: str) -> None:
+    """标注降级 tier (可观测, /query + eval 可见)."""
+    for r in results:
+        r.setdefault("budget_tier", tier)
+
+
 def _inject_per_page_chars() -> int:
     """v0.6.0: 动态读 inject.per_page_chars（CV from karpathy-wiki token budget）。"""
     try:
         return int(load_recall_params().get("inject_per_page_chars", MAX_BODY_PREVIEW))
     except Exception:
         return MAX_BODY_PREVIEW
+
+
+def _make_preview(
+    body: str,
+    limit: int | None = None,
+    abstract: str | None = None,
+) -> str:
+    """Build a semantically complete L0 preview from wiki body (P4: pure text ops).
+
+    v0.6.7: 旧 ``body[:limit]`` 机械截取有 86% 质量问题——标题重复 +
+    表格/段落中途截断。本函数：
+    1. 跳过 body 开头与 frontmatter ``title`` 重复的 ``# title`` 行；
+    2. 在 limit 内尽量在完整行边界截断（不破表格行/句子）；
+    3. frontmatter ``abstract`` 字段优先（Dreaming 层 AI 写的一句话摘要），
+       本函数只处理无 abstract 时的 fallback——纯机械抽取，不调 AI API（P4）。
+    """
+    if limit is None:
+        limit = _inject_per_page_chars()
+    if abstract and abstract.strip():
+        summary = abstract.strip()
+        if len(summary) <= limit:
+            return summary
+    if not body:
+        return ""
+    lines = body.split("\n")
+    idx = 0
+    # skip leading blanks
+    while idx < len(lines) and not lines[idx].strip():
+        idx += 1
+    # skip redundant '# title' (title already in frontmatter)
+    if idx < len(lines) and lines[idx].startswith("# "):
+        idx += 1
+    while idx < len(lines) and not lines[idx].strip():
+        idx += 1
+    rest = "\n".join(lines[idx:]) if idx < len(lines) else ""
+    if not rest:
+        return body[:limit]
+    if len(rest) <= limit:
+        return rest.rstrip()
+    # cut at last complete line within limit (don't break mid-row)
+    chunk = rest[:limit]
+    nl = chunk.rfind("\n")
+    if nl > limit // 2:
+        return chunk[:nl].rstrip()
+    return chunk.rstrip()
 RECALL_HIT_SCHEMA = "recall-hit/v1"
 RECALL_RESPONSE_SCHEMA = "recall-response/v1"
 
@@ -93,8 +201,6 @@ def set_recall_yaml_param(kb_root: Path, location: tuple[str | None, str], value
     # coerce value type
     if value.lower() in ("true", "false"):
         v: int | float | bool | str = value.lower() == "true"
-    elif value.lower() in ("true", "false"):
-        v: int | float | bool | str = value.lower() == "true"
     else:
         try:
             v = float(value) if "." in value else int(value)
@@ -109,7 +215,17 @@ def set_recall_yaml_param(kb_root: Path, location: tuple[str | None, str], value
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             _yaml.safe_dump(data, f, allow_unicode=True, sort_keys=False)
+            f.flush()
+            os.fsync(f.fileno())
         os.replace(tmp, ypath)
+        try:
+            dir_fd = os.open(str(ypath.parent), os.O_RDONLY)
+            try:
+                os.fsync(dir_fd)
+            finally:
+                os.close(dir_fd)
+        except OSError:
+            pass
     finally:
         if os.path.exists(tmp):
             os.unlink(tmp)
@@ -136,8 +252,7 @@ def load_recall_params(root=None):
     params = {
         "recall_floor": 0.7, "recall_topn": 3, "recall_minlen": 6,
         "recall_cooldown": 10,
-        "posttool_floor": 0.9, "posttool_topn": 2, "posttool_mode": "signal",
-        "posttool_recall": 1, "posttool_signal_rel_floor": 2.5,
+        "posttool_mode": "signal", "posttool_signal_rel_floor": 2.5,
         "conflict_window": 300, "search_backend": "native", "mail_topn": 3,
         # v0.6.3: embedding fallback — fts5 召回空/明显不足时切 embedding 补充
         "embedding_fallback": False,
@@ -161,10 +276,7 @@ def load_recall_params(root=None):
             params["recall_topn"] = int(rc.get("topn", params["recall_topn"]))
             params["recall_minlen"] = int(rc.get("minlen", params["recall_minlen"]))
             params["recall_cooldown"] = int(rc.get("cooldown", params["recall_cooldown"]))
-            params["posttool_floor"] = float(pc.get("floor", params["posttool_floor"]))
-            params["posttool_topn"] = int(pc.get("topn", params["posttool_topn"]))
             params["posttool_mode"] = str(pc.get("mode", params["posttool_mode"]))
-            params["posttool_recall"] = int(pc.get("recall", params["posttool_recall"]))
             params["posttool_signal_rel_floor"] = float(pc.get("signal_rel_floor", params["posttool_signal_rel_floor"]))
             params["conflict_window"] = int(cc.get("window", params["conflict_window"]))
             params["search_backend"] = str(data.get("search_backend", params["search_backend"]))
@@ -178,23 +290,37 @@ def load_recall_params(root=None):
     except Exception:
         pass
 
-    # env 已废弃——settings/recall.yaml 是唯一真源（git 同步，走到哪带到哪）。
-    # 临时调参用 CLI flag（oks recall --floor 0.9），不污染持久状态。
-    # 迁移：检测到旧 OKS_ env 时警告，提示迁移到 yaml + unset。
-    _legacy_env = [
-        "OKS_RECALL_FLOOR", "OKS_RECALL_TOPN", "OKS_RECALL_MINLEN",
-        "OKS_RECALL_COOLDOWN", "OKS_POSTTOOL_FLOOR", "OKS_POSTTOOL_TOPN",
-        "OKS_POSTTOOL_MODE", "OKS_POSTTOOL_RECALL", "OKS_POSTTOOL_SIGNAL_REL_FLOOR",
-        "OKS_CONFLICT_WINDOW", "OKS_SEARCH_BACKEND", "OKS_MAIL_TOPN",
-    ]
+    # Legacy environment variables remain readable for compatibility.
+    # YAML remains the durable default; env overrides are warned about so
+    # existing hosts do not silently change behavior during migration.
+    _legacy_env = {
+        "OKS_RECALL_FLOOR": ("recall_floor", float),
+        "OKS_RECALL_TOPN": ("recall_topn", int),
+        "OKS_RECALL_MINLEN": ("recall_minlen", int),
+        "OKS_RECALL_COOLDOWN": ("recall_cooldown", int),
+        "OKS_POSTTOOL_MODE": ("posttool_mode", str),
+        "OKS_POSTTOOL_SIGNAL_REL_FLOOR": ("posttool_signal_rel_floor", float),
+        "OKS_CONFLICT_WINDOW": ("conflict_window", int),
+        "OKS_SEARCH_BACKEND": ("search_backend", str),
+        "OKS_MAIL_TOPN": ("mail_topn", int),
+    }
     import os as _os
-    _found = [k for k in _legacy_env if _os.environ.get(k)]
+    _found = []
+    for env_name, (param_name, converter) in _legacy_env.items():
+        raw_value = _os.environ.get(env_name)
+        if not raw_value:
+            continue
+        try:
+            params[param_name] = converter(raw_value)
+            _found.append(env_name)
+        except (TypeError, ValueError):
+            _found.append(env_name + "=invalid")
     if _found and not getattr(load_recall_params, "_warned", False):
         load_recall_params._warned = True
         import sys
         print(
-            "⚠ OKS: 检测到旧环境变量 " + ", ".join(_found) + "，已废弃。\n"
-            "  settings/recall.yaml 是唯一参数真源（git 同步）。\n"
+            "⚠ OKS: 检测到旧环境变量 " + ", ".join(_found) + "，已弃用但仍兼容。\n"
+            "  settings/recall.yaml 是持久配置源；旧 env 仅作为临时覆盖。\n"
             "  请把值迁移到 settings/recall.yaml，然后 unset 这些 env。\n"
             "  临时调参用 CLI flag: oks recall --floor 0.9",
             file=sys.stderr,
@@ -609,7 +735,12 @@ def _recall_knowledge_via_backend(
             "score": round(float(p.get("score", 0) or 0), 3),
             "relevance": round(h.score, 3),
             "confidence": p.get("confidence", 0.8),
-            "body_preview": p.get("body", "")[:_inject_per_page_chars()],
+            "body_preview": _make_preview(
+                p.get("body", ""),
+                # L0 零 read: fts5 hit 带的 abstract 优先 (来自 SQLite, 不读文件);
+                # fallback 到 page frontmatter abstract (list_wiki_pages 已读).
+                abstract=h.abstract or p.get("abstract"),
+            ),
             "tags": p.get("tags", ""),
             "has_traces": bool(p.get("traces")),
             "human_reviewed_at": p.get("human_reviewed_at", ""),
@@ -629,7 +760,7 @@ def _recall_knowledge_via_backend(
         if review.get("lesson"):
             entry["review_lesson"] = review["lesson"]
         results.append(entry)
-    return results
+    return _apply_budget(results)
 
 
 def _recall_knowledge_with_context(
@@ -700,7 +831,11 @@ def _recall_knowledge_with_context(
             "score": round(item.get("score", 0), 3),
             "relevance": round(relevance, 3),
             "confidence": item.get("confidence", 0.8),
-            "body_preview": item.get("body", "")[:MAX_BODY_PREVIEW],
+            "body_preview": _make_preview(
+                item.get("body", ""),
+                MAX_BODY_PREVIEW,
+                abstract=item.get("abstract"),
+            ),
             "tags": item.get("tags", ""),
             "has_traces": bool(item.get("traces")),
             # The /query skill derives [verified] from one of two recorded
@@ -722,7 +857,7 @@ def _recall_knowledge_with_context(
             entry["goal_matches"] = components["goal_matches"]
         results.append(entry)
 
-    return results
+    return _apply_budget(results)
 
 
 def _tokenize(text: str) -> set[str]:

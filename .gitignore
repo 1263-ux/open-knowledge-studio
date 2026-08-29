@@ -103,3 +103,15 @@ records/file-edits.jsonl
 # Local agent workflow artifacts and recall trace output
 .agent/
 records/inject.jsonl
+
+# v0.6.14: 临时工作流目录（plans/specs 用 Git history/Issue 存，不 track）
+internal/
+openspec/
+
+# SQLite 运行残留（测试/本地运行产生，不 track）
+*.db
+*.db.lock
+*.db-journal
+
+# PR body 草稿（临时）
+pr-body-*.md

@@ -4,7 +4,7 @@
   "manifest": {
     "code_version": "0.5.14",
     "kb_commit": "3373ddff9cfee4301285974b9c07f086f325cfe7",
-    "dataset_path": "/Users/xinhai/Desktop/school/repo/open-knowledge-studio/records/experiments/eval-50.yaml",
+    "dataset_path": "records/experiments/eval-50.yaml",
     "dataset_sha256": "7c75f116cc17931bf7d99956b9d9e17bdd04c9d710ad4d6711ee1284aa7441ef",
     "dataset_id": "artboy-50-v2",
     "dataset_version": "2.0.0",

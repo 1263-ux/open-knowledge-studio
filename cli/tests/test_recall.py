@@ -1,4 +1,5 @@
 """Tests for the 6-factor recall engine."""
+from concurrent.futures import ThreadPoolExecutor
 import json
 import os
 import yaml
@@ -74,6 +75,54 @@ def test_tokenize():
     tokens = _tokenize("git branch strategy")
     assert isinstance(tokens, set)
     assert len(tokens) > 0
+
+
+def test_load_recall_params_keeps_legacy_environment_overrides(tmp_path, monkeypatch):
+    from knowledge_studio.recall import load_recall_params
+
+    settings = tmp_path / "settings"
+    settings.mkdir()
+    (settings / "recall.yaml").write_text(
+        "recall:\n  floor: 0.7\n  topn: 3\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("OKS_RECALL_FLOOR", "0.91")
+    monkeypatch.setenv("OKS_RECALL_TOPN", "5")
+
+    params = load_recall_params(tmp_path)
+
+    assert params["recall_floor"] == 0.91
+    assert params["recall_topn"] == 5
+
+
+def test_make_preview_skips_duplicate_heading_and_leading_blanks():
+    from knowledge_studio.recall import _make_preview
+
+    body = "\n\n# Git Branching Strategy\n\nUse short-lived branches."
+
+    assert _make_preview(body, limit=200) == "Use short-lived branches."
+
+
+def test_make_preview_prefers_short_abstract():
+    from knowledge_studio.recall import _make_preview
+
+    assert _make_preview("Long body that should not win.", 80, "A concise abstract.") == "A concise abstract."
+
+
+def test_make_preview_prefers_complete_line_when_truncating():
+    from knowledge_studio.recall import _make_preview
+
+    body = "First complete line.\nSecond complete line.\nThird line continues."
+
+    assert _make_preview(body, limit=45) == "First complete line.\nSecond complete line."
+
+
+def test_make_preview_falls_back_to_body_when_heading_is_only_content():
+    from knowledge_studio.recall import _make_preview
+
+    body = "# Only Heading"
+
+    assert _make_preview(body, limit=5) == "# Onl"
 
 
 def test_source_path_is_posix_on_windows():
@@ -578,6 +627,36 @@ def test_record_access_does_not_promote_or_reinforce(kb_root, monkeypatch):
         "reading a page says nothing about whether it is true"
     )
     assert "human_reviewed_at" not in updated
+
+
+def test_record_access_serializes_concurrent_updates(kb_root):
+    """The access snapshot must not lose increments under concurrent use."""
+    from knowledge_studio.store import get_wiki_page, record_access
+
+    calls = 40
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        list(pool.map(lambda _: record_access("git-branching"), range(calls)))
+
+    assert get_wiki_page("git-branching")["access_count"] == calls
+
+
+def test_set_recall_yaml_param_fsyncs_atomic_snapshot(tmp_path, monkeypatch):
+    """Recall config updates flush the file before publishing the rename."""
+    from knowledge_studio.recall import set_recall_yaml_param
+
+    fsync_calls = []
+    real_fsync = os.fsync
+
+    def record_fsync(fd):
+        fsync_calls.append(fd)
+        return real_fsync(fd)
+
+    monkeypatch.setattr(os, "fsync", record_fsync)
+    set_recall_yaml_param(tmp_path, ("inject", "per_page_chars"), "321")
+
+    config = (tmp_path / "settings" / "recall.yaml").read_text(encoding="utf-8")
+    assert "per_page_chars: 321" in config
+    assert fsync_calls, "the temporary file must be fsynced before os.replace"
 
 
 def test_only_review_and_traces_can_claim_verified(kb_root):

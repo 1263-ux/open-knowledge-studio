@@ -1,3 +1,23 @@
+## [Unreleased] — 2026-08-29
+
+### 仓库维护 + agent-config 扩展
+
+- **清理垃圾文件**: 删 internal/superpowers/ + openspec/ + index.db* + pr-body-oksummarized.md, .gitignore 防复发; 新建 images/ 统一 README 图片
+- **agent-config 4 agent**: 加 qoder (.qoder/settings.json) + pi (.pi/extensions/*.ts); _AGENT_TARGETS + EXPECTED_TOP_LEVEL 同步
+- **PR merge**: #50 hook UTF-8 (Windows 兼容) + #51 docs architecture (mermaid→精修 SVG)
+
+### fix(hooks): P8 _mark_mail_read 收口 (844b93a)
+
+@qoder 发现 _mark_mail_read 4 份实现 (CLI 1 份已修 + hook 3 份拷贝漂移), hook
+拷贝带和 CLI 修前相同的全文 replace bug, 高频路径 (每个 user prompt 都跑)。
+收口: hook 复用 store._locked_atomic_update, frontmatter-only, 幂等。
+
+### 8b04cc1 真实来源 (commit 卫生)
+
+> 注: 8b04cc1 "chore: 新建 images/" 实际扫进了 @qoder 工作树未 commit 的
+> mail_read 重写 (P7 正文损坏修复 + P2 原子写)。代码正确 (308 tests passed),
+> 不 revert; 补此条让 git log 可追。以后 staging 只用具名文件, 不用 git add -A。
+
 ## [0.6.1] — 2026-08-18
 
 ### oks 灵魂搬到 fts5 注入层
@@ -39,6 +59,57 @@
 - 50-case eval：native 54% / fts5 96% / fusion 90%
 
 # Changelog
+
+## [Unreleased]
+
+### Fixed
+
+- 保留旧版 recall 环境变量作为临时覆盖，同时以 `settings/recall.yaml` 作为持久配置来源。
+- 改进 recall preview，优先使用已有摘要，并尽量在完整行边界截断。
+- 让并发访问计数在读改写期间保持一致，并在 Raw Bundle 发布失败时保留原内容。
+- 补齐 Candidate 读取、人工审核覆盖与 Raw Bundle 成功后的临时文件清理测试。
+
+
+## [0.6.8] — 2026-08-25
+
+### fix(vfs): canonical uri 不再强制 .md 后缀
+
+旧 `resolve()` 要求 uri 必须带 `.md` 后缀（如 `oks://wiki/.../slug.md`），否则 PATH_NOT_FOUND。recall 返回的 slug 字段不带 .md，用户/Agent 用 slug 构造 uri 会找不到文件。
+
+**修复**：`resolve()` 在 candidate 不存在且无后缀时，透明尝试 `.md` sibling——canonical uri 可不带 .md（不暴露磁盘文件格式），带 .md 的旧 uri 向后兼容。
+
+**指标**：vfs 测试 45→46 passed（+1 新测试 `test_stat_and_read_accept_uri_without_md_suffix`），全测试 270 passed。
+
+
+## [0.6.7] — 2026-08-24
+
+### fix(recall): L0 preview 质量优化（机械截取 → 语义完整截取）
+
+旧 `body_preview = body[:200]` 机械截取 86% 的 wiki 页 preview 有质量问题
+（标题重复 + 表格/段落中途截断）。新增 `_make_preview()`：
+
+- 跳过 body 开头与 frontmatter `title` 重复的 `# title` 行
+- 在 limit 内尽量在完整行边界截断（不破表格行/句子）
+- frontmatter `abstract` 字段优先（Dreaming 层 AI 写的摘要），本函数作 fallback
+
+**指标**：preview 质量问题率 86% → 0%（50 页样本，43 页修复）
+**宪法**：P4 合规——纯文本操作，不调 AI API；abstract 生成属 Dreaming/Agent 层
+
+
+## [0.6.6] — 2026-08-24
+
+### feat: team bootstrap + Word skill + docs refresh（PR #45 by 1263-ux）
+
+- 新增 `oks team init` 命令——共享团队知识库 bootstrap（多人协作场景）
+- 新增 `knowledge-to-word` skill（`build_docx.py` 把 wiki 导出 Word 文档）
+- health.py: `WIKI_STATUSES` 兼容旧实例的 `published` 状态（lint 不再误报）
+- fts5.py: makedirs 注释（无逻辑改动）
+- +8 测试（261→269 passed）
+
+### docs: GitHub Pages broken links 修复（PR #44 by 1263-ux）
+
+- 修复 docs/ 下 12 文件的失效链接
+
 
 ## [0.6.5] — 2026-08-21
 

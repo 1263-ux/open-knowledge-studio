@@ -1,7 +1,7 @@
 ---
 title: 衰减系统
-nav_order: 2
-parent: 算法
+nav_order: 4
+parent: 维护者
 ---
 # 衰减系统（记忆曲线）
 
@@ -76,7 +76,7 @@ new_confidence = min(1.0, current + 0.1 × (1 - current))
 
 ### 对比 nowledge 衰减与置信度
 
-[Nowledge Mem](https://docs.nowledge.app) 的衰减综合时效性 + 频率 + 重要性底线 + 置信度 + 时间匹配。对照 OKS：
+Nowledge Mem（外部产品参考，公开文档链接当前待确认）的衰减综合时效性 + 频率 + 重要性底线 + 置信度 + 时间匹配。对照 OKS：
 
 | nowledge 衰减信号 | OKS 对应 | 取舍 |
 |------------------|---------|------|

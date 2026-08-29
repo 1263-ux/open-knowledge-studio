@@ -1,11 +1,13 @@
 ---
 title: 召回评估
-nav_order: 3
-parent: 算法
+nav_order: 5
+parent: 维护者
 ---
 # 召回评估（OKS Triple-Layer Recall 消融实验）
 
 `oks eval recall <dataset.yaml>` 支持离线评测召回质量。这一页讲评估方法论——三层次能力框架 + 三个量化指标——以及 OKS 当前的位置和阻塞。
+
+> 下文的数值是绑定固定 50-case 数据集和当时运行记录的历史基准，不是所有知识库、机器或 backend 的通用 SLA。修改代码或评测环境后，请按文末命令重新运行。
 
 ## 三层次能力框架
 

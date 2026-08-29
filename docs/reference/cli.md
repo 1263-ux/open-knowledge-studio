@@ -19,10 +19,12 @@ parent: 参考
 | `oks ingest run <src>` | 摄入材料 → Raw Bundle |
 | `oks ingest prepare <src>` | 生成 ingest 协议骨架 |
 | `oks wiki create/list/get/pin/archive/use/export` | wiki 页管理 + OKF 导出 |
-| `oks drafts list/promote/reject` | draft 候选审核 |
+| `oks drafts list/promote/reject` | draft 候选队列与状态变更；完整内容通过 `/promote` Skill 审阅，晋升与拒绝都必须保留人工决定 |
 | `oks distill [--dry-run]` | 衰减 + 演化（dreaming 后半） |
 | `oks capability list/install/status/guide` | 能力注册与选择指导 |
 | `oks hook install/status` | opt-in 自动 recall + 文件冲突检测注入 |
+| `oks team init [path] [--name NAME]` | 创建共享团队知识实例 |
+| `oks schema show <name>` | 输出协议文档的校验示例 |
 | `oks trace *` | 执行追踪（provenance） |
 | `oks mail send/inbox/read/count` | Agent 间消息接口；不属于 `oks recall` 结果 |
 | `oks registry list/bind/remove` | 终端注册表（agent+cwd → profile/goal） |
@@ -128,7 +130,7 @@ oks trace show <id>
 - `processing-run.schema.json` — 处理运行
 - `raw-bundle-v0.2.schema.json` — Raw Bundle v0.2
 
-当前版本 `raw-multimodal/v0.2`。OKS 负责 Capture 编排 + Candidate + 人审 + wiki 晋升 + 召回；来源获取后的机械解析、证据定位、质量状态由独立发布的 `oks-connector` 负责。摄入流程见 [ingest](ingest.md)。
+当前版本 `raw-multimodal/v0.2`。OKS 负责 Capture 编排 + Candidate + 人审 + wiki 晋升 + 召回；来源获取后的机械解析、证据定位、质量状态由独立发布的 `oks-connector` 负责。摄入流程见 [ingest](ingest.html)。
 
 ## Provider 凭证治理
 

@@ -26,14 +26,10 @@
 .side-bar .site-header {
   justify-content: space-between !important;
   padding: 0 0.75rem !important;
-  padding-left: 2.5rem !important;
   min-height: 3rem !important;
 }
 
-// ===== 导航默认全部平铺展开（参考 nowledge）=====
-.nav-list .nav-list {
-  display: block !important;
-}
+// ===== 导航分组可独立展开；展开状态会跨页面保留 =====
 .nav-list > .nav-list-item > .nav-list-link {
   color: #2c2c2c !important;
   font-weight: 700 !important;
@@ -74,8 +70,128 @@ h4 { font-weight: 500; }
 .main-content a { color: #1d4ed8; }
 .main-content a:hover { color: #1e3a8a; }
 
+// ===== Mermaid diagrams =====
+.oks-mermaid {
+  max-width: 100%;
+  overflow-x: auto;
+  padding: 0.75rem 0;
+  text-align: center;
+}
+.oks-mermaid svg {
+  max-width: 100%;
+  height: auto;
+}
+
 .main-content-wrap {
   padding-top: 1rem !important;
+}
+
+// ===== Task-first landing page =====
+.main-content {
+  max-width: 72rem;
+}
+
+.oks-hero {
+  margin: 0 0 3rem;
+  padding: 3.5rem 3.25rem;
+  border: 1px solid #dbe4f0;
+  border-radius: 1rem;
+  background:
+    radial-gradient(circle at 88% 12%, rgba(37, 99, 235, 0.14), transparent 34%),
+    linear-gradient(145deg, #f8fbff 0%, #ffffff 68%);
+}
+
+.oks-hero h1 {
+  max-width: 12ch;
+  margin: 0 0 1rem;
+  font-size: clamp(2.4rem, 6vw, 4.5rem);
+  line-height: 1.04;
+  letter-spacing: -0.04em;
+  font-weight: 700;
+}
+
+.oks-eyebrow {
+  margin-bottom: 1rem;
+  color: #2563eb;
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+}
+
+.oks-lead {
+  max-width: 42rem;
+  color: #475569;
+  font-size: 1.2rem;
+  line-height: 1.75;
+}
+
+.oks-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 1.75rem;
+}
+
+.oks-actions .btn {
+  min-height: 2.75rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.oks-card-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+  margin: 1.5rem 0 2.5rem;
+}
+
+.oks-card {
+  padding: 1.25rem 1.35rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.75rem;
+  background: #ffffff;
+}
+
+.oks-card h3 {
+  margin-top: 0;
+  font-size: 1.05rem;
+  font-weight: 650;
+}
+
+.oks-card p {
+  margin-bottom: 0;
+  color: #64748b;
+  font-size: 0.94rem;
+}
+
+.main-content img {
+  border: 1px solid #e2e8f0;
+  border-radius: 0.6rem;
+}
+
+@media (max-width: 50rem) {
+  .oks-hero {
+    padding: 2.25rem 1.35rem;
+    border-radius: 0.75rem;
+  }
+
+  .oks-lead {
+    font-size: 1.05rem;
+  }
+
+  .oks-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .oks-actions .btn {
+    width: 100%;
+  }
+
+  .oks-card-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 // ===== side-bar 内搜索框（修正默认 flex-grow:1/height:4rem + box-sizing）=====
@@ -96,38 +212,7 @@ h4 { font-weight: 500; }
   border-radius: 0.375rem;
 }
 
-// ===== CSS-only 折叠导航（checkbox hack，无 JS）=====
-.oks-nav-toggle {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  opacity: 0;
-  pointer-events: none;
-}
-.oks-nav-toggle-label {
-  position: fixed;
-  top: 0.7rem;
-  left: 0.5rem;
-  z-index: 1001;
-  cursor: pointer;
-  width: 1.6rem;
-  height: 1.6rem;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid #e2e8f0;
-  background: #fff;
-  border-radius: 0.25rem;
-  color: #475569;
-}
-@media (min-width: 66.5rem) {
-  .oks-nav-toggle:checked ~ .side-bar {
-    transform: translateX(-100%) !important;
-  }
-  .oks-nav-toggle:checked ~ .main {
-    margin-left: 0 !important;
-  }
-}
+// ===== Just the Docs 原生 Menu 按钮负责移动端导航 =====
 .side-bar {
   transition: transform 0.2s ease;
 }

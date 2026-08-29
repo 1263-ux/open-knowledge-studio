@@ -34,6 +34,55 @@ from typing import Any
 from knowledge_studio.store import repo_root
 
 
+def _fsync_directory(path: Path) -> None:
+    """Best-effort persistence of directory-entry changes across platforms."""
+    try:
+        fd = _os.open(str(path), _os.O_RDONLY)
+        try:
+            _os.fsync(fd)
+        finally:
+            _os.close(fd)
+    except OSError:
+        # Windows generally rejects opening a directory this way. The file
+        # writes and rename are still atomic; do not make a valid commit fail
+        # solely because directory fsync is unavailable.
+        pass
+
+
+def _replace_bundle_directory(staging: Path, final_output: Path) -> None:
+    """Atomically publish a staged bundle while preserving the old bundle.
+
+    Directory replacement cannot overwrite a non-empty directory with
+    ``os.replace`` on every supported platform. Rename the old directory to a
+    same-parent backup first, publish the staged directory into the now-empty
+    name, and restore the backup if publication fails. Cleanup happens only
+    after the new bundle is visible.
+    """
+    backup: Path | None = None
+    try:
+        if final_output.exists():
+            backup = final_output.with_name(
+                f".{final_output.name}.backup-{uuid.uuid4().hex}"
+            )
+            _os.replace(str(final_output), str(backup))
+        _os.replace(str(staging), str(final_output))
+        _fsync_directory(final_output.parent)
+    except BaseException:
+        if backup is not None and backup.exists() and not final_output.exists():
+            try:
+                _os.replace(str(backup), str(final_output))
+            except OSError:
+                # Preserve the original failure; the backup remains available
+                # for manual recovery rather than being deleted silently.
+                pass
+        raise
+    else:
+        if backup is not None:
+            # A cleanup failure must not turn a successful atomic publication
+            # into a reported failed commit. The backup is recoverable.
+            shutil.rmtree(backup, ignore_errors=True)
+
+
 def create_run_workspace(source: str) -> dict[str, Any]:
     """Create an isolated Run Workspace for a source without invoking any Agent.
 
@@ -911,9 +960,7 @@ def _assemble_bundle(
                 )
 
         # ── Atomic commit: promote staging → final output ──
-        if final_output.exists():
-            shutil.rmtree(final_output)
-        shutil.move(str(output), str(final_output))
+        _replace_bundle_directory(output, final_output)
         return final_output
 
     except BaseException:

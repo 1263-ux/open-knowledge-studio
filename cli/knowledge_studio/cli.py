@@ -5,7 +5,10 @@ Typer-based CLI for knowledge base search, wiki CRUD, drafts, and maintenance.
 from __future__ import annotations
 
 import importlib.util
+import hashlib
 import json
+import math
+import os
 from pathlib import Path
 import re
 import shutil
@@ -99,7 +102,7 @@ def _vfs_error(operation: str, uri: str, exc: VfsError) -> dict:
 
 def _render_vfs_text(operation: str, uri: str, result: dict[str, Any]) -> None:
     console.print(f"[bold]{escape(operation)}[/bold] {escape(uri)}")
-    rows = result.get("entries") or result.get("matches")
+    rows = result.get("entries") or result.get("matches") or result.get("items")
     if isinstance(rows, list):
         table = Table(show_header=True)
         columns = list(rows[0]) if rows else ["uri"]
@@ -319,6 +322,28 @@ def fs_read(
         uri,
         output_format,
         lambda service: service.read(uri, offset=offset, limit=limit),
+    )
+
+
+@fs_app.command("read-many")
+def fs_read_many(
+    uris: list[str] = typer.Argument(..., help="Canonical oks:// file URIs."),
+    limit: int = typer.Option(20_000, "--limit", help="Maximum characters per file."),
+    max_total_chars: int = typer.Option(
+        8 * 1024 * 1024,
+        "--max-total-chars",
+        help="Maximum characters returned across all files.",
+    ),
+    output_format: str = typer.Option("table", "--format", help="table or json"),
+):
+    """Read multiple bounded UTF-8 text files in one CLI invocation."""
+    _run_vfs(
+        "read-many",
+        "oks://",
+        output_format,
+        lambda service: service.read_many(
+            uris, limit=limit, max_total_chars=max_total_chars
+        ),
     )
 
 
@@ -1203,8 +1228,8 @@ def wiki_use(slug: str = typer.Argument(help="Slug of a page that was actually u
 
     Recall and search are read-only: a query does not count as a use. Call
     this when a page is actually injected or applied so that access_count
-    reflects real usage, not query frequency. Recording also promotes a
-    provisional page to active once it has been used 3+ times.
+    reflects real usage, not query frequency. This signal affects ranking only;
+    it does not promote a page or change its confidence/status.
     """
     if not store.get_wiki_page(slug):
         console.print(f"[red]Not found:[/red] {slug}")
@@ -1336,11 +1361,48 @@ def drafts_list():
     console.print(f"\n[dim]{len(drafts)} draft(s)[/dim]")
 
 
+@drafts_app.command("get")
+def drafts_get(slug: str = typer.Argument(help="Draft slug to read")):
+    """Print the exact Candidate Markdown for human review."""
+    try:
+        typer.echo(store.read_draft(slug), nl=False)
+    except FileNotFoundError:
+        console.print(f"[red]Draft not found:[/red] {slug}")
+        raise typer.Exit(1)
+    except ValueError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1)
+
+
 @drafts_app.command("promote")
-def drafts_promote(slug: str = typer.Argument(help="Draft slug to promote")):
+def drafts_promote(
+    slug: str = typer.Argument(help="Draft slug to promote"),
+    title: Optional[str] = typer.Option(
+        None, "--title", help="Override the Wiki title during human review"
+    ),
+    wiki_type: Optional[str] = typer.Option(
+        None, "--type", help="Override Wiki type: concept, strategy, or anti-pattern"
+    ),
+    area: Optional[str] = typer.Option(
+        None, "--area", help="Override the Wiki knowledge area"
+    ),
+    slug_hint: Optional[str] = typer.Option(
+        None, "--slug-hint", help="Stable slug hint for the promoted Wiki page"
+    ),
+    tags: list[str] = typer.Option(
+        [], "--tag", help="Replace Wiki tags; repeat for multiple tags"
+    ),
+):
     """Promote a draft to a wiki page."""
     try:
-        new_slug = store.promote_draft(slug)
+        new_slug = store.promote_draft(
+            slug,
+            title=title,
+            wiki_type=wiki_type,
+            area=area,
+            tags=tags or None,
+            slug_hint=slug_hint,
+        )
         console.print(f"[green]Promoted:[/green] {slug} → {new_slug}")
     except FileNotFoundError:
         console.print(f"[red]Draft not found:[/red] {slug}")
@@ -1528,16 +1590,15 @@ def _generate_metrics_html(root: Path) -> str:
             (accepted_rels if used else rejected_rels).append(rel)
     acc_med = statistics.median(accepted_rels) if accepted_rels else 0
     rej_med = statistics.median(rejected_rels) if rejected_rels else 0
-    import os as _os
-    cur_floor = _os.environ.get("OKS_RECALL_FLOOR", "0.7")
+    from knowledge_studio.recall import load_recall_params
+    params = load_recall_params(root)
+    cur_floor = params["recall_floor"]
     # PostToolUse 注入统计（source=posttool）
     posttool_injects = [r for r in injects if r.get("source") == "posttool"]
     pt_total = len(posttool_injects)
     pt_accepted = sum(1 for r in posttool_injects if r.get("used"))
     pt_rate = (pt_accepted / pt_total * 100) if pt_total else 0
-    # 当前生效参数（从 settings/recall.yaml + env）
-    from knowledge_studio.recall import load_recall_params
-    params = load_recall_params(root)
+    # 当前生效参数（从 settings/recall.yaml + legacy env override）
     suggested_floor = max(0.7, acc_med - 0.2) if accepted_rels else 0.7
     slug_freq = Counter()
     for rec in injects:
@@ -1583,21 +1644,20 @@ th {{ background: #f4f4f8; }}
 <table><tr><th>指标</th><th>当前</th><th>建议</th></tr>
 <tr><td>accepted rel 中位数</td><td>{acc_med:.2f}</td><td>—</td></tr>
 <tr><td>rejected rel 中位数</td><td>{rej_med:.2f}</td><td>—</td></tr>
-<tr><td>OKS_RECALL_FLOOR</td><td>{cur_floor}</td><td>{suggested_floor:.2f}</td></tr>
+<tr><td>recall.floor</td><td>{cur_floor}</td><td>{suggested_floor:.2f}</td></tr>
 </table>
 <p>频繁注入（cooldown 可能太短）：{freq_str}</p>
 <h2>PostToolUse 注入统计</h2>
 <p>PostToolUse 注入 <b>{pt_total}</b> 次，<b>{pt_accepted}</b> 条被采纳（<b>{pt_rate:.0f}%</b>）</p>
-<h2>当前参数（settings/recall.yaml + env）</h2>
+<h2>当前生效参数（settings/recall.yaml + legacy env override）</h2>
 <table><tr><th>参数</th><th>当前值</th></tr>
 <tr><td>recall.floor</td><td>{params["recall_floor"]}</td></tr>
 <tr><td>recall.topn</td><td>{params["recall_topn"]}</td></tr>
-<tr><td>posttool.floor</td><td>{params["posttool_floor"]}</td></tr>
 <tr><td>posttool.mode</td><td>{params["posttool_mode"]}</td></tr>
 <tr><td>posttool.signal_rel_floor</td><td>{params["posttool_signal_rel_floor"]}</td></tr>
 <tr><td>search_backend</td><td>{params["search_backend"]}</td></tr>
 </table>
-<p class="muted">settings/recall.yaml 是唯一参数真源 → git commit → 走到哪同步到哪。临时调参用 oks recall --floor 0.9。</p>
+<p class="muted">settings/recall.yaml 是持久配置源；旧环境变量仅作兼容覆盖。临时调参用 oks recall --floor 0.9。</p>
 <h2>知识指标</h2>
 <table><tr><th>维度</th><th>指标</th><th>值</th></tr>{"".join(k_rows)}</table>
 </body>
@@ -1778,10 +1838,7 @@ _RECALL_YAML_KEYS = {
     "recall_topn": ("recall", "topn"),
     "recall_minlen": ("recall", "minlen"),
     "recall_cooldown": ("recall", "cooldown"),
-    "posttool_floor": ("posttool", "floor"),
-    "posttool_topn": ("posttool", "topn"),
     "posttool_mode": ("posttool", "mode"),
-    "posttool_recall": ("posttool", "recall"),
     "posttool_signal_rel_floor": ("posttool", "signal_rel_floor"),
     "conflict_window": ("conflict", "window"),
     "mail_topn": (None, "mail_topn"),
@@ -1870,6 +1927,8 @@ _SHARED_ASSETS = ("templates", "_meta", "settings", "profiles")
 # components under assets/. Supporting another agent is one line here.
 _AGENT_TARGETS = {
     ".claude": {"config": "claude", "skills": True, "hooks": True, "rules": True},
+    ".qoder": {"config": "qoder", "skills": True, "hooks": True, "rules": True},
+    ".pi": {"config": "pi", "skills": False, "hooks": False, "rules": False},
     ".codex": {"config": "codex", "skills": False, "hooks": True, "rules": False},
     ".agents": {"config": None, "skills": True, "hooks": False, "rules": False},
 }
@@ -2394,8 +2453,16 @@ def mail_send(
         f"{body}\n"
     )
     slug = f"{ts}-{from_id}"
-    (inbox / f"{slug}.md").write_text(content, encoding="utf-8")
-    console.print(f"[green]Sent mail:[/green] {slug} -> {to_field}")
+    # A1/P6: CONSTITUTION 要求 sent/{agent-id}/{ts}.md outbox archive per agent.
+    # 之前只写 inbox, sent/ 从未写入 = P6 违规 (CONSTITUTION 写的路径实现不存在).
+    # v0.6.11: 补 sent/ 写入 + 用 _atomic_write (P2/A5 原子写, 不再裸 write_text).
+    # inbox 是被 inbox/count/read 并发读的一侧, 必须与 sent/ 同强度持久化.
+    from .store import _atomic_write
+    _atomic_write(inbox / f"{slug}.md", content)
+    sent_dir = root / "mail" / "sent" / from_id
+    sent_dir.mkdir(parents=True, exist_ok=True)
+    _atomic_write(sent_dir / f"{ts}.md", content)
+    console.print(f"[green]Sent mail:[/green] {slug} -> {to_field} (archived: sent/{from_id}/{ts}.md)")
 
 
 @mail_app.command("inbox")
@@ -2438,10 +2505,30 @@ def mail_read(
     if not f.exists():
         console.print(f"[red]Mail not found:[/red] {id}")
         raise typer.Exit(1)
-    content = f.read_text(encoding="utf-8")
-    content = content.replace("read: false", "read: true", 1)
-    f.write_text(content, encoding="utf-8")
-    console.print(f"[green]Marked read:[/green] {id}")
+
+    # P7: 只改 frontmatter。此前用全文 replace(...,1)，对已读信件重复执行会命中
+    # 正文里的 "read: false" 并静默改写正文，同时仍报 Marked read。
+    # P2/A5: 读改写必须同一把锁 + 原子替换快照，不能裸 write_text。
+    def update(current: str) -> str | None:
+        if not current.startswith("---"):
+            return None
+        parts = current.split("---", 2)
+        if len(parts) < 3:
+            return None
+        meta, body = parts[1], parts[2]
+        if "read: false" not in meta:
+            return None
+        return f"---{meta.replace('read: false', 'read: true', 1)}---{body}"
+
+    changed = store._locked_atomic_update(
+        f,
+        update,
+        lock_path=root / ".oks" / "locks" / "mail.lock",
+    )
+    if changed:
+        console.print(f"[green]Marked read:[/green] {id}")
+    else:
+        console.print(f"[dim]Already read (no change):[/dim] {id}")
 
 
 @mail_app.command("count")
@@ -2751,6 +2838,207 @@ def _hook_is_wired(settings_path: Path) -> bool:
     )
 
 
+_HOOK_RECALL_SCHEMA = "hook-recall-response/v1"
+_HOOK_HISTORY_SCHEMA = "hook-recall-history/v1"
+_HOOK_RECALL_STATUSES = {
+    "skipped_minlen",
+    "skipped_cooldown",
+    "empty",
+    "injected",
+    "error",
+}
+
+
+def _hook_recall_error(reason: str, *, diagnostic: str = "") -> dict:
+    result = {
+        "schema": _HOOK_RECALL_SCHEMA,
+        "status": "error",
+        "context": "",
+        "trace": {
+            "candidate_count": 0,
+            "matches": [],
+            "top_relevance": None,
+            "threshold": None,
+        },
+        "reason": reason,
+    }
+    if diagnostic and os.environ.get("OKS_HOOK_DIAGNOSTICS", "").lower() in {
+        "1", "true", "yes"
+    }:
+        result["diagnostic"] = diagnostic[-1000:]
+    return result
+
+
+def _valid_hook_number(value: object, *, allow_none: bool = False) -> bool:
+    return (allow_none and value is None) or (
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and math.isfinite(value)
+    )
+
+
+def _validate_hook_recall_response(data: object) -> Optional[dict]:
+    """Accept only the documented hook bridge envelope, never arbitrary fields."""
+    if not isinstance(data, dict):
+        return None
+    trace = data.get("trace")
+    if (
+        data.get("schema") != _HOOK_RECALL_SCHEMA
+        or data.get("status") not in _HOOK_RECALL_STATUSES
+        or not isinstance(data.get("context"), str)
+        or not isinstance(trace, dict)
+        or not _valid_hook_number(trace.get("candidate_count"))
+        or int(trace["candidate_count"]) < 0
+        or not isinstance(trace.get("matches"), list)
+        or not all(isinstance(match, str) for match in trace["matches"])
+        or not _valid_hook_number(trace.get("top_relevance"), allow_none=True)
+        or not _valid_hook_number(trace.get("threshold"), allow_none=True)
+    ):
+        return None
+    result = {
+        "schema": _HOOK_RECALL_SCHEMA,
+        "status": data["status"],
+        "context": data["context"],
+        "trace": {
+            "candidate_count": int(trace["candidate_count"]),
+            "matches": trace["matches"],
+            "top_relevance": trace["top_relevance"],
+            "threshold": trace["threshold"],
+        },
+    }
+    if isinstance(data.get("reason"), str):
+        result["reason"] = data["reason"]
+    return result
+
+
+def _hook_recall_script() -> Path:
+    assets = _asset_source()
+    if assets is not None:
+        return assets / "hooks" / "user-prompt-recall.py"
+    return Path(__file__).resolve().parent / "_assets" / "hooks" / "user-prompt-recall.py"
+
+
+def _run_hook_recall(
+    root: Path,
+    prompt: str,
+    session_id: str,
+    cwd: str,
+    agent_id: str,
+) -> dict:
+    """Run the exact installed prompt hook in its structured bridge mode."""
+    script = _hook_recall_script()
+    if not script.is_file():
+        return _hook_recall_error("hook_script_unavailable")
+    env = os.environ.copy()
+    env["OKS_ROOT"] = str(root)
+    env["OKS_HOOK_OUTPUT"] = "json"
+    # The Hook Bridge exchanges JSON with a Python child process. Force UTF-8
+    # instead of inheriting a Windows console code page that cannot round-trip
+    # Chinese prompts or recall context.
+    env["PYTHONIOENCODING"] = "utf-8"
+    env["PYTHONUTF8"] = "1"
+    package_root = str(Path(__file__).resolve().parents[1])
+    inherited_pythonpath = env.get("PYTHONPATH", "")
+    env["PYTHONPATH"] = os.pathsep.join([package_root, inherited_pythonpath]).rstrip(os.pathsep)
+    payload = {"prompt": prompt, "session_id": session_id, "cwd": cwd, "agent_id": agent_id}
+    try:
+        completed = subprocess.run(
+            [sys.executable, str(script)],
+            input=json.dumps(payload, ensure_ascii=False),
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            capture_output=True,
+            cwd=str(root),
+            env=env,
+            timeout=15,
+            check=False,
+        )
+        if completed.returncode != 0:
+            detail = f"hook exited {completed.returncode}"
+            stderr = str(getattr(completed, "stderr", "") or "").strip()
+            if stderr:
+                detail += f": {stderr[-1000:]}"
+            raise RuntimeError(detail)
+        data = _validate_hook_recall_response(json.loads(completed.stdout))
+        if data is None:
+            raise ValueError("invalid hook response")
+        return data
+    except Exception as exc:
+        return _hook_recall_error(
+            "hook_bridge_failed",
+            diagnostic=f"{type(exc).__name__}: {exc}",
+        )
+
+
+def _read_hook_history(root: Path, limit: int, session_id: str, cwd: str) -> dict:
+    """Expose existing hook injection records without prompts, paths, or a new store."""
+    path = root / "records" / "inject.jsonl"
+    items: list[dict] = []
+    if path.is_file():
+        try:
+            for line in path.read_text(encoding="utf-8").splitlines():
+                try:
+                    record = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if not isinstance(record, dict):
+                    continue
+                if session_id and record.get("session_id") != session_id:
+                    continue
+                if cwd and record.get("cwd") != cwd:
+                    continue
+                slugs = [str(value).strip() for value in record.get("slugs", []) if str(value).strip()]
+                rels = [float(value) for value in record.get("rels", []) if isinstance(value, (int, float))]
+                fingerprint = json.dumps(record, sort_keys=True, ensure_ascii=True)
+                items.append({
+                    "id": "inject-" + hashlib.sha256(fingerprint.encode("utf-8")).hexdigest()[:12],
+                    "at": str(record.get("injected_at", "")),
+                    "phase": "pre-step",
+                    "status": "ok",
+                    "candidate_count": len(slugs),
+                    "matches": slugs[:12],
+                    "top_relevance": max(rels) if rels else None,
+                    "threshold": None,
+                })
+        except OSError:
+            pass
+    items.sort(key=lambda item: item["at"], reverse=True)
+    return {"schema": _HOOK_HISTORY_SCHEMA, "items": items[:limit], "truncated": len(items) > limit}
+
+
+@hook_app.command("recall")
+def hook_recall(
+    prompt: str = typer.Argument(help="User prompt to run through the installed auto-recall policy"),
+    output_format: str = typer.Option("json", "--format", help="Output format: json"),
+    path: Optional[str] = typer.Option(None, "--path", help="Instance root (default: active KB)"),
+    session_id: str = typer.Option("", "--session-id", help="Stable caller session id for cooldown"),
+    cwd: str = typer.Option("", "--cwd", help="Caller working directory for registry/history scope"),
+    agent_id: str = typer.Option("", "--agent-id", help="Caller agent id for registry scope"),
+) -> None:
+    """Run the existing UserPromptSubmit recall policy and emit a JSON result."""
+    if output_format.strip().lower() != "json":
+        console.print("[red]--format must be json[/red]")
+        raise typer.Exit(2)
+    root = _instance_root(path)
+    _emit_json(_run_hook_recall(root, prompt, session_id, cwd, agent_id))
+
+
+@hook_app.command("history")
+def hook_history(
+    output_format: str = typer.Option("json", "--format", help="Output format: json"),
+    path: Optional[str] = typer.Option(None, "--path", help="Instance root (default: active KB)"),
+    limit: int = typer.Option(12, "--limit", min=1, max=50, help="Maximum retained injection summaries"),
+    session_id: str = typer.Option("", "--session-id", help="Optional stable caller session id filter"),
+    cwd: str = typer.Option("", "--cwd", help="Optional caller directory filter"),
+) -> None:
+    """Read retained auto-recall summaries without exposing prompts or bodies."""
+    if output_format.strip().lower() != "json":
+        console.print("[red]--format must be json[/red]")
+        raise typer.Exit(2)
+    _emit_json(_read_hook_history(_instance_root(path), limit, session_id, cwd))
+
+
 @hook_app.command("install")
 def hook_install(
     editor: str = typer.Option(
@@ -2838,8 +3126,8 @@ def hook_install(
         + "New prompts inject relevant memory.\n"
         + conflict_message
         + trust_message
-        + "Tune via env: OKS_RECALL_FLOOR (0.7), OKS_RECALL_TOPN (3), OKS_RECALL_MINLEN (6),\n"
-        + "  OKS_CONFLICT_WINDOW (300s)."
+        + "Tune in settings/recall.yaml: recall.floor (0.7), recall.topn (3), recall.minlen (6),\n"
+        + "  and conflict.window (300s)."
     )
     console.print(message)
 

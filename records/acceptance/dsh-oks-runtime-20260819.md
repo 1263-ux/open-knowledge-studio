@@ -1,7 +1,7 @@
 # dsh-oks runtime regression evidence
 
 Date: 2026-08-19
-Runtime: DSH Web profile web, http://127.0.0.1:3080, PID 6028
+Runtime: DSH Web profile web, http://127.0.0.1:3080, controlled acceptance process
 Session: session-a4263541-e021-4ee1-9c61-6cc008b9cf8e
 
 ## AC1 / AC2 API
@@ -49,7 +49,7 @@ Real non-error calls:
 - Existing settings/recall.yaml was restored to recall.floor=0.7 after the reversible test.
 - The controlled runtime cycle 0.70 -> 0.65 -> 0.70 was previously observed on the new 3080 runtime.
 - settings.describe reflected 0.65 during the test and 0.70 after restoration.
-- recall.yaml reflected the tested value and was restored; knowledge_base_path writeback to C:/Users/chenfeng/.oks/config.json was also verified and restored.
+- recall.yaml reflected the tested value and was restored; knowledge_base_path writeback to the user-level OKS config was also verified and restored.
 
 ## Boundaries
 
@@ -64,12 +64,12 @@ Real non-error calls:
 The controlled reload logs were checked at:
 
 ```text
-C:/Users/chenfeng/.dsh/logs/codex-controlled-reload-20260819/web-3080-after.out.log
-C:/Users/chenfeng/.dsh/logs/codex-controlled-reload-20260819/web-3080-after.err.log
+<dsh-log-root>/controlled-reload/web-after.out.log
+<dsh-log-root>/controlled-reload/web-after.err.log
 ```
 
 The stderr file is empty, and no `dsh-oks`/plugin load error match was found in the available DSH logs. This is supplementary evidence; it does not replace the GUI Owner gate.
 
 ## Temporary comparison runtime cleanup
 
-The comparison instance on port 3082 (PID 13456) was verified by command line and stopped after its evidence was saved. The controlled acceptance runtime on port 3080 (PID 6028) was left running for Owner GUI confirmation.
+The comparison instance on port 3082 was verified by command line and stopped after its evidence was saved. The controlled acceptance runtime on port 3080 was left running for Owner GUI confirmation.
