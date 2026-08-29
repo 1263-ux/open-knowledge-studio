@@ -1,3 +1,23 @@
+## [Unreleased] — 2026-08-29
+
+### 仓库维护 + agent-config 扩展
+
+- **清理垃圾文件**: 删 internal/superpowers/ + openspec/ + index.db* + pr-body-oksummarized.md, .gitignore 防复发; 新建 images/ 统一 README 图片
+- **agent-config 4 agent**: 加 qoder (.qoder/settings.json) + pi (.pi/extensions/*.ts); _AGENT_TARGETS + EXPECTED_TOP_LEVEL 同步
+- **PR merge**: #50 hook UTF-8 (Windows 兼容) + #51 docs architecture (mermaid→精修 SVG)
+
+### fix(hooks): P8 _mark_mail_read 收口 (844b93a)
+
+@qoder 发现 _mark_mail_read 4 份实现 (CLI 1 份已修 + hook 3 份拷贝漂移), hook
+拷贝带和 CLI 修前相同的全文 replace bug, 高频路径 (每个 user prompt 都跑)。
+收口: hook 复用 store._locked_atomic_update, frontmatter-only, 幂等。
+
+### 8b04cc1 真实来源 (commit 卫生)
+
+> 注: 8b04cc1 "chore: 新建 images/" 实际扫进了 @qoder 工作树未 commit 的
+> mail_read 重写 (P7 正文损坏修复 + P2 原子写)。代码正确 (308 tests passed),
+> 不 revert; 补此条让 git log 可追。以后 staging 只用具名文件, 不用 git add -A。
+
 ## [0.6.1] — 2026-08-18
 
 ### oks 灵魂搬到 fts5 注入层
