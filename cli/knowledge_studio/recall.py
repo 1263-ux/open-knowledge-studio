@@ -47,6 +47,69 @@ DEFAULT_RECALL_LIMIT = 5
 MAX_BODY_PREVIEW = 200  # fallback; v0.6.0 实际用 inject_per_page_chars
 
 
+def _apply_budget(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Tier degradation: total body_preview > budget 时降级 L2→L1→L0→截断.
+
+    CV from OpenViking ``tiers.py`` — token 超预算自动降级到更浅 tier.
+    v0.6.12: ``budget_chars`` + ``title_only_floor`` 之前定义但没用 (P6 形状,
+    和 mail/sent/ 同), 现在生效.
+
+    Tier 顺序:
+    - L2 full: ``per_page_chars`` (200) — 默认, 不超 budget 不动
+    - L1 overview: ``per_page_chars`` // 2 (100) — 超预算缩半
+    - L0 abstract: ``per_page_chars`` // 4 (50) + rel<title_only_floor 降 title-only
+    - 截断: 保留 top-N 直到 total < budget
+    """
+    try:
+        params = load_recall_params()
+        budget = int(params.get("inject_budget_chars", 4000))
+        per_page = int(params.get("inject_per_page_chars", MAX_BODY_PREVIEW))
+        title_floor = float(params.get("inject_title_only_floor", 0.5))
+    except Exception:
+        budget, per_page, title_floor = 4000, MAX_BODY_PREVIEW, 0.5
+
+    def _total() -> int:
+        return sum(len(r.get("body_preview", "")) for r in results)
+
+    if not results or _total() <= budget:
+        return results  # 不超预算, 不降级
+
+    # Tier 1: L2→L1 缩半 (overview 级)
+    for r in results:
+        r["body_preview"] = r.get("body_preview", "")[: max(1, per_page // 2)]
+    if _total() <= budget:
+        _tag_budget(results, "l1_overview")
+        return results
+
+    # Tier 0: abstract (~50) + low-relevance 降 title-only
+    l0_cap = max(1, per_page // 4)
+    for r in results:
+        if float(r.get("relevance", 0)) < title_floor:
+            r["body_preview"] = ""  # title only (slug+title 仍在 entry)
+        else:
+            r["body_preview"] = r.get("body_preview", "")[:l0_cap]
+    if _total() <= budget:
+        _tag_budget(results, "l0_abstract")
+        return results
+
+    # 截断: 保留 top-N 直到 total < budget (recall 已按 relevance 排序)
+    acc, kept = 0, []
+    for r in results:
+        pl = len(r.get("body_preview", ""))
+        if acc + pl > budget and kept:
+            break
+        acc += pl
+        kept.append(r)
+    _tag_budget(kept, "truncated")
+    return kept
+
+
+def _tag_budget(results: list[dict[str, Any]], tier: str) -> None:
+    """标注降级 tier (可观测, /query + eval 可见)."""
+    for r in results:
+        r.setdefault("budget_tier", tier)
+
+
 def _inject_per_page_chars() -> int:
     """v0.6.0: 动态读 inject.per_page_chars（CV from karpathy-wiki token budget）。"""
     try:
@@ -704,7 +767,7 @@ def _recall_knowledge_via_backend(
         if review.get("lesson"):
             entry["review_lesson"] = review["lesson"]
         results.append(entry)
-    return results
+    return _apply_budget(results)
 
 
 def _recall_knowledge_with_context(
@@ -801,7 +864,7 @@ def _recall_knowledge_with_context(
             entry["goal_matches"] = components["goal_matches"]
         results.append(entry)
 
-    return results
+    return _apply_budget(results)
 
 
 def _tokenize(text: str) -> set[str]:
