@@ -252,8 +252,7 @@ def load_recall_params(root=None):
     params = {
         "recall_floor": 0.7, "recall_topn": 3, "recall_minlen": 6,
         "recall_cooldown": 10,
-        "posttool_floor": 0.9, "posttool_topn": 2, "posttool_mode": "signal",
-        "posttool_recall": 1, "posttool_signal_rel_floor": 2.5,
+        "posttool_mode": "signal", "posttool_signal_rel_floor": 2.5,
         "conflict_window": 300, "search_backend": "native", "mail_topn": 3,
         # v0.6.3: embedding fallback — fts5 召回空/明显不足时切 embedding 补充
         "embedding_fallback": False,
@@ -277,10 +276,7 @@ def load_recall_params(root=None):
             params["recall_topn"] = int(rc.get("topn", params["recall_topn"]))
             params["recall_minlen"] = int(rc.get("minlen", params["recall_minlen"]))
             params["recall_cooldown"] = int(rc.get("cooldown", params["recall_cooldown"]))
-            params["posttool_floor"] = float(pc.get("floor", params["posttool_floor"]))
-            params["posttool_topn"] = int(pc.get("topn", params["posttool_topn"]))
             params["posttool_mode"] = str(pc.get("mode", params["posttool_mode"]))
-            params["posttool_recall"] = int(pc.get("recall", params["posttool_recall"]))
             params["posttool_signal_rel_floor"] = float(pc.get("signal_rel_floor", params["posttool_signal_rel_floor"]))
             params["conflict_window"] = int(cc.get("window", params["conflict_window"]))
             params["search_backend"] = str(data.get("search_backend", params["search_backend"]))
@@ -302,10 +298,7 @@ def load_recall_params(root=None):
         "OKS_RECALL_TOPN": ("recall_topn", int),
         "OKS_RECALL_MINLEN": ("recall_minlen", int),
         "OKS_RECALL_COOLDOWN": ("recall_cooldown", int),
-        "OKS_POSTTOOL_FLOOR": ("posttool_floor", float),
-        "OKS_POSTTOOL_TOPN": ("posttool_topn", int),
         "OKS_POSTTOOL_MODE": ("posttool_mode", str),
-        "OKS_POSTTOOL_RECALL": ("posttool_recall", int),
         "OKS_POSTTOOL_SIGNAL_REL_FLOOR": ("posttool_signal_rel_floor", float),
         "OKS_CONFLICT_WINDOW": ("conflict_window", int),
         "OKS_SEARCH_BACKEND": ("search_backend", str),

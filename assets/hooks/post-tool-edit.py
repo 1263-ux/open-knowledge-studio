@@ -17,7 +17,7 @@ Two jobs (both fail-open, never block a tool):
      never injects — the agent executes blind to relevant memory.
    - PostToolUse fires after every tool call: we extract a query from the
      tool operation (file basename / bash command / grep pattern) and run
-     recall with a HIGHER floor (0.9) + lower topn (2) to avoid noise.
+     recall (unified recall.floor + recall.topn, v0.6.14) — posttool relies on signal_rel_floor to avoid noise.
    - Shares recall-state-{session}.json + cooldown with UserPromptSubmit so
      the same slug isn't re-injected twice.
    - Codex receives conflict/recall text as PostToolUse JSON
@@ -382,8 +382,8 @@ def _recall_supplement(
 
     from knowledge_studio.recall import load_recall_params
     p = load_recall_params(kb_root)
-    floor = p["posttool_floor"]
-    topn = p["posttool_topn"]
+    floor = p["recall_floor"]
+    topn = p["recall_topn"]
     cooldown = p["recall_cooldown"]
     search_backend = p["search_backend"]
 

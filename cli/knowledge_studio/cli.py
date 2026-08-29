@@ -1653,7 +1653,6 @@ th {{ background: #f4f4f8; }}
 <table><tr><th>参数</th><th>当前值</th></tr>
 <tr><td>recall.floor</td><td>{params["recall_floor"]}</td></tr>
 <tr><td>recall.topn</td><td>{params["recall_topn"]}</td></tr>
-<tr><td>posttool.floor</td><td>{params["posttool_floor"]}</td></tr>
 <tr><td>posttool.mode</td><td>{params["posttool_mode"]}</td></tr>
 <tr><td>posttool.signal_rel_floor</td><td>{params["posttool_signal_rel_floor"]}</td></tr>
 <tr><td>search_backend</td><td>{params["search_backend"]}</td></tr>
@@ -1839,10 +1838,7 @@ _RECALL_YAML_KEYS = {
     "recall_topn": ("recall", "topn"),
     "recall_minlen": ("recall", "minlen"),
     "recall_cooldown": ("recall", "cooldown"),
-    "posttool_floor": ("posttool", "floor"),
-    "posttool_topn": ("posttool", "topn"),
     "posttool_mode": ("posttool", "mode"),
-    "posttool_recall": ("posttool", "recall"),
     "posttool_signal_rel_floor": ("posttool", "signal_rel_floor"),
     "conflict_window": ("conflict", "window"),
     "mail_topn": (None, "mail_topn"),
