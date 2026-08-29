@@ -1928,6 +1928,7 @@ _SHARED_ASSETS = ("templates", "_meta", "settings", "profiles")
 _AGENT_TARGETS = {
     ".claude": {"config": "claude", "skills": True, "hooks": True, "rules": True},
     ".qoder": {"config": "qoder", "skills": True, "hooks": True, "rules": True},
+    ".pi": {"config": "pi", "skills": False, "hooks": False, "rules": False},
     ".codex": {"config": "codex", "skills": False, "hooks": True, "rules": False},
     ".agents": {"config": None, "skills": True, "hooks": False, "rules": False},
 }
