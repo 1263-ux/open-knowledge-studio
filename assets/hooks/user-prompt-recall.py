@@ -34,6 +34,21 @@ from pathlib import Path
 
 from _persistence import append_jsonl, atomic_write_text, file_lock
 
+
+def _configure_utf8_stdio() -> None:
+    """Keep the JSON bridge stable when a Windows host uses a legacy code page."""
+    for stream in (sys.stdin, sys.stdout):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if callable(reconfigure):
+            try:
+                reconfigure(encoding="utf-8", errors="replace")
+            except (OSError, ValueError):
+                pass
+
+
+_configure_utf8_stdio()
+
+
 _TRIVIAL = {
     "你好", "谢谢", "多谢", "ok", "okay", "好", "好的", "嗯", "行", "继续",
     "hi", "hello", "thanks", "thx", "yes", "no", "是", "对", "收到",

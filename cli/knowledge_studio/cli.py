@@ -2931,6 +2931,11 @@ def _run_hook_recall(
     env = os.environ.copy()
     env["OKS_ROOT"] = str(root)
     env["OKS_HOOK_OUTPUT"] = "json"
+    # The Hook Bridge exchanges JSON with a Python child process. Force UTF-8
+    # instead of inheriting a Windows console code page that cannot round-trip
+    # Chinese prompts or recall context.
+    env["PYTHONIOENCODING"] = "utf-8"
+    env["PYTHONUTF8"] = "1"
     package_root = str(Path(__file__).resolve().parents[1])
     inherited_pythonpath = env.get("PYTHONPATH", "")
     env["PYTHONPATH"] = os.pathsep.join([package_root, inherited_pythonpath]).rstrip(os.pathsep)
