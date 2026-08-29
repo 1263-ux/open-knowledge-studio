@@ -6,206 +6,41 @@ parent: 工作原理
 
 # 架构总览
 
-OKS 三层架构：**摄入 → 桶 → 召回**，只读 VFS 是桶之上的访问层；两条 hook 是可选注入入口，飞书是可选集成，不随 `oks` CLI 分发。
+OKS 不是一个单独的“记忆插件”。它是一套让 **用户、Agent、文件化知识、收录能力和交付能力**各自做对的事的工作架构。
 
-```mermaid
-flowchart TB
+<picture>
+  <source media="(max-width: 50rem)" srcset="../assets/architecture/oks-overview-mobile.svg">
+  <img src="../assets/architecture/oks-overview.svg" alt="OKS 三段式架构：来源经过能力选择、证据片段、Manifest 和 raw-commit，进入 Raw Bundle、Candidate、人工审核和 Wiki；中段是 profiles、raw、drafts、wiki、mail 五个桶与 settings、_meta、security、Trace；下段是 6+1 因子召回与上下文注入，飞书和 Office 为可选入口与交付能力。">
+</picture>
 
-%% =========================================================
-%% Open Knowledge Studio (OKS) 当前架构
-%% Agent-native · 文件系统优先 · 可审核 · 可追溯
-%% =========================================================
+## 怎样读这张图
 
-%% ---------- 颜色 ----------
-classDef ingest fill:#EEF4FF,stroke:#4F7CFF,stroke-width:1.5px,color:#172033;
-classDef ingestStrong fill:#E4EDFF,stroke:#2563EB,stroke-width:2px,color:#172033;
+先看第一段摄入流水线：Source 经过模态判断、Provider、EvidenceFragment、Manifest 和 `raw-commit`，才形成可追溯的 Raw Bundle；Agent 可以据此提出 Candidate，但只有人审核后才进入 Wiki。
 
-classDef knowledge fill:#EFFAF2,stroke:#55A86B,stroke-width:1.5px,color:#172033;
-classDef mail fill:#F7EEFF,stroke:#9B51E0,stroke-width:2px,color:#5B2391;
+第二段是文件工作区和运行时：
 
-classDef infra fill:#F4F5F7,stroke:#98A2B3,stroke-width:1.5px,color:#344054;
+- `profiles/` 放稳定的用户、项目、Recipe 和 Goal；
+- `raw/` 放原始来源与机械提取结果；
+- `drafts/` 放 Agent 的 Candidate；
+- `wiki/` 只放人审后的可复用知识；
+- `mail/` 与 Trace 留下协作和执行证据，但不冒充长期知识；`settings/`、`_meta/` 和 `security/` 提供配置、Schema 与脱敏边界。
 
-classDef recall fill:#FFF5EA,stroke:#F59E5B,stroke-width:1.5px,color:#172033;
-classDef recallStrong fill:#FFECDB,stroke:#EA580C,stroke-width:2px,color:#172033;
+`oks` CLI 负责文件操作、召回和状态，不在核心中调用模型 API；Agent 根据 Recipe、Provider 和 Capability 选择网页、PDF、Office、图片、音视频等处理能力。明确要交付文件时，Office 工作流才会接手 Word、PDF、PPT 或 Excel。飞书的 Base、表单与 IM 审核是**可选参考实现**：它可以承担采集和移动审核入口，但不属于 CLI 核心，也不会绕开人审门。
 
-classDef optional fill:#FCF7FF,stroke:#9B51E0,stroke-width:1.5px,stroke-dasharray:6 5,color:#5B2391;
-classDef note fill:#FFF9E8,stroke:#D8B04C,stroke-width:1px,color:#594A1A;
-classDef hook fill:#F7F8FA,stroke:#98A2B3,stroke-width:1px,stroke-dasharray:5 4,color:#475467;
-classDef vfs fill:#EEF2FF,stroke:#6366F1,stroke-width:1.5px,color:#312E81;
-classDef vfsStrong fill:#E0E7FF,stroke:#4F46E5,stroke-width:2px,color:#312E81;
+第三段是召回与注入：Query 先经过 scope / goal 约束，再由 6+1 因子评分、搜索后端、过滤去重，最终把已审核的 `wiki/` 和必要的 `raw/` 注入下一次任务。相关性只能影响排序，不能把材料升级为事实。
 
+## 需要深入时
 
-%% =========================================================
-%% 第 1 层：摄入流水线
-%% =========================================================
+这张图把系统层级和实际能力放在一起，但没有展开协议字段与评分公式。需要进一步实现或排障时：
 
-subgraph L1["① 摄入流水线"]
-direction LR
+- 想收集不同类型的材料，阅读[收集来源](../usage/ingest.html)。
+- 想理解审核和晋升，阅读[审核候选](../usage/review.html)。
+- 想了解召回如何选择知识，阅读[召回与注入](../usage/recall.html)。
+- 维护者需要完整文件桶、只读 VFS、Hooks 与可选飞书集成时，阅读[宪法（A1-A5）](constitution.html)和[参考手册](../reference/)。
 
-S["Source<br/><small>文件 / URL / 媒体 / 平台</small>"]:::ingest
-M["模态判定<br/><small>text · pdf · office<br/>image · web · audio · video</small>"]:::ingest
-P["选 Provider<br/><small>能力目录 · oks capability status</small>"]:::ingest
+## 架构边界
 
-EF["EvidenceFragment ×N"]:::ingest
-EM["EvidenceManifest<br/><small>steps · artifacts · SHA-256</small>"]:::ingest
-
-RC["oks raw-commit<br/><small>fail-closed</small>"]:::ingestStrong
-
-RB["Raw Bundle v0.2<br/><small>bundle · content · source · derived</small>"]:::ingest
-
-C["Candidate<br/><small>A / B / C · A级才写</small>"]:::ingest
-
-HR["Human Review<br/><small>promote · edit · reject</small>"]:::ingest
-
-W0["Wiki"]:::knowledge
-
-S --> M --> P --> EF --> EM --> RC --> RB --> C --> HR --> W0
-
-end
-
-
-%% =========================================================
-%% 第 2 层：5 个主桶 + 2 个基础设施
-%% =========================================================
-
-subgraph L2["② 5 个主桶 + 2 个基础设施"]
-direction TB
-
-subgraph BUCKETS["知识工作区"]
-direction LR
-
-PRO["profiles/<br/><small>画像 · scope · goal · registry</small>"]:::knowledge
-
-RAW["raw/<br/><small>原始材料 · episodic</small>"]:::knowledge
-
-WIKI["wiki/<br/><small>人审知识 · 22 domain</small>"]:::knowledge
-
-DRAFT["drafts/<br/><small>Candidate · 人审门控</small>"]:::knowledge
-
-MAIL["mail/<br/><small>协调桶 · inbox / sent<br/><b>不是知识桶</b></small>"]:::mail
-
-end
-
-subgraph INFRA["基础设施"]
-direction LR
-
-SET["settings/<br/><small>recall.yaml</small>"]:::infra
-META["_meta/<br/><small>schema · 协议形状契约</small>"]:::infra
-
-end
-
-RAW -. "raw ≠ memory<br/>材料 ≠ 正式知识" .-> WIKI
-
-end
-
-
-%% 摄入结果对应到文件系统
-RB --> RAW
-C --> DRAFT
-HR --> WIKI
-W0 --> WIKI
-
-
-%% =========================================================
-%% 只读访问层：VFS 在桶之上，不是新桶
-%% =========================================================
-
-subgraph VFS_LAYER["只读 VFS 访问层 · 桶之上的访问视图"]
-direction LR
-
-VFS["oks:// · oks fs<br/><small>只读访问 · 不写回</small>"]:::vfsStrong
-VFS_SCOPE["公开 scope<br/><small>profiles · raw · wiki · drafts · mail<br/>skills · traces</small>"]:::vfs
-VFS_OPS["ls · tree · stat · read<br/><small>overview · find</small>"]:::vfs
-
-VFS --> VFS_SCOPE --> VFS_OPS
-
-end
-
-PRO -.-> VFS
-RAW -.-> VFS
-WIKI -.-> VFS
-DRAFT -.-> VFS
-MAIL -.-> VFS
-
-
-%% =========================================================
-%% 第 3 层：召回 + 注入
-%% =========================================================
-
-subgraph L3["③ 召回 + 注入"]
-direction LR
-
-Q["query<br/><small>用户 prompt / 工具操作</small>"]:::recall
-
-REG["registry<br/><small>scope / goal<br/>agent_id + cwd</small>"]:::recall
-
-SCORE["fts5 node-level 召回<br/><small>BM25 · oks 灵魂 boost · memory curve · goal</small>"]:::recall
-
-SEARCH["search backend<br/><small>native · fts5 · fusion</small>"]:::recall
-
-FILTER["过滤 + 去重<br/><small>floor · cooldown</small>"]:::recall
-
-CTX["注入上下文<br/><small>&lt;recalled-memory&gt;</small>"]:::recallStrong
-
-Q --> REG --> SCORE --> SEARCH --> FILTER --> CTX
-
-end
-
-PRO --> REG
-WIKI --> SCORE
-SET --> SCORE
-SET --> SEARCH
-META -. "协议约束" .-> SEARCH
-
-
-%% =========================================================
-%% Hooks
-%% =========================================================
-
-H1["UserPromptSubmit<br/><small>用户说话 → recall 注入</small>"]:::hook
-H2["PostToolUse<br/><small>recall 补位 + 文件冲突检测</small>"]:::hook
-
-H1 -.-> Q
-H2 -.-> Q
-H2 -. "冲突记录" .-> MAIL
-
-
-%% =========================================================
-%% 可选集成：飞书
-%% =========================================================
-
-subgraph FEISHU["可选集成 · 飞书"]
-direction TB
-
-F0["reference-implementations/oh-my-feishu/<br/><small>可选 · 不随 oks CLI 分发</small>"]:::optional
-F1["手机表单采集"]:::optional
-F2["IM 审核"]:::optional
-
-F0 --> F1
-F0 --> F2
-
-end
-
-F1 -. "替代采集入口" .-> S
-F2 -. "审核表面" .-> HR
-
-
-%% =========================================================
-%% 信任语义
-%% =========================================================
-
-TRUST["[verified] 只来自 trace 证据或 human_reviewed_at<br/>绝不来自使用次数"]:::note
-
-HR -.-> TRUST
-WIKI -.-> TRUST
-```
-
-## 关键点
-
-- **摄入 fail-closed**：Schema + provenance + SHA-256 校验，证据不足即拒；raw ≠ memory，材料≠正式知识。
-- **7 桶**：profiles / raw / wiki / drafts / mail（5 认知）+ settings / _meta（2 基础设施）；`mail` 是协调桶，不是知识桶。
-- **只读 VFS 访问层**：`oks://` 在不改变物理布局和七桶治理的前提下，公开 `profiles`、`raw`、`wiki`、`drafts`、`mail`、`skills`、`traces` 七个只读 scope。这里的七个 scope 是访问视图，不是新的“七桶”：`skills` 映射 `.agents/skills/`，`traces` 是 `raw/executions/` 的唯一公开地址；`settings`、`_meta`、`.oks` 不公开。`oks fs` 只有 `ls/tree/stat/read/overview/find`，没有通用写入、移动或删除能力。
-- **召回**：fts5 node-level（默认）+ 可插拔 backend（native / fts5 / fusion / connector），floor + cooldown 过滤去重后注入 `<recalled-memory>`。
-- **Hooks（可选注入）**：UserPromptSubmit（用户 prompt → recall 注入）+ PostToolUse（recall 补位 + 文件冲突检测），`oks hook install` 显式安装。
-- **信任语义**：`[verified]` 只来自 trace 证据或 `human_reviewed_at`，绝不来自使用次数。
-- **飞书**：可选参考集成（`reference-implementations/oh-my-feishu/`），提供手机表单采集 + IM 审核的替代前端，不随 `oks` CLI 分发。
+- **Raw 不等于 Wiki**：Raw 保留材料和机械提取；Wiki 是经人审核、能在后续任务中复用的知识。
+- **VFS 不是新知识桶**：`oks://` 只提供受限的只读访问视图，不会绕开文件治理。
+- **Hooks 和飞书是可选入口**：它们可以改变收集或反馈的位置，但不会取消人工审核。
+- **信任来自证据和审核**：`[verified]` 只应来自 Trace 证据或 `human_reviewed_at`，而不是使用次数。
