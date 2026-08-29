@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 460" font-family="system-ui,-apple-system,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" role="img" aria-label="OKS Triple-Layer Recall benchmark: Node-BM25 R@1=82.5% vs native 52.5% vs fusion 80.5%; embedding R@1=61.7% at 197× latency; layer ablation shows Node-BM25 is the precision engine.">
+  <rect x="150" y="4" width="14" height="14" rx="3" fill="#16a34a"/><text x="170" y="15" font-size="12" fill="#52514e">fts5 (full Triple-Layer, default)</text>
+  <rect x="330" y="4" width="14" height="14" rx="3" fill="#94a3b8"/><text x="350" y="15" font-size="12" fill="#52514e">ablated backend</text>
+
+  <text x="150" y="48" font-size="13" font-weight="600" fill="#0b0b0b">Retrieval ablation — 50-case semantic-paraphrase, strict exact-slug match · R@1</text>
+  <line x1="150.0" y1="62" x2="150.0" y2="215" stroke="#c3c2b7" stroke-width="1"/>
+  <text x="150.0" y="231" font-size="10" fill="#898781" text-anchor="middle">0%</text>
+  <line x1="312.5" y1="62" x2="312.5" y2="215" stroke="#e1e0d9" stroke-width="1"/>
+  <text x="312.5" y="231" font-size="10" fill="#898781" text-anchor="middle">25%</text>
+  <line x1="475.0" y1="62" x2="475.0" y2="215" stroke="#e1e0d9" stroke-width="1"/>
+  <text x="475.0" y="231" font-size="10" fill="#898781" text-anchor="middle">50%</text>
+  <line x1="637.5" y1="62" x2="637.5" y2="215" stroke="#e1e0d9" stroke-width="1"/>
+  <text x="637.5" y="231" font-size="10" fill="#898781" text-anchor="middle">75%</text>
+  <line x1="800.0" y1="62" x2="800.0" y2="215" stroke="#e1e0d9" stroke-width="1"/>
+  <text x="800.0" y="231" font-size="10" fill="#898781" text-anchor="middle">100%</text>
+
+  <text x="138" y="87" font-size="12" fill="#52514e" text-anchor="end">fts5 (Node-BM25)</text>
+  <path d="M150,80 L150,62 L809,62 Q813,62 813,66 L813,76 Q813,80 809,80 Z" fill="#16a34a"/>
+  <text x="820" y="75" font-size="11" font-weight="600" fill="#0b0b0b">82.5%</text>
+
+  <text x="138" y="124" font-size="12" fill="#52514e" text-anchor="end">fusion (+native re-rank)</text>
+  <path d="M150,117 L150,99 L790.6,99 Q794.6,99 794.6,103 L794.6,113 Q794.6,117 790.6,117 Z" fill="#94a3b8"/>
+  <text x="801.6" y="112" font-size="11" fill="#52514e">80.5%</text>
+
+  <text x="138" y="161" font-size="12" fill="#52514e" text-anchor="end">native (page-level 6+1)</text>
+  <path d="M150,154 L150,136 L471.5,136 Q475.5,136 475.5,140 L475.5,150 Q475.5,154 471.5,154 Z" fill="#94a3b8"/>
+  <text x="482.5" y="149" font-size="11" fill="#52514e">52.5%</text>
+
+  <text x="150" y="267" font-size="13" font-weight="600" fill="#0b0b0b">Embedding vs literal — semantic recall · R@1 and p50 latency</text>
+  <line x1="150.0" y1="281" x2="150.0" y2="395" stroke="#c3c2b7" stroke-width="1"/>
+  <text x="150.0" y="411" font-size="10" fill="#898781" text-anchor="middle">0%</text>
+  <line x1="312.5" y1="281" x2="312.5" y2="395" stroke="#e1e0d9" stroke-width="1"/>
+  <text x="312.5" y="411" font-size="10" fill="#898781" text-anchor="middle">25%</text>
+  <line x1="475.0" y1="281" x2="475.0" y2="395" stroke="#e1e0d9" stroke-width="1"/>
+  <text x="475.0" y="411" font-size="10" fill="#898781" text-anchor="middle">50%</text>
+  <line x1="637.5" y1="281" x2="637.5" y2="395" stroke="#e1e0d9" stroke-width="1"/>
+  <text x="637.5" y="411" font-size="10" fill="#898781" text-anchor="middle">75%</text>
+  <line x1="800.0" y1="281" x2="800.0" y2="395" stroke="#e1e0d9" stroke-width="1"/>
+  <text x="800.0" y="411" font-size="10" fill="#898781" text-anchor="middle">100%</text>
+
+  <text x="138" y="306" font-size="12" fill="#52514e" text-anchor="end">fts5 (literal)</text>
+  <path d="M150,299 L150,281 L809,281 Q813,281 813,285 L813,295 Q813,299 809,299 Z" fill="#16a34a"/>
+  <text x="820" y="294" font-size="11" font-weight="600" fill="#0b0b0b">82.5% · 93ms</text>
+
+  <text x="138" y="343" font-size="12" fill="#52514e" text-anchor="end">embedding (MiniLM)</text>
+  <path d="M150,336 L150,318 L626.8,318 Q630.8,318 630.8,322 L630.8,332 Q630.8,336 626.8,336 Z" fill="#94a3b8"/>
+  <text x="637.8" y="331" font-size="11" fill="#52514e">61.7% · 18304ms (197×)</text>
+
+  <text x="150" y="448" font-size="11" fill="#898781">Historical baseline · one KB · 50 semantic-paraphrase queries · not a universal SLA. Reproduce: oks eval recall records/experiments/eval-50.yaml</text>
+</svg>

@@ -58,6 +58,15 @@ The three recall layers:
 
 OKS has been evaluated on a 50-case semantic-paraphrase dataset (strict exact-slug match). Full results, ablation tables, and reproduction scripts are in [docs/algorithms/recall-evaluation.md](./docs/algorithms/recall-evaluation.md); the dataset and run JSONs live in [./records/experiments](./records/experiments).
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/benchmark-dark.svg">
+  <img src="images/benchmark-light.svg" alt="OKS Triple-Layer Recall benchmark. 50-case R@1: fts5 82.5% vs native 52.5% vs fusion 80.5%; embedding 61.7% at 197× latency.">
+</picture>
+
+- **Node-BM25 dominates page-level 6+1**: R@1 +57% (0.525→0.825), MRR +44% (0.630→0.907). Multi-word same-section BM25 scores high; synonym/rewrite recall is precise.
+- **Soul Boost must live in injection, not retrieval**: native re-rank *lowers* precision (R@1 0.825→0.805) — irrelevant pages score high and displace exact matches.
+- **Embedding loses on a small KB**: 61.7% R@1 vs 82.5%, and 197× slower (18304ms vs 93ms). BM25 literal already hits Chinese technical terms; embedding's semantic generalization introduces noise. Embedding is a **fallback** for fts5-miss cases, not a replacement.
+
 ### Triple-Layer ablation — 50-case, strict exact-slug match
 
 Queries are semantic paraphrases — the query does not contain the slug's keyword, testing synonym/rewrite recall. Match is strict: the expected slug must appear in top-k.

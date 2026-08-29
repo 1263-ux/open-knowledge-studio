@@ -58,6 +58,15 @@ open-knowledge-studio/
 
 OKS 在一个 50-case 语义改写数据集上做过评估（严格精确 slug 匹配）。完整结果、消融表、复现脚本在 [docs/algorithms/recall-evaluation.md](./docs/algorithms/recall-evaluation.md)；数据集和 run JSON 在 [./records/experiments](./records/experiments)。
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/benchmark-dark.svg">
+  <img src="images/benchmark-light.svg" alt="OKS Triple-Layer Recall benchmark. 50-case R@1: fts5 82.5% vs native 52.5% vs fusion 80.5%; embedding 61.7% at 197× latency.">
+</picture>
+
+- **Node-BM25 全面碾压 page-level 6+1**：R@1 +57%（0.525→0.825），MRR +44%（0.630→0.907）。多词同段 BM25 高分，语义改写召回精准。
+- **Soul Boost 必须在注入层，不在召回层**：native re-rank *反而降精度*（R@1 0.825→0.805）——不相关 page 高分挤掉精确命中。
+- **Embedding 在小库上输**：R@1 61.7% vs 82.5%，而且慢 197 倍（18304ms vs 93ms）。BM25 字面已能命中中文技术术语；embedding 的语义泛化引入噪声。embedding 作 fts5 miss 时的 **fallback**，不替代。
+
 ### 三层消融 —— 50-case，严格精确 slug 匹配
 
 查询是语义改写——query 不含 slug 的关键词，测试同义词/改写召回。匹配是严格的：期望 slug 必须出现在 top-k。
