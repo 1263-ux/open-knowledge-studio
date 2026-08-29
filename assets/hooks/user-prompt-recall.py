@@ -242,12 +242,36 @@ def _load_unread_mail(kb_root: Path, limit: int = 3) -> list:
 
 
 def _mark_mail_read(path: Path) -> None:
+    """Mark a mail file as read (frontmatter only, atomic, idempotent).
+
+    P7/P2/P8 fix (qoder 发现): 旧实现是裸全文 replace + write_text +
+    silent except — 对已读信件重复执行会命中正文里的 "read: false"
+    字面量并静默改坏正文，且高频路径（每个 user prompt 都跑）。
+    现复用 store._locked_atomic_update（与 CLI mail_read 同一把锁），
+    只改 frontmatter，幂等（已读返回 None）。
+    """
+    from knowledge_studio import store as _store
+    from knowledge_studio.config import get_kb_root
+
+    def update(current: str) -> str | None:
+        if not current.startswith("---"):
+            return None
+        parts = current.split("---", 2)
+        if len(parts) < 3:
+            return None
+        meta, body = parts[1], parts[2]
+        if "read: false" not in meta:
+            return None
+        return f"---{meta.replace('read: false', 'read: true', 1)}---{body}"
+
     try:
-        text = path.read_text(encoding="utf-8")
-        text = text.replace("read: false", "read: true", 1)
-        path.write_text(text, encoding="utf-8")
+        kb_root = get_kb_root()
+        _store._locked_atomic_update(
+            path, update,
+            lock_path=kb_root / ".oks" / "locks" / "mail.lock",
+        )
     except Exception:
-        pass
+        pass  # fail-open: hook 不应阻塞 user prompt
 
 
 # ── Inject trace (records/inject.jsonl, git-shared training signal) ──
