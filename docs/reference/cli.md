@@ -26,7 +26,7 @@ parent: 参考
 | `oks team init [path] [--name NAME]` | 创建共享团队知识实例 |
 | `oks schema show <name>` | 输出协议文档的校验示例 |
 | `oks trace *` | 执行追踪（provenance） |
-| `oks mail send/inbox/read/count` | Agent 间消息接口；不属于 `oks recall` 结果 |
+| `oks mail send/inbox/show/read/count` | Agent 间消息接口；不属于 `oks recall` 结果 |
 | `oks registry list/bind/remove` | 终端注册表（agent+cwd → profile/goal） |
 | `oks lint` | 扫 wiki/ 一致性 |
 | `oks config init/show/set` | 配置 |

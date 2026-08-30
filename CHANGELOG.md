@@ -1,5 +1,26 @@
 ## [Unreleased] — 2026-08-29
 
+### fix(mail): 身份不再伪造 human + 补 `oks mail show` (P6/P7/P9)
+
+分支 `fix/mail-identity-and-show`, 14 个新测试 (cli/tests/test_mail.py), 322 passed。
+对修前代码跑同一批测试: 12 failed / 2 passed, 证明测试锁住的是真实行为差异。
+
+- **P9 身份伪造**: `mail send` 在 `OKS_AGENT_ID` 缺失时签成 `from: human`。
+  `human` 是 OKS 流水线的评审门, 环境没配就冒充最高信任身份 = fail-open。
+  实测两次真实误签 (@qoder + @pi 各一次, 40 分钟内)。改为 `--from` >
+  `OKS_AGENT_ID` > cwd basename, 解析不出就 exit 1; 与 assets/hooks/*.py 和
+  docs/reference/cli.md 同一条链 (P8, 此前 hook 回落 `unknown` / CLI 回落
+  `human` 是两套)。
+- **P6 读不到正文**: CONSTITUTION 写了 agent 间邮件, 但没有任何命令能输出正文,
+  `read` 只标记已读。补 `oks mail show <id>` (逐字输出, 不改 read 状态);
+  `read` 的 help 改成 "does not print the body; use `oks mail show`"。
+- **frontmatter 注入**: `--to "@all\nfrom: pi"` 能塞进第二行 `from:`, 或用
+  `read: true` 让邮件对 `inbox`/`count` 隐身 — 会让上面的身份修复变成摆设。
+  `--to/--type/--priority` 拒换行。
+- **路径穿越**: `--from` 会拼进 `mail/sent/{from_id}/`, mail id 会拼进
+  `mail/inbox/{id}.md`; `show` 输出正文后穿越就是任意文件读原语。两处都收成
+  单段路径校验, `show`/`read` 共用 `_mail_path`。
+
 ### 仓库维护 + agent-config 扩展
 
 - **清理垃圾文件**: 删 internal/superpowers/ + openspec/ + index.db* + pr-body-oksummarized.md, .gitignore 防复发; 新建 images/ 统一 README 图片

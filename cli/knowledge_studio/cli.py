@@ -2420,6 +2420,56 @@ def _instance_root(path: str | None) -> Path:
     return get_kb_root()
 
 
+def _mail_agent_id(explicit: str = "") -> str:
+    """Sender identity: --from > OKS_AGENT_ID > cwd basename.
+
+    P7/P9: no fallback to "human". "human" is the review gate in the OKS
+    pipeline, so an unset environment must not silently sign mail as the
+    highest-trust identity. The chain matches assets/hooks/*.py and
+    docs/reference/cli.md so one contract has one implementation (P8).
+    """
+    import os as _os
+    from pathlib import Path as _Path
+
+    for candidate in (explicit, _os.environ.get("OKS_AGENT_ID", ""), _Path.cwd().name):
+        agent_id = candidate.strip()
+        if not agent_id:
+            continue
+        # from_id is interpolated into mail/sent/{from_id}/ and into the inbox
+        # slug, so it must be one safe path component.
+        if agent_id in {".", ".."} or any(c in agent_id for c in '/\\:\0\n\r'):
+            console.print(f"[red]Invalid agent id:[/red] {agent_id!r}")
+            raise typer.Exit(1)
+        return agent_id
+    console.print(
+        "[red]Cannot resolve sender identity.[/red] "
+        "Pass --from, or set OKS_AGENT_ID."
+    )
+    raise typer.Exit(1)
+
+
+def _mail_path(root: Path, id: str) -> Path:
+    """Resolve an inbox mail path, rejecting ids that escape mail/inbox/."""
+    slug = id.strip()
+    if not slug or slug in {".", ".."} or any(c in slug for c in '/\\\0\n\r'):
+        console.print(f"[red]Invalid mail id:[/red] {id!r}")
+        raise typer.Exit(1)
+    return root / "mail" / "inbox" / f"{slug}.md"
+
+
+def _mail_field(name: str, value: str) -> str:
+    """Reject line breaks in values written into the mail frontmatter.
+
+    Frontmatter is trust-bearing (from/read/priority). A newline here would let
+    a sender inject extra keys, e.g. forge `from:` or set `read: true` to hide
+    the mail from `inbox`/`count`.
+    """
+    if any(c in value for c in "\n\r\0"):
+        console.print(f"[red]Invalid {name}:[/red] line breaks are not allowed")
+        raise typer.Exit(1)
+    return value
+
+
 @mail_app.command("send")
 def mail_send(
     body: str = typer.Option(..., "--body", "-b", help="Mail body text"),
@@ -2427,16 +2477,19 @@ def mail_send(
     type: str = typer.Option("message", "--type", help="message | conflict | handoff"),
     title: str = typer.Option("", "--title", "-t", help="Mail title"),
     priority: str = typer.Option("normal", "--priority", help="normal | urgent"),
+    from_: str = typer.Option("", "--from", help="Sender id (default: OKS_AGENT_ID, else cwd basename)"),
 ) -> None:
     """Send a mail to inbox/ (Agent-to-agent communication)."""
     from datetime import datetime
-    import os as _os
     root = _instance_root(None)
     inbox = root / "mail" / "inbox"
     inbox.mkdir(parents=True, exist_ok=True)
     now = datetime.now()
     ts = now.strftime("%Y%m%dT%H%M%S")
-    from_id = _os.environ.get("OKS_AGENT_ID", "human")
+    from_id = _mail_agent_id(from_)
+    to = _mail_field("--to", to)
+    type = _mail_field("--type", type)
+    priority = _mail_field("--priority", priority)
     to_field = to if to.startswith("@") else f"@{to}"
     title_line = title or "(no title)"
     content = (
@@ -2495,13 +2548,28 @@ def mail_inbox() -> None:
         console.print(f"  - [cyan]{slug}[/cyan]  {title}")
 
 
+@mail_app.command("show")
+def mail_show(
+    id: str = typer.Argument(..., help="Mail slug (timestamp-from)"),
+) -> None:
+    """Print a mail's full content. Does not change its read state."""
+    root = _instance_root(None)
+    f = _mail_path(root, id)
+    if not f.exists():
+        console.print(f"[red]Mail not found:[/red] {id}")
+        raise typer.Exit(1)
+    # Print verbatim: frontmatter carries from/to/type/priority, and any
+    # reformatting here would be a second mail parser to keep in sync (P8).
+    print(f.read_text(encoding="utf-8"), end="")
+
+
 @mail_app.command("read")
 def mail_read(
     id: str = typer.Argument(..., help="Mail slug (timestamp-from)"),
 ) -> None:
-    """Mark a mail as read."""
+    """Mark a mail as read (does not print the body; use `oks mail show`)."""
     root = _instance_root(None)
-    f = root / "mail" / "inbox" / f"{id}.md"
+    f = _mail_path(root, id)
     if not f.exists():
         console.print(f"[red]Mail not found:[/red] {id}")
         raise typer.Exit(1)
