@@ -31,6 +31,8 @@ Tunables via env:
   OKS_RECALL_COOLDOWN  shared with UserPromptSubmit (default 10 turns)
   OKS_SEARCH_BACKEND   search backend (default native)
 """
+from __future__ import annotations
+
 import json
 import os
 import re

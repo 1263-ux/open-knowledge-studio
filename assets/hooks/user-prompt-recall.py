@@ -24,6 +24,8 @@ related environment variables remain temporary compatibility overrides;
 internal CLI bridge mode; it emits a safe structured result instead of editor
 context text.
 """
+from __future__ import annotations
+
 import hashlib
 import json
 import os

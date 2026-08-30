@@ -1,3 +1,34 @@
+## [0.6.15] — 2026-08-29
+
+### fix(hooks): 独立 hook 脚本兼容 Python 3.9 宿主
+
+`user-prompt-recall.py` 和 `post-tool-edit.py` 用了 PEP 604 注解
+(`Path | None`、`dict | None`、`list | None`)，需要 Python 3.10+。但 hook
+是独立脚本，用宿主的 `python3` 跑，很多 macOS 系统默认还是 3.9.6 →
+`TypeError: unsupported operand type(s) for |: 'type' and 'NoneType'`。
+
+`_persistence.py` 一直有 `from __future__ import annotations` 所以没事，
+两个 hook 脚本漏了。补上后注解延迟求值为字符串，3.9 宿主也能跑。
+
+实测: `echo '{"prompt":"test"}' | python3 .claude/hooks/user-prompt-recall.py`
+在 3.9.6 下 exit 0 无 traceback (修复前 TypeError)。
+
+回归防护 (test_persistence.py +2):
+- `test_standalone_hooks_use_future_annotations_for_py39`: 静态检查两个
+  hook 脚本含 `from __future__ import annotations` + `py_compile` 过
+- `test_standalone_hooks_import_cleanly`: importlib 加载不报错
+  (抓 `_persistence` 缺失 + 坏注解)
+
+324 passed.
+
+### 另: 手动维护的 .claude/hooks/ 缺 `_persistence.py`
+
+开发仓库的 `.claude/hooks/` 是手动维护 (非 `oks hook install` 创建)，
+P8 修 `_mark_mail_read` 时手动复制 `user-prompt-recall.py` 到 4 处，
+漏了依赖模块 `_persistence.py` → `ModuleNotFoundError: No module
+named '_persistence'`。`oks hook install` 的 `_HOOK_SUPPORT_FILES` 循环
+逻辑是对的 (会复制)，这次只是手动维护事故。已补到 .claude/hooks/。
+
 ## [Unreleased] — 2026-08-29
 
 ### fix(mail): 身份不再伪造 human + 补 `oks mail show` (P6/P7/P9)
