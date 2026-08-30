@@ -56,20 +56,13 @@ open-knowledge-studio/
 
 ## 实测效果
 
-OKS 在一个 50-case 语义改写数据集上做过评估（严格精确 slug 匹配）。完整结果、消融表、复现脚本在 [docs/algorithms/recall-evaluation.md](./docs/algorithms/recall-evaluation.md)；数据集和 run JSON 在 [./records/experiments](./records/experiments)。
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="images/benchmark-dark.svg">
-  <img src="images/benchmark-light.svg" alt="OKS Triple-Layer Recall benchmark. 50-case R@1: fts5 82.5% vs native 52.5% vs fusion 80.5%; embedding 61.7% at 197× latency.">
-</picture>
-
-- **Node-BM25 全面碾压 page-level 6+1**：R@1 +57%（0.525→0.825），MRR +44%（0.630→0.907）。多词同段 BM25 高分，语义改写召回精准。
-- **Soul Boost 必须在注入层，不在召回层**：native re-rank *反而降精度*（R@1 0.825→0.805）——不相关 page 高分挤掉精确命中。
-- **Embedding 在小库上输**：R@1 61.7% vs 82.5%，而且慢 197 倍（18304ms vs 93ms）。BM25 字面已能命中中文技术术语；embedding 的语义泛化引入噪声。embedding 作 fts5 miss 时的 **fallback**，不替代。
+OKS 在一个 50-case 语义改写数据集（严格精确 slug 匹配）和公开 LoCoMo 长对话评测上做过评估。完整结果和复现脚本在 [docs/algorithms/recall-evaluation.md](./docs/algorithms/recall-evaluation.md)；数据集和 run JSON 在 [./records/experiments](./records/experiments)。
 
 ### 三层消融 —— 50-case，严格精确 slug 匹配
 
-查询是语义改写——query 不含 slug 的关键词，测试同义词/改写召回。匹配是严格的：期望 slug 必须出现在 top-k。fts5（Node-BM25） R@1=0.825、R@3=0.925、MRR=0.907、nDCG@5=0.893、p50=93ms；native R@1=0.525；fusion R@1=0.805。
+查询是语义改写——query 不含 slug 的关键词，测试同义词/改写召回。匹配是严格的：期望 slug 必须出现在 top-k。
+
+<img src="images/ablation-triple-layer.svg" alt="三层消融。fts5 R@1=0.825 R@3=0.925 MRR=0.907；fusion 0.805/0.905/0.900；native 0.525/0.647/0.630。">
 
 - **Node-BM25 全面碾压 page-level 6+1**：R@1 +57%（0.525→0.825），MRR +44%（0.630→0.907）。多词同段 BM25 高分，语义改写召回精准。
 - **Soul Boost 必须在注入层，不在召回层**：native 6+1 的 memory curve / goal boost / review bonus 放到召回层 re-rank *反而降精度*（R@1 0.825→0.805）——不相关 page 高分挤掉精确命中。
@@ -77,20 +70,23 @@ OKS 在一个 50-case 语义改写数据集上做过评估（严格精确 slug �
 
 ### Embedding backend —— 语义召回对比（v0.6.2）
 
-fts5（Node-BM25 字面） R@1=0.825、MRR=0.907、p50=93ms；embedding（MiniLM cosine） R@1=0.617、MRR=0.733、p50=18304ms。
+<img src="images/ablation-embedding.svg" alt="Embedding 对比。fts5 R@1=0.825 MRR=0.907 p50=93ms；embedding R@1=0.617 MRR=0.733 p50=18304ms（197x）。">
 
 - 在中文术语重合度高的小库上，BM25 字面已能命中（术语和 wiki 重合）；embedding 的语义泛化反而引入噪声——而且慢 197 倍。
 - **决策**：fts5 仍是默认。embedding 作 fts5 miss 时的 **fallback**，不替代。embedding 真正的价值在大库 + 跨语言 + 同义词重的场景。
 
 ### 逐层消融
 
-- **完整三层**（baseline）：R@1=0.825、MRR=0.907。
-- **去 Node-BM25**（召回 fts5→native）：R@1=0.525、MRR=0.630 —— Node-BM25 是精度主力（−36%）。
-- **去 Soul Boost**（fusion 误用，灵魂搬到召回层 re-rank）：R@1=0.805、MRR=0.900 —— 灵魂在注入层才对，召回层 re-rank 是负优化。
+<img src="images/ablation-layers.svg" alt="逐层消融。完整三层 R@1=0.825 MRR=0.907；去 Node-BM25 0.525/0.630（−36%）；去 Soul Boost 0.805/0.900。">
+
+- **去 Node-BM25**（召回 fts5→native）：R@1 0.825→0.525（−36%）—— Node-BM25 是精度主力。
+- **去 Soul Boost**（fusion 误用，灵魂搬到召回层 re-rank）：R@1 0.825→0.805 —— 灵魂在注入层才对，召回层 re-rank 是负优化。
 
 ### LoCoMo 长对话召回 —— vs OpenViking（1540 case）
 
-我们适配了公开的 [LoCoMo](https://github.com/snap-research/locomo) 评测（ACL 2024，10 段长对话，1540 个 QA，4 个类别，排除 adversarial）：每段对话 → 一个 wiki 页，每个 QA question → 一个 eval case，期望命中是对话 slug。OKS fts5 recall@1=0.920（p50=31ms，1540 case）vs OpenViking QA accuracy=0.8286（Hermes，最佳）。完整报告：[locomo-pk-report.md](./records/experiments/locomo-pk-report.md)。
+我们适配了公开的 [LoCoMo](https://github.com/snap-research/locomo) 评测（ACL 2024，10 段长对话，1540 个 QA，4 个类别，排除 adversarial）：每段对话 → 一个 wiki 页，每个 QA question → 一个 eval case，期望命中是对话 slug。完整报告：[locomo-pk-report.md](./records/experiments/locomo-pk-report.md)。
+
+<img src="images/locomo-pk.svg" alt="LoCoMo 1540 case。OKS recall@1=0.920 p50=31ms；OpenViking QA accuracy=0.8286。">
 
 - **OKS recall@1 = 92.0%** —— 1540 个 LoCoMo question 里 92% 在 top-1 召回到正确对话。
 - **指标诚实说明**：OKS 报*召回命中*（正确对话被召回到）；OpenViking 报*完整 QA accuracy*（召回 + LLM answer + LLM judge）。召回是 QA 的上界——召不到就答不对。OKS core 无 API（P4）评到召回为止；完整 QA accuracy 取决于宿主 Agent 的 LLM。

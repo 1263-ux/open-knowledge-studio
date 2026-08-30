@@ -56,20 +56,13 @@ The three recall layers:
 
 ## Proof it works
 
-OKS has been evaluated on a 50-case semantic-paraphrase dataset (strict exact-slug match). Full results, ablation tables, and reproduction scripts are in [docs/algorithms/recall-evaluation.md](./docs/algorithms/recall-evaluation.md); the dataset and run JSONs live in [./records/experiments](./records/experiments).
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="images/benchmark-dark.svg">
-  <img src="images/benchmark-light.svg" alt="OKS Triple-Layer Recall benchmark. 50-case R@1: fts5 82.5% vs native 52.5% vs fusion 80.5%; embedding 61.7% at 197× latency.">
-</picture>
-
-- **Node-BM25 dominates page-level 6+1**: R@1 +57% (0.525→0.825), MRR +44% (0.630→0.907). Multi-word same-section BM25 scores high; synonym/rewrite recall is precise.
-- **Soul Boost must live in injection, not retrieval**: native re-rank *lowers* precision (R@1 0.825→0.805) — irrelevant pages score high and displace exact matches.
-- **Embedding loses on a small KB**: 61.7% R@1 vs 82.5%, and 197× slower (18304ms vs 93ms). BM25 literal already hits Chinese technical terms; embedding's semantic generalization introduces noise. Embedding is a **fallback** for fts5-miss cases, not a replacement.
+OKS has been evaluated on a 50-case semantic-paraphrase dataset (strict exact-slug match) and on the public LoCoMo long-conversation benchmark. Full results and reproduction scripts are in [docs/algorithms/recall-evaluation.md](./docs/algorithms/recall-evaluation.md); the datasets and run JSONs live in [./records/experiments](./records/experiments).
 
 ### Triple-Layer ablation — 50-case, strict exact-slug match
 
-Queries are semantic paraphrases — the query does not contain the slug's keyword, testing synonym/rewrite recall. Match is strict: the expected slug must appear in top-k. fts5 (Node-BM25) R@1=0.825, R@3=0.925, MRR=0.907, nDCG@5=0.893, p50=93ms; native R@1=0.525; fusion R@1=0.805.
+Queries are semantic paraphrases — the query does not contain the slug's keyword, testing synonym/rewrite recall. Match is strict: the expected slug must appear in top-k.
+
+<img src="images/ablation-triple-layer.svg" alt="Triple-Layer ablation. fts5 R@1=0.825 R@3=0.925 MRR=0.907; fusion 0.805/0.905/0.900; native 0.525/0.647/0.630.">
 
 - **Node-BM25 dominates page-level 6+1**: R@1 +57% (0.525→0.825), MRR +44% (0.630→0.907). Multi-word same-section BM25 scores high; synonym/rewrite recall is precise.
 - **Soul Boost must live in injection, not retrieval**: native 6+1's memory curve / goal boost / review bonus applied as retrieval re-rank *lowers* precision (R@1 0.825→0.805) — irrelevant pages score high and displace exact matches.
@@ -77,20 +70,23 @@ Queries are semantic paraphrases — the query does not contain the slug's keywo
 
 ### Embedding backend — semantic recall comparison (v0.6.2)
 
-fts5 (Node-BM25 literal) R@1=0.825, MRR=0.907, p50=93ms; embedding (MiniLM cosine) R@1=0.617, MRR=0.733, p50=18304ms.
+<img src="images/ablation-embedding.svg" alt="Embedding vs literal. fts5 R@1=0.825 MRR=0.907 p50=93ms; embedding R@1=0.617 MRR=0.733 p50=18304ms (197x).">
 
 - On a small Chinese-term-heavy KB, BM25 literal already hits (terms overlap with wiki); embedding's semantic generalization introduces noise — and is 197× slower.
 - **Decision**: fts5 stays default. Embedding is a **fallback** for fts5-miss cases, not a replacement. Embedding's real value is large KBs + cross-lingual + synonym-heavy domains.
 
 ### Layer-by-layer ablation
 
-- **Full Triple-Layer** (baseline): R@1=0.825, MRR=0.907.
-- **Remove Node-BM25** (retrieval fts5→native): R@1=0.525, MRR=0.630 — Node-BM25 is the precision engine (−36%).
-- **Remove Soul Boost** (fusion misuse, soul moved to retrieval re-rank): R@1=0.805, MRR=0.900 — soul in injection = right; re-rank in retrieval = negative optimization.
+<img src="images/ablation-layers.svg" alt="Layer-by-layer ablation. full R@1=0.825 MRR=0.907; minus Node-BM25 0.525/0.630 (-36%); minus Soul Boost 0.805/0.900.">
+
+- **Remove Node-BM25** (retrieval fts5→native): R@1 0.825→0.525 (−36%) — Node-BM25 is the precision engine.
+- **Remove Soul Boost** (fusion misuse, soul moved to retrieval re-rank): R@1 0.825→0.805 — soul in injection = right; re-rank in retrieval = negative optimization.
 
 ### LoCoMo long-conversation recall — vs OpenViking (1540-case)
 
-We adapted the public [LoCoMo](https://github.com/snap-research/locomo) benchmark (ACL 2024, 10 long conversations, 1540 QA across 4 categories, excluding adversarial) to OKS: each conversation → one wiki page, each QA question → an eval case with the expected conversation slug. OKS fts5 recall@1=0.920 (p50=31ms, 1540 cases) vs OpenViking QA accuracy=0.8286 (Hermes, best). Full report: [locomo-pk-report.md](./records/experiments/locomo-pk-report.md).
+We adapted the public [LoCoMo](https://github.com/snap-research/locomo) benchmark (ACL 2024, 10 long conversations, 1540 QA across 4 categories, excluding adversarial) to OKS: each conversation → one wiki page, each QA question → an eval case with the expected conversation slug. Full report: [locomo-pk-report.md](./records/experiments/locomo-pk-report.md).
+
+<img src="images/locomo-pk.svg" alt="LoCoMo 1540-case. OKS recall@1=0.920 p50=31ms; OpenViking QA accuracy=0.8286.">
 
 - **OKS recall@1 = 92.0%** — 92% of 1540 LoCoMo questions retrieved the correct conversation in top-1.
 - **Metric caveat (honest)**: OKS reports *recall hit* (the correct conversation is retrieved); OpenViking reports *full QA accuracy* (recall + LLM answer + LLM judge). Recall upper-bounds QA — if you can't retrieve it, you can't answer it. OKS core is API-free (P4) and stops at recall; full QA accuracy depends on the host Agent's LLM.

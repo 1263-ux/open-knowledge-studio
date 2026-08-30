@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 620 180" font-family="system-ui,-apple-system,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" role="img" aria-label="Embedding vs literal. fts5 R@1=0.825 MRR=0.907 p50=93ms; embedding R@1=0.617 MRR=0.733 p50=18304ms (197x).">
+  <style>
+    .bg{fill:#fafaf7}.tx{fill:#0b0b0b}.mu{fill:#52514e}.gr{fill:#c3c2b7}.gl{fill:#e1e0d9}
+    .bar{fill:#16a34a}.ab{fill:#94a3b8}
+    @media (prefers-color-scheme: dark){
+      .bg{fill:#0d1117}.tx{fill:#e6edf3}.mu{fill:#8b949e}.gr{fill:#30363d}.gl{fill:#21262d}
+      .bar{fill:#22c55e}.ab{fill:#6e7681}
+    }
+  </style>
+  <rect class="bg" width="620" height="180"/>
+  <text x="10" y="18" font-size="13" font-weight="600" class="tx">Embedding vs literal — semantic recall · R@1 / MRR</text>
+  <rect x="10" y="30" width="12" height="12" rx="2" class="bar"/><text x="26" y="40" font-size="11" class="mu">fts5 (Node-BM25)</text>
+  <rect x="130" y="30" width="12" height="12" rx="2" class="ab"/><text x="146" y="40" font-size="11" class="mu">embedding (MiniLM)</text>
+  <line x1="150" y1="55" x2="150" y2="140" class="gr" stroke-width="1"/>
+  <line x1="255" y1="55" x2="255" y2="140" class="gl" stroke-width="1"/>
+  <line x1="360" y1="55" x2="360" y2="140" class="gl" stroke-width="1"/>
+  <line x1="465" y1="55" x2="465" y2="140" class="gl" stroke-width="1"/>
+  <line x1="570" y1="55" x2="570" y2="140" class="gl" stroke-width="1"/>
+  <text x="150" y="155" font-size="10" class="mu" text-anchor="middle">0</text>
+  <text x="255" y="155" font-size="10" class="mu" text-anchor="middle">.25</text>
+  <text x="360" y="155" font-size="10" class="mu" text-anchor="middle">.50</text>
+  <text x="465" y="155" font-size="10" class="mu" text-anchor="middle">.75</text>
+  <text x="570" y="155" font-size="10" class="mu" text-anchor="middle">1.0</text>
+  <text x="142" y="78" font-size="12" class="mu" text-anchor="end">fts5</text>
+  <rect x="152" y="66" width="351" height="14" rx="3" class="bar"/><text x="509" y="77" font-size="11" font-weight="600" class="tx">R@1 .825 · 93ms</text>
+  <rect x="152" y="84" width="385" height="10" class="bar" opacity="0.5"/><text x="543" y="92" font-size="10" class="mu">MRR .907</text>
+  <text x="142" y="118" font-size="12" class="mu" text-anchor="end">embedding</text>
+  <rect x="152" y="106" width="262" height="14" rx="3" class="ab"/><text x="420" y="117" font-size="11" class="mu">R@1 .617 · 18304ms</text>
+  <rect x="152" y="124" width="311" height="10" class="ab" opacity="0.5"/><text x="469" y="132" font-size="10" class="mu">MRR .733</text>
+  <text x="10" y="174" font-size="10" class="mu">embedding is 197× slower and loses — fts5 stays default; embedding is fallback for fts5-miss only.</text>
+</svg>
