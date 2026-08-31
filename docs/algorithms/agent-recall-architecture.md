@@ -175,3 +175,126 @@ fun-rec 用连续打散（类型+年代维度）。OKS 迁移：
 - 蓝本：`raw/2026/08/31/fun-rec/docs/_sources/chapter_10_projects/`（architecture/offline_pipeline/online_pipeline）
 - OKS 现状：`cli/knowledge_studio/recall.py`（dispatch + 6+1 因子）+ `assets/settings/recall.yaml`（参数）
 - 设计约束：`CONSTITUTION.md` A1-A7（P1 文件即DB / P4 API-free / A5 原子写 / A6 wiki 命名 / A7 mail 存储）
+
+---
+
+# Part B：个人版 + 团队版双形态
+
+> 推荐系统多用户场景，和团队多 Agent 1:1 同构。OKS 分两种形态：
+> **个人版**（单 Agent）和 **团队版**（多 Agent 共享 KB + 协同召回）。
+> 这是把 fun-rec 的多用户推荐 1:1 复用到 Agent 域。
+
+## 9. 为什么是双形态
+
+传统推荐系统天然服务多用户（每个用户独立画像 + 行为序列 + 协同过滤）。OKS 当前是单 Agent 视角——一个 Agent 用一个 KB。但团队场景（多个 Agent 协作一个 KB：claude 写 wiki、qoder 改代码、pi 调研、codex review）和推荐系统多用户**完全同构**：
+
+| 推荐系统多用户 | OKS 团队版多 Agent |
+|---------------|-------------------|
+| users 表（用户记录） | `profiles/agents/{agent_id}/`（Agent 画像目录） |
+| 用户画像（偏好/人口统计） | Agent 画像（scope/goals/历史 topic 分布/能力） |
+| 用户行为序列（最近观影） | `inject.jsonl` 按 agent_id 分组的 slugs 序列 |
+| 协同过滤 CF（看过 X 的人也看 Y） | Agent 间协同召回（召回过 X 的 Agent 也召回 Y） |
+| 偏好类目召回 | Agent 偏好 scope/topic 召回 |
+| 冷启动新用户 | 新 Agent 入团（无 inject 历史） |
+| 多样性（跨用户视角） | 跨 Agent 多样性（避免同 Agent 视角刷屏） |
+
+## 10. 个人版（当前 OKS）
+
+```
+单实例 (文件即 DB, Git 是 migration, P1)
+  ├─ 单 Agent 或多 Agent 但无显式画像隔离
+  ├─ mail 跨 Agent 通信 (A7, 已有)
+  ├─ 6+1 因子召回 (判别式打分, §3.3)
+  └─ profiles/agents/registry.jsonl (Agent 注册, 当前只 1 个)
+```
+
+定位：**个人知识库**——一个 Agent 维护、一个用户消费。当前架构已够（§1-8 的三阶段漏斗升级后）。
+
+## 11. 团队版（新增形态）
+
+```
+单实例 共享 (raw/ + wiki/ 全 Agent 共用, 文件即 DB 不变)
+  ├─ 多 Agent 各自画像: profiles/agents/{agent_id}/{profile,goals,history,prefs}.md
+  ├─ registry.jsonl 全 Agent 注册 (补全 pi/qoder/claude/codex)
+  ├─ inject.jsonl 按 agent_id 分组 (每 Agent 独立行为序列)
+  ├─ 协同召回 (CF 1:1): 召回过 X 的 Agent 也召回 Y
+  ├─ Agent 画像召回: 基于 Agent 历史 topic 分布 (偏好类目召回 1:1)
+  ├─ 冷启动: 新 Agent 入团 (UCB topic 探索 + 热门兜底)
+  └─ 权限/信任: 不同 Agent 可访问 scope (如 codex 只读 computing)
+```
+
+### 11.1 协同召回（Collaborative Recall）★ 团队版核心
+
+推荐系统 CF（协同过滤）的 Agent 版：
+- **ItemCF Agent 版**：当前 Agent 召回了页 X，找"也召回过 X 的其他 Agent 还召回过什么 Y"——从 inject.jsonl 跨 Agent 共现挖掘。这是多用户 CF 的 1:1 迁移。
+- **UserCF Agent 版**：找"和当前 Agent 召回历史相似的 Agent"（行为序列重叠度高），推荐那个 Agent 召回过但本 Agent 没召回的页。
+- **数据源**：`records/inject.jsonl` 按 agent_id 分组——每条记录 `{agent_id, slugs, used}`，跨 Agent 统计页共现。
+
+这是个人版没有的召回路（个人版只有 FTS5 + topic + goal）。团队版的差异化价值所在。
+
+### 11.2 Agent 画像召回（Preference Recall）
+
+推荐系统"偏好类目召回"的 Agent 版：
+- 每个 Agent 的历史 recall 统计 topic/area 分布 → 偏好域
+- 如 pi 偏 computing/concepts，codex 偏 computing/strategies
+- 召回时提升偏好域页的权重（对齐 goal boost，但是基于行为非显式 goal）
+
+### 11.3 权限与信任（Permission & Trust）
+
+个人版无此问题（单 Agent 拥有全部）。团队版要解决：
+- **scope 可见性**：不同 Agent 可访问的 wiki 域（如 codex 只读 computing，pi 可写 drafts）
+- **信任分级**：Agent 写的 drafts 待 human review（A3 Dreaming 不变），但 Agent 间可互评（mail 已有 trust 机制 P9）
+- **实现**：profiles/agents/{agent_id}/profile.md 的 `scope` 字段 + recall 时按 scope 过滤
+
+### 11.4 联邦（可选，Phase 远期）
+
+多实例联邦：团队 A 的 KB + 团队 B 的 KB，共享部分 raw 但 wiki 各自维护。对应推荐系统的跨域推荐。这是远期，当前不实现。
+
+## 12. 双形态路线图（合并 Phase 1-6）
+
+| Phase | 内容 | 形态 | 优先级 |
+|-------|------|------|--------|
+| 1 ✅ | 架构文档（本）+ A8 宪法（待 P2 实现） | 共用 | 🔴 地基 |
+| **2** | dispatch 重构：FTS5=召回→6+1=排序，fts5 接灵魂层 | 共用 | 🔴 还债 |
+| 3 | 多路召回 + Snake Merge（FTS5+topic+goal+**协同**） | 协同=团队版 | 🟡 |
+| 4 | 多样性重排（area/type 打散 + **跨 Agent 视角**） | 团队版扩展 | 🟡 |
+| 5 | 冷启动（UCB topic + 热门 + **新 Agent 入团**） | 团队版扩展 | 🟢 |
+| 6 | 生产级（延迟监控 + 索引重建 cron + **Agent 画像积累**） | 团队版扩展 | 🟢 |
+| **7** | registry 补全 + profiles/agents/{id}/ 画像目录 | 团队版 | 🟡 |
+| **8** | 协同召回（ItemCF/UserCF Agent 版，从 inject.jsonl） | 团队版核心 | 🟡 |
+| 9 | 权限/scope 可见性 + recall 按 scope 过滤 | 团队版 | 🟢 |
+| 10 | 联邦多实例（远期） | 团队版远期 | ⚪ |
+
+**关键洞察**：Phase 2-6 是共用基础（个人版 + 团队版都受益），Phase 7-8 是团队版差异化（协同召回是团队版核心价值），Phase 9-10 是团队治理。**先做共用基础（P2-6），再做团队差异化（P7-8）**。
+
+## 13. 个人版 vs 团队版的代码开关
+
+```yaml
+# settings/recall.yaml
+mode: personal  # personal | team
+
+team:
+  collaborative_recall: true   # Phase 8: ItemCF/UserCF Agent 版
+  agent_profile_recall: true    # Phase 7: 偏好域召回
+  cross_agent_diversity: true   # Phase 4: 跨 Agent 视角打散
+  scope_filter: true            # Phase 9: 按 Agent scope 过滤
+```
+
+`mode: personal`（默认）→ 个人版，跳过团队版召回路，零开销。
+`mode: team` → 启用协同召回 + 画像 + 跨 Agent 多样性。向后兼容。
+
+## 14. 团队版的本质约束（不破坏个人版）
+
+1. **文件即 DB 不变**（P1）——团队版不引入数据库，多 Agent 画像仍是文件（profiles/agents/{id}/）
+2. **API-free 不变**（P4）——协同召回的统计在 CLI core（读 inject.jsonl 算共现），不调外部 API
+3. **向后兼容**——`mode: personal` 时团队版代码静默不生效，个人版用户无感知
+4. **Agent 身份显式**——团队版要求 `OKS_AGENT_ID` 注入（mail 已有 P9），recall 按 agent_id 分组行为
+
+---
+
+## 参考（Part A + B）
+
+- 蓝本：`raw/2026/08/31/fun-rec/docs/_sources/chapter_10_projects/`（architecture/offline/online_pipeline）
+- OKS 现状：`cli/knowledge_studio/recall.py`（dispatch + 6+1 因子）+ `assets/settings/recall.yaml`（参数）
+- 设计约束：`CONSTITUTION.md` A1-A7（P1 文件即DB / P4 API-free / A5 原子写 / A6 wiki 命名 / A7 mail 存储 / P9 trust 不可自产）
+- 多用户推荐 1:1 映射：fun-rec `users` 表 → OKS `profiles/agents/{id}/`；CF → 协同召回

@@ -104,3 +104,20 @@ def test_standalone_hooks_import_cleanly():
             sys.modules.pop(mod_name, None)
     finally:
         sys.path.remove(hooks_dir)
+
+
+def test_user_prompt_recall_reads_date_organized_mail(tmp_path, monkeypatch):
+    """v0.6.16 mail 按日期子目录存, user-prompt-recall 的 _load_unread_mail
+    必须用 rglob 才能读到, 否则 Agent 收不到未读通知."""
+    import importlib.util, sys
+    hook_path = Path(__file__).parent.parent / "knowledge_studio" / "_assets" / "hooks" / "user-prompt-recall.py"
+    spec = importlib.util.spec_from_file_location("_upr_test", hook_path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    inbox = tmp_path / "mail" / "inbox" / "2026" / "08" / "31"
+    inbox.mkdir(parents=True)
+    (inbox / "20260831T120000-qoder.md").write_text(
+        "---\nfrom: qoder\nread: false\n---\n\n# hi\nbody", encoding="utf-8")
+    mails = mod._load_unread_mail(tmp_path, limit=3)
+    assert len(mails) == 1, f"expected 1, got {len(mails)} — rglob not reaching date subdir?"
+    assert "qoder" in mails[0].get("from", "") or "qoder" in str(mails[0])

@@ -217,7 +217,7 @@ def _load_unread_mail(kb_root: Path, limit: int = 3) -> list:
     if not inbox.is_dir():
         return []
     mails = []
-    for f in sorted(inbox.glob("*.md"), reverse=True):
+    for f in sorted(inbox.rglob("*.md"), reverse=True):
         try:
             text = f.read_text(encoding="utf-8")
             parts = text.split("---")
