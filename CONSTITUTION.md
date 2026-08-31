@@ -440,6 +440,54 @@ read-modify-write records must use their lock for the full critical section.
 
 **Do not** write wiki pages or config with bare `open(path, 'w')`.
 
+### A6: Wiki page slug and filename
+
+A wiki page's filename is its slug, and the slug is **date-prefixed and
+CJK-preserving**. This is not cosmetic — it is what makes backlinks stable,
+sorts pages by creation time on a plain `ls`, and keeps Chinese-titled pages
+from degrading to `untitled`.
+
+- **Slug** = `f"{YYYYMMDD}-{make_slug(title)}"` where `YYYYMMDD` is the page's
+  creation date. `make_slug` keeps CJK characters
+  (`[^a-z0-9\u4e00-\u9fff]+ → "-"`, truncated to 60, stripped) — Chinese
+  titles yield Chinese slugs, not the `untitled` fallback. English titles yield
+  kebab-case.
+- **Path** = `wiki/{area}/{type}/{slug}.md`. `area` is a free string (default
+  `computing`); `type` ∈ {concept, strategy, anti-pattern}.
+- **Collision** = `{slug}-{counter}.md` (counter increments until free).
+- **Backlinks** reference the slug verbatim (`relates_to`, `supersedes`,
+  `enriches`). Renaming a page without updating every backlink breaks recall —
+  use `oks wiki` commands, not manual `mv`.
+
+Reference implementation: `store.py::make_slug` and `create_wiki_page`
+(`slug = f"{date_str}-{slug}"`, `file_path = type_dir / f"{slug}.md"`).
+
+The date prefix reflects OKS's **memory**定位 (a dated event, decayed by
+`created` age), not an encyclopedia entry that evolves in place — concept
+evolution is modeled by the A4 relationship chain (supersedes/enriches), not
+by rewriting one stable filename.
+
+### A7: Mail storage layout
+
+`mail/inbox/` is **date-organized**, not flat. A busy instance accumulates
+hundreds of messages; one flat directory is unreadable by humans and slow to
+glob. The layout is derived from the slug, which `oks mail send` already stamps
+with a `YYYYMMDD` timestamp prefix.
+
+- **Inbox path** = `mail/inbox/{YYYY}/{MM}/{DD}/{slug}.md`, where the date is
+  extracted from the first 8 digits of the slug. A slug without a date prefix
+  falls back to flat `mail/inbox/{slug}.md` (legacy compatibility).
+- **Slug** = `f"{YYYYMMDD}T{HHMMSS}-{from_id}"` (stamped by `oks mail send`).
+- **Sent outbox** = `mail/sent/{agent_id}/{ts}.md` (per-agent archive, P6).
+- **Listing** (`oks mail inbox`/`count`) uses `rglob("*.md")` so date-organized
+  and legacy flat mails are both found.
+- **`oks mail migrate`** moves legacy flat mails into date subdirs; idempotent.
+
+Reference implementation: `cli.py::_mail_inbox_dir`, `mail_send`,
+`mail_inbox`, `mail_count`. The read path (`show`/`read`) resolves through
+`_mail_path`, which derives the date dir from the slug — so reader and writer
+agree by construction, never by convention.
+
 ---
 
 ## Revision history
@@ -485,3 +533,18 @@ archaeology through 20k-line diffs.
 - **2026-07-31 — A4 relationships reachable**: `promote_draft` dropped
   `relates_to` / `relationship`, so no production path could mark a page
   superseded. Promotion now carries them through.
+- **2026-08-30 — A6 + A7 added; wiki naming and mail layout are now invariants.**
+  Two layouts that lived only in code are now written invariants, because a
+  layout enforced by convention erodes under manual edits and forks.
+  **A6 (wiki slug/filename)** pins the `{YYYYMMDD}-{make_slug(title)}.md`
+  format and `make_slug`'s CJK preservation — so Chinese-titled pages stay
+  Chinese (not `untitled`), backlinks are stable, and `ls` sorts by creation.
+  The date prefix reflects the memory-not-encyclopedia positioning: evolution
+  is the A4 relationship chain, not rewriting one filename.
+  **A7 (mail storage layout)** pins `mail/inbox/{YYYY}/{MM}/{DD}/{slug}.md`
+  (date derived from the slug's `YYYYMMDD` prefix), per-agent
+  `mail/sent/{agent_id}/{ts}.md`, and `rglob` listing. Introduced with
+  `oks mail migrate` (v0.6.16) so existing flat inboxes upgrade in place.
+  Both cite their reference implementation so P6 (ships match docs) stays
+  auditable: `store.py::make_slug`/`create_wiki_page` for A6,
+  `cli.py::_mail_inbox_dir`/`mail_send`/`mail_inbox`/`mail_count` for A7.
