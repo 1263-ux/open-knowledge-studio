@@ -1,3 +1,22 @@
+## [0.6.16] — 2026-08-30
+
+### feat(mail): inbox 按日期分目录 + `oks mail migrate` 迁移命令
+
+`oks mail send` 之前把所有信件平铺写在 `mail/inbox/{slug}.md`，一个
+活跃实例会堆积几百个文件在一个目录里，肉眼和工具都难看。
+
+v0.6.16 起 inbox 按 `{YYYY}/{MM}/{DD}/{slug}.md` 组织（slug 本身就带
+`YYYYMMDD` 时间戳前缀，提取前 8 位即得日期）。`inbox`/`count` 改用
+`rglob` 递归遍历，所以旧平铺信件仍能被读到（向后兼容）。
+
+新增 `oks mail migrate` 命令：把旧实例的平铺信件一次性迁进日期子目录，
+幂等（已在子目录的不动，无日期前缀的保留平铺仍可读）。
+
+向后兼容：`show`/`read` 通过 `_mail_path` 自动算日期路径，旧 slug
+（无日期前缀）fallback 到平铺顶层，不破坏现有实例。
+
+### test: +2 mail 日期目录 / migrate 测试 (326 passed)
+
 ## [0.6.15] — 2026-08-29
 
 ### fix(hooks): 独立 hook 脚本兼容 Python 3.9 宿主
