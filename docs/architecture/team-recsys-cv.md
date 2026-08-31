@@ -157,12 +157,12 @@ agent query → [cold_start 检测]
 > 1:1 CV fun-rec `offline/pipeline.py`，`--steps all/preprocess/train/ingest/deploy`。
 
 ```bash
-# team/offline/pipeline.py — 1:1 CV fun-rec offline steps
-oks team offline --steps all                          # 全流程
-oks team offline --steps preprocess                   # 特征工程
-oks team offline --steps train                        # "模型训练" (P4 退化)
-oks team offline --steps ingest                        # 特征上线
-oks team offline --steps deploy                        # 派生部署
+# team/offline/pipeline.py — 1:1 CV fun-rec offline steps (Phase T6 设想命令, 未实现)
+team offline --steps all                          # 全流程
+team offline --steps preprocess                   # 特征工程
+team offline --steps train                        # "模型训练" (P4 退化)
+team offline --steps ingest                        # 特征上线
+team offline --steps deploy                        # 派生部署
 ```
 
 **步骤 1:1 CV**：
