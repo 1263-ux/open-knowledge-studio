@@ -212,68 +212,121 @@ def _touch_registry_last_active(kb_root: Path, agent_id: str, cwd: str) -> None:
 
 # ── Mail ──
 
-def _load_unread_mail(kb_root: Path, limit: int = 3) -> list:
+def _mail_is_recipient(to_field: str, agent_id: str) -> bool:
+    """D2: a mail is for this agent if `to:` is @all, @<self>, or lists self."""
+    to_field = (to_field or "").strip()
+    if not to_field:
+        return True  # no `to:` = broadcast (legacy), accept
+    targets = [t.strip().lstrip("@") for t in to_field.split(",")]
+    return "all" in targets or agent_id in targets
+
+
+def _mail_read_slugs(kb_root: Path, agent_id: str) -> set[str]:
+    """D1: per-agent read state from mail/.read/<agent_id>.jsonl (append-only).
+
+    Replaces writing `read: true` into the mail frontmatter, which was
+    letter-level global — an @all broadcast got eaten by the first agent whose
+    hook fired, and every other agent missed it forever.
+    """
+    p = kb_root / "mail" / ".read" / f"{agent_id}.jsonl"
+    if not p.is_file():
+        return set()
+    slugs: set[str] = set()
+    try:
+        for line in p.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                import json as _json
+                rec = _json.loads(line)
+                if isinstance(rec, dict) and rec.get("slug"):
+                    slugs.add(rec["slug"])
+            except Exception:
+                continue
+    except Exception:
+        pass
+    return slugs
+
+
+def _load_unread_mail(kb_root: Path, limit: int = 3, agent_id: str = "") -> list:
+    """Load unread mail *for this agent*.
+
+    D1: read state is per-agent (mail/.read/<agent>.jsonl), not the global
+        frontmatter `read:` — so @all broadcasts reach every agent.
+    D2: filter by `to:` (@all / @<self> / lists self); skip mail we sent.
+    """
     inbox = kb_root / "mail" / "inbox"
     if not inbox.is_dir():
         return []
+    already_read = _mail_read_slugs(kb_root, agent_id) if agent_id else set()
     mails = []
     for f in sorted(inbox.rglob("*.md"), reverse=True):
         try:
             text = f.read_text(encoding="utf-8")
             parts = text.split("---")
-            if len(parts) >= 3 and "read: false" in parts[1]:
-                from_id = "unknown"
-                title = ""
-                for line in parts[1].split("\n"):
-                    if line.startswith("from:"):
-                        from_id = line.split(":", 1)[1].strip()
-                for line in parts[2].split("\n"):
-                    if line.startswith("# "):
-                        title = line[2:].strip()
-                        break
-                preview = re.sub(r"\s+", " ", parts[2].split("\n", 1)[-1]).strip()[:100]
-                mails.append({
-                    "slug": f.stem, "from": from_id, "title": title,
-                    "preview": preview, "path": f,
-                })
-                if len(mails) >= limit:
+            if len(parts) < 3:
+                continue
+            meta, body = parts[1], parts[2]
+            from_id = "unknown"
+            to_field = ""
+            for line in meta.split("\n"):
+                if line.startswith("from:"):
+                    from_id = line.split(":", 1)[1].strip()
+                elif line.startswith("to:"):
+                    to_field = line.split(":", 1)[1].strip()
+            # D2: recipient filter + skip self-sent
+            if agent_id and from_id == agent_id:
+                continue
+            if agent_id and not _mail_is_recipient(to_field, agent_id):
+                continue
+            slug = f.stem
+            if slug in already_read:
+                continue  # D1: this agent already saw it
+            title = ""
+            for line in body.split("\n"):
+                if line.startswith("# "):
+                    title = line[2:].strip()
                     break
+            preview = re.sub(r"\s+", " ", body.split("\n", 1)[-1]).strip()[:100]
+            mails.append({
+                "slug": slug, "from": from_id, "title": title,
+                "preview": preview, "path": f,
+            })
+            if len(mails) >= limit:
+                break
         except Exception:
             continue
     return mails
 
 
-def _mark_mail_read(path: Path) -> None:
-    """Mark a mail file as read (frontmatter only, atomic, idempotent).
+def _mark_mail_read(path: Path, agent_id: str = "", kb_root: Path | None = None) -> None:
+    """D1: mark a mail as read *for this agent* (append-only per-agent jsonl).
 
-    P7/P2/P8 fix (qoder 发现): 旧实现是裸全文 replace + write_text +
-    silent except — 对已读信件重复执行会命中正文里的 "read: false"
-    字面量并静默改坏正文，且高频路径（每个 user prompt 都跑）。
-    现复用 store._locked_atomic_update（与 CLI mail_read 同一把锁），
-    只改 frontmatter，幂等（已读返回 None）。
+    The old impl wrote `read: true` into the mail frontmatter — letter-level
+    global state. An @all broadcast got eaten by the first agent whose hook
+    fired; every other agent missed it forever. Now each agent tracks its own
+    read slugs in mail/.read/<agent_id>.jsonl (append-only, idempotent),
+    so broadcasts reach everyone. The CLI `oks mail read` still flips the
+    frontmatter for the human CLI view (separate concern).
     """
-    from knowledge_studio import store as _store
-    from knowledge_studio.config import get_kb_root
-
-    def update(current: str) -> str | None:
-        if not current.startswith("---"):
-            return None
-        parts = current.split("---", 2)
-        if len(parts) < 3:
-            return None
-        meta, body = parts[1], parts[2]
-        if "read: false" not in meta:
-            return None
-        return f"---{meta.replace('read: false', 'read: true', 1)}---{body}"
-
-    try:
-        kb_root = get_kb_root()
-        _store._locked_atomic_update(
-            path, update,
-            lock_path=kb_root / ".oks" / "locks" / "mail.lock",
-        )
-    except Exception:
-        pass  # fail-open: hook 不应阻塞 user prompt
+    if not agent_id:
+        return  # no identity = nothing to record; hook will re-inject next time
+    from _persistence import append_jsonl
+    if kb_root is None:
+        try:
+            from knowledge_studio.config import get_kb_root
+            kb_root = get_kb_root()
+        except Exception:
+            return
+    read_dir = kb_root / "mail" / ".read"
+    read_dir.mkdir(parents=True, exist_ok=True)
+    (kb_root / ".oks" / "locks").mkdir(parents=True, exist_ok=True)
+    append_jsonl(
+        read_dir / f"{agent_id}.jsonl",
+        {"slug": path.stem, "at": datetime.now(timezone.utc).isoformat()},
+        lock_path=kb_root / ".oks" / "locks" / "mail-read.lock",
+    )
 
 
 # ── Inject trace (records/inject.jsonl, git-shared training signal) ──
@@ -491,7 +544,7 @@ def main() -> int:
 
     # Mail section
     mail_topn = int(params.get("mail_topn", 3))
-    mails = _load_unread_mail(kb_root, limit=mail_topn)
+    mails = _load_unread_mail(kb_root, limit=mail_topn, agent_id=agent_id)
     if mails:
         lines = [f"## 通信（{len(mails)} 未读）"]
         for m in mails:
@@ -500,7 +553,7 @@ def main() -> int:
                 lines.append(f"    {m['preview']}")
         sections.append("\n".join(lines))
         for m in mails:
-            _mark_mail_read(m["path"])
+            _mark_mail_read(m["path"], agent_id, kb_root)
 
     # 更新 registry last_active（best-effort）
     if reg_entry:

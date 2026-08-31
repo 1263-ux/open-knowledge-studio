@@ -124,3 +124,55 @@ def test_user_prompt_recall_reads_date_organized_mail(tmp_path, monkeypatch):
     mails = mod._load_unread_mail(tmp_path, limit=3)
     assert len(mails) == 1, f"expected 1, got {len(mails)} — rglob not reaching date subdir?"
     assert "qoder" in mails[0].get("from", "") or "qoder" in str(mails[0])
+
+
+def test_mail_d2_filters_by_to_and_skips_self_sent(tmp_path):
+    """D2: _load_unread_mail filters by `to:` (@all/@self) and skips self-sent."""
+    import importlib.util, sys
+    hook = Path(__file__).parent.parent / "knowledge_studio" / "_assets" / "hooks" / "user-prompt-recall.py"
+    sys.path.insert(0, str(hook.parent))
+    spec = importlib.util.spec_from_file_location("_upr_d2", hook)
+    mod = importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)
+    inbox = tmp_path / "mail" / "inbox" / "2026" / "08" / "31"
+    inbox.mkdir(parents=True)
+    # to @qoder (not pi) — pi should NOT see it
+    (inbox / "20260831T100000-qoder.md").write_text(
+        "---\nfrom: qoder\nto: @qoder\nread: false\n---\n\n# hi qoder\nbody", encoding="utf-8")
+    # to @all — pi SHOULD see it
+    (inbox / "20260831T100001-qoder.md").write_text(
+        "---\nfrom: qoder\nto: @all\nread: false\n---\n\n# broadcast\nbody", encoding="utf-8")
+    # from pi to qoder — pi should NOT see its own sent mail
+    (inbox / "20260831T100002-pi.md").write_text(
+        "---\nfrom: pi\nto: @qoder\nread: false\n---\n\n# my own\nbody", encoding="utf-8")
+    mails = mod._load_unread_mail(tmp_path, limit=10, agent_id="pi")
+    slugs = [m["slug"] for m in mails]
+    assert "20260831T100001-qoder" in slugs  # @all reaches pi
+    assert "20260831T100000-qoder" not in slugs  # not addressed to pi
+    assert "20260831T100002-pi" not in slugs  # self-sent skipped
+
+
+def test_mail_d1_per_agent_read_state(tmp_path):
+    """D1: marking read is per-agent; @all broadcast reaches a 2nd agent
+    even after the 1st agent's hook marked it read."""
+    import importlib.util, sys
+    hook = Path(__file__).parent.parent / "knowledge_studio" / "_assets" / "hooks" / "user-prompt-recall.py"
+    sys.path.insert(0, str(hook.parent))
+    spec = importlib.util.spec_from_file_location("_upr_d1", hook)
+    mod = importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)
+    inbox = tmp_path / "mail" / "inbox" / "2026" / "08" / "31"
+    inbox.mkdir(parents=True)
+    (inbox / "20260831T110000-qoder.md").write_text(
+        "---\nfrom: qoder\nto: @all\nread: false\n---\n\n# broadcast\nbody", encoding="utf-8")
+    # Agent A (codex) reads first: inject + mark read
+    import os
+    os.environ["OKS_ROOT"] = str(tmp_path)
+    mails_a = mod._load_unread_mail(tmp_path, limit=3, agent_id="codex")
+    assert len(mails_a) == 1
+    mod._mark_mail_read(mails_a[0]["path"], "codex")
+    # Agent B (pi) reads after: MUST still see it (D1 — not eaten by codex)
+    mails_b = mod._load_unread_mail(tmp_path, limit=3, agent_id="pi")
+    assert len(mails_b) == 1, f"D1 regression: pi missed the broadcast ({len(mails_b)})"
+    # Agent A re-checks: should now be empty (codex already read)
+    mails_a2 = mod._load_unread_mail(tmp_path, limit=3, agent_id="codex")
+    assert len(mails_a2) == 0
+    del os.environ["OKS_ROOT"]
