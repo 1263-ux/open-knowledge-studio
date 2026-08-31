@@ -384,3 +384,13 @@ def test_init_adopts_when_no_active_kb_is_registered(_isolated_config, tmp_path)
 
     config = json.loads(_isolated_config.read_text(encoding="utf-8"))
     assert config["knowledge_base_path"] == str(target.resolve())
+
+
+def test_qoder_no_hooks_dir_but_runs_via_claude_hooks(tmp_path):
+    """plan A (qoder-cli): _AGENT_TARGETS['.qoder']['hooks']=False.
+    .qoder/ no longer gets a hooks/ dir (dead weight — settings.json
+    points to .claude/hooks), but qoder config + skills still install."""
+    from knowledge_studio.cli import _AGENT_TARGETS
+    assert _AGENT_TARGETS[".qoder"]["hooks"] is False, "plan A: .qoder hooks should be disabled"
+    assert _AGENT_TARGETS[".qoder"]["skills"] is True, "qoder skills still install"
+    assert _AGENT_TARGETS[".qoder"]["config"] == "qoder", "qoder config still install"

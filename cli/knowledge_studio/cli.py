@@ -1927,7 +1927,7 @@ _SHARED_ASSETS = ("templates", "_meta", "settings", "profiles")
 # components under assets/. Supporting another agent is one line here.
 _AGENT_TARGETS = {
     ".claude": {"config": "claude", "skills": True, "hooks": True, "rules": True},
-    ".qoder": {"config": "qoder", "skills": True, "hooks": True, "rules": True},
+    ".qoder": {"config": "qoder", "skills": True, "hooks": False, "rules": True},  # plan A (qoder-cli): .qoder/hooks 是死重量 — settings.json 指 .claude/hooks, 铺了无引用 (P8)
     ".pi": {"config": "pi", "skills": False, "hooks": False, "rules": False},
     ".codex": {"config": "codex", "skills": False, "hooks": True, "rules": False},
     ".agents": {"config": None, "skills": True, "hooks": False, "rules": False},
