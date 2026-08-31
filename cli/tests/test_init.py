@@ -181,20 +181,25 @@ def test_init_upgrade_refreshes_assets_but_keeps_user_files(tmp_path):
     marker = target / ".claude" / "MARKER.txt"
     marker.write_text("local edit", encoding="utf-8")
 
-    bundled = target / ".claude" / "settings.json"
+    bundled = target / ".claude" / "rules" / "wiki-writing.md"
     original = bundled.read_text(encoding="utf-8")
-    bundled.write_text("{}", encoding="utf-8")
+    bundled.write_text("stale\n", encoding="utf-8")
+
+    # Editor config holds live hook wiring, so an upgrade must not restore it.
+    wiring = target / ".claude" / "settings.json"
+    wiring.write_text("{}", encoding="utf-8")
 
     # re-init without --upgrade keeps existing assets untouched
     runner.invoke(app, ["init", str(target), "--no-git", "--no-set-default"])
     assert marker.exists()
-    assert bundled.read_text(encoding="utf-8") == "{}"
+    assert bundled.read_text(encoding="utf-8") == "stale\n"
 
     # --upgrade merge-copies bundled assets: bundled files refreshed,
     # user-owned files (marker) survive — no more whole-tree deletion
     runner.invoke(app, ["init", str(target), "--no-git", "--no-set-default", "--upgrade"])
     assert marker.exists()
     assert bundled.read_text(encoding="utf-8") == original
+    assert wiring.read_text(encoding="utf-8") == "{}"
 
 
 def test_init_requires_path_argument():

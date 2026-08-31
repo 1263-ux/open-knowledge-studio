@@ -1,3 +1,82 @@
+## [0.6.17] — 2026-08-31
+
+### fix(init): `--upgrade` 不再冲掉 hook 接线
+
+追查上一条 `hook status` 建议时发现的真实缺陷：`_materialize_assets`
+在 `overwrite=True` 下把打包的编辑器配置原样盖回
+`.claude/settings.json`、`.qoder/settings.json`、`.codex/hooks.json`
+——而这三个文件正是 `oks hook install` 写接线的地方。
+
+实测（临时实例，codex 已接线）：`oks init . --upgrade` 之后
+`codex: wired` → `not wired`，`hooks.json` 里整个 `UserPromptSubmit`
+块被删掉，自动 recall 静默失效；同时已迁移成绝对路径的四个 lifecycle
+命令被退回 `"$(git rev-parse --show-toplevel)/..."` 模板形式（`--no-git`
+实例根本没有 toplevel，等于直接失效），把
+`test_hook_install_migrates_codex_relative_lifecycle_paths` 修好的东西
+又还原了。
+
+修复：这三个文件属于用户运行态而非可刷新资产，已存在时 `--upgrade` 一律
+不覆盖；全新 `init` 仍照常写入。修复后同一路径实测：引擎
+`outdated → current`，`codex: wired` 保持，`hooks.json` 逐字节不变。
+
+`test_init_upgrade_refreshes_assets_but_keeps_user_files` 原来拿
+`.claude/settings.json` 当「会被刷新的打包文件」样本，改用真正的打包资产
+`.claude/rules/wiki-writing.md`，并补断言：被编辑过的 `settings.json`
+必须在 `--upgrade` 后保持原样。
+
+### fix(hooks): wrapper 不再静默吞掉引擎崩溃
+
+`user-prompt-recall.sh` / `post-tool-edit.sh` 原本是
+`exec "$OKS_PYTHON" engine.py 2>/dev/null`。两个问题叠在一起：`2>/dev/null`
+把引擎的 traceback 全丢了，`exec` 又把 python 的非零退出码原样传给编辑器
+——注释写着「fails open」，实际是 fail-closed，而且崩溃和「没命中记忆」
+在外部完全无法区分。
+
+现在 stderr 落到临时文件：成功就丢掉（jieba 的噪声不该污染 stdout 的
+`<recalled-memory>` 块），非零退出则打印
+`oks hook: recall engine exited N — run 'oks hook install' to refresh it`
+外加最后 5 行 traceback，并且始终 `exit 0`，prompt/工具永不被挡。
+
+实测（artboy-knowledge 实例）：正常路径 exit 0 / stdout 1171 字节 / stderr 0
+字节；`OKS_PYTHON=/usr/bin/python3`（3.9.6，引擎陈旧）exit 0 且 stderr 直接
+点出 `TypeError: unsupported operand type(s) for |` 在
+`user-prompt-recall.py:66`。修复前同一场景是 exit 1 + 零输出。
+
+### fix(hooks): `oks hook install` 刷新过期的 wrapper 正文
+
+`_ensure_recall_scripts` 判定 `.sh` 是否需要重写时只看「有没有当前解释器
+的 bake」。于是 bake 正确、正文陈旧的实例会被跳过，上游 wrapper 修复永远
+到不了它们。改为与打包资产逐字比对（把 bake 代入后），bake 陈旧和正文陈旧
+都会重写；读不到资产时退回旧的 bake 子串判定。`.py` 引擎仍保持「存在就不
+动」，刷新引擎请用 `oks init <root> --upgrade`。
+
+### fix(hooks): `oks hook status` 分级结论，不再把陈旧当阻断
+
+新增 `engine version: current / outdated` 一行（按内容比对打包资产），并把
+结论分三档：有阻断项（脚本缺失、解释器 import 不了 knowledge_studio）才说
+`a hook cannot inject context`，并明确 `wired` 只代表设置项存在；仅引擎与
+打包版本不一致时降级为黄色提示，指向 `oks init --upgrade`；都正常则报
+healthy。之前把「引擎陈旧」也算进阻断项，会对一个实际能注入的 hook 谎报
+失效。
+
+### fix(hooks): 修正 `hook install` 帮助文案 (P6)
+
+原文案说「Copies the hook scripts ... (if missing)」「non-destructive:
+existing hooks are preserved」，与实现不符——`.sh` 每次都会重写以重新 bake
+解释器。改为如实说明：只保留既有 `.py` 引擎，`.sh` wrapper 会被重写，刷新
+引擎用 `oks init <root> --upgrade`。
+
+### test: +4 hook/init 回归测试 (326→330 passed)
+
+- `test_hook_install_refreshes_an_outdated_wrapper_body`：bake 正确但正文陈旧
+  必须被重写
+- `test_hook_status_reports_a_differing_engine_as_a_warning`：引擎不一致只报
+  警告，不得出现 `cannot inject context`
+- `test_recall_wrapper_surfaces_engine_failure_and_still_exits_zero`：引擎失败
+  要可见且 exit 0
+- `test_init_upgrade_refreshes_engines_without_unwiring_hooks`：`--upgrade` 刷新
+  引擎的同时接线不得丢失
+
 ## [0.6.16] — 2026-08-30
 
 ### feat(mail): inbox 按日期分目录 + `oks mail migrate` 迁移命令

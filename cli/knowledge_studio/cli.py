@@ -1954,6 +1954,12 @@ def _materialize_assets(root: Path, base: Path, overwrite: bool) -> list[str]:
     """Assemble instance directories from the single-source asset tree."""
     import shutil
 
+    # Editor config files carry the live hook wiring that `oks hook install`
+    # writes. Re-copying the pristine asset over them silently un-wires
+    # UserPromptSubmit and reverts migrated absolute paths, so an upgrade must
+    # leave an existing one alone; a fresh init still gets it.
+    wiring_state = {root / rel for rel in _HOOK_EDITORS.values()}
+
     def copy_into(src: Path, dest: Path) -> bool:
         """Merge per file: never clobber what the user changed unless upgrading.
 
@@ -1966,7 +1972,7 @@ def _materialize_assets(root: Path, base: Path, overwrite: bool) -> list[str]:
             if item.is_dir():
                 target.mkdir(parents=True, exist_ok=True)
                 continue
-            if target.exists() and not overwrite:
+            if target.exists() and (not overwrite or target in wiring_state):
                 continue
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(item, target)
@@ -2815,9 +2821,10 @@ def _ensure_recall_scripts(root: Path, hooks_dir: Path | None = None) -> list[st
     """Copy/refresh the recall hook scripts into an agent's hooks directory.
 
     The .sh wrapper gets the current interpreter baked into its OKS_PYTHON
-    fallback. If an existing .sh lacks the current bake (fresh copy still on
-    `python3`, or baked against a stale interpreter), it is re-copied from
-    the asset source and re-baked. The .py engine is only copied if missing.
+    fallback, and is re-copied whenever it differs from the bundled asset —
+    that covers both a stale interpreter bake and an outdated wrapper body, so
+    an upstream wrapper fix reaches instances created before it. The .py engine
+    is only copied if missing; `oks init --upgrade` refreshes those.
     """
     import shutil
     import stat
@@ -2850,11 +2857,20 @@ def _ensure_recall_scripts(root: Path, hooks_dir: Path | None = None) -> list[st
             if not name.endswith(".sh"):
                 continue
             try:
-                if baked in dest.read_text(encoding="utf-8"):
+                current = dest.read_text(encoding="utf-8")
+                if src_dir is not None and (src_dir / name).is_file():
+                    expected = (
+                        (src_dir / name)
+                        .read_text(encoding="utf-8")
+                        .replace('"${OKS_PYTHON:-python3}"', baked)
+                    )
+                    if current == expected:
+                        continue
+                elif baked in current:
                     continue
             except OSError:
                 pass
-            # Stale interpreter bake — fall through to re-copy + re-bake.
+            # Outdated wrapper body or stale interpreter bake — re-copy + re-bake.
         if src_dir is None or not (src_dir / name).is_file():
             raise FileNotFoundError(
                 f"bundled hook script not found: {name} (asset source: {src_dir})"
@@ -3293,7 +3309,8 @@ def hook_status(
     import re
     import subprocess
     shown_dirs = []
-    problems: list[str] = []
+    blockers: list[str] = []
+    warnings: list[str] = []
     any_wired = False
     for name in _HOOK_EDITORS:
         hooks_dir = root / _HOOK_SCRIPT_DIRS[name]
@@ -3304,7 +3321,7 @@ def hook_status(
         label = "script" if name == "claude" else f"{name} script"
         console.print(f"  {label}: {'present' if script.is_file() else 'missing'} ({script})")
         if not script.is_file():
-            problems.append(f"{label} is missing — run `oks hook install`")
+            blockers.append(f"{label} is missing — run `oks hook install`")
             continue
         m = re.search(r"\$\{OKS_PYTHON:-([^}]+)\}", script.read_text(encoding="utf-8"))
         py = os.environ.get("OKS_PYTHON") or (m.group(1) if m else "python3")
@@ -3320,15 +3337,17 @@ def hook_status(
                       "run `oks hook install` to re-bake[/red]")
         console.print(f"  {label} engine: {state} (python: {py})")
         if not ok:
-            problems.append(
+            blockers.append(
                 f"{label} interpreter cannot import knowledge_studio ({py}) — "
                 "run `oks hook install` to re-bake"
             )
         stale = _stale_hook_engines(hooks_dir)
         if stale:
-            console.print(f"  {label} engine version: [red]outdated[/red] ({', '.join(stale)})")
-            problems.append(
-                f"{label} engine is older than the bundled one ({', '.join(stale)}) — "
+            console.print(
+                f"  {label} engine version: [yellow]outdated[/yellow] ({', '.join(stale)})"
+            )
+            warnings.append(
+                f"{label} engine differs from the bundled one ({', '.join(stale)}) — "
                 f"run `oks init {root} --upgrade`; `oks hook install` keeps an "
                 "existing engine and cannot refresh it"
             )
@@ -3348,15 +3367,20 @@ def hook_status(
         console.print(f"  {name} PostToolUse: {post_state}")
         if name == "codex":
             console.print("  codex trust: review with `/hooks`")
-    if problems:
+    if blockers:
         console.print(
-            "\n  [red]verdict: the hook cannot inject context.[/red] "
+            "\n  [red]verdict: a hook cannot inject context.[/red] "
             "[yellow]`wired` above only means the settings entry exists.[/yellow]"
         )
-        for problem in problems:
-            console.print(f"    - {problem}")
+    elif warnings:
+        console.print(
+            "\n  [yellow]verdict: hooks run, but an engine is not the bundled "
+            "version — it may lack upstream fixes.[/yellow]"
+        )
     elif any_wired:
         console.print("\n  [green]verdict: scripts are healthy and wired.[/green]")
+    for item in (*blockers, *warnings):
+        console.print(f"    - {item}")
 
 
 if __name__ == "__main__":
