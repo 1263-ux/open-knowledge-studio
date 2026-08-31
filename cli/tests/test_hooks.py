@@ -641,3 +641,33 @@ def test_init_upgrade_refreshes_engines_without_unwiring_hooks(tmp_path):
     assert engine.read_text(encoding="utf-8") != "# stale\n"
     assert (target / ".codex" / "hooks.json").read_text(encoding="utf-8") == before
     assert _codex_commands(_load_codex_hooks(target), "UserPromptSubmit")
+
+
+def test_init_upgrade_keeps_the_baked_interpreter(tmp_path):
+    """Refreshing the wrapper body must not reset OKS_PYTHON to bare python3.
+
+    `python3` cannot import knowledge_studio on a pipx/venv install, so losing
+    the bake turns the upgrade into a silent hook outage.
+    """
+    target = _init_instance(tmp_path)
+    assert runner.invoke(
+        app, ["hook", "install", "--editor", "codex", "--path", str(target)]
+    ).exit_code == 0
+    baked = f"${{OKS_PYTHON:-{sys.executable}}}"
+    wrappers = [
+        target / ".codex" / "hooks" / name
+        for name in ("user-prompt-recall.sh", "post-tool-edit.sh")
+    ]
+    for wrapper in wrappers:
+        assert baked in wrapper.read_text(encoding="utf-8")
+    # Force a body refresh so the copy actually happens.
+    wrappers[0].write_text(f'#!/usr/bin/env bash\n"{baked}" old\n', encoding="utf-8")
+
+    assert runner.invoke(
+        app, ["init", str(target), "--no-git", "--no-set-default", "--upgrade"]
+    ).exit_code == 0
+
+    for wrapper in wrappers:
+        body = wrapper.read_text(encoding="utf-8")
+        assert baked in body, body
+        assert "${OKS_PYTHON:-python3}" not in body

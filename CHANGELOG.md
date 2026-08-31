@@ -1,5 +1,25 @@
 ## [0.6.17] — 2026-08-31
 
+### fix(init): `--upgrade` 不再把 wrapper 的解释器打回 `python3`
+
+接着上一条继续查，发现同一类的第二个缺陷：`--upgrade` 把打包的
+`user-prompt-recall.sh` / `post-tool-edit.sh` 原样盖回去，顺手把
+`${OKS_PYTHON:-<解释器>}` 里 `oks hook install` bake 进去的解释器重置成
+裸 `python3`。pipx / venv / conda 装的 `oks`，`python3` 根本 import 不到
+`knowledge_studio` —— 于是 `--upgrade` 一边刷新引擎、一边让 hook 失效，
+而这条路正是 `oks hook status` 推荐给用户的。
+
+实测（真实 KB `artboy-knowledge` 的副本，136M 全量）：修复前
+`.claude/hooks/user-prompt-recall.sh` 的
+`OKS_PYTHON:-/opt/homebrew/.../python3.13` → `OKS_PYTHON:-python3`；
+修复后 bake 保持不变，引擎仍刷新到最新，接线三个文件逐字节不变，
+升级后的副本里直接跑 wrapper：exit 0 / stdout 692 字节
+`<recalled-memory>` / stderr 0 字节。
+
+修复：bake 与接线同属运行态。`_materialize_assets` 在拷贝前快照各
+wrapper 的非默认 bake，拷贝后写回，因此升级只换正文不换解释器。
+新增 `test_init_upgrade_keeps_the_baked_interpreter`。
+
 ### fix(init): `--upgrade` 不再冲掉 hook 接线
 
 追查上一条 `hook status` 建议时发现的真实缺陷：`_materialize_assets`
@@ -66,7 +86,7 @@ existing hooks are preserved」，与实现不符——`.sh` 每次都会重写�
 解释器。改为如实说明：只保留既有 `.py` 引擎，`.sh` wrapper 会被重写，刷新
 引擎用 `oks init <root> --upgrade`。
 
-### test: +4 hook/init 回归测试 (326→330 passed)
+### test: +5 hook/init 回归测试 (326→331 passed)
 
 - `test_hook_install_refreshes_an_outdated_wrapper_body`：bake 正确但正文陈旧
   必须被重写
@@ -76,6 +96,8 @@ existing hooks are preserved」，与实现不符——`.sh` 每次都会重写�
   要可见且 exit 0
 - `test_init_upgrade_refreshes_engines_without_unwiring_hooks`：`--upgrade` 刷新
   引擎的同时接线不得丢失
+- `test_init_upgrade_keeps_the_baked_interpreter`：`--upgrade` 刷新 wrapper 正文
+  时不得把 bake 好的解释器打回 `python3`
 
 ## [0.6.16] — 2026-08-30
 

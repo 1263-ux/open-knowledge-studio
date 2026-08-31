@@ -1960,6 +1960,28 @@ def _materialize_assets(root: Path, base: Path, overwrite: bool) -> list[str]:
     # leave an existing one alone; a fresh init still gets it.
     wiring_state = {root / rel for rel in _HOOK_EDITORS.values()}
 
+    # The interpreter baked into a wrapper's OKS_PYTHON fallback is also live
+    # install state, written by `oks hook install`. Copying the pristine asset
+    # resets it to `python3`, which cannot import knowledge_studio on a
+    # pipx/venv install — so an upgrade would refresh the engines and disable
+    # the hooks in the same breath. Snapshot each bake and restore it after.
+    default_bake = '"${OKS_PYTHON:-python3}"'
+    preserved_bakes: dict[Path, str] = {}
+    for dest_name, spec in _AGENT_TARGETS.items():
+        if not spec["hooks"]:
+            continue
+        for name in _RECALL_HOOK_SCRIPTS:
+            if not name.endswith(".sh"):
+                continue
+            wrapper = root / dest_name / "hooks" / name
+            try:
+                body = wrapper.read_text(encoding="utf-8")
+            except OSError:
+                continue
+            found = re.search(r"\$\{OKS_PYTHON:-([^}]+)\}", body)
+            if found and found.group(1) != "python3":
+                preserved_bakes[wrapper] = f'"${{OKS_PYTHON:-{found.group(1)}}}"'
+
     def copy_into(src: Path, dest: Path) -> bool:
         """Merge per file: never clobber what the user changed unless upgrading.
 
@@ -1998,6 +2020,13 @@ def _materialize_assets(root: Path, base: Path, overwrite: bool) -> list[str]:
                 wrote |= copy_into(src, dest / component)
         if wrote:
             done.append(dest_name)
+    for wrapper, bake in preserved_bakes.items():
+        try:
+            body = wrapper.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        if default_bake in body:
+            wrapper.write_text(body.replace(default_bake, bake), encoding="utf-8")
     _bake_codex_lifecycle_hooks(root)
     return done
 
