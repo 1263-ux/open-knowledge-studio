@@ -136,7 +136,7 @@ cluster 三层 + 召回层扩多路
 
 **P1（文件即 DB）**：core 的 wiki/raw/profiles/mail 永远是文件 + frontmatter。对象存储是"文件存哪"，不是"文件变 DB 行"。mini/standard 完全 P1；cluster 的 core 文件存对象存储，本地是缓存（P1 部分退化但语义不变）。
 
-**P4（API-free）**：core 命令（`oks recall/fs/init`）永远本地操作，不调远程 API。remote sync 是 opt-in 扩展命令。Hub 服务（若用）是独立部署，core 不依赖。mini/standard 完全 P4；cluster 的 remote sync 是扩展层，core 仍本地优先。
+**P4（API-free）**：core 命令（`oks recall` / `oks fs` / `oks init`）永远本地操作，不调远程 API。remote sync 是 opt-in 扩展命令。Hub 服务（若用）是独立部署，core 不依赖。mini/standard 完全 P4；cluster 的 remote sync 是扩展层，core 仍本地优先。
 
 **A8（三层不变量）**：所有规模都是三层。复杂版是召回层宽（多路）、注入层厚（协同）、衰减层散（分布式）——**层数永远三**。不在召回层 re-rank 灵魂（fusion 实测负优化，所有规模适用）。
 
