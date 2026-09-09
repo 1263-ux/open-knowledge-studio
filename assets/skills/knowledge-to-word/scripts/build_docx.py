@@ -108,8 +108,10 @@ def build(outline: dict, output: Path) -> None:
             paragraph = document.add_paragraph(style="List Bullet")
             label = source.get("label", "Source")
             path = source.get("path", "")
+            status = source.get("status", "")
+            suffix = f" [{status}]" if status else ""
             _add_text(paragraph, f"{label}: ")
-            _add_text(paragraph, path)
+            _add_text(paragraph, f"{path}{suffix}")
 
     output.parent.mkdir(parents=True, exist_ok=True)
     fd, temp_name = tempfile.mkstemp(prefix=f".{output.stem}-", suffix=".docx", dir=output.parent)

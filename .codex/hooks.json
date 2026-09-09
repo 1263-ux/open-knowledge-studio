@@ -1,0 +1,24 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "C:\\Users\\chenfeng\\AppData\\Local\\pipx\\pipx\\venvs\\open-knowledge-studio\\Scripts\\python.exe D:\\XiangMuLuoDi\\Clone\\open-agent-power\\open-knowledge-studio\\.codex\\hooks\\post-tool-edit.py 2>NUL"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "C:\\Users\\chenfeng\\AppData\\Local\\pipx\\pipx\\venvs\\open-knowledge-studio\\Scripts\\python.exe D:\\XiangMuLuoDi\\Clone\\open-agent-power\\open-knowledge-studio\\.codex\\hooks\\user-prompt-recall.py 2>NUL"
+          }
+        ]
+      }
+    ]
+  }
+}

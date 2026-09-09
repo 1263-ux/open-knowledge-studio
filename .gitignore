@@ -32,6 +32,10 @@ cli/knowledge_studio.egg-info/
 # Trace append locks (runtime state, not trace content)
 raw/executions/*/.append.lock
 
+# Mail runtime state: this repo is Studio source; mail/ belongs to instances
+# (an instance's own .gitignore tracks its mail/ — see oks init template)
+/mail/
+
 # Qoder local runtime state (scheduled tasks etc.)
 .qoder/
 
@@ -103,3 +107,11 @@ records/file-edits.jsonl
 # Local agent workflow artifacts and recall trace output
 .agent/
 records/inject.jsonl
+
+# Local experiment/scratch directories (not part of the Studio source tree)
+/tmp/
+/artifacts/
+/output/
+
+# ZCode client-local session state
+/.zcode/

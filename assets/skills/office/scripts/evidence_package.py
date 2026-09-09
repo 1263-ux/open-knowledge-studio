@@ -1,0 +1,277 @@
+#!/usr/bin/env python3
+"""Validate and normalize an OKS Office evidence package.
+
+The package is the bridge between OKS recall and format adapters. It keeps
+claim-to-source mappings explicit, then produces the older shared outline
+shape so existing renderers remain compatible.
+"""
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from typing import Any
+from urllib.parse import urlparse
+
+
+SOURCE_STATUSES = {
+    "reviewed",
+    "partial",
+    "failed",
+    "skipped",
+    "environment_limited",
+    "unverified",
+    "synthesis",
+}
+SOURCE_KINDS = {"wiki", "raw", "profile", "web", "research", "template", "synthesis"}
+EXTERNAL_SOURCE_KINDS = {"web", "research"}
+CLAIM_STATUSES = {"reviewed", "provisional", "unverified"}
+CONFIDENCES = {"high", "medium", "low"}
+BLOCK_TYPES = {"paragraph", "bullets", "table", "callout"}
+
+
+def _text(value: Any) -> str:
+    if value is None:
+        return ""
+    return str(value).strip()
+
+
+def _refs(value: Any, location: str) -> list[str]:
+    if not isinstance(value, list) or not value or any(not _text(item) for item in value):
+        raise ValueError(f"{location} must be a non-empty list of ids")
+    return [_text(item) for item in value]
+
+
+def _is_http_url(value: str) -> bool:
+    parsed = urlparse(value)
+    return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
+
+
+def load_package(path: Path) -> dict[str, Any]:
+    data = json.loads(path.read_text(encoding="utf-8"))
+    validate_package(data)
+    return data
+
+
+def validate_package(data: Any) -> dict[str, Any]:
+    if not isinstance(data, dict):
+        raise ValueError("evidence package must be a JSON object")
+    if data.get("schema_version") != "oks-office-evidence/v1":
+        raise ValueError("schema_version must be oks-office-evidence/v1")
+    request = data.get("request")
+    if not isinstance(request, dict) or not _text(request.get("title")):
+        raise ValueError("request.title is required")
+
+    sources = data.get("sources")
+    if not isinstance(sources, list) or not sources:
+        raise ValueError("sources must be a non-empty list")
+    source_ids: set[str] = set()
+    for index, source in enumerate(sources):
+        location = f"sources[{index}]"
+        if not isinstance(source, dict):
+            raise ValueError(f"{location} must be an object")
+        source_id = _text(source.get("id"))
+        kind = _text(source.get("kind"))
+        label = _text(source.get("label"))
+        locator = _text(source.get("locator"))
+        status = _text(source.get("status"))
+        if not source_id or not kind or not label or not locator:
+            raise ValueError(f"{location} requires id, kind, label, and locator")
+        if source_id in source_ids:
+            raise ValueError(f"duplicate source id: {source_id}")
+        if kind not in SOURCE_KINDS:
+            raise ValueError(f"{location}.kind must be one of {sorted(SOURCE_KINDS)}")
+        if status not in SOURCE_STATUSES:
+            raise ValueError(f"{location}.status must be one of {sorted(SOURCE_STATUSES)}")
+        if kind in EXTERNAL_SOURCE_KINDS:
+            if not _is_http_url(locator):
+                raise ValueError(f"{location}.locator must be an http(s) URL for external research")
+            if not _text(source.get("retrieved_at")):
+                raise ValueError(f"{location}.retrieved_at is required for external research")
+        source_ids.add(source_id)
+
+    claims = data.get("claims")
+    if not isinstance(claims, list) or not claims:
+        raise ValueError("claims must be a non-empty list")
+    claim_ids: set[str] = set()
+    for index, claim in enumerate(claims):
+        location = f"claims[{index}]"
+        if not isinstance(claim, dict):
+            raise ValueError(f"{location} must be an object")
+        claim_id = _text(claim.get("id"))
+        if not claim_id or not _text(claim.get("text")):
+            raise ValueError(f"{location} requires id and text")
+        if claim_id in claim_ids:
+            raise ValueError(f"duplicate claim id: {claim_id}")
+        source_refs = _refs(claim.get("source_refs"), f"{location}.source_refs")
+        unknown = [ref for ref in source_refs if ref not in source_ids]
+        if unknown:
+            raise ValueError(f"{location}.source_refs contains unknown ids: {unknown}")
+        review_status = _text(claim.get("review_status"))
+        if review_status not in CLAIM_STATUSES:
+            raise ValueError(f"{location}.review_status must be one of {sorted(CLAIM_STATUSES)}")
+        confidence = _text(claim.get("confidence"))
+        if confidence and confidence not in CONFIDENCES:
+            raise ValueError(f"{location}.confidence must be one of {sorted(CONFIDENCES)}")
+        claim_ids.add(claim_id)
+
+    def check_claim_refs(value: Any, location: str) -> list[str]:
+        refs = _refs(value, location)
+        unknown = [ref for ref in refs if ref not in claim_ids]
+        if unknown:
+            raise ValueError(f"{location} contains unknown claim ids: {unknown}")
+        return refs
+
+    summary = data.get("summary")
+    if summary is not None:
+        if not isinstance(summary, dict) or not _text(summary.get("text")):
+            raise ValueError("summary requires text and claim_refs")
+        check_claim_refs(summary.get("claim_refs"), "summary.claim_refs")
+
+    sections = data.get("sections")
+    if not isinstance(sections, list) or not sections:
+        raise ValueError("sections must be a non-empty list")
+    section_ids: set[str] = set()
+    for section_index, section in enumerate(sections):
+        location = f"sections[{section_index}]"
+        if not isinstance(section, dict):
+            raise ValueError(f"{location} must be an object")
+        section_id = _text(section.get("id"))
+        if not section_id or section_id in section_ids:
+            raise ValueError(f"{location}.id is required and must be unique")
+        section_claims = set(check_claim_refs(section.get("claim_refs"), f"{location}.claim_refs"))
+        blocks = section.get("blocks")
+        if not isinstance(blocks, list) or not blocks:
+            raise ValueError(f"{location}.blocks must be a non-empty list")
+        for block_index, block in enumerate(blocks):
+            block_location = f"{location}.blocks[{block_index}]"
+            if not isinstance(block, dict):
+                raise ValueError(f"{block_location} must be an object")
+            block_type = _text(block.get("type"))
+            if block_type not in BLOCK_TYPES:
+                raise ValueError(f"{block_location}.type must be one of {sorted(BLOCK_TYPES)}")
+            block_claims = set(check_claim_refs(block.get("claim_refs"), f"{block_location}.claim_refs"))
+            if not block_claims.issubset(section_claims):
+                raise ValueError(f"{block_location}.claim_refs must be a subset of its section claim_refs")
+            if block_type in {"paragraph", "callout"} and not _text(block.get("text")):
+                raise ValueError(f"{block_location}.text is required")
+            if block_type == "bullets":
+                items = block.get("items")
+                if not isinstance(items, list) or not items:
+                    raise ValueError(f"{block_location}.items must be a non-empty list")
+                for item_index, item in enumerate(items):
+                    item_location = f"{block_location}.items[{item_index}]"
+                    if isinstance(item, str):
+                        if not item.strip():
+                            raise ValueError(f"{item_location} cannot be empty")
+                    elif isinstance(item, dict):
+                        if not _text(item.get("text")):
+                            raise ValueError(f"{item_location}.text is required")
+                        item_claims = set(check_claim_refs(item.get("claim_refs"), f"{item_location}.claim_refs"))
+                        if not item_claims.issubset(block_claims):
+                            raise ValueError(f"{item_location}.claim_refs must be a subset of its block claim_refs")
+                    else:
+                        raise ValueError(f"{item_location} must be a string or object")
+            if block_type == "table":
+                rows = block.get("rows")
+                if not isinstance(rows, list) or not rows or any(not isinstance(row, list) or not row for row in rows):
+                    raise ValueError(f"{block_location}.rows must be a non-empty list of rows")
+                width = len(rows[0])
+                if any(len(row) != width for row in rows):
+                    raise ValueError(f"{block_location}.rows must be rectangular")
+        section_ids.add(section_id)
+    return data
+
+
+def _source_refs_for_claims(claims_by_id: dict[str, dict[str, Any]], claim_refs: list[str]) -> list[str]:
+    result: list[str] = []
+    for claim_ref in claim_refs:
+        for source_ref in claims_by_id[claim_ref]["source_refs"]:
+            if source_ref not in result:
+                result.append(source_ref)
+    return result
+
+
+def _claim_statuses_for_claims(claims_by_id: dict[str, dict[str, Any]], claim_refs: list[str]) -> list[str]:
+    result: list[str] = []
+    for claim_ref in claim_refs:
+        status = _text(claims_by_id[claim_ref]["review_status"])
+        if status not in result:
+            result.append(status)
+    return result
+
+
+def package_to_outline(package: dict[str, Any]) -> dict[str, Any]:
+    validate_package(package)
+    claims_by_id = {_text(claim["id"]): claim for claim in package["claims"]}
+
+    def item(value: Any, inherited_claims: list[str]) -> dict[str, Any]:
+        if isinstance(value, dict):
+            claim_refs = [_text(ref) for ref in value["claim_refs"]]
+            return {
+                "text": _text(value["text"]),
+                "source_refs": _source_refs_for_claims(claims_by_id, claim_refs),
+                "claim_statuses": _claim_statuses_for_claims(claims_by_id, claim_refs),
+            }
+        return {
+            "text": _text(value),
+            "source_refs": _source_refs_for_claims(claims_by_id, inherited_claims),
+            "claim_statuses": _claim_statuses_for_claims(claims_by_id, inherited_claims),
+        }
+
+    summary = package.get("summary")
+    outline: dict[str, Any] = {
+        "title": _text(package["request"]["title"]),
+        "subtitle": _text(package["request"].get("audience")),
+        "sections": [],
+        "sources": [
+            {
+                "id": source["id"],
+                "kind": source["kind"],
+                "label": source["label"],
+                "path": source["locator"],
+                "status": source["status"],
+                "retrieved_at": source.get("retrieved_at"),
+            }
+            for source in package["sources"]
+        ],
+    }
+    if summary:
+        summary_claims = [_text(ref) for ref in summary["claim_refs"]]
+        outline["summary"] = _text(summary["text"])
+        outline["summary_source_refs"] = _source_refs_for_claims(claims_by_id, summary_claims)
+        outline["summary_claim_statuses"] = _claim_statuses_for_claims(claims_by_id, summary_claims)
+
+    for section in package["sections"]:
+        section_claims = [_text(ref) for ref in section["claim_refs"]]
+        section_data: dict[str, Any] = {
+            "heading": _text(section["title"]),
+            "source_refs": _source_refs_for_claims(claims_by_id, section_claims),
+            "paragraphs": [],
+            "bullets": [],
+            "table": [],
+            "tables": [],
+        }
+        for block in section["blocks"]:
+            block_type = block["type"]
+            block_claims = [_text(ref) for ref in block["claim_refs"]]
+            if block_type in {"paragraph", "callout"}:
+                section_data["paragraphs"].append(item({"text": block["text"], "claim_refs": block_claims}, section_claims))
+            elif block_type == "bullets":
+                section_data["bullets"].extend(item(value, block_claims) for value in block["items"])
+            elif block_type == "table":
+                section_data["tables"].append(
+                    {
+                        "rows": block["rows"],
+                        "source_refs": _source_refs_for_claims(claims_by_id, block_claims),
+                        "claim_statuses": _claim_statuses_for_claims(claims_by_id, block_claims),
+                    }
+                )
+        outline["sections"].append(section_data)
+    return outline
+
+
+def package_to_outline_file(package_path: Path, outline_path: Path) -> dict[str, Any]:
+    outline = package_to_outline(load_package(package_path))
+    outline_path.parent.mkdir(parents=True, exist_ok=True)
+    outline_path.write_text(json.dumps(outline, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return outline

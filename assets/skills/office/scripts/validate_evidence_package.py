@@ -1,0 +1,42 @@
+#!/usr/bin/env python3
+"""Fail-closed validator for an OKS Office evidence package."""
+from __future__ import annotations
+
+import argparse
+import json
+from pathlib import Path
+import sys
+
+from evidence_package import load_package, package_to_outline
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--package", required=True, type=Path)
+    parser.add_argument("--json", action="store_true", dest="as_json")
+    parser.add_argument("--normalized-outline", type=Path)
+    args = parser.parse_args()
+    try:
+        package = load_package(args.package)
+        outline = package_to_outline(package)
+        if args.normalized_outline:
+            args.normalized_outline.parent.mkdir(parents=True, exist_ok=True)
+            args.normalized_outline.write_text(json.dumps(outline, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        result = {
+            "valid": True,
+            "schema_version": package["schema_version"],
+            "claims": len(package["claims"]),
+            "sections": len(package["sections"]),
+            "sources": len(package["sources"]),
+            "normalized": bool(args.normalized_outline),
+        }
+        print(json.dumps(result, ensure_ascii=False) if args.as_json else "valid OKS Office evidence package")
+        return 0
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        result = {"valid": False, "error": str(exc)}
+        print(json.dumps(result, ensure_ascii=False) if args.as_json else f"invalid: {exc}", file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

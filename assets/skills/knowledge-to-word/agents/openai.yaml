@@ -1,4 +1,4 @@
 interface:
   display_name: "Knowledge to Word"
-  short_description: "Generate reviewed Word documents from OKS knowledge"
-  default_prompt: "Use $knowledge-to-word to turn relevant OKS knowledge into a polished, cited Word document."
+  short_description: "Compatibility entry point for OKS Office Word output"
+  default_prompt: "Use $knowledge-to-word (the OKS Office Word route) to create a source-traceable Word document from relevant OKS knowledge and, where needed, cited external research."
