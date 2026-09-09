@@ -2,7 +2,7 @@
 (function () {
   function init() {
     var main = document.querySelector('.main-content');
-    if (main && !main.getAttribute('data-oks-toc')) {
+    if (main && !main.getAttribute('data-oks-toc') && !main.querySelector('.oks-hero')) {
       main.setAttribute('data-oks-toc', '1');
       var heads = main.querySelectorAll('h2');
       if (heads.length >= 2) {

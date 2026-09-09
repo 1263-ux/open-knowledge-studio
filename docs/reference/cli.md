@@ -26,14 +26,47 @@ parent: 参考
 | `oks team init [path] [--name NAME]` | 创建共享团队知识实例 |
 | `oks schema show <name>` | 输出协议文档的校验示例 |
 | `oks trace *` | 执行追踪（provenance） |
-| `oks mail send/inbox/read/count` | Agent 间消息接口；不属于 `oks recall` 结果 |
+| `oks mail delegate/send/sent/reply/inbox/thread/read/archive/count/ack/view/snapshot/wait` | Agent-native 意图交接、Agent 间协调接口、Thread/Session 投影、可写状态操作与无 Host push 时的本地等待降级；不属于 `oks recall` 结果；详见 [Mail 协议](mail-protocol) |
 | `oks registry list/bind/remove` | 终端注册表（agent+cwd → profile/goal） |
 | `oks lint` | 扫 wiki/ 一致性 |
 | `oks config init/show/set` | 配置 |
 | `oks security sanitize <file>` | 凭据脱敏 |
 | `oks eval recall <dataset>` | 召回离线评测 |
 
+Windows 原生运行 Claude 或 Codex 时，执行对应的 `oks hook install --editor ...`
+会把 `UserPromptSubmit` 与 `PostToolUse` 直接绑定到 Python hook，不依赖 Bash；安装器
+同时复制 `_hook_runner.py`，由它把当前 OKS 包根目录加入 `sys.path`，因此新安装的
+Hook 能在没有 `OKS_*` 环境变量时加载正确的 Mail 实现。升级 `oks` 后如需刷新已安装
+Hook，应重新执行 `oks hook install`；
+Codex 的 `PreToolUse`、`PreCompact`、`SessionStart` 等其他生命周期 hook 仍是
+Bash 脚本，需要 WSL 或 Git Bash。Qoder 的 hook 也仍按 Bash 环境运行。
+
 完整命令：`oks --help`。
+
+Agent 交接优先使用意图级命令，避免手工拼装 handoff 字段：
+
+```bash
+oks mail delegate --to codex --task "检查登录模块" \
+  --context "重点看 src/auth" \
+  --acceptance "输出问题清单和修改建议" \
+  --format json
+```
+
+`@codex` 仍是协议层可接受的路由键；普通用户不需要输入它，Host 或当前
+Agent 可以在后台填充目标和 Session。`send/reply` 仍保留为低层兼容和排障
+接口。
+
+`send`、`delegate`、`reply` 支持重复的 `--evidence-ref '<json object>'`，例如：
+
+```bash
+oks mail reply thr_... --session-id codex-s1 \
+  --evidence-ref '{"type":"trace","id":"trace_xxx"}' \
+  --evidence-ref '{"type":"candidate","path":"drafts/foo.md"}' \
+  --body "结果已完成" --format json
+```
+
+Evidence Ref 只保存 `trace`、`run`、`capability`、`bundle`、`commit` 的 `id` 或
+`candidate` 的相对 `path`，不会把证据正文复制进 Mail。
 
 ## 只读虚拟文件系统
 
@@ -63,7 +96,7 @@ VFS 没有 `write`、`mkdir`、`mv`、`rm`、`cp` 或其他修改命令。Raw �
 | `OKS_RECALL_FLOOR` | 0.7 | 最小 relevance 才注入 |
 | `OKS_RECALL_TOPN` | 3 | 最多注入条数 |
 | `OKS_RECALL_COOLDOWN` | 10 | 同 slug 重注入间隔（轮）|
-| `OKS_MAIL_TOPN` | 3 | 最多注入未读 mail |
+| `OKS_MAIL_TOPN` | 3 | 当前 Agent/Session 最多注入的协调 mail 数；注入写 Delivery Receipt，不会自动标记已读 |
 | `OKS_CONFLICT_WINDOW` | 300 | 文件冲突检测窗口（秒）|
 | `OKS_AGENT_ID` | cwd basename | Agent 身份（registry key）|
 | `OKS_SEARCH_BACKEND` | native | search backend：`native` \| `fts5` \| `fusion` \| `<connector-name>`（见下） |

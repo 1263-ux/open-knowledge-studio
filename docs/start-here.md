@@ -30,4 +30,5 @@ has_children: true
 
 - 已经有很多历史对话：[导入已有对话](import-conversations.html)
 - 想看完整研究场景：[托管你的研究](oh-my/study.html)
+- 想把已审核知识交付为文件：[Office 工作流](usage/office.html)
 - 想理解为什么必须人审：[知识即模型](concepts/philosophy.html)

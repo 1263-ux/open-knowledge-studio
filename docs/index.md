@@ -14,6 +14,21 @@ nav_exclude: true
   </div>
 </div>
 
+<div class="oks-proof-strip" aria-label="OKS 的三个保证">
+  <div>
+    <strong>有来源</strong>
+    <span>重要判断可以回到具体材料</span>
+  </div>
+  <div>
+    <strong>先审核</strong>
+    <span>Agent 只能提出 Candidate，不能自我批准</span>
+  </div>
+  <div>
+    <strong>可复用</strong>
+    <span>下一次任务直接召回已确认的经验</span>
+  </div>
+</div>
+
 ## 把这句话交给 Agent
 
 > 请按 [OKS 上游安装 Skill](https://raw.githubusercontent.com/open-agent-power/open-knowledge-studio/main/SKILL.md) 为我安装 Open Knowledge Studio：把个人知识放进独立实例，不要写入源码仓库；完成后用自然语言告诉我实例位置、可用能力和所有未完成项。

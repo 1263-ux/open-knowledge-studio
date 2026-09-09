@@ -14,6 +14,26 @@
 
 它不是模型训练，也不会把 Agent 看过的内容自动变成“团队共识”。材料先被保留，Agent 可以提出 Candidate，是否留下仍由人决定。
 
+## OKS Mail：跨 Session 的持续通信层
+
+OKS Mail 是 Git-backed、独立于宿主的持久通信层：Human 和 Agent 可以在同一
+个 durable Thread 中跨 Session、Agent、Host 和机器继续消息、回复、Receipt
+事实和成果引用。Thread 是有主题边界的通信上下文，不是任务、工作流或执行状态。
+
+Claude、Codex、DSH 以及未来的 Pi、桌面或 Web Host 都可以通过各自的 Adapter
+使用同一份 Thread、Message 和 Session Receipt。DSH 只是当前的 Human/Work UI
+Adapter；它调用 `oks mail` 提供可视化和人工操作，Mail Core 不依赖 DSH，也不把
+通信消息混入 Wiki 或 Recall。
+
+其中 `oks` CLI 是 Agent-native 的核心入口；Host 只是适配器。Agent 交接任务
+优先使用 `oks mail delegate`，由 CLI 自动构造 handoff Thread；普通用户则由
+当前 Agent 在后台调用它，不需要学习 `@agent-id`。
+
+普通用户不需要学习 `thread_id` 或 `ack`。当前 DSH P0 仍要求选择收件 Agent，
+但它默认把 Session、机器和协议 ID 收在来源详情中；用户应感受到的是同一段对话
+可以继续，而不是一次次独立执行。自然语言路由和命名 Human 身份仍是后续需要单独
+设计的能力。
+
 ## 先看它怎么工作
 
 不必先读一堆文档。这里有一个真实记录：两段 Kimi 视频被保存为来源和 Raw，Agent 据此提出待审核的知识 Candidate。

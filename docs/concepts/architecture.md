@@ -8,6 +8,48 @@ parent: 理解 OKS
 
 OKS 不是一个单独的“记忆插件”。它是一套让 **用户、Agent、文件化知识、收录能力和交付能力**各自做对的事的工作架构。
 
+## OKS Mail 的产品定位
+
+OKS Mail 是 OKS 的跨 Host 持久协作协议，不是 DSH 的附属功能，也不是
+一个只能在面板里查看的知识桶。它把 Message、Thread、Agent 状态和
+Session Receipt 保存在文件中，供不同 Agent 与 Session 继续同一项工作；
+Mail 不因此变成 Wiki，也不承诺唤醒进程或保证任务执行。
+
+### Agent-native 的两层使用模型
+
+Mail 的底层协议面向 Agent，用户层面向任务意图。`@claude`、`@codex` 等是
+内部稳定地址；普通用户不应被要求记住它们或手动维护 Thread/Session。
+
+```text
+普通用户：描述任务 → 选择/接受推荐 Agent → 查看结果
+                         │
+Host / Agent Adapter：自动创建 Thread、路由、呈现和回复
+                         │
+协议层：@agent-id + Message + Thread + Session Receipt
+```
+
+这不是两套 Mail，也不是 DSH 取代 Agent。Agent 是协作的主要操作者，DSH 是
+人类观察与介入的工作面；`thread_id`、`session_id`、`ack` 和底层 `@` 地址
+应在高级详情或 Agent CLI 中保留，而不是成为普通用户的日常心智负担。
+
+```text
+                         OKS Mail Protocol
+                 ┌──────────────┼──────────────┐
+                 ▼              ▼              ▼
+          Claude Adapter   Codex Adapter   DSH Adapter
+            Hook / CLI       Hook / CLI      RPC / UI
+                 │              │              │
+                 └──────────────┴──────────────┘
+                                │
+                        Future Host Adapters
+                         Pi / Desktop / Web / TUI
+```
+
+Claude、Codex、DSH 以及未来的 Pi、桌面或 Web Host 都是同一 Mail Core 的
+适配器。DSH 是当前的 Human/Work UI Adapter，负责把协议投影为可观察、可
+操作的工作面；它通过 `oks mail` 访问 Core，Core 不依赖 DSH，也不要求
+所有 Host 都有 UI。
+
 <picture>
   <source media="(max-width: 50rem)" srcset="../assets/architecture/oks-overview-mobile.svg">
   <img src="../assets/architecture/oks-overview.svg" alt="OKS 完整架构：用户和 Agent 在上方发起任务；profiles、raw、drafts、wiki、mail 构成文件化知识工作区；右侧是 API-free CLI、能力目录、安全契约与 Office 交付；人审门控制 Candidate 进入 Wiki，召回将资料带回下一次任务。">
@@ -44,3 +86,4 @@ OKS 不是一个单独的“记忆插件”。它是一套让 **用户、Agent�
 - **VFS 不是新知识桶**：`oks://` 只提供受限的只读访问视图，不会绕开文件治理。
 - **Hooks 和飞书是可选入口**：它们可以改变收集或反馈的位置，但不会取消人工审核。
 - **信任来自证据和审核**：`[verified]` 只应来自 Trace 证据或 `human_reviewed_at`，而不是使用次数。
+- **协议细节不等于用户界面**：Mail Core 保留确定性的 Agent 路由键；Host 应将其封装为自然语言任务和友好 Agent 选择。

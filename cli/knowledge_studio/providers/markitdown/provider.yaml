@@ -17,6 +17,7 @@ cost:
   estimated_per_call: 0
 
 known_limits:
+  - Word 与 XLSX 的真实样本验收尚未完成
   - 公式可能丢失
   - 嵌入媒体不保留
   - PPTX 列表结构弱于原生

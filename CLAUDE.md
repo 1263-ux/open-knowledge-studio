@@ -116,8 +116,9 @@ open-knowledge-studio/
 | `/accept` ⚙ | Evidence-first isolated capability acceptance (maintainer-only, not in wheel) |
 | `/media-ingest` | Experimental video intake adapter (currently unavailable — scripts not yet packaged) |
 
-Agents skills mirror Claude skills with identical content. 4 dev-only skills
-are excluded from the Wheel via `_DEV_ONLY_ASSET_NAMES`.
+Agents skills mirror Claude skills with identical content. Maintainer-only
+skills such as `/accept` live only in this repo's `.claude/skills` and
+`.agents/skills` (never in `assets/skills`), so they are not shipped in the Wheel.
 
 ## CLI Commands
 
