@@ -8,7 +8,7 @@ Open Knowledge Studio is a file-based knowledge base system designed for use wit
 
 - **5 cognitive buckets + 2 infrastructure layers**: profiles/, raw/, wiki/, drafts/, mail/ (cognitive), settings/ (config), _meta/ (schema)
 - **Agent-Native ingestion pipeline**: Source → Provider → EvidenceFragment → EvidenceManifest → `oks raw-commit` → Raw Bundle v0.2 → Candidate → Human Review → Wiki
-- **6+1-factor recall engine**: token overlap + substring + topic trace + type boost + review bonus (failure lessons rank higher) + memory curve + optional goal boost (active goals lift on-scope pages; no-op without goals)
+- **Triple-Layer recall (Constitution A8)**: Node-BM25 retrieval (SQLite FTS5 over `##` heading nodes, default `fts5` backend) + Soul Boost injection re-rank (type boost, review bonus, generic demotion) + Memory Curve decay; legacy native 6+1 backend kept for compatibility
 - **Provider and capability catalogs**: inspect current Provider availability with `oks capability status`; do not copy changing counts into prose
 - **Dreaming cycle**: raw → AI distill → drafts → human review → wiki
 - **Decay system**: memory curve scoring with type-specific λ, tier classification (hot/warm/cold/evictable)
@@ -21,7 +21,7 @@ Open Knowledge Studio is a file-based knowledge base system designed for use wit
 | **What** | Original article, paper, repo note, or conversation | Durable takeaway, distilled and curated |
 | **Who writes** | Human collects, LLM reads only | LLM writes via Dreaming, human approves |
 | **Decay** | None | Type-specific λ |
-| **Recall** | Keyword + freshness | 6+1-factor relevance + memory curve |
+| **Recall** | Keyword + freshness | Triple-Layer: Node-BM25 relevance + Soul Boost re-rank + memory curve |
 | **Advantage** | Date-based ({YYYY}/{MM}/{DD}/{source}/), A/B/C grading, fingerprint dedup | 22-domain structure, decay tiers, 4 relationships |
 
 A strong workflow: save the source into `raw/`, then distill the parts worth keeping into `wiki/` memories.
@@ -47,7 +47,7 @@ raw/ (human-collected or tool-processed materials)
 drafts/ (intermediate proposals)
   ↓ /promote skill — human review
 wiki/ (curated knowledge, with decay)
-  ↓ oks recall / /query skill — 6+1-factor recall
+  ↓ oks recall / /query skill — Triple-Layer recall
 injected into Claude Code context
 ```
 
@@ -96,7 +96,7 @@ open-knowledge-studio/
 |-------|---------|
 | `/assess` | Q&A builds profile + active goals, verify recall boost (initial setup + tuning) |
 | `/ingest` | Agent-native evidence ingestion (Source → Provider → Fragment → Manifest → raw-commit) |
-| `/query` | 6+1-factor recall → inject into context → AI answers with citations |
+| `/query` | Triple-Layer recall → inject into context → AI answers with citations |
 | `/lint` | Scan wiki/: frontmatter, orphans, broken links, stale |
 | `/compile` | Re-compile concept pages from sources → drafts/ |
 | `/status` | Overview: wiki count, tier distribution, drafts, quality |
