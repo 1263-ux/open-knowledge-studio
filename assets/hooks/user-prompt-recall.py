@@ -543,8 +543,39 @@ def main() -> int:
     # ── Build sections ──
     sections = []
 
+    # Mail delivery: load before the first-run guide so pending mail can
+    # suppress it — the onboarding prompt and mail processing must not
+    # compete for the same reply.
+    mail_topn = int(params.get("mail_topn", 3))
+    registry_scope = reg_entry.get("scope", []) if reg_entry else []
+    if isinstance(registry_scope, list):
+        registry_scope = ",".join(str(item) for item in registry_scope)
+    if mail_domain is None:
+        # knowledge_studio is not importable (e.g. direct run with an
+        # interpreter that lacks the installed package). Degrade loudly
+        # instead of silently skipping pending mail.
+        print(
+            "oks-hook: knowledge_studio.mail unavailable"
+            f" ({_MAIL_IMPORT_ERROR}); Mail injection disabled for this run."
+            " Install hooks via `oks hook install` so the baked interpreter"
+            " can import knowledge_studio.",
+            file=sys.stderr,
+        )
+        if is_first_turn and kb_root is not None:
+            _write_mail_degraded_trace(kb_root, session_id, agent_id, cwd)
+        mails = []
+    else:
+        mails = _load_unread_mail(
+            kb_root,
+            agent_id=agent_id,
+            session_id=session_id,
+            scope=str(registry_scope),
+            limit=mail_topn,
+        )
+
     # 首次引导：新 session + 没绑 goal → 询问（一次性，AI 反问人类建档）
-    show_first_run = bool(prompt) and is_first_turn and not reg_goals
+    # 有待处理 Mail 时抑制：引导不能挤掉用户消息的处理。
+    show_first_run = bool(prompt) and is_first_turn and not reg_goals and not mails
     if show_first_run:
         sections.append(
             "## 首次使用（新终端）\n"
@@ -579,33 +610,7 @@ def main() -> int:
                 lines.append(f"    {preview}")
         sections.append("\n".join(lines))
 
-    # Mail section
-    mail_topn = int(params.get("mail_topn", 3))
-    registry_scope = reg_entry.get("scope", []) if reg_entry else []
-    if isinstance(registry_scope, list):
-        registry_scope = ",".join(str(item) for item in registry_scope)
-    if mail_domain is None:
-        # knowledge_studio is not importable (e.g. direct run with an
-        # interpreter that lacks the installed package). Degrade loudly
-        # instead of silently skipping pending mail.
-        print(
-            "oks-hook: knowledge_studio.mail unavailable"
-            f" ({_MAIL_IMPORT_ERROR}); Mail injection disabled for this run."
-            " Install hooks via `oks hook install` so the baked interpreter"
-            " can import knowledge_studio.",
-            file=sys.stderr,
-        )
-        if is_first_turn and kb_root is not None:
-            _write_mail_degraded_trace(kb_root, session_id, agent_id, cwd)
-        mails = []
-    else:
-        mails = _load_unread_mail(
-            kb_root,
-            agent_id=agent_id,
-            session_id=session_id,
-            scope=str(registry_scope),
-            limit=mail_topn,
-        )
+    # Mail section (delivery already loaded above)
     if mails:
         lines = [
             f"## 通信（{len(mails)} 未读）",

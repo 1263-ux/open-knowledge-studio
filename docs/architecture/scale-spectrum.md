@@ -1,3 +1,10 @@
+---
+title: 规模光谱
+nav_order: 4
+parent: 设计蓝图
+grand_parent: 工作原理
+---
+
 # 规模光谱 — 三层在 mini → cluster 的部署变形
 
 > OKS 是**三层架构**（CONSTITUTION A8: Triple-Layer Recall = 召回层 / 注入层 / 衰减层）。

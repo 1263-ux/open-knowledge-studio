@@ -1,3 +1,10 @@
+---
+title: Team 大型版设计
+nav_order: 3
+parent: 设计蓝图
+grand_parent: 工作原理
+---
+
 # Team 大型版 — fun-rec 架构 1:1 CV 设计（两部分 + 工业栈）
 
 > OKS team 大型版 = **OKS CLI 本地**（不变，加 remote backend connector）+ **远程推荐系统服务**（独立部署，1:1 CV fun-rec，含 ES/PG/Redis 工业栈）。

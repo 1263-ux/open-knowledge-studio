@@ -28,14 +28,17 @@ until a human has reviewed it. Claims based on external research are normally
 
 ## Research procedure
 
-1. Use OKS recall first and identify the exact knowledge gap.
-2. Research only material gaps, current facts, or user-requested external
-   context. Prefer the primary issuer, regulator, standard, paper, or vendor.
-3. Read the target page, record its direct URL and retrieval time, and capture
-   only claims the page supports. Search result snippets are not evidence.
-4. If a source cannot be read, preserve `failed`, `partial`, `skipped`, or
+1. Research the topic as a fixed baseline. Prefer the primary issuer,
+   regulator, standard, paper, or vendor; record its direct URL and retrieval
+   time. Search result snippets are not evidence.
+2. Identify what remains uncertain after the baseline and which team decisions
+   or reviewed material may bear on it.
+3. Recall relevant OKS knowledge to add team context, prior decisions, and
+   reviewed material, and mark claims that still lack an external source.
+4. Read the target page and capture only claims the page supports.
+5. If a source cannot be read, preserve `failed`, `partial`, `skipped`, or
    `environment_limited`; do not turn it into a confident claim.
-5. Write the package before authoring. Each claim, summary, section, and block
+6. Write the package before authoring. Each claim, summary, section, and block
    must resolve to source ids through claim ids.
 
 Run the executable fail-closed validator before any renderer:

@@ -1,7 +1,8 @@
 ---
 title: 召回引擎
-nav_order: 3
-parent: 维护者
+nav_order: 1
+parent: 算法引擎
+grand_parent: 工作原理
 ---
 # 召回引擎（OKS Triple-Layer Recall）
 

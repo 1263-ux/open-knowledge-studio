@@ -8,6 +8,7 @@ shape so existing renderers remain compatible.
 from __future__ import annotations
 
 import json
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -46,6 +47,13 @@ def _is_http_url(value: str) -> bool:
     return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
 
 
+def _is_timestamp(value: str) -> bool:
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00")).tzinfo is not None
+    except ValueError:
+        return False
+
+
 def load_package(path: Path) -> dict[str, Any]:
     data = json.loads(path.read_text(encoding="utf-8"))
     validate_package(data)
@@ -60,6 +68,9 @@ def validate_package(data: Any) -> dict[str, Any]:
     request = data.get("request")
     if not isinstance(request, dict) or not _text(request.get("title")):
         raise ValueError("request.title is required")
+    recall = data.get("recall")
+    if not isinstance(recall, dict) or not _text(recall.get("query")):
+        raise ValueError("recall.query is required after the fixed research step")
 
     sources = data.get("sources")
     if not isinstance(sources, list) or not sources:
@@ -85,9 +96,15 @@ def validate_package(data: Any) -> dict[str, Any]:
         if kind in EXTERNAL_SOURCE_KINDS:
             if not _is_http_url(locator):
                 raise ValueError(f"{location}.locator must be an http(s) URL for external research")
-            if not _text(source.get("retrieved_at")):
-                raise ValueError(f"{location}.retrieved_at is required for external research")
+            retrieved_at = _text(source.get("retrieved_at"))
+            if not _is_timestamp(retrieved_at):
+                raise ValueError(f"{location}.retrieved_at must be an ISO 8601 timestamp with a timezone")
+            if status == "reviewed":
+                raise ValueError(f"{location}.status cannot be reviewed for direct external research")
         source_ids.add(source_id)
+
+    if not any(_text(source.get("kind")) in EXTERNAL_SOURCE_KINDS for source in sources):
+        raise ValueError("sources must include one web or research source from the fixed research step")
 
     claims = data.get("claims")
     if not isinstance(claims, list) or not claims:
@@ -109,6 +126,12 @@ def validate_package(data: Any) -> dict[str, Any]:
         review_status = _text(claim.get("review_status"))
         if review_status not in CLAIM_STATUSES:
             raise ValueError(f"{location}.review_status must be one of {sorted(CLAIM_STATUSES)}")
+        if review_status == "reviewed" and any(
+            _text(source["kind"]) in EXTERNAL_SOURCE_KINDS
+            for source in sources
+            if _text(source["id"]) in source_refs
+        ):
+            raise ValueError(f"{location}.review_status cannot be reviewed when based on direct external research")
         confidence = _text(claim.get("confidence"))
         if confidence and confidence not in CONFIDENCES:
             raise ValueError(f"{location}.confidence must be one of {sorted(CONFIDENCES)}")

@@ -1,3 +1,10 @@
+---
+title: 召回复杂版设计
+nav_order: 2
+parent: 设计蓝图
+grand_parent: 工作原理
+---
+
 # Agent Recall System — 复杂版设计（基于 Triple-Layer Recall）
 
 > 本文档基于 **CONSTITUTION A8: Triple-Layer Recall**（召回层 / 注入层 / 衰减层三层解耦）。

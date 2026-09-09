@@ -1,7 +1,8 @@
 ---
 title: 衰减系统
-nav_order: 4
-parent: 维护者
+nav_order: 2
+parent: 算法引擎
+grand_parent: 工作原理
 ---
 # 衰减系统（记忆曲线）
 

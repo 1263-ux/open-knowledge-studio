@@ -8,7 +8,7 @@ or a hidden default dependency.
 |---|---|---|
 | Create or edit DOCX | Independently installed Anthropic `docx` host skill; otherwise host `documents` skill | Local deterministic DOCX builder only for simple, labeled fallback output |
 | Revise an open Word document with tracked changes/comments | `word-live` optional Adapter | Do not emulate a live revision with untracked XML changes |
-| Create regular XLSX | Host `spreadsheets` skill / openpyxl | Preserve formulas and use worksheet rendering QA |
+| Create regular XLSX | Host `spreadsheets` skill | Preserve formulas and use worksheet rendering QA |
 | Power Query, Data Model, PivotTable, native VBA | `excel-native` optional Adapter | Requires its supported Windows desktop Excel workstation |
 | Create ordinary PPTX | Host `presentations` skill | Local python-pptx output is serialization smoke only |
 | High-design or template-intensive PPTX | `ppt-master` optional Adapter | Use only after local probe and full slide visual review |

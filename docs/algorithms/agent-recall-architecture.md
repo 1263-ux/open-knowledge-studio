@@ -1,3 +1,10 @@
+---
+title: 召回系统蓝图
+nav_order: 1
+parent: 设计蓝图
+grand_parent: 工作原理
+---
+
 # Agent Recall Architecture — 面向 Agent 的文档推荐系统
 
 > 生产级蓝图：把推荐系统工程架构一比一迁移到"面向 Agent 的文档召回/搜索"。

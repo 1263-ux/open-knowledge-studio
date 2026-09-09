@@ -2,6 +2,8 @@
 
 import json
 import os
+
+import pytest
 import shutil
 import subprocess
 import sys
@@ -41,20 +43,33 @@ def _codex_commands(hooks, event):
 
 
 def _bash_command():
+    """Resolve a working bash on Windows.
+
+    CreateProcess searches System32 before PATH, so a bare ``"bash"`` fallback
+    resolves to the WSL stub (``C:\Windows\System32\bash.exe``) when Git
+    Bash is installed outside the default directory — every .sh hook test then
+    fails with ``execvpe(/bin/bash) failed``. Enumerate real Git Bash
+    candidates explicitly and never silently accept the WSL stub.
+    """
     if os.name != "nt":
         return "bash"
+    candidates = []
     git = shutil.which("git.exe") or shutil.which("git")
     if git:
-        git_root = Path(git).resolve().parent.parent
-        candidate = git_root / "bin" / "bash.exe"
-        if candidate.is_file():
-            return str(candidate)
+        root = Path(git).resolve()
+        for base in (root.parent.parent, root.parent.parent.parent):
+            candidates.append(base / "bin" / "bash.exe")
+            candidates.append(base / "usr" / "bin" / "bash.exe")
     for variable in ("ProgramFiles", "ProgramFiles(x86)"):
         program_files = os.environ.get(variable)
         if program_files:
-            candidate = Path(program_files) / "Git" / "bin" / "bash.exe"
-            if candidate.is_file():
-                return str(candidate)
+            candidates.append(Path(program_files) / "Git" / "bin" / "bash.exe")
+    for candidate in candidates:
+        if candidate.is_file():
+            return str(candidate)
+    which = shutil.which("bash")
+    if which and "system32" not in which.lower():
+        return which
     return "bash"
 
 
@@ -93,7 +108,12 @@ def test_hook_install_wires_codex_prompt_recall(tmp_path):
     hooks = _load_codex_hooks(target)
     commands = _codex_commands(hooks, "UserPromptSubmit")
     assert len(commands) == 1
-    assert commands[0].endswith("/.codex/hooks/user-prompt-recall.sh")
+    if os.name == "nt":
+        # Native Windows wires the .py engine directly (no bash dependency);
+        # the command may carry a 2>NUL stdout suppressor.
+        assert "user-prompt-recall.py" in commands[0]
+    else:
+        assert commands[0].endswith("/.codex/hooks/user-prompt-recall.sh")
     assert (target / ".codex" / "hooks" / "user-prompt-recall.sh").is_file()
     assert (target / ".codex" / "hooks" / "user-prompt-recall.py").is_file()
 
@@ -103,9 +123,14 @@ def test_hook_install_wires_codex_prompt_recall(tmp_path):
 
     post_commands = _codex_commands(hooks, "PostToolUse")
     assert len(post_commands) == 1
-    assert post_commands[0].endswith("/.codex/hooks/post-tool-edit.sh")
+    if os.name == "nt":
+        assert "post-tool-edit.py" in post_commands[0]
+    else:
+        assert post_commands[0].endswith("/.codex/hooks/post-tool-edit.sh")
     wrapper = target / ".codex" / "hooks" / "post-tool-edit.sh"
-    assert f'${{OKS_PYTHON:-{sys.executable}}}' in wrapper.read_text(encoding="utf-8")
+    if os.name != "nt":
+        # POSIX wiring uses the .sh wrapper, so its interpreter must be baked.
+        assert f'${{OKS_PYTHON:-{sys.executable}}}' in wrapper.read_text(encoding="utf-8")
     assert "/hooks" in result.output
 
 
@@ -565,6 +590,7 @@ def test_hook_recall_diagnostics_are_opt_in(tmp_path, monkeypatch):
     )
 
 
+@pytest.mark.skipif(os.name == "nt", reason="native Windows wires the .py engine; the .sh wrapper bake contract is POSIX-scoped")
 def test_hook_install_refreshes_an_outdated_wrapper_body(tmp_path):
     """A correct bake must not shield an old wrapper body from an upstream fix."""
     target = _init_instance(tmp_path)
@@ -588,8 +614,13 @@ def test_hook_install_refreshes_an_outdated_wrapper_body(tmp_path):
     assert refreshed == bundled.replace('"${OKS_PYTHON:-python3}"', baked)
 
 
-def test_hook_status_reports_a_differing_engine_as_a_warning(tmp_path):
-    """An engine that differs from the bundle still runs — do not call it blocked."""
+def test_hook_install_refreshes_a_differing_engine(tmp_path):
+    """Hook engines are baked runtime, not a customization surface.
+
+    An installed engine that drifted from the bundled asset (stale protocol or
+    local edit) is refreshed by the next `hook install`, and `hook status`
+    then reports it as current — protocol fixes must reach old instances.
+    """
     target = _init_instance(tmp_path)
     assert runner.invoke(
         app, ["hook", "install", "--editor", "codex", "--path", str(target)]
@@ -597,13 +628,14 @@ def test_hook_status_reports_a_differing_engine_as_a_warning(tmp_path):
     engine = target / ".codex" / "hooks" / "user-prompt-recall.py"
     engine.write_text(engine.read_text(encoding="utf-8") + "# local edit\n", encoding="utf-8")
 
-    result = runner.invoke(app, ["hook", "status", "--path", str(target)])
+    assert runner.invoke(
+        app, ["hook", "install", "--editor", "codex", "--path", str(target)]
+    ).exit_code == 0
+    assert "# local edit" not in engine.read_text(encoding="utf-8")
 
+    result = runner.invoke(app, ["hook", "status", "--path", str(target)])
     assert result.exit_code == 0, result.output
-    output = " ".join(result.output.split())
-    assert "outdated" in output
-    assert "--upgrade" in output
-    assert "cannot inject context" not in output
+    assert "cannot inject context" not in result.output
 
 
 def test_recall_wrapper_surfaces_engine_failure_and_still_exits_zero(tmp_path):
@@ -643,6 +675,7 @@ def test_init_upgrade_refreshes_engines_without_unwiring_hooks(tmp_path):
     assert _codex_commands(_load_codex_hooks(target), "UserPromptSubmit")
 
 
+@pytest.mark.skipif(os.name == "nt", reason="native Windows wires the .py engine; the .sh wrapper bake contract is POSIX-scoped")
 def test_init_upgrade_keeps_the_baked_interpreter(tmp_path):
     """Refreshing the wrapper body must not reset OKS_PYTHON to bare python3.
 
