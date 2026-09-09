@@ -17,7 +17,7 @@ Two jobs (both fail-open, never block a tool):
      never injects — the agent executes blind to relevant memory.
    - PostToolUse fires after every tool call: we extract a query from the
      tool operation (file basename / bash command / grep pattern) and run
-     recall with a HIGHER floor (0.9) + lower topn (2) to avoid noise.
+     recall (unified recall.floor + recall.topn, v0.6.14) — posttool relies on signal_rel_floor to avoid noise.
    - Shares recall-state-{session}.json + cooldown with UserPromptSubmit so
      the same slug isn't re-injected twice.
    - Codex receives conflict/recall text as PostToolUse JSON
@@ -31,6 +31,8 @@ Tunables via env:
   OKS_RECALL_COOLDOWN  shared with UserPromptSubmit (default 10 turns)
   OKS_SEARCH_BACKEND   search backend (default native)
 """
+from __future__ import annotations
+
 import json
 import os
 import re
@@ -354,17 +356,23 @@ def _should_signal(tool_name: str, query: str, hits: list) -> bool:
     """Smart selectivity: not every tool call deserves a signal.
 
     Only signal when ALL hold:
-    1. Tool type is knowledge-relevant (Edit/Write/Grep/Glob, not Bash/Read)
+    1. Tool type is knowledge-relevant (Edit/Write/Grep/Glob/Bash, not Read)
     2. Query is domain-specific (not generic words like git/status/ls)
     3. Top hit has very high relevance (> 2.5)
 
-    Rationale: PostToolUse fires after every tool. Bash ops (git/ls/cd) and
-    Read (AI already reading) don't need signals — they generate 85% noise.
-    Only Edit/Write code + Grep/Glob search + high-rel + domain query signal.
+    Rationale: PostToolUse fires after every tool. Read (AI already reading)
+    doesn't need signals. Bash ops (git/ls/cd) are filtered by rule 2 (generic
+    words) + rule 3 (relevance>2.5), but knowledge-bearing Bash (download/
+    embedding/recall/test/distributed) SHOULD signal — excluding Bash entirely
+    caused "tool 调用时总是遗忘": agent forgot to recall browser-extractor
+    strategy during network failures because the diagnostic Bash was silenced.
+    v0.6.9: Bash re-added; generic noise (git/ls/cd/status) still blocked by
+    rule 2, low-relevance noise by rule 3.
     """
-    # 1. Tool type: only Edit/Write/MultiEdit/Grep/Glob
+    # 1. Tool type: Edit/Write/MultiEdit/Grep/Glob/Bash (Read excluded — AI already reading)
     signal_tools = {"Edit", "Write", "MultiEdit", "edit", "write", "multiedit",
-                   "Grep", "Glob", "grep", "glob"}
+                   "Grep", "Glob", "grep", "glob",
+                   "Bash", "bash"}  # v0.6.9: Bash re-added (generic noise filtered by rule 2+3)
     if tool_name not in signal_tools:
         return False
     # 2. Query quality: generic words don't signal
@@ -395,7 +403,7 @@ def _recall_supplement(
 ) -> str:
     """PostToolUse recall — inject relevant memory after tool calls.
 
-    Higher floor (0.9) + lower topn (2) than UserPromptSubmit (0.7 / 3) —
+    Unified recall.floor + recall.topn (v0.6.14) — posttool relies on signal_rel_floor (2.5) for noise control;
     PostToolUse fires often, we only surface high-confidence hits to avoid
     drowning the agent's execution flow.
     """
@@ -408,8 +416,8 @@ def _recall_supplement(
 
     from knowledge_studio.recall import load_recall_params
     p = load_recall_params(kb_root)
-    floor = p["posttool_floor"]
-    topn = p["posttool_topn"]
+    floor = p["recall_floor"]
+    topn = p["recall_topn"]
     cooldown = p["recall_cooldown"]
     search_backend = p["search_backend"]
 

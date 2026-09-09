@@ -1,3 +1,228 @@
+## [0.6.21] — 2026-08-31
+
+### fix(test): `test_persistence` 不再依赖未跟踪的 `_assets/`
+
+v0.6.19 新增的 `test_user_prompt_recall_reads_date_organized_mail` 把
+hook 路径硬编码成 `cli/knowledge_studio/_assets/hooks/user-prompt-recall.py`。
+但 `_assets/` 是 `cli/setup.py` 的构建产物、被 `.gitignore:52` 忽略
+（`git ls-files` 返回 0 条）—— 全新 clone 上文件不存在，测试直接失败；
+即便存在也可能是陈旧副本，测的不是权威源。
+
+改为和其余测试一致走 `cli_module._asset_source()`（git checkout 下优先
+`assets/`，wheel 下回落 `_assets/`）。实测解析到
+`assets/hooks/user-prompt-recall.py`（`git ls-files` 有此条目），
+全量 332 passed。
+
+## [0.6.20] — 2026-08-31
+
+### fix(test): user-prompt-recall 测试补 `sys.path`
+
+v0.6.19 的新测试用 `importlib` 直接加载 hook，而 hook 内部
+`from _persistence import ...` 在这种加载方式下解析不到同目录模块。
+加载前把 hook 所在目录插入 `sys.path`。
+
+## [0.6.19] — 2026-08-31
+
+### fix(hooks): `_load_unread_mail` 改 `rglob`，读得到日期子目录
+
+v0.6.16 起 mail 按 `mail/inbox/<YYYY>/<MM>/<DD>/` 分层存放，而
+`user-prompt-recall.py` 的 `_load_unread_mail` 仍用 `glob("*.md")`
+只扫 `inbox/` 顶层 —— 于是所有新邮件对 Agent 不可见，自动通知静默失效。
+改为 `rglob("*.md")`。新增
+`test_user_prompt_recall_reads_date_organized_mail` 回归防护。
+
+## [0.6.18] — 2026-08-31
+
+### fix(init): `--upgrade` 不再把 wrapper 的解释器打回 `python3`
+
+接着上一条继续查，发现同一类的第二个缺陷：`--upgrade` 把打包的
+`user-prompt-recall.sh` / `post-tool-edit.sh` 原样盖回去，顺手把
+`${OKS_PYTHON:-<解释器>}` 里 `oks hook install` bake 进去的解释器重置成
+裸 `python3`。pipx / venv / conda 装的 `oks`，`python3` 根本 import 不到
+`knowledge_studio` —— 于是 `--upgrade` 一边刷新引擎、一边让 hook 失效，
+而这条路正是 `oks hook status` 推荐给用户的。
+
+实测（真实 KB `artboy-knowledge` 的副本，136M 全量）：修复前
+`.claude/hooks/user-prompt-recall.sh` 的
+`OKS_PYTHON:-/opt/homebrew/.../python3.13` → `OKS_PYTHON:-python3`；
+修复后 bake 保持不变，引擎仍刷新到最新，接线三个文件逐字节不变，
+升级后的副本里直接跑 wrapper：exit 0 / stdout 692 字节
+`<recalled-memory>` / stderr 0 字节。
+
+修复：bake 与接线同属运行态。`_materialize_assets` 在拷贝前快照各
+wrapper 的非默认 bake，拷贝后写回，因此升级只换正文不换解释器。
+新增 `test_init_upgrade_keeps_the_baked_interpreter`（331 passed）。
+
+## [0.6.17] — 2026-08-31
+
+### fix(init): `--upgrade` 不再冲掉 hook 接线
+
+追查上一条 `hook status` 建议时发现的真实缺陷：`_materialize_assets`
+在 `overwrite=True` 下把打包的编辑器配置原样盖回
+`.claude/settings.json`、`.qoder/settings.json`、`.codex/hooks.json`
+——而这三个文件正是 `oks hook install` 写接线的地方。
+
+实测（临时实例，codex 已接线）：`oks init . --upgrade` 之后
+`codex: wired` → `not wired`，`hooks.json` 里整个 `UserPromptSubmit`
+块被删掉，自动 recall 静默失效；同时已迁移成绝对路径的四个 lifecycle
+命令被退回 `"$(git rev-parse --show-toplevel)/..."` 模板形式（`--no-git`
+实例根本没有 toplevel，等于直接失效），把
+`test_hook_install_migrates_codex_relative_lifecycle_paths` 修好的东西
+又还原了。
+
+修复：这三个文件属于用户运行态而非可刷新资产，已存在时 `--upgrade` 一律
+不覆盖；全新 `init` 仍照常写入。修复后同一路径实测：引擎
+`outdated → current`，`codex: wired` 保持，`hooks.json` 逐字节不变。
+
+`test_init_upgrade_refreshes_assets_but_keeps_user_files` 原来拿
+`.claude/settings.json` 当「会被刷新的打包文件」样本，改用真正的打包资产
+`.claude/rules/wiki-writing.md`，并补断言：被编辑过的 `settings.json`
+必须在 `--upgrade` 后保持原样。
+
+### fix(hooks): wrapper 不再静默吞掉引擎崩溃
+
+`user-prompt-recall.sh` / `post-tool-edit.sh` 原本是
+`exec "$OKS_PYTHON" engine.py 2>/dev/null`。两个问题叠在一起：`2>/dev/null`
+把引擎的 traceback 全丢了，`exec` 又把 python 的非零退出码原样传给编辑器
+——注释写着「fails open」，实际是 fail-closed，而且崩溃和「没命中记忆」
+在外部完全无法区分。
+
+现在 stderr 落到临时文件：成功就丢掉（jieba 的噪声不该污染 stdout 的
+`<recalled-memory>` 块），非零退出则打印
+`oks hook: recall engine exited N — run 'oks hook install' to refresh it`
+外加最后 5 行 traceback，并且始终 `exit 0`，prompt/工具永不被挡。
+
+实测（artboy-knowledge 实例）：正常路径 exit 0 / stdout 1171 字节 / stderr 0
+字节；`OKS_PYTHON=/usr/bin/python3`（3.9.6，引擎陈旧）exit 0 且 stderr 直接
+点出 `TypeError: unsupported operand type(s) for |` 在
+`user-prompt-recall.py:66`。修复前同一场景是 exit 1 + 零输出。
+
+### fix(hooks): `oks hook install` 刷新过期的 wrapper 正文
+
+`_ensure_recall_scripts` 判定 `.sh` 是否需要重写时只看「有没有当前解释器
+的 bake」。于是 bake 正确、正文陈旧的实例会被跳过，上游 wrapper 修复永远
+到不了它们。改为与打包资产逐字比对（把 bake 代入后），bake 陈旧和正文陈旧
+都会重写；读不到资产时退回旧的 bake 子串判定。`.py` 引擎仍保持「存在就不
+动」，刷新引擎请用 `oks init <root> --upgrade`。
+
+### fix(hooks): `oks hook status` 分级结论，不再把陈旧当阻断
+
+新增 `engine version: current / outdated` 一行（按内容比对打包资产），并把
+结论分三档：有阻断项（脚本缺失、解释器 import 不了 knowledge_studio）才说
+`a hook cannot inject context`，并明确 `wired` 只代表设置项存在；仅引擎与
+打包版本不一致时降级为黄色提示，指向 `oks init --upgrade`；都正常则报
+healthy。之前把「引擎陈旧」也算进阻断项，会对一个实际能注入的 hook 谎报
+失效。
+
+### fix(hooks): 修正 `hook install` 帮助文案 (P6)
+
+原文案说「Copies the hook scripts ... (if missing)」「non-destructive:
+existing hooks are preserved」，与实现不符——`.sh` 每次都会重写以重新 bake
+解释器。改为如实说明：只保留既有 `.py` 引擎，`.sh` wrapper 会被重写，刷新
+引擎用 `oks init <root> --upgrade`。
+
+### test: +4 hook/init 回归测试 (326→330 passed)
+
+- `test_hook_install_refreshes_an_outdated_wrapper_body`：bake 正确但正文陈旧
+  必须被重写
+- `test_hook_status_reports_a_differing_engine_as_a_warning`：引擎不一致只报
+  警告，不得出现 `cannot inject context`
+- `test_recall_wrapper_surfaces_engine_failure_and_still_exits_zero`：引擎失败
+  要可见且 exit 0
+- `test_init_upgrade_refreshes_engines_without_unwiring_hooks`：`--upgrade` 刷新
+  引擎的同时接线不得丢失
+
+## [0.6.16] — 2026-08-30
+
+### feat(mail): inbox 按日期分目录 + `oks mail migrate` 迁移命令
+
+`oks mail send` 之前把所有信件平铺写在 `mail/inbox/{slug}.md`，一个
+活跃实例会堆积几百个文件在一个目录里，肉眼和工具都难看。
+
+v0.6.16 起 inbox 按 `{YYYY}/{MM}/{DD}/{slug}.md` 组织（slug 本身就带
+`YYYYMMDD` 时间戳前缀，提取前 8 位即得日期）。`inbox`/`count` 改用
+`rglob` 递归遍历，所以旧平铺信件仍能被读到（向后兼容）。
+
+新增 `oks mail migrate` 命令：把旧实例的平铺信件一次性迁进日期子目录，
+幂等（已在子目录的不动，无日期前缀的保留平铺仍可读）。
+
+向后兼容：`show`/`read` 通过 `_mail_path` 自动算日期路径，旧 slug
+（无日期前缀）fallback 到平铺顶层，不破坏现有实例。
+
+### test: +2 mail 日期目录 / migrate 测试 (326 passed)
+
+## [0.6.15] — 2026-08-29
+
+### fix(hooks): 独立 hook 脚本兼容 Python 3.9 宿主
+
+`user-prompt-recall.py` 和 `post-tool-edit.py` 用了 PEP 604 注解
+(`Path | None`、`dict | None`、`list | None`)，需要 Python 3.10+。但 hook
+是独立脚本，用宿主的 `python3` 跑，很多 macOS 系统默认还是 3.9.6 →
+`TypeError: unsupported operand type(s) for |: 'type' and 'NoneType'`。
+
+`_persistence.py` 一直有 `from __future__ import annotations` 所以没事，
+两个 hook 脚本漏了。补上后注解延迟求值为字符串，3.9 宿主也能跑。
+
+实测: `echo '{"prompt":"test"}' | python3 .claude/hooks/user-prompt-recall.py`
+在 3.9.6 下 exit 0 无 traceback (修复前 TypeError)。
+
+回归防护 (test_persistence.py +2):
+- `test_standalone_hooks_use_future_annotations_for_py39`: 静态检查两个
+  hook 脚本含 `from __future__ import annotations` + `py_compile` 过
+- `test_standalone_hooks_import_cleanly`: importlib 加载不报错
+  (抓 `_persistence` 缺失 + 坏注解)
+
+324 passed.
+
+### 另: 手动维护的 .claude/hooks/ 缺 `_persistence.py`
+
+开发仓库的 `.claude/hooks/` 是手动维护 (非 `oks hook install` 创建)，
+P8 修 `_mark_mail_read` 时手动复制 `user-prompt-recall.py` 到 4 处，
+漏了依赖模块 `_persistence.py` → `ModuleNotFoundError: No module
+named '_persistence'`。`oks hook install` 的 `_HOOK_SUPPORT_FILES` 循环
+逻辑是对的 (会复制)，这次只是手动维护事故。已补到 .claude/hooks/。
+
+## [Unreleased] — 2026-08-29
+
+### fix(mail): 身份不再伪造 human + 补 `oks mail show` (P6/P7/P9)
+
+分支 `fix/mail-identity-and-show`, 14 个新测试 (cli/tests/test_mail.py), 322 passed。
+对修前代码跑同一批测试: 12 failed / 2 passed, 证明测试锁住的是真实行为差异。
+
+- **P9 身份伪造**: `mail send` 在 `OKS_AGENT_ID` 缺失时签成 `from: human`。
+  `human` 是 OKS 流水线的评审门, 环境没配就冒充最高信任身份 = fail-open。
+  实测两次真实误签 (@qoder + @pi 各一次, 40 分钟内)。改为 `--from` >
+  `OKS_AGENT_ID` > cwd basename, 解析不出就 exit 1; 与 assets/hooks/*.py 和
+  docs/reference/cli.md 同一条链 (P8, 此前 hook 回落 `unknown` / CLI 回落
+  `human` 是两套)。
+- **P6 读不到正文**: CONSTITUTION 写了 agent 间邮件, 但没有任何命令能输出正文,
+  `read` 只标记已读。补 `oks mail show <id>` (逐字输出, 不改 read 状态);
+  `read` 的 help 改成 "does not print the body; use `oks mail show`"。
+- **frontmatter 注入**: `--to "@all\nfrom: pi"` 能塞进第二行 `from:`, 或用
+  `read: true` 让邮件对 `inbox`/`count` 隐身 — 会让上面的身份修复变成摆设。
+  `--to/--type/--priority` 拒换行。
+- **路径穿越**: `--from` 会拼进 `mail/sent/{from_id}/`, mail id 会拼进
+  `mail/inbox/{id}.md`; `show` 输出正文后穿越就是任意文件读原语。两处都收成
+  单段路径校验, `show`/`read` 共用 `_mail_path`。
+
+### 仓库维护 + agent-config 扩展
+
+- **清理垃圾文件**: 删 internal/superpowers/ + openspec/ + index.db* + pr-body-oksummarized.md, .gitignore 防复发; 新建 images/ 统一 README 图片
+- **agent-config 4 agent**: 加 qoder (.qoder/settings.json) + pi (.pi/extensions/*.ts); _AGENT_TARGETS + EXPECTED_TOP_LEVEL 同步
+- **PR merge**: #50 hook UTF-8 (Windows 兼容) + #51 docs architecture (mermaid→精修 SVG)
+
+### fix(hooks): P8 _mark_mail_read 收口 (844b93a)
+
+@qoder 发现 _mark_mail_read 4 份实现 (CLI 1 份已修 + hook 3 份拷贝漂移), hook
+拷贝带和 CLI 修前相同的全文 replace bug, 高频路径 (每个 user prompt 都跑)。
+收口: hook 复用 store._locked_atomic_update, frontmatter-only, 幂等。
+
+### 8b04cc1 真实来源 (commit 卫生)
+
+> 注: 8b04cc1 "chore: 新建 images/" 实际扫进了 @qoder 工作树未 commit 的
+> mail_read 重写 (P7 正文损坏修复 + P2 原子写)。代码正确 (308 tests passed),
+> 不 revert; 补此条让 git log 可追。以后 staging 只用具名文件, 不用 git add -A。
+
 ## [0.6.1] — 2026-08-18
 
 ### oks 灵魂搬到 fts5 注入层
@@ -48,6 +273,32 @@
 - 改进 recall preview，优先使用已有摘要，并尽量在完整行边界截断。
 - 让并发访问计数在读改写期间保持一致，并在 Raw Bundle 发布失败时保留原内容。
 - 补齐 Candidate 读取、人工审核覆盖与 Raw Bundle 成功后的临时文件清理测试。
+
+
+## [0.6.8] — 2026-08-25
+
+### fix(vfs): canonical uri 不再强制 .md 后缀
+
+旧 `resolve()` 要求 uri 必须带 `.md` 后缀（如 `oks://wiki/.../slug.md`），否则 PATH_NOT_FOUND。recall 返回的 slug 字段不带 .md，用户/Agent 用 slug 构造 uri 会找不到文件。
+
+**修复**：`resolve()` 在 candidate 不存在且无后缀时，透明尝试 `.md` sibling——canonical uri 可不带 .md（不暴露磁盘文件格式），带 .md 的旧 uri 向后兼容。
+
+**指标**：vfs 测试 45→46 passed（+1 新测试 `test_stat_and_read_accept_uri_without_md_suffix`），全测试 270 passed。
+
+
+## [0.6.7] — 2026-08-24
+
+### fix(recall): L0 preview 质量优化（机械截取 → 语义完整截取）
+
+旧 `body_preview = body[:200]` 机械截取 86% 的 wiki 页 preview 有质量问题
+（标题重复 + 表格/段落中途截断）。新增 `_make_preview()`：
+
+- 跳过 body 开头与 frontmatter `title` 重复的 `# title` 行
+- 在 limit 内尽量在完整行边界截断（不破表格行/句子）
+- frontmatter `abstract` 字段优先（Dreaming 层 AI 写的摘要），本函数作 fallback
+
+**指标**：preview 质量问题率 86% → 0%（50 页样本，43 页修复）
+**宪法**：P4 合规——纯文本操作，不调 AI API；abstract 生成属 Dreaming/Agent 层
 
 
 ## [0.6.6] — 2026-08-24

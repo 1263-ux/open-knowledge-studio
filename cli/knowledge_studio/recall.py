@@ -47,6 +47,69 @@ DEFAULT_RECALL_LIMIT = 5
 MAX_BODY_PREVIEW = 200  # fallback; v0.6.0 实际用 inject_per_page_chars
 
 
+def _apply_budget(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Tier degradation: total body_preview > budget 时降级 L2→L1→L0→截断.
+
+    CV from OpenViking ``tiers.py`` — token 超预算自动降级到更浅 tier.
+    v0.6.12: ``budget_chars`` + ``title_only_floor`` 之前定义但没用 (P6 形状,
+    和 mail/sent/ 同), 现在生效.
+
+    Tier 顺序:
+    - L2 full: ``per_page_chars`` (200) — 默认, 不超 budget 不动
+    - L1 overview: ``per_page_chars`` // 2 (100) — 超预算缩半
+    - L0 abstract: ``per_page_chars`` // 4 (50) + rel<title_only_floor 降 title-only
+    - 截断: 保留 top-N 直到 total < budget
+    """
+    try:
+        params = load_recall_params()
+        budget = int(params.get("inject_budget_chars", 4000))
+        per_page = int(params.get("inject_per_page_chars", MAX_BODY_PREVIEW))
+        title_floor = float(params.get("inject_title_only_floor", 0.5))
+    except Exception:
+        budget, per_page, title_floor = 4000, MAX_BODY_PREVIEW, 0.5
+
+    def _total() -> int:
+        return sum(len(r.get("body_preview", "")) for r in results)
+
+    if not results or _total() <= budget:
+        return results  # 不超预算, 不降级
+
+    # Tier 1: L2→L1 缩半 (overview 级)
+    for r in results:
+        r["body_preview"] = r.get("body_preview", "")[: max(1, per_page // 2)]
+    if _total() <= budget:
+        _tag_budget(results, "l1_overview")
+        return results
+
+    # Tier 0: abstract (~50) + low-relevance 降 title-only
+    l0_cap = max(1, per_page // 4)
+    for r in results:
+        if float(r.get("relevance", 0)) < title_floor:
+            r["body_preview"] = ""  # title only (slug+title 仍在 entry)
+        else:
+            r["body_preview"] = r.get("body_preview", "")[:l0_cap]
+    if _total() <= budget:
+        _tag_budget(results, "l0_abstract")
+        return results
+
+    # 截断: 保留 top-N 直到 total < budget (recall 已按 relevance 排序)
+    acc, kept = 0, []
+    for r in results:
+        pl = len(r.get("body_preview", ""))
+        if acc + pl > budget and kept:
+            break
+        acc += pl
+        kept.append(r)
+    _tag_budget(kept, "truncated")
+    return kept
+
+
+def _tag_budget(results: list[dict[str, Any]], tier: str) -> None:
+    """标注降级 tier (可观测, /query + eval 可见)."""
+    for r in results:
+        r.setdefault("budget_tier", tier)
+
+
 def _inject_per_page_chars() -> int:
     """v0.6.0: 动态读 inject.per_page_chars（CV from karpathy-wiki token budget）。"""
     try:
@@ -192,8 +255,7 @@ def load_recall_params(root=None):
     params = {
         "recall_floor": 0.7, "recall_topn": 3, "recall_minlen": 6,
         "recall_cooldown": 10,
-        "posttool_floor": 0.9, "posttool_topn": 2, "posttool_mode": "signal",
-        "posttool_recall": 1, "posttool_signal_rel_floor": 2.5,
+        "posttool_mode": "signal", "posttool_signal_rel_floor": 2.5,
         "conflict_window": 300, "search_backend": "native", "mail_topn": 3,
         # v0.6.3: embedding fallback — fts5 召回空/明显不足时切 embedding 补充
         "embedding_fallback": False,
@@ -217,10 +279,7 @@ def load_recall_params(root=None):
             params["recall_topn"] = int(rc.get("topn", params["recall_topn"]))
             params["recall_minlen"] = int(rc.get("minlen", params["recall_minlen"]))
             params["recall_cooldown"] = int(rc.get("cooldown", params["recall_cooldown"]))
-            params["posttool_floor"] = float(pc.get("floor", params["posttool_floor"]))
-            params["posttool_topn"] = int(pc.get("topn", params["posttool_topn"]))
             params["posttool_mode"] = str(pc.get("mode", params["posttool_mode"]))
-            params["posttool_recall"] = int(pc.get("recall", params["posttool_recall"]))
             params["posttool_signal_rel_floor"] = float(pc.get("signal_rel_floor", params["posttool_signal_rel_floor"]))
             params["conflict_window"] = int(cc.get("window", params["conflict_window"]))
             params["search_backend"] = str(data.get("search_backend", params["search_backend"]))
@@ -580,17 +639,22 @@ def _recall_knowledge_via_backend(
     type_filter: str | None = None,
     search_backend: str | None = None,
 ) -> list[dict[str, Any]]:
-    """Dispatch knowledge recall to native or a pluggable search backend.
+    """Dispatch knowledge recall — Triple-Layer Recall 召回层 (CONSTITUTION A8).
 
-    native (default) → OKS 6+1 factor recall (jieba + IDF + title boost).
-    fts5 → SQLite FTS5 + BM25 (CV from TreeSearch, persistent index).
-    fusion → native top-3 + fts5 supplement-2 (experiment-validated optimal).
-    other → connector entry_points(group="oks_search_backend").
+    三层架构: 召回层 (本函数, 可插拔 backend) + 注入层 (Soul Boost,
+      _injection_boost) + 衰减层 (Memory Curve, store.apply_decay).
+
+    backends (settings/recall.yaml `search_backend`, 默认 fts5):
+      fts5 (默认) → SQLite FTS5 + node-level BM25 (CV from TreeSearch,
+        persistent index). R@1=0.825. 每 ## heading 段一 FTS5 row.
+      native (向后兼容, v0.6.0 前默认) → OKS 6+1 factor recall (jieba +
+        IDF + title boost). page-level, R@1=0.525. --search-backend native 仍可跑.
+      fusion (实验) → fts5 + native re-rank. R@1=0.805, re-rank 负优化 (P6 实测).
+      other → connector entry_points(group="oks_search_backend").
     """
-    # native (default) → OKS 6+1 factor recall (jieba + IDF + title boost +
-    # memory curve + goal boost). oks 原创召回，不走 get_backend。
-    # fts5 → SQLite FTS5 + BM25 (CV from TreeSearch, flat page-level).
-    # fusion → native top-3 + fts5 supplement-2 (default for best of both).
+    # fts5 (默认, recall.yaml) → Node-BM25 召回, 灵魂因子在注入层 boost.
+    # native (向后兼容) → 6+1 因子召回算分, v0.6.0 前默认, 仍可 --search-backend native.
+    # fusion → 实验位, 灵魂 re-rank 在召回层是负优化 (R@1 0.825→0.805).
     if not search_backend or search_backend in ("native", "legacy"):
         # v0.6.1: backend None 时读 settings/recall.yaml（CLI recall() 同逻辑）
         # 之前 None 直接走 native，导致 eval 测不到 fts5/fusion
@@ -684,7 +748,9 @@ def _recall_knowledge_via_backend(
             "confidence": p.get("confidence", 0.8),
             "body_preview": _make_preview(
                 p.get("body", ""),
-                abstract=p.get("abstract"),
+                # L0 零 read: fts5 hit 带的 abstract 优先 (来自 SQLite, 不读文件);
+                # fallback 到 page frontmatter abstract (list_wiki_pages 已读).
+                abstract=h.abstract or p.get("abstract"),
             ),
             "tags": p.get("tags", ""),
             "has_traces": bool(p.get("traces")),
@@ -705,7 +771,7 @@ def _recall_knowledge_via_backend(
         if review.get("lesson"):
             entry["review_lesson"] = review["lesson"]
         results.append(entry)
-    return results
+    return _apply_budget(results)
 
 
 def _recall_knowledge_with_context(
@@ -802,7 +868,7 @@ def _recall_knowledge_with_context(
             entry["goal_matches"] = components["goal_matches"]
         results.append(entry)
 
-    return results
+    return _apply_budget(results)
 
 
 def _tokenize(text: str) -> set[str]:

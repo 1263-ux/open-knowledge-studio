@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 620 250" font-family="system-ui,-apple-system,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" role="img" aria-label="Triple-Layer ablation 50-case. fts5 R@1=0.825 R@3=0.925 MRR=0.907; fusion 0.805/0.905/0.900; native 0.525/0.647/0.630.">
+  <style>
+    .bg{fill:#fafaf7}.tx{fill:#0b0b0b}.mu{fill:#52514e}.gr{fill:#c3c2b7}.gl{fill:#e1e0d9}
+    .bar{fill:#16a34a}.ab{fill:#94a3b8}
+    @media (prefers-color-scheme: dark){
+      .bg{fill:#0d1117}.tx{fill:#e6edf3}.mu{fill:#8b949e}.gr{fill:#30363d}.gl{fill:#21262d}
+      .bar{fill:#22c55e}.ab{fill:#6e7681}
+    }
+  </style>
+  <rect class="bg" width="620" height="250"/>
+  <text x="10" y="18" font-size="13" font-weight="600" class="tx">Triple-Layer ablation — 50-case · R@1 / R@3 / MRR</text>
+  <rect x="10" y="30" width="12" height="12" rx="2" class="bar"/><text x="26" y="40" font-size="11" class="mu">fts5 (default)</text>
+  <rect x="130" y="30" width="12" height="12" rx="2" class="ab"/><text x="146" y="40" font-size="11" class="mu">ablated</text>
+  <line x1="150" y1="55" x2="150" y2="205" class="gr" stroke-width="1"/>
+  <line x1="255" y1="55" x2="255" y2="205" class="gl" stroke-width="1"/>
+  <line x1="360" y1="55" x2="360" y2="205" class="gl" stroke-width="1"/>
+  <line x1="465" y1="55" x2="465" y2="205" class="gl" stroke-width="1"/>
+  <line x1="570" y1="55" x2="570" y2="205" class="gl" stroke-width="1"/>
+  <text x="150" y="220" font-size="10" class="mu" text-anchor="middle">0</text>
+  <text x="255" y="220" font-size="10" class="mu" text-anchor="middle">.25</text>
+  <text x="360" y="220" font-size="10" class="mu" text-anchor="middle">.50</text>
+  <text x="465" y="220" font-size="10" class="mu" text-anchor="middle">.75</text>
+  <text x="570" y="220" font-size="10" class="mu" text-anchor="middle">1.0</text>
+  <text x="142" y="76" font-size="12" class="mu" text-anchor="end">fts5</text>
+  <rect x="152" y="66" width="351" height="11" class="bar" opacity="0.95"/><text x="509" y="75" font-size="10" class="tx">R@1 .825</text>
+  <rect x="152" y="79" width="393" height="11" class="bar" opacity="0.6"/><text x="551" y="88" font-size="10" class="mu">R@3 .925</text>
+  <rect x="152" y="92" width="385" height="11" class="bar" opacity="0.4"/><text x="543" y="101" font-size="10" class="mu">MRR .907</text>
+  <text x="142" y="126" font-size="12" class="mu" text-anchor="end">fusion</text>
+  <rect x="152" y="116" width="342" height="11" class="ab" opacity="0.95"/><text x="500" y="125" font-size="10" class="mu">R@1 .805</text>
+  <rect x="152" y="129" width="385" height="11" class="ab" opacity="0.6"/><text x="543" y="138" font-size="10" class="mu">R@3 .905</text>
+  <rect x="152" y="142" width="383" height="11" class="ab" opacity="0.4"/><text x="541" y="151" font-size="10" class="mu">MRR .900</text>
+  <text x="142" y="176" font-size="12" class="mu" text-anchor="end">native</text>
+  <rect x="152" y="166" width="223" height="11" class="ab" opacity="0.95"/><text x="381" y="175" font-size="10" class="mu">R@1 .525</text>
+  <rect x="152" y="179" width="275" height="11" class="ab" opacity="0.6"/><text x="433" y="188" font-size="10" class="mu">R@3 .647</text>
+  <rect x="152" y="192" width="268" height="11" class="ab" opacity="0.4"/><text x="426" y="201" font-size="10" class="mu">MRR .630</text>
+  <text x="10" y="244" font-size="10" class="mu">p50: fts5 93ms · fusion 226ms · native 137ms</text>
+</svg>

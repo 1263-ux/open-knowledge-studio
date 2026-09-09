@@ -80,7 +80,8 @@
     restoreOpenSections();
     document.addEventListener('click', function (event) {
       var expander = event.target.closest('.nav-list-expander');
-      if (!expander || !document.getElementById('site-nav').contains(expander)) return;
+      var siteNav = document.getElementById('site-nav');
+      if (!expander || !siteNav || !siteNav.contains(expander)) return;
       window.setTimeout(writeOpenSections, 0);
     });
   }

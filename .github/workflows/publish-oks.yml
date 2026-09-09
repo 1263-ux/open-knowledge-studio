@@ -31,6 +31,16 @@ jobs:
             exit 1
           fi
 
+      - name: Run tests before publish
+        # v0.6.10 教训: publish workflow 不跑测试 → broken 0.6.9 直接发 PyPI
+        # (ruff auto-fix 误删 #46-#49 import, 7 测试 fail 但 CI 仍 publish).
+        # 加此 gate: 测试 fail 则 build fail, broken 版本不会到 PyPI.
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ./cli
+          python -m pip install pytest requests
+          python -m pytest cli/tests/ -q
+
       - name: Install build backend
         run: python -m pip install --upgrade build
 

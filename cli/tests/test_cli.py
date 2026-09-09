@@ -60,6 +60,41 @@ def test_fs_commands_share_json_envelope(
     assert result_key in payload["result"]
 
 
+def test_fs_read_many_json_contract(tmp_path, monkeypatch):
+    from knowledge_studio import cli
+
+    monkeypatch.setenv("OKS_ROOT", str(tmp_path))
+    _make_vfs_instance(tmp_path)
+    (tmp_path / "wiki/second.md").write_text("second", encoding="utf-8")
+
+    result = CliRunner().invoke(
+        cli.app,
+        [
+            "fs",
+            "read-many",
+            "oks://wiki/page.md",
+            "oks://wiki/second.md",
+            "--limit",
+            "6",
+            "--max-total-chars",
+            "9",
+            "--format",
+            "json",
+        ],
+    )
+    payload = json.loads(result.stdout)
+
+    assert result.exit_code == 0
+    assert payload["operation"] == "read-many"
+    assert payload["uri"] == "oks://"
+    assert [item["uri"] for item in payload["result"]["items"]] == [
+        "oks://wiki/page.md",
+        "oks://wiki/second.md",
+    ]
+    assert payload["result"]["returned_chars"] == 9
+    assert payload["result"]["truncated"] is True
+
+
 def test_fs_error_json_hides_physical_path(tmp_path, monkeypatch):
     from knowledge_studio import cli
 

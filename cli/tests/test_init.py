@@ -17,7 +17,7 @@ EXPECTED_BUCKETS = [
     "raw", "wiki", "drafts",
 ]
 EXPECTED_TOP_LEVEL = {
-    ".claude", ".codex", ".agents", "_meta", "settings", "templates",
+    ".claude", ".qoder", ".pi", ".codex", ".agents", "_meta", "settings", "templates",
     "profiles", "raw", "wiki", "drafts", "mail", ".gitignore", "AGENTS.md",
 }
 
@@ -158,6 +158,7 @@ def test_init_materializes_shareable_assets(tmp_path):
 
     # skills + templates arrive so the Claude Code experience works out of the box
     assert (target / ".claude" / "skills" / "ingest").is_dir()
+    assert (target / ".claude" / "skills" / "office" / "SKILL.md").is_file()
     assert (target / ".claude" / "settings.json").is_file()
     assert (target / "templates").is_dir()
     for schema in ("recall-case.schema.json", "trace-event.schema.json", "run-manifest.schema.json"):
@@ -176,20 +177,25 @@ def test_init_upgrade_refreshes_assets_but_keeps_user_files(tmp_path):
     marker = target / ".claude" / "MARKER.txt"
     marker.write_text("local edit", encoding="utf-8")
 
-    bundled = target / ".claude" / "settings.json"
+    bundled = target / ".claude" / "rules" / "wiki-writing.md"
     original = bundled.read_text(encoding="utf-8")
-    bundled.write_text("{}", encoding="utf-8")
+    bundled.write_text("stale\n", encoding="utf-8")
+
+    # Editor config holds live hook wiring, so an upgrade must not restore it.
+    wiring = target / ".claude" / "settings.json"
+    wiring.write_text("{}", encoding="utf-8")
 
     # re-init without --upgrade keeps existing assets untouched
     runner.invoke(app, ["init", str(target), "--no-git", "--no-set-default"])
     assert marker.exists()
-    assert bundled.read_text(encoding="utf-8") == "{}"
+    assert bundled.read_text(encoding="utf-8") == "stale\n"
 
     # --upgrade merge-copies bundled assets: bundled files refreshed,
     # user-owned files (marker) survive — no more whole-tree deletion
     runner.invoke(app, ["init", str(target), "--no-git", "--no-set-default", "--upgrade"])
     assert marker.exists()
     assert bundled.read_text(encoding="utf-8") == original
+    assert wiring.read_text(encoding="utf-8") == "{}"
 
 
 def test_init_requires_path_argument():
@@ -374,3 +380,13 @@ def test_init_adopts_when_no_active_kb_is_registered(_isolated_config, tmp_path)
 
     config = json.loads(_isolated_config.read_text(encoding="utf-8"))
     assert config["knowledge_base_path"] == str(target.resolve())
+
+
+def test_qoder_no_hooks_dir_but_runs_via_claude_hooks(tmp_path):
+    """plan A (qoder-cli): _AGENT_TARGETS['.qoder']['hooks']=False.
+    .qoder/ no longer gets a hooks/ dir (dead weight — settings.json
+    points to .claude/hooks), but qoder config + skills still install."""
+    from knowledge_studio.cli import _AGENT_TARGETS
+    assert _AGENT_TARGETS[".qoder"]["hooks"] is False, "plan A: .qoder hooks should be disabled"
+    assert _AGENT_TARGETS[".qoder"]["skills"] is True, "qoder skills still install"
+    assert _AGENT_TARGETS[".qoder"]["config"] == "qoder", "qoder config still install"

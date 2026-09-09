@@ -1,7 +1,7 @@
 ---
 title: 架构总览
 nav_order: 2
-parent: 理解 OKS
+parent: 工作原理
 ---
 
 # 架构总览
@@ -65,7 +65,7 @@ Claude、Codex、DSH 以及未来的 Pi、桌面或 Web Host 都是同一 Mail C
 - `raw/` 放原始来源与机械提取结果；
 - `drafts/` 放 Agent 的 Candidate；
 - `wiki/` 只放人审后的可复用知识；
-- `mail/` 与 Trace 留下协作和执行证据，但不冒充长期知识。
+- `mail/` 与 Trace 留下协作和执行证据，但不冒充长期知识；`settings/`、`_meta/` 和 `security/` 提供配置、Schema 与脱敏边界。
 
 右侧是运行时：`oks` CLI 负责文件操作、召回和状态，不在核心中调用模型 API；Agent 根据 Recipe、Provider 和 Capability 选择网页、PDF、Office、图片、音视频等处理能力。明确要交付文件时，Office 工作流才会接手 Word、PDF、PPT 或 Excel。飞书的 Base、表单与 IM 审核则是一个**可选参考实现**：它可以承担采集和移动审核入口，但不属于 CLI 核心，也不会绕开人审门。
 

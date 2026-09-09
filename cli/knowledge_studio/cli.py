@@ -103,7 +103,7 @@ def _vfs_error(operation: str, uri: str, exc: VfsError) -> dict:
 
 def _render_vfs_text(operation: str, uri: str, result: dict[str, Any]) -> None:
     console.print(f"[bold]{escape(operation)}[/bold] {escape(uri)}")
-    rows = result.get("entries") or result.get("matches")
+    rows = result.get("entries") or result.get("matches") or result.get("items")
     if isinstance(rows, list):
         table = Table(show_header=True)
         columns = list(rows[0]) if rows else ["uri"]
@@ -323,6 +323,28 @@ def fs_read(
         uri,
         output_format,
         lambda service: service.read(uri, offset=offset, limit=limit),
+    )
+
+
+@fs_app.command("read-many")
+def fs_read_many(
+    uris: list[str] = typer.Argument(..., help="Canonical oks:// file URIs."),
+    limit: int = typer.Option(20_000, "--limit", help="Maximum characters per file."),
+    max_total_chars: int = typer.Option(
+        8 * 1024 * 1024,
+        "--max-total-chars",
+        help="Maximum characters returned across all files.",
+    ),
+    output_format: str = typer.Option("table", "--format", help="table or json"),
+):
+    """Read multiple bounded UTF-8 text files in one CLI invocation."""
+    _run_vfs(
+        "read-many",
+        "oks://",
+        output_format,
+        lambda service: service.read_many(
+            uris, limit=limit, max_total_chars=max_total_chars
+        ),
     )
 
 
@@ -1632,7 +1654,6 @@ th {{ background: #f4f4f8; }}
 <table><tr><th>参数</th><th>当前值</th></tr>
 <tr><td>recall.floor</td><td>{params["recall_floor"]}</td></tr>
 <tr><td>recall.topn</td><td>{params["recall_topn"]}</td></tr>
-<tr><td>posttool.floor</td><td>{params["posttool_floor"]}</td></tr>
 <tr><td>posttool.mode</td><td>{params["posttool_mode"]}</td></tr>
 <tr><td>posttool.signal_rel_floor</td><td>{params["posttool_signal_rel_floor"]}</td></tr>
 <tr><td>search_backend</td><td>{params["search_backend"]}</td></tr>
@@ -1818,10 +1839,7 @@ _RECALL_YAML_KEYS = {
     "recall_topn": ("recall", "topn"),
     "recall_minlen": ("recall", "minlen"),
     "recall_cooldown": ("recall", "cooldown"),
-    "posttool_floor": ("posttool", "floor"),
-    "posttool_topn": ("posttool", "topn"),
     "posttool_mode": ("posttool", "mode"),
-    "posttool_recall": ("posttool", "recall"),
     "posttool_signal_rel_floor": ("posttool", "signal_rel_floor"),
     "conflict_window": ("conflict", "window"),
     "mail_topn": (None, "mail_topn"),
@@ -1913,6 +1931,8 @@ _SHARED_ASSETS = ("templates", "_meta", "settings", "profiles")
 # components under assets/. Supporting another agent is one line here.
 _AGENT_TARGETS = {
     ".claude": {"config": "claude", "skills": True, "hooks": True, "rules": True},
+    ".qoder": {"config": "qoder", "skills": True, "hooks": False, "rules": True},  # plan A (qoder-cli): .qoder/hooks 是死重量 — settings.json 指 .claude/hooks, 铺了无引用 (P8)
+    ".pi": {"config": "pi", "skills": False, "hooks": False, "rules": False},
     ".codex": {"config": "codex", "skills": False, "hooks": True, "rules": False},
     ".agents": {"config": None, "skills": True, "hooks": False, "rules": False},
 }
@@ -1938,6 +1958,34 @@ def _materialize_assets(root: Path, base: Path, overwrite: bool) -> list[str]:
     """Assemble instance directories from the single-source asset tree."""
     import shutil
 
+    # Editor config files carry the live hook wiring that `oks hook install`
+    # writes. Re-copying the pristine asset over them silently un-wires
+    # UserPromptSubmit and reverts migrated absolute paths, so an upgrade must
+    # leave an existing one alone; a fresh init still gets it.
+    wiring_state = {root / rel for rel in _HOOK_EDITORS.values()}
+
+    # The interpreter baked into a wrapper's OKS_PYTHON fallback is also live
+    # install state, written by `oks hook install`. Copying the pristine asset
+    # resets it to `python3`, which cannot import knowledge_studio on a
+    # pipx/venv install — so an upgrade would refresh the engines and disable
+    # the hooks in the same breath. Snapshot each bake and restore it after.
+    default_bake = '"${OKS_PYTHON:-python3}"'
+    preserved_bakes: dict[Path, str] = {}
+    for dest_name, spec in _AGENT_TARGETS.items():
+        if not spec["hooks"]:
+            continue
+        for name in _RECALL_HOOK_SCRIPTS:
+            if not name.endswith(".sh"):
+                continue
+            wrapper = root / dest_name / "hooks" / name
+            try:
+                body = wrapper.read_text(encoding="utf-8")
+            except OSError:
+                continue
+            found = re.search(r"\$\{OKS_PYTHON:-([^}]+)\}", body)
+            if found and found.group(1) != "python3":
+                preserved_bakes[wrapper] = f'"${{OKS_PYTHON:-{found.group(1)}}}"'
+
     def copy_into(src: Path, dest: Path) -> bool:
         """Merge per file: never clobber what the user changed unless upgrading.
 
@@ -1950,7 +1998,7 @@ def _materialize_assets(root: Path, base: Path, overwrite: bool) -> list[str]:
             if item.is_dir():
                 target.mkdir(parents=True, exist_ok=True)
                 continue
-            if target.exists() and not overwrite:
+            if target.exists() and (not overwrite or target in wiring_state):
                 continue
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(item, target)
@@ -1976,6 +2024,13 @@ def _materialize_assets(root: Path, base: Path, overwrite: bool) -> list[str]:
                 wrote |= copy_into(src, dest / component)
         if wrote:
             done.append(dest_name)
+    for wrapper, bake in preserved_bakes.items():
+        try:
+            body = wrapper.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        if default_bake in body:
+            wrapper.write_text(body.replace(default_bake, bake), encoding="utf-8")
     _bake_codex_lifecycle_hooks(root)
     return done
 
@@ -2799,6 +2854,27 @@ def mail_reply(
     )
 
 
+@mail_app.command("show")
+def mail_show(
+    id: str = typer.Argument(..., help="Mail slug (timestamp-from)"),
+) -> None:
+    """Print a mail's full content. Does not change its read state."""
+    root = _instance_root(None)
+    agent = _mail_agent_id()
+    found = next(
+        (m for m in mail_domain.iter_messages(root, agent)
+         if m["meta"].get("message_id") == id or m["path"].stem == id),
+        None,
+    )
+    if not found:
+        console.print(f"[red]Mail not found:[/red] {id}")
+        raise typer.Exit(1)
+    f = found["path"]
+    # Print verbatim: frontmatter carries from/to/type/priority, and any
+    # reformatting here would be a second mail parser to keep in sync (P8).
+    print(f.read_text(encoding="utf-8"), end="")
+
+
 @mail_app.command("read")
 def mail_read(
     id: str = typer.Argument(..., help="Message ID or legacy mail slug"),
@@ -2953,6 +3029,46 @@ def mail_wait(
     root = _instance_root(path)
     runtime = FileMailRuntime(root, agent.strip() or _mail_agent_id(), session_id.strip() or _mail_session_id())
     _emit_json(runtime.wait(timeout=timeout))
+
+
+@mail_app.command("migrate")
+def mail_migrate() -> None:
+    """Migrate legacy flat inbox mails into date-organized subdirs.
+
+    v0.6.16 organizes ``mail/inbox/`` by date (``{YYYY}/{MM}/{DD}/{slug}.md``)
+    so a busy instance does not accumulate one flat directory of hundreds of
+    files. Existing instances created before v0.6.16 have flat mails at
+    ``mail/inbox/{slug}.md``; this command moves them into date subdirs based
+    on the ``YYYYMMDD`` prefix that ``oks mail send`` already stamps. Idempotent
+    — mails already in a date subdir are left untouched.
+    """
+    root = _instance_root(None)
+    inbox = root / "mail" / "inbox"
+    if not inbox.is_dir():
+        console.print("[dim]No mail inbox.[/dim]")
+        return
+    moved = 0
+    # Only top-level *.md are legacy flat mails; date-organized ones live in
+    # subdirs and are skipped by glob("*.md").
+    for f in sorted(inbox.glob("*.md")):
+        slug = f.stem
+        if len(slug) >= 8 and slug[:8].isdigit():
+            dest_dir = inbox / slug[:4] / slug[4:6] / slug[6:8]
+        else:
+            dest_dir = inbox
+        if dest_dir == inbox:
+            continue  # slug has no date prefix — leave flat (still readable)
+        dest = dest_dir / f.name
+        if dest == f:
+            continue
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(f.read_bytes())
+        f.unlink()
+        moved += 1
+    if moved:
+        console.print(f"[green]Migrated[/green] {moved} mail(s) into date subdirs.")
+    else:
+        console.print("[dim]No flat mails to migrate.[/dim]")
 
 
 @registry_app.command("list")
@@ -3145,7 +3261,7 @@ def _ensure_recall_scripts(root: Path, hooks_dir: Path | None = None) -> list[st
                     continue
             except OSError:
                 pass
-            # Stale interpreter bake — fall through to re-copy + re-bake.
+            # Outdated wrapper body or stale interpreter bake — re-copy + re-bake.
         if src_dir is None or not (src_dir / name).is_file():
             raise FileNotFoundError(
                 f"bundled hook script not found: {name} (asset source: {src_dir})"
@@ -3271,8 +3387,8 @@ _HOOK_RECALL_STATUSES = {
 }
 
 
-def _hook_recall_error(reason: str) -> dict:
-    return {
+def _hook_recall_error(reason: str, *, diagnostic: str = "") -> dict:
+    result = {
         "schema": _HOOK_RECALL_SCHEMA,
         "status": "error",
         "context": "",
@@ -3284,6 +3400,11 @@ def _hook_recall_error(reason: str) -> dict:
         },
         "reason": reason,
     }
+    if diagnostic and os.environ.get("OKS_HOOK_DIAGNOSTICS", "").lower() in {
+        "1", "true", "yes"
+    }:
+        result["diagnostic"] = diagnostic[-1000:]
+    return result
 
 
 def _valid_hook_number(value: object, *, allow_none: bool = False) -> bool:
@@ -3329,6 +3450,9 @@ def _validate_hook_recall_response(data: object) -> Optional[dict]:
 
 
 def _hook_recall_script() -> Path:
+    assets = _asset_source()
+    if assets is not None:
+        return assets / "hooks" / "user-prompt-recall.py"
     return Path(__file__).resolve().parent / "_assets" / "hooks" / "user-prompt-recall.py"
 
 
@@ -3346,6 +3470,11 @@ def _run_hook_recall(
     env = os.environ.copy()
     env["OKS_ROOT"] = str(root)
     env["OKS_HOOK_OUTPUT"] = "json"
+    # The Hook Bridge exchanges JSON with a Python child process. Force UTF-8
+    # instead of inheriting a Windows console code page that cannot round-trip
+    # Chinese prompts or recall context.
+    env["PYTHONIOENCODING"] = "utf-8"
+    env["PYTHONUTF8"] = "1"
     package_root = str(Path(__file__).resolve().parents[1])
     inherited_pythonpath = env.get("PYTHONPATH", "")
     env["PYTHONPATH"] = os.pathsep.join([package_root, inherited_pythonpath]).rstrip(os.pathsep)
@@ -3364,13 +3493,20 @@ def _run_hook_recall(
             check=False,
         )
         if completed.returncode != 0:
-            raise RuntimeError(f"hook exited {completed.returncode}")
+            detail = f"hook exited {completed.returncode}"
+            stderr = str(getattr(completed, "stderr", "") or "").strip()
+            if stderr:
+                detail += f": {stderr[-1000:]}"
+            raise RuntimeError(detail)
         data = _validate_hook_recall_response(json.loads(completed.stdout))
         if data is None:
             raise ValueError("invalid hook response")
         return data
-    except Exception:
-        return _hook_recall_error("hook_bridge_failed")
+    except Exception as exc:
+        return _hook_recall_error(
+            "hook_bridge_failed",
+            diagnostic=f"{type(exc).__name__}: {exc}",
+        )
 
 
 def _read_hook_history(root: Path, limit: int, session_id: str, cwd: str) -> dict:
@@ -3452,9 +3588,11 @@ def hook_install(
 ):
     """Wire prompt recall and post-tool conflict hooks into editor settings (opt-in).
 
-    Copies the hook scripts into the chosen editor's hook directory (if missing)
-    and adds UserPromptSubmit + PostToolUse entries. Idempotent and
-    non-destructive: existing settings and hooks are preserved.
+    Adds UserPromptSubmit + PostToolUse entries and installs the hook scripts
+    into the chosen editor's hook directory. Idempotent. Existing settings are
+    preserved, and so is an existing `.py` engine — only the `.sh` wrappers are
+    rewritten, to re-bake the interpreter that can import knowledge_studio. Use
+    `oks init <root> --upgrade` to refresh the engines themselves.
     """
     editor = editor.lower().strip()
     if editor not in ("claude", "qoder", "codex", "both"):
@@ -3564,6 +3702,9 @@ def hook_status(
     import re
     import subprocess
     shown_dirs = []
+    blockers: list[str] = []
+    warnings: list[str] = []
+    any_wired = False
     for name in _HOOK_EDITORS:
         hooks_dir = root / _HOOK_SCRIPT_DIRS[name]
         if hooks_dir in shown_dirs:
@@ -3601,10 +3742,25 @@ def hook_status(
         post_wired = _hook_event_is_wired(
             settings_path, "PostToolUse", _POST_TOOL_SCRIPT_NAMES
         )
+        any_wired = any_wired or post_wired
         post_state = "[green]wired[/green]" if post_wired else "[dim]not wired[/dim]"
         console.print(f"  {name} PostToolUse: {post_state}")
         if name == "codex":
             console.print("  codex trust: review with `/hooks`")
+    if blockers:
+        console.print(
+            "\n  [red]verdict: a hook cannot inject context.[/red] "
+            "[yellow]`wired` above only means the settings entry exists.[/yellow]"
+        )
+    elif warnings:
+        console.print(
+            "\n  [yellow]verdict: hooks run, but an engine is not the bundled "
+            "version — it may lack upstream fixes.[/yellow]"
+        )
+    elif any_wired:
+        console.print("\n  [green]verdict: scripts are healthy and wired.[/green]")
+    for item in (*blockers, *warnings):
+        console.print(f"    - {item}")
 
 
 if __name__ == "__main__":

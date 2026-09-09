@@ -32,6 +32,8 @@ related environment variables remain temporary compatibility overrides;
 internal CLI bridge mode; it emits a safe structured result instead of editor
 context text.
 """
+from __future__ import annotations
+
 import hashlib
 from html import escape as escape_html
 import json
@@ -42,6 +44,20 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from _persistence import append_jsonl, atomic_write_text, file_lock
+
+
+def _configure_utf8_stdio() -> None:
+    """Keep the JSON bridge stable when a Windows host uses a legacy code page."""
+    for stream in (sys.stdin, sys.stdout):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if callable(reconfigure):
+            try:
+                reconfigure(encoding="utf-8", errors="replace")
+            except (OSError, ValueError):
+                pass
+
+
+_configure_utf8_stdio()
 
 try:
     from knowledge_studio import mail as mail_domain
