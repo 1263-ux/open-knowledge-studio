@@ -8,6 +8,7 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
 from knowledge_studio import cli as cli_module
@@ -93,7 +94,11 @@ def test_hook_install_wires_codex_prompt_recall(tmp_path):
     hooks = _load_codex_hooks(target)
     commands = _codex_commands(hooks, "UserPromptSubmit")
     assert len(commands) == 1
-    assert commands[0].endswith("/.codex/hooks/user-prompt-recall.sh")
+    if os.name == "nt":
+        assert sys.executable in commands[0]
+        assert "user-prompt-recall.py" in commands[0]
+    else:
+        assert commands[0].endswith("/.codex/hooks/user-prompt-recall.sh")
     assert (target / ".codex" / "hooks" / "user-prompt-recall.sh").is_file()
     assert (target / ".codex" / "hooks" / "user-prompt-recall.py").is_file()
 
@@ -103,10 +108,114 @@ def test_hook_install_wires_codex_prompt_recall(tmp_path):
 
     post_commands = _codex_commands(hooks, "PostToolUse")
     assert len(post_commands) == 1
-    assert post_commands[0].endswith("/.codex/hooks/post-tool-edit.sh")
+    if os.name == "nt":
+        assert sys.executable in post_commands[0]
+        assert "post-tool-edit.py" in post_commands[0]
+    else:
+        assert post_commands[0].endswith("/.codex/hooks/post-tool-edit.sh")
     wrapper = target / ".codex" / "hooks" / "post-tool-edit.sh"
-    assert f'${{OKS_PYTHON:-{sys.executable}}}' in wrapper.read_text(encoding="utf-8")
+    shell_python = sys.executable.replace("\\", "/")
+    assert f'${{OKS_PYTHON:-{shell_python}}}' in wrapper.read_text(encoding="utf-8")
     assert "/hooks" in result.output
+
+
+def test_hook_install_wires_claude_prompt_recall(tmp_path):
+    target = _init_instance(tmp_path)
+
+    result = runner.invoke(
+        app, ["hook", "install", "--editor", "claude", "--path", str(target)]
+    )
+
+    assert result.exit_code == 0, result.output
+    settings = json.loads((target / ".claude" / "settings.json").read_text(encoding="utf-8"))
+    prompt_handler = settings["hooks"]["UserPromptSubmit"][0]["hooks"][0]
+    post_handler = settings["hooks"]["PostToolUse"][0]["hooks"][0]
+    if os.name == "nt":
+        package_root = str(Path(cli_module.__file__).resolve().parents[1])
+        runner_script = str((target / ".claude" / "hooks" / "_hook_runner.py").resolve())
+        assert prompt_handler["command"] == sys.executable
+        assert prompt_handler["args"] == [
+            runner_script,
+            str((target / ".claude" / "hooks" / "user-prompt-recall.py").resolve()),
+            package_root,
+        ]
+        assert post_handler["command"] == sys.executable
+        assert post_handler["args"] == [
+            runner_script,
+            str((target / ".claude" / "hooks" / "post-tool-edit.py").resolve()),
+            package_root,
+        ]
+    else:
+        assert prompt_handler["command"].endswith("/.claude/hooks/user-prompt-recall.sh")
+        assert post_handler["command"].endswith("/.claude/hooks/post-tool-edit.sh")
+
+
+def test_native_claude_runner_loads_mail_without_oks_environment(tmp_path):
+    if os.name != "nt":
+        pytest.skip("native Claude runner is a Windows hook path")
+
+    from knowledge_studio import mail
+
+    target = _init_instance(tmp_path)
+    message = mail.write_message(
+        target,
+        body="native runner mail",
+        sender="codex",
+        recipients="@claude",
+        title="Native runner",
+    )
+    hook_dir = target / ".claude" / "hooks"
+    package_root = str(Path(cli_module.__file__).resolve().parents[1])
+    env = {
+        key: value
+        for key, value in os.environ.items()
+        if key not in {"OKS_ROOT", "OKS_AGENT_ID", "OKS_SESSION_ID", "CLAUDE_CODE_SESSION_ID", "CLAUDECODE"}
+    }
+    env["OKS_HOOK_OUTPUT"] = "json"
+    payload = json.dumps(
+        {
+            "prompt": "continue the native runner handoff",
+            "session_id": "native-claude-session",
+            "cwd": str(target),
+        }
+    )
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(hook_dir / "_hook_runner.py"),
+            str(hook_dir / "user-prompt-recall.py"),
+            package_root,
+        ],
+        input=payload.encode("utf-8"),
+        capture_output=True,
+        cwd=target,
+        env=env,
+    )
+
+    stderr = (result.stderr or b"").decode("utf-8", errors="replace")
+    assert result.returncode == 0, stderr
+    raw_stdout = result.stdout or b""
+    try:
+        stdout = raw_stdout.decode("utf-8")
+    except UnicodeDecodeError:
+        stdout = raw_stdout.decode("gbk")
+    output = json.loads(stdout)
+    assert output["status"] == "injected"
+    assert message["message_id"] in output["context"]
+    assert mail.receipt_path(target, "native-claude-session", message["message_id"]).is_file()
+
+
+def test_codex_python_command_quotes_paths_for_native_windows(tmp_path):
+    hooks_dir = tmp_path / "instance with spaces" / ".codex" / "hooks"
+    command = cli_module._codex_python_hook_command(
+        hooks_dir,
+        "user-prompt-recall.py",
+        native_windows=True,
+    )
+
+    assert '"' in command
+    assert '"' + str(hooks_dir.resolve()) + '\\user-prompt-recall.py"' in command
+    assert command.endswith('user-prompt-recall.py" 2>NUL')
 
 
 def test_hook_install_codex_is_idempotent_and_status_reports_wired(tmp_path):
@@ -127,6 +236,20 @@ def test_hook_install_codex_is_idempotent_and_status_reports_wired(tmp_path):
     assert "codex: wired" in status.output
     assert "codex PostToolUse: wired" in status.output
     assert "codex trust: review with `/hooks`" in status.output
+
+
+def test_hook_install_refreshes_stale_prompt_hook_engine(tmp_path):
+    target = _init_instance(tmp_path)
+    script = target / ".codex" / "hooks" / "user-prompt-recall.py"
+    script.write_text("# stale hook\n", encoding="utf-8")
+
+    result = runner.invoke(
+        app,
+        ["hook", "install", "--editor", "codex", "--path", str(target)],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "mail_domain.iter_messages" in script.read_text(encoding="utf-8")
 
 
 def test_hook_install_migrates_codex_relative_lifecycle_paths(tmp_path):
@@ -466,3 +589,46 @@ def test_hook_recall_cli_rejects_malformed_success_envelope(tmp_path, monkeypatc
         "trace": {"candidate_count": 0, "matches": [], "top_relevance": None, "threshold": None},
         "reason": "hook_bridge_failed",
     }
+
+
+def test_prompt_hook_degrades_loudly_without_mail_module(tmp_path):
+    """A hook run without knowledge_studio warns on stderr and traces the gap."""
+    target = _init_instance(tmp_path)
+    result = runner.invoke(
+        app,
+        ["hook", "install", "--editor", "claude", "--path", str(target)],
+    )
+    assert result.exit_code == 0, result.output
+    script = target / ".claude" / "hooks" / "user-prompt-recall.py"
+
+    # A stub package whose import raises reproduces an environment where
+    # knowledge_studio.mail is unavailable (e.g. wrong interpreter).
+    stub = tmp_path / "stub" / "knowledge_studio"
+    stub.mkdir(parents=True)
+    (stub / "__init__.py").write_text(
+        "raise ImportError('stub: mail unavailable')\n", encoding="utf-8"
+    )
+    env = os.environ.copy()
+    env["OKS_ROOT"] = str(target)
+    env["OKS_AGENT_ID"] = "claude"
+    env["OKS_SESSION_ID"] = "degraded-session"
+    env["PYTHONPATH"] = str(stub.parent)
+    proc = subprocess.run(
+        [sys.executable, str(script)],
+        input=json.dumps({"session_id": "degraded-session", "prompt": "hello"}),
+        text=True,
+        encoding="utf-8",
+        capture_output=True,
+        cwd=str(target),
+        env=env,
+        check=False,
+    )
+
+    assert proc.returncode == 0
+    assert "Mail injection disabled" in proc.stderr
+    assert "<oks-mail-inbox" not in proc.stdout
+
+    trace = target / "records" / "inject.jsonl"
+    assert trace.is_file()
+    records = [json.loads(line) for line in trace.read_text(encoding="utf-8").splitlines() if line.strip()]
+    assert any(record.get("event") == "mail_degraded" for record in records)

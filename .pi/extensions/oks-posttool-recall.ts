@@ -99,6 +99,24 @@ function _kbRoot(): string | null {
   return null;
 }
 
+function hookPython(script: string): string {
+  const configured = process.env.OKS_PYTHON?.trim();
+  if (configured) return configured;
+
+  // Reuse the interpreter baked into the Claude/Git-Bash wrapper. This keeps
+  // Pi's PostToolUse path importable on Windows, where `python3` is commonly
+  // absent even though the pipx OKS interpreter is installed.
+  const wrapper = script.replace(/post-tool-edit\.py$/, "post-tool-edit.sh");
+  try {
+    const text = readFileSync(wrapper, "utf-8");
+    const match = text.match(/\$\{OKS_PYTHON:-([^}]+)\}/);
+    if (match?.[1]) return match[1].trim().replace(/^['"]|['"]$/g, "");
+  } catch {
+    // Use the platform default below.
+  }
+  return process.platform === "win32" ? "python" : "python3";
+}
+
 // query-level cooldown: same tool-derived query within COOLDOWN turns
 // skips Python subprocess entirely (0ms vs ~560ms startup). The .py hook
 // does authoritative slug-level cooldown; this is a coarser pre-filter.
@@ -147,14 +165,20 @@ export default function (pi: ExtensionAPI) {
       tool_name: event.toolName,
       tool_input: (event as any).input ?? {},
       session_id: sessionId,
-      cwd: kbRoot,
+      cwd: process.cwd(),
+      agent_id: process.env.OKS_AGENT_ID ?? "pi",
     });
 
     try {
-      const out = execFileSync("python3", [script], {
+      const out = execFileSync(hookPython(script), [script], {
         input: payload,
         encoding: "utf-8",
         timeout: 8000,
+        env: {
+          ...process.env,
+          OKS_ROOT: kbRoot,
+          OKS_AGENT_ID: process.env.OKS_AGENT_ID ?? "pi",
+        },
       }).trim();
       if (!out) return; // cooldown skip or no hit above floor — 0 bytes added
 

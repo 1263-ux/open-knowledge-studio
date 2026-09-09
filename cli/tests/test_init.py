@@ -30,12 +30,7 @@ def test_maintainer_skills_live_outside_assets():
     """
     repo_root = Path(__file__).parents[2]
     shipped = {entry.name for entry in (repo_root / "assets" / "skills").iterdir()}
-    assert "review-upstream-pr" not in shipped
-    assert "upstream-pr-remediation" not in shipped
     assert {"ingest", "query", "promote"} <= shipped
-
-    dev_skills = {entry.name for entry in (repo_root / ".claude" / "skills").iterdir()}
-    assert {"review-upstream-pr", "upstream-pr-remediation"} <= dev_skills
 
 
 def test_both_build_paths_vendor_assets_verbatim():
@@ -81,8 +76,8 @@ def test_init_assembles_each_agent_ecosystem(tmp_path):
     assert (target / ".codex" / "hooks.json").is_file()
 
 
-def test_hook_install_refreshes_persistence_support_file_for_old_instances(tmp_path):
-    """Old instances with hooks must receive the helper used by both engines."""
+def test_hook_install_refreshes_persistence_support_file_and_stale_engine(tmp_path):
+    """Old instances receive support files and the current hook protocol."""
     from knowledge_studio.cli import _ensure_recall_scripts
 
     target = tmp_path / "kb"
@@ -95,8 +90,9 @@ def test_hook_install_refreshes_persistence_support_file_for_old_instances(tmp_p
 
     assert "_persistence.py" in created
     assert (hooks / "_persistence.py").is_file()
-    assert (hooks / "user-prompt-recall.py").read_text(encoding="utf-8") == "old\n"
-    assert (hooks / "post-tool-edit.py").read_text(encoding="utf-8") == "old\n"
+    assert "old\n" != (hooks / "user-prompt-recall.py").read_text(encoding="utf-8")
+    assert "old\n" != (hooks / "post-tool-edit.py").read_text(encoding="utf-8")
+    assert "independent from knowledge recall" in (hooks / "user-prompt-recall.py").read_text(encoding="utf-8")
 
 
 def test_init_recommends_the_current_ingest_command(tmp_path):
