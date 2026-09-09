@@ -1,6 +1,14 @@
 <script>
 (function () {
   function init() {
+    // Deduplicate TOCs: the theme's built-in "On this page" aside is replaced
+    // by the fixed right-hand toc-right, so remove the built-in one first.
+    document.querySelectorAll('.main-content aside.toc, .main-content .toc > ul').forEach(function (node) {
+      var root = node.closest('aside') || node;
+      if (!root.classList.contains('toc-right')) {
+        root.remove();
+      }
+    });
     var main = document.querySelector('.main-content');
     if (main && !main.getAttribute('data-oks-toc') && !main.querySelector('.oks-hero')) {
       main.setAttribute('data-oks-toc', '1');

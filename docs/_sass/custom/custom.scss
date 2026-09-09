@@ -145,6 +145,11 @@ h4 { font-weight: 500; }
   background-image: none !important;
   color: #ffffff !important;
   font-weight: 700;
+  /* CJK labels need explicit line-height and letter-spacing so glyphs do not
+     overlap inside the fixed-height button. */
+  line-height: 1.4;
+  letter-spacing: 0.02em;
+  padding: 0.5rem 1.1rem;
 }
 
 .oks-actions a.btn.btn-primary:hover {

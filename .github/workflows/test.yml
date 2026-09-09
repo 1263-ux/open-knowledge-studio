@@ -85,3 +85,24 @@ jobs:
           /tmp/probe/bin/python -m pip install --quiet dist/*.whl
           /tmp/probe/bin/oks init /tmp/probe-kb --no-set-default
           /tmp/probe/bin/oks --help > /dev/null
+
+
+  docs-links:
+    name: docs link check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Check docs and README links
+        # --offline: external URLs are flaky from CI (anti-bot 412s, geo
+        # blocks); the site-link and relative-link rules catch the failures
+        # that have actually shipped (promised-but-missing pages, clean-URL
+        # 404s). Run scripts/check_links.py without --offline locally before
+        # pushing URL changes.
+        run: python scripts/check_links.py --offline

@@ -19,7 +19,9 @@ parent: 维护者
 
 ## 写作门禁
 
-- `docs/` 下的公开页面必须有明确的 `title`，并归入开始使用、日常任务、真实案例、参考或维护者之一；研究草稿和内部记录应设置 `nav_exclude: true` 与 `search_exclude: true`，不得悄悄进入产品导航。
+- `docs/` 下的公开页面必须有明确的 `title`，并归入开始使用、日常任务、真实案例、工作原理、参考或维护者之一；研究草稿和内部记录应设置 `nav_exclude: true` 与 `search_exclude: true`，不得悄悄进入产品导航。
+- `title` 保持短名（建议 ≤12 个字符）；完整标题、全称和长破折号副题只出现在正文 `h1` 里。导航出现超长标题视为缺陷。
+- 归属子栏目的页面必须写 `parent`（跨两级时加 `grand_parent`），栏目入口页写 `has_children: true`；`nav_order` 在同级内唯一。
 - 不虚构用户与 Agent 对话。
 - 不使用未经测量的“30 秒”“一键完成”。
 - 不用“真实、完整、专业、智能”代替验收证据。
@@ -27,6 +29,17 @@ parent: 维护者
 - 截图只证明截图中可观察的状态，不证明后台流程或业务结论。
 - `SIMULATED`、`REPLAYED`、`partial`、`failed` 和 `skipped` 必须保持原义。
 - 删除或移动页面前检查入链、锚点和 Pages 路由。
+
+## 链接规范
+
+- 站内链接一律 `{% raw %}{{ '/path/to/page.html' | relative_url }}{% endraw %}`（正文内可用相对路径 `../usage/recall.html`），必须带 `.html` 后缀——GitHub Pages 没有 clean-URL，尾斜杠链接是 404。
+- 新增概念页先确认信息架构里有没有它的位置；没有就先补 IA 再写页面，不允许出现"README 承诺了但页面不存在"。
+- 仓库 README 面向 GitHub 渲染：仓库内文件用相对链接（`./docs/xxx.md`），文档站页面用文档站域名绝对链接。
+- 每次改文档后运行 `python scripts/check_links.py`（CI 同款门禁），broken link 不允许合入。
+
+## 设计文档边界
+
+`docs/design/` 与 `docs/algorithms/` 中的蓝图（召回系统蓝图、Team 大型版、规模光谱等）描述的是演进方向，不是已交付行为。它们必须挂在工作原理 → 设计蓝图子树下，并在开头说明与已实现行为（召回引擎、CLI 参考）的边界；引用其 Phase 与指标时必须区分"已实现"与"设计中"。
 
 ## 案例模板
 

@@ -26,7 +26,7 @@ parent: 参考
 | `oks team init [path] [--name NAME]` | 创建共享团队知识实例 |
 | `oks schema show <name>` | 输出协议文档的校验示例 |
 | `oks trace *` | 执行追踪（provenance） |
-| `oks mail delegate/send/sent/reply/inbox/thread/read/archive/count/ack/view/snapshot/wait` | Agent-native 意图交接、Agent 间协调接口、Thread/Session 投影、可写状态操作与无 Host push 时的本地等待降级；不属于 `oks recall` 结果；详见 [Mail 协议](mail-protocol) |
+| `oks mail delegate/send/sent/reply/inbox/thread/read/archive/count/ack/view/snapshot/wait` | Agent-native 意图交接、Agent 间协调接口、Thread/Session 投影、可写状态操作与无 Host push 时的本地等待降级；不属于 `oks recall` 结果；详见 [Mail 协议](mail-protocol.html) |
 | `oks registry list/bind/remove` | 终端注册表（agent+cwd → profile/goal） |
 | `oks lint` | 扫 wiki/ 一致性 |
 | `oks config init/show/set` | 配置 |

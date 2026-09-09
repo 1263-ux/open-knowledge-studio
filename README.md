@@ -6,7 +6,7 @@
 
 把已经核实过的资料和判断，留给下一次任务。
 
-[先看一个真实过程](https://open-agent-power.github.io/open-knowledge-studio/oh-my/study.html) · [开始使用](https://open-agent-power.github.io/open-knowledge-studio/start-here.html) · [完整文档](https://open-agent-power.github.io/open-knowledge-studio/)
+[先看一个真实过程](https://1263-ux.github.io/open-knowledge-studio/oh-my/study.html) · [开始使用](https://1263-ux.github.io/open-knowledge-studio/start-here.html) · [完整文档](https://1263-ux.github.io/open-knowledge-studio/)
 
 </div>
 
@@ -38,7 +38,7 @@ Adapter；它调用 `oks mail` 提供可视化和人工操作，Mail Core 不依
 
 不必先读一堆文档。这里有一个真实记录：两段 Kimi 视频被保存为来源和 Raw，Agent 据此提出待审核的知识 Candidate。
 
-[看「托管你的研究」这个案例 →](https://open-agent-power.github.io/open-knowledge-studio/oh-my/study.html)
+[看「托管你的研究」这个案例 →](https://1263-ux.github.io/open-knowledge-studio/oh-my/study.html)
 
 案例页面也会直接说明它**没有**证明什么：Candidate 尚未晋升为 Wiki，Kimi 的参数和能力结论仍需要官方资料或 benchmark 复核。这正是 OKS 想保留的边界。
 
@@ -54,20 +54,20 @@ Adapter；它调用 `oks mail` 提供可视化和人工操作，Mail Core 不依
 2. 让它展示 Candidate，逐条看来源支持了什么、还缺什么。
 3. 换一个实际任务，确认它只使用已审核的内容，并能告诉你依据在哪里。
 
-[第一次知识闭环的详细说明 →](https://open-agent-power.github.io/open-knowledge-studio/first-knowledge-loop.html)
+[第一次知识闭环的详细说明 →](https://1263-ux.github.io/open-knowledge-studio/first-knowledge-loop.html)
 
 ## 接下来从哪儿走
 
-- 要把文章、文件、视频或对话留下来，从 [收集来源](https://open-agent-power.github.io/open-knowledge-studio/usage/ingest.html) 开始。
-- 要审 Agent 的提议，读 [审核候选](https://open-agent-power.github.io/open-knowledge-studio/usage/review.html)。
-- 要在新任务里用回已经确认的经验，读 [召回与注入](https://open-agent-power.github.io/open-knowledge-studio/usage/recall.html)。
-- 要把已审核的知识做成 Word、PDF、PPT 或 Excel，读 [Office 工作流](https://open-agent-power.github.io/open-knowledge-studio/usage/office.html)。
+- 要把文章、文件、视频或对话留下来，从 [收集来源](https://1263-ux.github.io/open-knowledge-studio/usage/ingest.html) 开始。
+- 要审 Agent 的提议，读 [审核候选](https://1263-ux.github.io/open-knowledge-studio/usage/review.html)。
+- 要在新任务里用回已经确认的经验，读 [召回与注入](https://1263-ux.github.io/open-knowledge-studio/usage/recall.html)。
+- 要把已审核的知识做成 Word、PDF、PPT 或 Excel，读 [Office 工作流](https://1263-ux.github.io/open-knowledge-studio/usage/office.html)。
 
-更多原理、故障排除和维护者资料在 [文档站](https://open-agent-power.github.io/open-knowledge-studio/)。如果你需要手动安装、CI 或 CLI，请从 [参考手册](docs/reference/cli.md) 进入。
+更多原理、故障排除和维护者资料在 [文档站](https://1263-ux.github.io/open-knowledge-studio/)。如果你需要手动安装、CI 或 CLI，请从 [参考手册](docs/reference/cli.md) 进入。
 
 ## English
 
-Open Knowledge Studio keeps sources, human review decisions, and reusable knowledge outside the model so a later task can start from confirmed context. See the [documented real-world example](https://open-agent-power.github.io/open-knowledge-studio/oh-my/study.html), then ask your coding Agent to follow the [OKS setup skill](https://raw.githubusercontent.com/open-agent-power/open-knowledge-studio/main/SKILL.md).
+Open Knowledge Studio keeps sources, human review decisions, and reusable knowledge outside the model so a later task can start from confirmed context. See the [documented real-world example](https://1263-ux.github.io/open-knowledge-studio/oh-my/study.html), then ask your coding Agent to follow the [OKS setup skill](https://raw.githubusercontent.com/open-agent-power/open-knowledge-studio/main/SKILL.md).
 
 ## License
 
