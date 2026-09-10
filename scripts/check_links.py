@@ -18,6 +18,7 @@ from __future__ import annotations
 import argparse
 import re
 import sys
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -74,14 +75,37 @@ def relative_target_exists(link: str, source: Path) -> bool:
 
 def check_external(url: str) -> str | None:
     """Return an error message, or None if the URL is acceptable."""
-    req = urllib.request.Request(url, method="HEAD", headers={"User-Agent": "oks-link-check"})
-    try:
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            if resp.status in STATUS_OK:
+    # A browser-shaped UA avoids false negatives from hosts that reject
+    # generic bot identifiers.  A few sites also reject HEAD while serving
+    # the same URL over GET, so retry that method for transient/unsupported
+    # HEAD responses.  Status checks stay strict: a 404 is still broken.
+    headers = {"User-Agent": "Mozilla/5.0"}
+    last_error: str | None = None
+    for method in ("HEAD", "GET"):
+        req = urllib.request.Request(url, method=method, headers=headers)
+        try:
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                if resp.status in STATUS_OK:
+                    return None
+                if resp.status == 404:
+                    return "HTTP 404"
+                last_error = f"HTTP {resp.status}"
+        except urllib.error.HTTPError as exc:
+            if exc.code == 404:
+                return "HTTP 404"
+            if exc.code in STATUS_OK:
+                if exc.code == 405 and method == "HEAD":
+                    # Some servers reject HEAD but serve the same URL via GET.
+                    continue
                 return None
-            return f"HTTP {resp.status}"
-    except Exception as exc:  # noqa: BLE001 - report anything unusual
-        return f"unreachable: {exc}"
+            last_error = f"HTTP {exc.code}"
+            if method == "HEAD":
+                continue
+        except Exception as exc:  # noqa: BLE001 - report anything unusual
+            last_error = f"unreachable: {exc}"
+            if method == "HEAD":
+                continue
+    return last_error or "unreachable"
 
 
 def main() -> int:

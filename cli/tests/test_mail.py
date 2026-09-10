@@ -305,19 +305,19 @@ def test_prompt_hook_receipts_are_session_scoped_and_do_not_mark_read(tmp_path):
     script = __import__("pathlib").Path(__file__).parents[2] / "assets" / "hooks" / "user-prompt-recall.py"
     env = {"OKS_ROOT": str(tmp_path), "OKS_AGENT_ID": "codex", "PYTHONPATH": str(script.parents[2] / "cli")}
     payload = json.dumps({"prompt": "continue the handoff now", "session_id": "ses_b", "cwd": str(tmp_path), "agent_id": "codex"})
-    first = subprocess.run([sys.executable, str(script)], input=payload, text=True, capture_output=True, env={**__import__("os").environ, **env})
+    first = subprocess.run([sys.executable, str(script)], input=payload, text=True, encoding="utf-8", capture_output=True, env={**__import__("os").environ, **env})
     assert "Handoff" in first.stdout
     assert "[Agent · @claude]" in first.stdout
     state = mail.load_state(tmp_path, "codex", message["message_id"])
     assert state["read_at"] is None
     assert mail.receipt_path(tmp_path, "ses_b", message["message_id"]).is_file()
 
-    second = subprocess.run([sys.executable, str(script)], input=payload, text=True, capture_output=True, env={**__import__("os").environ, **env})
+    second = subprocess.run([sys.executable, str(script)], input=payload, text=True, encoding="utf-8", capture_output=True, env={**__import__("os").environ, **env})
     assert "Handoff" not in second.stdout
     # Agent-level read by Session B must not suppress a new Session C receipt.
     mail.update_recipient_state(tmp_path, "codex", message["message_id"], read_at=mail.iso_now())
     payload_c = payload.replace('"ses_b"', '"ses_c"')
-    third = subprocess.run([sys.executable, str(script)], input=payload_c, text=True, capture_output=True, env={**__import__("os").environ, **env})
+    third = subprocess.run([sys.executable, str(script)], input=payload_c, text=True, encoding="utf-8", capture_output=True, env={**__import__("os").environ, **env})
     assert "Handoff" in third.stdout
     assert mail.receipt_path(tmp_path, "ses_c", message["message_id"]).is_file()
 
@@ -336,7 +336,7 @@ def test_prompt_hook_marks_dsh_human_mail_provenance(tmp_path):
     script = __import__("pathlib").Path(__file__).parents[2] / "assets" / "hooks" / "user-prompt-recall.py"
     env = {"OKS_ROOT": str(tmp_path), "OKS_AGENT_ID": "codex", "PYTHONPATH": str(script.parents[2] / "cli")}
     payload = json.dumps({"prompt": "continue", "session_id": "human-origin", "cwd": str(tmp_path), "agent_id": "codex"})
-    result = subprocess.run([sys.executable, str(script)], input=payload, text=True, capture_output=True, env={**__import__("os").environ, **env})
+    result = subprocess.run([sys.executable, str(script)], input=payload, text=True, encoding="utf-8", capture_output=True, env={**__import__("os").environ, **env})
 
     assert result.returncode == 0
     assert "[人工 · @dsh]" in result.stdout
@@ -359,6 +359,7 @@ def test_prompt_hook_default_output_uses_editor_context_envelope(tmp_path):
         [sys.executable, str(script)],
         input=payload,
         text=True,
+        encoding="utf-8",
         capture_output=True,
         env={**__import__("os").environ, **env},
     )
@@ -381,7 +382,7 @@ def test_short_prompt_still_injects_mail(tmp_path):
     script = __import__("pathlib").Path(__file__).parents[2] / "assets" / "hooks" / "user-prompt-recall.py"
     env = {"OKS_ROOT": str(tmp_path), "OKS_AGENT_ID": "codex", "PYTHONPATH": str(script.parents[2] / "cli"), "OKS_HOOK_OUTPUT": "json"}
     payload = json.dumps({"prompt": "继续", "session_id": "short-session", "cwd": str(tmp_path), "agent_id": "codex"})
-    result = subprocess.run([sys.executable, str(script)], input=payload, text=True, capture_output=True, env={**__import__("os").environ, **env})
+    result = subprocess.run([sys.executable, str(script)], input=payload, text=True, encoding="utf-8", capture_output=True, env={**__import__("os").environ, **env})
     assert result.returncode == 0
     assert "Short prompt handoff" in result.stdout
     assert mail.receipt_path(tmp_path, "short-session", message["message_id"]).is_file()
@@ -422,6 +423,7 @@ def test_prompt_hook_uses_claude_host_identity_and_payload_cwd(tmp_path):
         [sys.executable, str(script)],
         input=payload,
         text=True,
+        encoding="utf-8",
         capture_output=True,
         cwd=tmp_path,
         env=env,
@@ -474,6 +476,7 @@ def test_prompt_hook_uses_installed_claude_location_without_oks_environment(tmp_
         [sys.executable, str(hook_dir / "user-prompt-recall.py")],
         input=payload,
         text=True,
+        encoding="utf-8",
         capture_output=True,
         cwd=tmp_path,
         env=env,
@@ -728,6 +731,7 @@ def test_prompt_hook_escapes_untrusted_mail_envelope(tmp_path):
         [sys.executable, str(script)],
         input=payload,
         text=True,
+        encoding="utf-8",
         capture_output=True,
         env={**__import__("os").environ, **env},
     )
@@ -953,7 +957,7 @@ def test_gate4_git_backed_two_clone_handoff_and_concurrent_merge(tmp_path, monke
 
     def git(cwd, *args, check=True):
         return subprocess.run(
-            ["git", *args], cwd=str(cwd), check=check, capture_output=True, text=True
+            ["git", *args], cwd=str(cwd), check=check, capture_output=True, text=True, encoding="utf-8"
         )
 
     remote = tmp_path / "remote.git"

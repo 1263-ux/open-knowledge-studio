@@ -14,6 +14,21 @@ Thread 是有主题边界的持久通信上下文：它不是任务，也不只�
 切成多个 Thread。Machine 与 Session 是按需查看的 provenance，不是在线、完成或
 认证声明。
 
+## 三类执行边界
+
+Mail 的统一问题是：工作上下文如何跨执行边界继续存在。边界不同，接入方式可以不
+同，但持久对象仍是同一套 Thread、Message、Receipt 和 Evidence Ref。
+
+| 边界 | 典型接力 | 在线承载 | OKS Mail 留下的事实 |
+| --- | --- | --- | --- |
+| Session / Subagent | 同一 Agent 换会话、交接子 Agent | Host 内部消息或当前进程 | 可恢复的 handoff、决定、阻塞和证据引用 |
+| Agent / Host | Claude、Codex、Pi 之间交接 | 各自 Host Adapter | 统一路由、来源 provenance、Receipt 和原 Thread 回复 |
+| Machine / Team | 电脑 A 到电脑 B，离线后继续 | Git fetch/merge/push | 可迁移、可审计、可合并的 canonical Mail 事实 |
+
+宿主自带的 SendMessage、MCP Mail 或 Agent Teams 适合高频、临时、在线消息；需要跨
+Session、跨运行或跨机器保留的协作事实才进入 OKS Mail。Mail 不把实时消息总线、
+presence、daemon 或模型调度复制进 Core。
+
 ## Host-agnostic 定位
 
 **OKS Mail 是跨 Host 的持久通信协议，DSH 只是其中一个适配器。** Mail
@@ -46,15 +61,18 @@ Adapter（也可称 DSH Coordination UI），不是 Mail 的宿主、唯一前�
 `oks` CLI/Core 是 Agent-native 协作的第一等接口。`@agent-id` 是其中稳定的
 协议路由键，不是要求普通用户学习的操作语言。
 例如协议内部可以使用 `@claude`、`@codex`，用户层应显示友好的 Agent 名称、
-能力和可核实状态。Host 或当前 Agent 应从自然语言任务调用 CLI 创建 handoff，并在
-后台填充收件人、Thread 和 Session；用户通常不需要手写 `@`、复制
+能力和可核实状态。Host 或当前 Agent 可把用户的通信意图解析为收件人、Thread 和
+Session，并在后台调用 CLI；用户通常不需要手写 `@`、复制
 `thread_id`，也不需要自己调用 `ack`。
 
 因此 Mail 有两种入口，但只有一套 Core：
 
 ```text
-普通用户：任务意图 → Host/Agent 自动路由 → Mail Core
-Agent/维护者：oks mail send/reply --to @agent-id → Mail Core
+普通用户：通信意图 → Host/Agent 解析接收方 → Mail Core
+Agent/维护者：
+oks mail send --to @agent-id
+或 oks mail reply <thread-id>
+→ Mail Core
 ```
 
 Agent 进行任务交接时优先使用意图级命令：
@@ -85,8 +103,9 @@ DSH 面板默认是人类通信工作面：它显示连续的 Thread，把 Sessi
   复用一个随机 opaque ID。它不从主机名、用户名、仓库路径或 MAC 地址推导。
 - 协议审计 tuple 是 `(agent_id, machine_id, session_id)`：同一个 Agent 在
   两台机器上保持相同 `agent_id`，由不同 `machine_id` 区分；每次新的 Host
-  运行使用新的 `session_id`。`session_id` 在 Gate 1 中只保证 Machine 内
-  唯一，Git-safe 存储键属于后续 Gate 2。
+  运行使用新的 `session_id`。Mail Core 将这些 opaque 身份字段分别写入
+  canonical Message、Session Registry 和 Receipt 路径，保证跨机器同步时
+  不依赖主机名或本地路径推导唯一性。
 - `sender_kind` (`human`、`agent`、`unknown`) 是适配器提供的来源标记，
   不是认证，也不授予权限。
 
@@ -207,6 +226,10 @@ Canonical Message 是不可变单文件；Receipt transition 是 append-only 事
 是按时间戳和 Message ID 排序得到的 derived view。两台隔离 Git clone 可以各自
 创建消息并合并，而不共同编辑 `thread.json`。Gate 4 的本地 bare-remote 双 clone
 试验是 Git transport 的真实验证，但不声称完成物理多机器部署、实时 wake 或 daemon。
+当前没有 `oks mail sync` 这个隐藏的中心服务：跨机器先使用团队已有的 Git remote，
+按普通 fetch/merge/push 流程交换文件；冲突、离线和同步结果必须与“对方已读取”
+“对方已完成”分开显示。自动同步与唤醒属于后续 Adapter/运行时设计，不属于 Mail
+Core 的隐含行为。
 
 ## 投递模式
 
@@ -218,7 +241,9 @@ Canonical Message 是不可变单文件；Receipt transition 是 append-only 事
 
 Hook 默认最多注入 `OKS_MAIL_TOPN` 条 Mail，并只放入有限预览。完整内容
 通过 `oks mail thread` 获取，`oks mail read` 只改变收件人已读状态；面板通过
-`mail.snapshot.v1` 读取 Thread 投影，浏览器动作不直接写 Mail。
+`mail.snapshot.v1` 读取 Thread 投影。UI 可以通过受限 Host Adapter 提供人工
+send/reply/read，必要时提供明确点击触发的 Agent 处理；这些是 Adapter 代写
+或代调用 Core，不代表浏览器可访问任意文件、命令或 Agent 自动唤醒。
 
 ## 不可信内容边界
 
@@ -238,8 +263,9 @@ Hook 输出中的标题、来源、Thread ID、reason 和正文预览都是外�
 
 核心 OKS 负责文件、投影、CLI JSON 和轮询。DSH Adapter 是
 observation-first 的人工控制面：它读取 Inbox、Thread、Receipt、Snapshot、
-Count，也可以提供人工 send/reply；但不拥有 Agent ack、Agent lifecycle、
-wake 或 runtime 调度。它显示 queued 是因为当前没有 Host wake 能力。
+Count，也可以提供人工 send/reply，或在产品明确允许时把一次人工点击转给
+受限 Host Adapter；但不拥有 Agent ack、Agent lifecycle、wake 或 runtime 调度。
+它显示 queued 是因为当前没有 Host wake 能力。
 其他 Host Adapter 可以用 Hook、CLI、TUI 或独立 Web/桌面界面投影同一份
 Mail Core 状态，不需要复制另一份 Mail store。
 未来的实时唤醒必须作为可选 Host adapter 定义明确的目标 Session、权限、

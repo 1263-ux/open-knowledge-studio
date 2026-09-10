@@ -7,8 +7,8 @@ Adapter 的明确证据。`agent_ack`/`agent_reply` 记录 Agent 是否实际通
 | Host | receive | presented | agent_ack | agent_reply | manual_reply | wake | Evidence / note |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Claude interactive | pass | pass | pass | pass | pass | unsupported | BETA-08 final6: native Windows runner presented to the actual Claude Session UUID; Claude acked and replied in the same Thread |
-| Claude headless | pass | pass | fail | pass | pass | unsupported | BETA-02: Hook created `presented`; `dontAsk` blocked Bash, bypass run replied but did not ack the Hook Session |
-| Codex CLI | pass | pass | pass | pass | pass | unsupported | Isolated G4 completed receive → presented → ack → same-Thread reply |
+| Claude headless (historical observation) | pass | pass | fail | pass | pass | unsupported | BETA-02: Hook created `presented`; `dontAsk` blocked Bash, bypass run replied but did not ack the Hook Session; not formal support |
+| Codex CLI contract (isolated) | pass | pass | pass | pass | pass | unsupported | Isolated G4 completed receive → presented → ack → same-Thread reply; this does not prove process-internal Codex Host integration |
 | DSH human panel | pass | n/a | n/a | n/a | pass | unsupported | Observation-first control surface; human send/reply/read/archive |
 
 ## Field meanings
@@ -25,3 +25,8 @@ Adapter 的明确证据。`agent_ack`/`agent_reply` 记录 Agent 是否实际通
 只在有任务卡和原始证据时更新状态；不要用一次回归测试替代真实宿主行为。BETA-01--BETA-06
 的证据与临时根路径记录在 batch-01 中，BETA-07--BETA-11 记录在 batch-02 中，
 BETA-12--BETA-15 记录在各自任务卡中。
+
+2026-09-10 的 `.agent/RESULT-mail-independent.md` 另有一次隔离 Claude headless
+闭环观察（使用 `--dangerously-skip-permissions`）；由于原始 transcript 与临时
+目录未版本化保存，本矩阵不把它提升为可复现的 `pass`，也不覆盖 BETA-02 的
+权限受限基线。后续应以版本化任务卡和原始证据重新验证。
