@@ -267,7 +267,9 @@ def _load_unread_mail(
     session for the same Agent may receive the same message independently.
     """
     if mail_domain is not None:
-        sid = session_id or str(Path.cwd())
+        # Without an editor-provided Session ID, isolate the compatibility
+        # receipt by Agent so one Agent cannot consume another Agent's @all mail.
+        sid = session_id or f"{Path.cwd()}::{agent_id or 'unknown'}"
         try:
             mail_domain.register_session(kb_root, sid, agent_id, str(Path.cwd()), scope)
             mails = []
@@ -309,7 +311,7 @@ def _load_unread_mail(
     if not inbox.is_dir():
         return []
     mails = []
-    for f in sorted(inbox.glob("*.md"), reverse=True):
+    for f in sorted(inbox.rglob("*.md"), reverse=True):
         try:
             text = f.read_text(encoding="utf-8")
             parts = text.split("---")
@@ -333,6 +335,24 @@ def _load_unread_mail(
         except Exception:
             continue
     return mails
+
+
+def _mark_mail_read(path: Path, agent_id: str = "", kb_root: Path | None = None) -> None:
+    """Compatibility shim for legacy callers that marked hook mail as read.
+
+    Current delivery uses Session receipts. Replaying that transition here
+    keeps older integrations working without mutating the message frontmatter.
+    """
+    if not agent_id or mail_domain is None:
+        return
+    try:
+        root = kb_root or _kb_root()
+        message = mail_domain.parse_message(path)
+        if root is not None and message is not None:
+            sid = f"{Path.cwd()}::{agent_id}"
+            mail_domain.record_delivery(root, sid, message, agent_id=agent_id)
+    except Exception:
+        pass
 
 
 # ── Inject trace (records/inject.jsonl, git-shared training signal) ──
