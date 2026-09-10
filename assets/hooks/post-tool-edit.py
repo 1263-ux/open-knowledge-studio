@@ -42,6 +42,11 @@ from pathlib import Path
 
 from _persistence import append_jsonl, atomic_write_text, file_lock
 
+try:
+    from knowledge_studio import mail as mail_domain
+except Exception:  # pragma: no cover - standalone legacy hook fallback
+    mail_domain = None
+
 CONFLICT_WINDOW = int(os.environ.get("OKS_CONFLICT_WINDOW", "300"))
 
 EDIT_TOOLS = {"Edit", "Write", "MultiEdit", "edit", "write", "multiedit", "apply_patch"}
@@ -200,7 +205,34 @@ def _check_conflict(kb_root: Path, agent_id: str, file_path: str) -> dict | None
     return None
 
 
-def _write_conflict_mail(kb_root: Path, agent_id: str, file_path: str, other: dict) -> None:
+def _write_conflict_mail(
+    kb_root: Path,
+    agent_id: str,
+    file_path: str,
+    other: dict,
+    session_id: str = "",
+) -> None:
+    if mail_domain is not None:
+        try:
+            mail_domain.register_session(kb_root, session_id or str(Path.cwd()), agent_id, str(Path.cwd()))
+            mail_domain.write_message(
+                kb_root,
+                body=(
+                    f"你刚编辑了 `{file_path}`，但 `{other.get('agent_id', 'unknown')}` "
+                    f"在 {str(other.get('ts', '?'))[:19]} 也编辑了该文件。\n"
+                    "可能冲突——建议 review 对方的改动后再继续。"
+                ),
+                sender="system",
+                recipients=f"@{agent_id.lstrip('@')}",
+                title=f"文件冲突: {Path(file_path).name}",
+                kind="conflict",
+                priority="urgent",
+                origin_session_id=session_id or str(Path.cwd()),
+                delivery_reason="conflict",
+            )
+            return
+        except Exception:
+            pass
     inbox = kb_root / "mail" / "inbox"
     inbox.mkdir(parents=True, exist_ok=True)
     now = datetime.now()
@@ -486,7 +518,7 @@ def main() -> int:
             _append_file_edit(kb_root, agent_id, file_path)
             other = _check_conflict(kb_root, agent_id, file_path)
             if other:
-                _write_conflict_mail(kb_root, agent_id, file_path, other)
+                _write_conflict_mail(kb_root, agent_id, file_path, other, session_id)
                 output_parts.append(
                     f"[oks] 文件冲突: {Path(file_path).name} 也被 "
                     f"{other.get('agent_id')} 编辑"
