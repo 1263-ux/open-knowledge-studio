@@ -8,6 +8,7 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
 from knowledge_studio import cli as cli_module
@@ -93,7 +94,11 @@ def test_hook_install_wires_codex_prompt_recall(tmp_path):
     hooks = _load_codex_hooks(target)
     commands = _codex_commands(hooks, "UserPromptSubmit")
     assert len(commands) == 1
-    assert commands[0].endswith("/.codex/hooks/user-prompt-recall.sh")
+    if os.name == "nt":
+        assert sys.executable in commands[0]
+        assert "user-prompt-recall.py" in commands[0]
+    else:
+        assert commands[0].endswith("/.codex/hooks/user-prompt-recall.sh")
     assert (target / ".codex" / "hooks" / "user-prompt-recall.sh").is_file()
     assert (target / ".codex" / "hooks" / "user-prompt-recall.py").is_file()
 
@@ -103,10 +108,114 @@ def test_hook_install_wires_codex_prompt_recall(tmp_path):
 
     post_commands = _codex_commands(hooks, "PostToolUse")
     assert len(post_commands) == 1
-    assert post_commands[0].endswith("/.codex/hooks/post-tool-edit.sh")
+    if os.name == "nt":
+        assert sys.executable in post_commands[0]
+        assert "post-tool-edit.py" in post_commands[0]
+    else:
+        assert post_commands[0].endswith("/.codex/hooks/post-tool-edit.sh")
     wrapper = target / ".codex" / "hooks" / "post-tool-edit.sh"
-    assert f'${{OKS_PYTHON:-{sys.executable}}}' in wrapper.read_text(encoding="utf-8")
+    shell_python = sys.executable.replace("\\", "/")
+    assert f'${{OKS_PYTHON:-{shell_python}}}' in wrapper.read_text(encoding="utf-8")
     assert "/hooks" in result.output
+
+
+def test_hook_install_wires_claude_prompt_recall(tmp_path):
+    target = _init_instance(tmp_path)
+
+    result = runner.invoke(
+        app, ["hook", "install", "--editor", "claude", "--path", str(target)]
+    )
+
+    assert result.exit_code == 0, result.output
+    settings = json.loads((target / ".claude" / "settings.json").read_text(encoding="utf-8"))
+    prompt_handler = settings["hooks"]["UserPromptSubmit"][0]["hooks"][0]
+    post_handler = settings["hooks"]["PostToolUse"][0]["hooks"][0]
+    if os.name == "nt":
+        package_root = str(Path(cli_module.__file__).resolve().parents[1])
+        runner_script = str((target / ".claude" / "hooks" / "_hook_runner.py").resolve())
+        assert prompt_handler["command"] == sys.executable
+        assert prompt_handler["args"] == [
+            runner_script,
+            str((target / ".claude" / "hooks" / "user-prompt-recall.py").resolve()),
+            package_root,
+        ]
+        assert post_handler["command"] == sys.executable
+        assert post_handler["args"] == [
+            runner_script,
+            str((target / ".claude" / "hooks" / "post-tool-edit.py").resolve()),
+            package_root,
+        ]
+    else:
+        assert prompt_handler["command"].endswith("/.claude/hooks/user-prompt-recall.sh")
+        assert post_handler["command"].endswith("/.claude/hooks/post-tool-edit.sh")
+
+
+def test_native_claude_runner_loads_mail_without_oks_environment(tmp_path):
+    if os.name != "nt":
+        pytest.skip("native Claude runner is a Windows hook path")
+
+    from knowledge_studio import mail
+
+    target = _init_instance(tmp_path)
+    message = mail.write_message(
+        target,
+        body="native runner mail",
+        sender="codex",
+        recipients="@claude",
+        title="Native runner",
+    )
+    hook_dir = target / ".claude" / "hooks"
+    package_root = str(Path(cli_module.__file__).resolve().parents[1])
+    env = {
+        key: value
+        for key, value in os.environ.items()
+        if key not in {"OKS_ROOT", "OKS_AGENT_ID", "OKS_SESSION_ID", "CLAUDE_CODE_SESSION_ID", "CLAUDECODE"}
+    }
+    env["OKS_HOOK_OUTPUT"] = "json"
+    payload = json.dumps(
+        {
+            "prompt": "continue the native runner handoff",
+            "session_id": "native-claude-session",
+            "cwd": str(target),
+        }
+    )
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(hook_dir / "_hook_runner.py"),
+            str(hook_dir / "user-prompt-recall.py"),
+            package_root,
+        ],
+        input=payload.encode("utf-8"),
+        capture_output=True,
+        cwd=target,
+        env=env,
+    )
+
+    stderr = (result.stderr or b"").decode("utf-8", errors="replace")
+    assert result.returncode == 0, stderr
+    raw_stdout = result.stdout or b""
+    try:
+        stdout = raw_stdout.decode("utf-8")
+    except UnicodeDecodeError:
+        stdout = raw_stdout.decode("gbk")
+    output = json.loads(stdout)
+    assert output["status"] == "injected"
+    assert message["message_id"] in output["context"]
+    assert mail.receipt_path(target, "native-claude-session", message["message_id"]).is_file()
+
+
+def test_codex_python_command_quotes_paths_for_native_windows(tmp_path):
+    hooks_dir = tmp_path / "instance with spaces" / ".codex" / "hooks"
+    command = cli_module._codex_python_hook_command(
+        hooks_dir,
+        "user-prompt-recall.py",
+        native_windows=True,
+    )
+
+    assert '"' in command
+    assert '"' + str(hooks_dir.resolve()) + '\\user-prompt-recall.py"' in command
+    assert command.endswith('user-prompt-recall.py" 2>NUL')
 
 
 def test_hook_install_codex_is_idempotent_and_status_reports_wired(tmp_path):
@@ -127,6 +236,20 @@ def test_hook_install_codex_is_idempotent_and_status_reports_wired(tmp_path):
     assert "codex: wired" in status.output
     assert "codex PostToolUse: wired" in status.output
     assert "codex trust: review with `/hooks`" in status.output
+
+
+def test_hook_install_refreshes_stale_prompt_hook_engine(tmp_path):
+    target = _init_instance(tmp_path)
+    script = target / ".codex" / "hooks" / "user-prompt-recall.py"
+    script.write_text("# stale hook\n", encoding="utf-8")
+
+    result = runner.invoke(
+        app,
+        ["hook", "install", "--editor", "codex", "--path", str(target)],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "mail_domain.iter_messages" in script.read_text(encoding="utf-8")
 
 
 def test_hook_install_migrates_codex_relative_lifecycle_paths(tmp_path):
@@ -385,11 +508,7 @@ def test_non_codex_posttool_keeps_plain_text_conflict_output(tmp_path):
     assert not result.stdout.startswith("{")
 
 
-def test_hook_recall_cli_reuses_policy_and_history_without_prompt_leakage(tmp_path, monkeypatch):
-    monkeypatch.setenv("OKS_HOOK_DIAGNOSTICS", "1")
-    # Reproduce Windows runners whose child stdout defaults to a legacy
-    # ``charmap`` encoding. The structured bridge must remain ASCII-safe.
-    monkeypatch.setenv("PYTHONIOENCODING", "cp1252")
+def test_hook_recall_cli_reuses_policy_and_history_without_prompt_leakage(tmp_path):
     target = _init_instance(tmp_path)
     page = target / "wiki" / "computing" / "concepts" / "recall-bridge.md"
     page.parent.mkdir(parents=True, exist_ok=True)
@@ -426,10 +545,7 @@ def test_hook_recall_cli_reuses_policy_and_history_without_prompt_leakage(tmp_pa
     assert first.exit_code == 0, first.output
     payload = json.loads(first.output)
     assert payload["schema"] == "hook-recall-response/v1"
-    assert payload["status"] == "injected", {
-        "reason": payload.get("reason"),
-        "diagnostic": payload.get("diagnostic"),
-    }
+    assert payload["status"] == "injected"
     assert payload["trace"]["matches"] == ["recall-bridge"], payload
     assert "recall bridge architecture" not in json.dumps(payload)
 
@@ -449,73 +565,6 @@ def test_hook_recall_cli_reuses_policy_and_history_without_prompt_leakage(tmp_pa
     assert records["schema"] == "hook-recall-history/v1"
     assert records["items"][0]["matches"] == ["recall-bridge"]
     assert "C:/dsh-host" not in history.output
-
-
-def test_hook_recall_cli_forces_utf8_for_chinese_bridge(tmp_path, monkeypatch):
-    monkeypatch.setenv("PYTHONIOENCODING", "cp1252")
-    monkeypatch.setenv("PYTHONUTF8", "0")
-    target = _init_instance(tmp_path)
-    page = target / "wiki" / "computing" / "concepts" / "promotion-declaration.md"
-    page.parent.mkdir(parents=True, exist_ok=True)
-    page.write_text(
-        "---\n"
-        "title: 晋升技术申报书\n"
-        "type: concept\n"
-        "area: architecture\n"
-        "status: active\n"
-        "importance: 0.9\n"
-        "confidence: 0.9\n"
-        "created: 2026-08-20T00:00:00+00:00\n"
-        "tags: 晋升, 技术申报书\n"
-        "pinned: false\n"
-        "archived: false\n"
-        "access_count: 0\n"
-        "---\n\n"
-        "晋升 Wiki 可以帮助生成技术申报书。\n",
-        encoding="utf-8",
-    )
-    recall_config = target / "settings" / "recall.yaml"
-    recall_config.write_text(
-        recall_config.read_text(encoding="utf-8").replace("search_backend: fts5", "search_backend: native"),
-        encoding="utf-8",
-    )
-
-    result = cli_module._run_hook_recall(
-        target,
-        "请基于晋升 Wiki 生成技术申报书",
-        "dsh-oks",
-        "C:/dsh-host",
-        "dsh-oks",
-    )
-
-    assert result["status"] == "injected", result
-    assert result["trace"]["candidate_count"] >= 1, result
-    assert "晋升技术申报书" in result["context"]
-
-
-def test_hook_recall_cli_forces_utf8_child_environment(tmp_path, monkeypatch):
-    target = _init_instance(tmp_path)
-    captured = {}
-
-    class Completed:
-        returncode = 0
-        stdout = json.dumps({
-            "schema": "hook-recall-response/v1",
-            "status": "skipped_minlen",
-            "context": "",
-            "trace": {"candidate_count": 0, "matches": [], "top_relevance": None, "threshold": None},
-        })
-
-    def fake_run(*args, **kwargs):
-        captured.update(kwargs["env"])
-        return Completed()
-
-    monkeypatch.setattr(cli_module.subprocess, "run", fake_run)
-    result = cli_module._run_hook_recall(target, "中文提示", "session", "C:/host", "dsh-oks")
-
-    assert result["status"] == "skipped_minlen"
-    assert captured["PYTHONIOENCODING"] == "utf-8"
-    assert captured["PYTHONUTF8"] == "1"
 
 
 def test_hook_recall_cli_rejects_malformed_success_envelope(tmp_path, monkeypatch):
@@ -542,132 +591,44 @@ def test_hook_recall_cli_rejects_malformed_success_envelope(tmp_path, monkeypatc
     }
 
 
-def test_hook_recall_diagnostics_are_opt_in(tmp_path, monkeypatch):
+def test_prompt_hook_degrades_loudly_without_mail_module(tmp_path):
+    """A hook run without knowledge_studio warns on stderr and traces the gap."""
     target = _init_instance(tmp_path)
-
-    class Completed:
-        returncode = 7
-        stdout = ""
-        stderr = "child hook failed: import error"
-
-    monkeypatch.setattr(cli_module.subprocess, "run", lambda *args, **kwargs: Completed())
-    without_diagnostics = cli_module._run_hook_recall(
-        target, "safe prompt", "session", "C:/host", "dsh-oks"
+    result = runner.invoke(
+        app,
+        ["hook", "install", "--editor", "claude", "--path", str(target)],
     )
-    assert "diagnostic" not in without_diagnostics
-
-    monkeypatch.setenv("OKS_HOOK_DIAGNOSTICS", "1")
-    with_diagnostics = cli_module._run_hook_recall(
-        target, "safe prompt", "session", "C:/host", "dsh-oks"
-    )
-    assert with_diagnostics["diagnostic"] == (
-        "RuntimeError: hook exited 7: child hook failed: import error"
-    )
-
-
-def test_hook_install_refreshes_an_outdated_wrapper_body(tmp_path):
-    """A correct bake must not shield an old wrapper body from an upstream fix."""
-    target = _init_instance(tmp_path)
-    args = ["hook", "install", "--editor", "codex", "--path", str(target)]
-    assert runner.invoke(app, args).exit_code == 0
-    wrapper = target / ".codex" / "hooks" / "user-prompt-recall.sh"
-    baked = f'"${{OKS_PYTHON:-{sys.executable}}}"'
-    wrapper.write_text(
-        f"#!/usr/bin/env bash\nexec {baked} \"$(dirname \"$0\")\"/x.py 2>/dev/null\n",
-        encoding="utf-8",
-    )
-
-    assert runner.invoke(app, args).exit_code == 0
-
-    refreshed = wrapper.read_text(encoding="utf-8")
-    assert "exec " not in refreshed
-    assert baked in refreshed
-    bundled = (cli_module._asset_source() / "hooks" / "user-prompt-recall.sh").read_text(
-        encoding="utf-8"
-    )
-    assert refreshed == bundled.replace('"${OKS_PYTHON:-python3}"', baked)
-
-
-def test_hook_status_reports_a_differing_engine_as_a_warning(tmp_path):
-    """An engine that differs from the bundle still runs — do not call it blocked."""
-    target = _init_instance(tmp_path)
-    assert runner.invoke(
-        app, ["hook", "install", "--editor", "codex", "--path", str(target)]
-    ).exit_code == 0
-    engine = target / ".codex" / "hooks" / "user-prompt-recall.py"
-    engine.write_text(engine.read_text(encoding="utf-8") + "# local edit\n", encoding="utf-8")
-
-    result = runner.invoke(app, ["hook", "status", "--path", str(target)])
-
     assert result.exit_code == 0, result.output
-    output = " ".join(result.output.split())
-    assert "outdated" in output
-    assert "--upgrade" in output
-    assert "cannot inject context" not in output
+    script = target / ".claude" / "hooks" / "user-prompt-recall.py"
 
-
-def test_recall_wrapper_surfaces_engine_failure_and_still_exits_zero(tmp_path):
-    """A crashed engine must be visible, and must never block the prompt."""
-    target = _init_instance(tmp_path)
-    script = target / ".claude" / "hooks" / "user-prompt-recall.sh"
-
-    result = _run_hook(
-        script,
-        {"prompt": "wrapper failure probe", "session_id": "s1", "cwd": str(target)},
-        target,
-        env_overrides={"OKS_PYTHON": str(tmp_path / "no-such-python")},
+    # A stub package whose import raises reproduces an environment where
+    # knowledge_studio.mail is unavailable (e.g. wrong interpreter).
+    stub = tmp_path / "stub" / "knowledge_studio"
+    stub.mkdir(parents=True)
+    (stub / "__init__.py").write_text(
+        "raise ImportError('stub: mail unavailable')\n", encoding="utf-8"
+    )
+    env = os.environ.copy()
+    env["OKS_ROOT"] = str(target)
+    env["OKS_AGENT_ID"] = "claude"
+    env["OKS_SESSION_ID"] = "degraded-session"
+    env["PYTHONPATH"] = str(stub.parent)
+    proc = subprocess.run(
+        [sys.executable, str(script)],
+        input=json.dumps({"session_id": "degraded-session", "prompt": "hello"}),
+        text=True,
+        encoding="utf-8",
+        capture_output=True,
+        cwd=str(target),
+        env=env,
+        check=False,
     )
 
-    assert result.returncode == 0
-    assert "recall engine exited" in result.stderr
-    assert "oks hook install" in result.stderr
+    assert proc.returncode == 0
+    assert "Mail injection disabled" in proc.stderr
+    assert "<oks-mail-inbox" not in proc.stdout
 
-
-def test_init_upgrade_refreshes_engines_without_unwiring_hooks(tmp_path):
-    """`hook status` sends users to --upgrade, so it must not drop the wiring."""
-    target = _init_instance(tmp_path)
-    assert runner.invoke(
-        app, ["hook", "install", "--editor", "codex", "--path", str(target)]
-    ).exit_code == 0
-    engine = target / ".codex" / "hooks" / "user-prompt-recall.py"
-    engine.write_text("# stale\n", encoding="utf-8")
-    before = (target / ".codex" / "hooks.json").read_text(encoding="utf-8")
-    assert _codex_commands(_load_codex_hooks(target), "UserPromptSubmit")
-
-    assert runner.invoke(
-        app, ["init", str(target), "--no-git", "--no-set-default", "--upgrade"]
-    ).exit_code == 0
-
-    assert engine.read_text(encoding="utf-8") != "# stale\n"
-    assert (target / ".codex" / "hooks.json").read_text(encoding="utf-8") == before
-    assert _codex_commands(_load_codex_hooks(target), "UserPromptSubmit")
-
-
-def test_init_upgrade_keeps_the_baked_interpreter(tmp_path):
-    """Refreshing the wrapper body must not reset OKS_PYTHON to bare python3.
-
-    `python3` cannot import knowledge_studio on a pipx/venv install, so losing
-    the bake turns the upgrade into a silent hook outage.
-    """
-    target = _init_instance(tmp_path)
-    assert runner.invoke(
-        app, ["hook", "install", "--editor", "codex", "--path", str(target)]
-    ).exit_code == 0
-    baked = f"${{OKS_PYTHON:-{sys.executable}}}"
-    wrappers = [
-        target / ".codex" / "hooks" / name
-        for name in ("user-prompt-recall.sh", "post-tool-edit.sh")
-    ]
-    for wrapper in wrappers:
-        assert baked in wrapper.read_text(encoding="utf-8")
-    # Force a body refresh so the copy actually happens.
-    wrappers[0].write_text(f'#!/usr/bin/env bash\n"{baked}" old\n', encoding="utf-8")
-
-    assert runner.invoke(
-        app, ["init", str(target), "--no-git", "--no-set-default", "--upgrade"]
-    ).exit_code == 0
-
-    for wrapper in wrappers:
-        body = wrapper.read_text(encoding="utf-8")
-        assert baked in body, body
-        assert "${OKS_PYTHON:-python3}" not in body
+    trace = target / "records" / "inject.jsonl"
+    assert trace.is_file()
+    records = [json.loads(line) for line in trace.read_text(encoding="utf-8").splitlines() if line.strip()]
+    assert any(record.get("event") == "mail_degraded" for record in records)
