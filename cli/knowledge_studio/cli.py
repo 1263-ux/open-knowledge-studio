@@ -2962,6 +2962,23 @@ def mail_archive(
     console.print(f"[green]Archived for @{agent.lstrip('@')}:[/green] {id}")
 
 
+@mail_app.command("setup")
+def mail_setup(
+    agent: str = typer.Option(..., "--agent", help="Stable identity for this Agent"),
+    skills_dir: Path = typer.Option(..., "--skills-dir", help="Host skills directory, e.g. .agents/skills"),
+    path: Optional[str] = typer.Option(None, "--path", help="Knowledge base root"),
+) -> None:
+    """Install the generic oks-mail Skill bound to this KB and Agent."""
+    from knowledge_studio.mail_setup import install_skill
+
+    try:
+        destination = install_skill(_instance_root(path), agent, skills_dir)
+    except (ValueError, OSError) as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(2)
+    console.print(f"Mail Skill installed: {destination}")
+
+
 @mail_app.command("view")
 def mail_view(
     output: Path = typer.Option(..., "--output", "-o", help="Standalone HTML output path"),
