@@ -2384,7 +2384,10 @@ def _codex_python_hook_command(
         # Keep dependency warnings off Codex's hook stdout contract.  The
         # Python hook itself is fail-open, so stderr suppression is safe here.
         # Use native separators even when tests simulate Windows on POSIX.
-        script_text = str(script).replace("/", "\\")
+        # Preserve the host's directory spelling while using a Windows
+        # separator between the directory and script name. This also makes
+        # native-Windows formatting deterministic in cross-platform tests.
+        script_text = str(script.parent) + "\\" + script.name
         return subprocess.list2cmdline([sys.executable, script_text]) + " 2>NUL"
     return script.as_posix()
 
