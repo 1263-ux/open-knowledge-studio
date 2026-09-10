@@ -74,3 +74,12 @@ def test_invalid_candidate_evidence_path_is_rejected(tmp_path):
             recipients="reviewer",
             evidence_refs=[{"type": "candidate", "path": "../secret"}],
         )
+
+
+def test_legacy_date_organized_inbox_remains_readable(tmp_path):
+    path = tmp_path / "mail" / "inbox" / "2026" / "09" / "11" / "legacy.md"
+    path.parent.mkdir(parents=True)
+    path.write_text("---\nfrom: writer\nto: reviewer\nread: false\n---\n\n# Legacy\n\nbody\n", encoding="utf-8")
+    messages = list(mail.iter_messages(tmp_path, "reviewer"))
+    assert len(messages) == 1
+    assert messages[0]["title"] == "Legacy"
