@@ -1,0 +1,8 @@
+/* The shell fills available space below notices and mobile navigation. */
+body{height:100dvh;display:flex;flex-direction:column;overflow:hidden}
+.demo,.workspace-mobile{flex-shrink:0}
+.shell,body.lab-open .shell{flex:1;min-height:0;height:auto}
+#workspacePage pre{white-space:pre-wrap;overflow-wrap:anywhere}
+@media(max-width:800px){.shell,body.lab-open .shell{height:auto}.demo span{max-width:100%}#detailPanel{top:0}}
+
+
