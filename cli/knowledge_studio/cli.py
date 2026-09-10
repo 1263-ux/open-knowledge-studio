@@ -3171,14 +3171,15 @@ def _ensure_recall_scripts(root: Path, hooks_dir: Path | None = None) -> list[st
     The .sh wrapper gets the current interpreter baked into its OKS_PYTHON
     fallback. If an existing .sh lacks the current bake (fresh copy still on
     `python3`, or baked against a stale interpreter), it is re-copied from
-    the asset source and re-baked. Existing hook engines are refreshed when
-    their bundled source has changed, so protocol updates reach installed
-    instances too.
+    the asset source and re-baked. Explicit hook installation refreshes
+    existing Python engines; the init compatibility path preserves custom
+    engines and only adds missing support files.
     """
     import shutil
     import stat
     import sys
 
+    refresh_existing_engines = hooks_dir is not None
     hooks_dir = hooks_dir or (root / ".claude" / "hooks")
     hooks_dir.mkdir(parents=True, exist_ok=True)
 
@@ -3207,6 +3208,8 @@ def _ensure_recall_scripts(root: Path, hooks_dir: Path | None = None) -> list[st
     for name in _RECALL_HOOK_SCRIPTS:
         dest = hooks_dir / name
         if dest.exists():
+            if not refresh_existing_engines and name.endswith(".py"):
+                continue
             try:
                 dest_text = dest.read_text(encoding="utf-8")
                 if name.endswith(".sh"):
