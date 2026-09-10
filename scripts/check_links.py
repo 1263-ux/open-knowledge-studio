@@ -68,11 +68,7 @@ def relative_target_exists(link: str, source: Path) -> bool:
         return True
     if link_path.endswith(".html"):
         # a rendered page may come from a sibling .md (e.g. oh-my/study.html -> study.md)
-        md = target.with_suffix(".md")
-        if md.is_file():
-            return True
-        if (target.parent / "index.md").is_file():
-            return True
+        return target.with_suffix(".md").is_file()
     return False
 
 
