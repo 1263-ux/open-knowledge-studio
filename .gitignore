@@ -104,6 +104,9 @@ records/file-edits.jsonl
 .agent/
 records/inject.jsonl
 
+# Mail Skill bindings contain machine-local knowledge base paths.
+**/skills/oks-mail/binding.json
+
 # v0.6.14: 临时工作流目录（plans/specs 用 Git history/Issue 存，不 track）
 internal/
 openspec/
