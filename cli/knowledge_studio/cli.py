@@ -2383,7 +2383,9 @@ def _codex_python_hook_command(
     if native_windows:
         # Keep dependency warnings off Codex's hook stdout contract.  The
         # Python hook itself is fail-open, so stderr suppression is safe here.
-        return subprocess.list2cmdline([sys.executable, str(script)]) + " 2>NUL"
+        # Use native separators even when tests simulate Windows on POSIX.
+        script_text = str(script).replace("/", "\\")
+        return subprocess.list2cmdline([sys.executable, script_text]) + " 2>NUL"
     return script.as_posix()
 
 
