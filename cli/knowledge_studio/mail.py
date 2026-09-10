@@ -509,7 +509,9 @@ def _iter_legacy(root: Path) -> Iterable[dict[str, Any]]:
     directory = root / "mail" / "inbox"
     if not directory.is_dir():
         return
-    for path in sorted(directory.glob("*.md"), key=lambda p: p.stat().st_mtime if p.exists() else 0, reverse=True):
+    # Legacy instances may already be date-organized under inbox/YYYY/MM/DD.
+    # Keep the compatibility reader recursive so hooks and CLI see those mails.
+    for path in sorted(directory.rglob("*.md"), key=lambda p: p.stat().st_mtime if p.exists() else 0, reverse=True):
         message = parse_message(path)
         if message:
             yield message
