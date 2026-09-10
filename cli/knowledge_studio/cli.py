@@ -2979,6 +2979,28 @@ def mail_setup(
     console.print(f"Mail Skill installed: {destination}")
 
 
+@mail_app.command("serve")
+def mail_serve(
+    path: Optional[str] = typer.Option(None, "--path", help="Knowledge base root"),
+    port: int = typer.Option(3182, "--port", min=1, max=65535),
+) -> None:
+    """Serve the real local Mail workspace for a human browser."""
+    from knowledge_studio.mail_web import create_server
+
+    try:
+        server = create_server(_instance_root(path), port)
+    except (ValueError, OSError) as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(2)
+    console.print(f"OKS Mail: http://127.0.0.1:{server.server_port}/ — Ctrl+C to stop")
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        server.server_close()
+
+
 @mail_app.command("view")
 def mail_view(
     output: Path = typer.Option(..., "--output", "-o", help="Standalone HTML output path"),
