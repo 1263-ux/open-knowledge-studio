@@ -1,4 +1,7 @@
 # OKS recall 参数 — managed by dsh-oks plugin
+# 身份：这是本仓库自己的开发实例配置（OKS_ROOT=仓库根时生效）。
+# 它不随 wheel 分发；实例得到的模板是 assets/settings/recall.yaml。
+# 两者的差异是正常的（开发实例可实验不同后端），不算漂移。
 recall:
   floor: 0.7
   topn: 3

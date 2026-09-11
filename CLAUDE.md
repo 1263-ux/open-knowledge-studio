@@ -75,30 +75,60 @@ See `CONSTITUTION.md` for the full memory design (A1-A5):
 
 ## Directory Structure
 
+There are **two trees with different laws**. Do not describe one with the
+other's map.
+
+### Map 1 — This repository (the factory)
+
+This repo develops and packages OKS. It is **not** an instance: long-term
+personal knowledge must live in an instance created by `oks init` (A1/P3
+apply there, not here).
+
 ```
-open-knowledge-studio/
-├── .claude/          # Claude Code development assets
-├── .agents/          # Generic Agent skill replicas
-├── .codex/           # Codex hooks config
+open-knowledge-studio/            # 源码仓库 = 工厂
+├── cli/                          # Python 包：oks CLI 与 knowledge_studio 包
+│   └── knowledge_studio/
+│       ├── (代码模块)            # recall.py / store.py / cli.py …
+│       ├── providers/            # 包内数据：Provider 定义 (provider.yaml + SKILL.md)，importlib 读取
+│       ├── capabilities/         # 包内数据：capability 动作目录 (actions.yaml)
+│       ├── recipes/              # 包内数据：模态 recipe (text/pdf/office/…)
+│       ├── schemas/              # schemas/ 的运行时校验镜像 —— 由 scripts/sync_schemas.py 同步，禁止手改
+│       └── search/               # 召回后端 (fts5 / native / fusion)
+├── assets/                       # init 物化层：实例得到的一切的唯一来源（setup.py 契约）
+│   ├── agent-config/ hooks/ profiles/ rules/ settings/ skills/ templates/
+│   └── _meta/                    # 实例 _meta/ 的模板（含 schemas/ 镜像，同步于根 schemas/）
+├── schemas/                      # 协议 schema 唯一事实源（P8：镜像漂移由 CI --check 抓住）
+├── docs/                         # GitHub Pages 站点 —— 每个 .md 都是已发布页面
+├── scripts/                      # 维护脚本（check_links / sync_schemas / locomo_to_oks）
+├── records/                      # 版本化验收与可复现实验记录（大体积第三方数据不进 git）
+├── reference-implementations/    # 可选集成参考实现（oh-my-feishu），不随包分发
+├── images/                       # README 与品牌图（站点用图在 docs/assets/）
+├── settings/                     # 本仓库自己的开发实例配置 —— 不随包分发，勿与 assets/settings/ 混淆
+├── templates/                    # 实例模板样例（examples/）
+├── .claude/ .codex/ .agents/ .pi/  # 各宿主的开发期配置；maintainer-only skills 只在 .claude 与 .agents
+└── CONSTITUTION.md  AGENTS.md  CLAUDE.md  README.md  README.zh.md  SKILL.md  CHANGELOG.md
+```
+
+**打包边界（一条规则）**：会随 wheel 发给用户的数据只有两条通道 ——
+`assets/`（init 物化到实例）或包内数据目录（Python importlib 读取）。
+同一份数据只允许一条通道；新增数据时先选通道，再选目录。
+
+### Map 2 — An instance (the memory)
+
+`oks init <path>` 产出的实例仓库，结构由宪法 A1 定义。`docs/concepts/` 的
+概念页描述它的运行，写作契约在 `docs/maintainers/`。
+
+```
+<instance>/
 ├── profiles/         # ① Portraits — team, users, projects, recipes, goals
 ├── raw/              # ② Raw materials — date-based: {YYYY}/{MM}/{DD}/{source}/
 ├── wiki/             # ③ Curated, human-reviewed knowledge
 ├── drafts/           # ④ Dreaming candidates
-├── mail/             # ⑤ Coordination and human-Agent evaluation evidence
-├── settings/         # ⑥ Config layer — decay, tool registry, input sources
-├── _meta/            # ⑦ Schema layer — raw evidence shape contract
-├── templates/        # concept, strategy, anti-pattern, draft
-├── capabilities/     # Capability action catalog (actions.yaml)
-├── providers/        # Provider definitions
-├── recipes/          # Modality recipes
-├── security/         # Credential redaction + sensitive field detection
-├── cli/              # Python CLI tool (oks); packaged assets come from assets/
-├── docs/             # GitHub Pages site — every .md here is a published page
-├── reference-implementations/ # Optional integrations; not shipped with oks
-├── records/          # Versioned acceptance + reproducible experiments
-├── CONSTITUTION.md   # Memory architecture design
-├── CHANGELOG.md      # Release history
-└── CLAUDE.md         # This file
+├── mail/             # Agent communication — inbox/ + sent/
+├── settings/         # Config layer — recall.yaml, tool registry, input sources
+├── _meta/            # Schema layer — raw evidence, recall case, trace event
+├── capabilities/  recipes/  providers/  security/   # 由包内数据物化
+└── .claude/ .codex/ .qoder/ .pi/                    # hook 与 skills 安装目标
 ```
 
 ## Claude Code Skills

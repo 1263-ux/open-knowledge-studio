@@ -20,7 +20,7 @@
     "schema_version": {"const": "oks-capture-envelope/v0.2"},
     "capture_id": {"type": "string", "minLength": 1},
     "capture_revision": {"type": "integer", "minimum": 1, "default": 1},
-    "source_type": {"enum": ["feishu_base", "browser", "obsidian", "local"]},
+    "source_type": {"enum": ["feishu_base", "browser", "obsidian", "local", "remote_api"]},
     "source_uri": {"type": "string", "minLength": 1},
     "captured_at": {"type": "string", "format": "date-time"},
     "submitted_by": {"type": ["string", "null"]},

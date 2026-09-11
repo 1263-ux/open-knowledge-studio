@@ -35,6 +35,7 @@ parent: 维护者
 - 站内链接一律 `{% raw %}{{ '/path/to/page.html' | relative_url }}{% endraw %}`（正文内可用相对路径 `../usage/recall.html`），必须带 `.html` 后缀——GitHub Pages 没有 clean-URL，尾斜杠链接是 404。
 - 新增概念页先确认信息架构里有没有它的位置；没有就先补 IA 再写页面，不允许出现"README 承诺了但页面不存在"。
 - 仓库 README 面向 GitHub 渲染：仓库内文件用相对链接（`./docs/xxx.md`），文档站页面用文档站域名绝对链接。
+- 图片分两处：README/品牌图入 `images/`，文档站资产入 `docs/assets/`（图表在 `docs/assets/diagrams/`）；同一张图不入两处。
 - 每次改文档后运行 `python scripts/check_links.py`（CI 同款门禁），broken link 不允许合入。
 
 ## 设计文档边界

@@ -99,6 +99,9 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Check schema mirror sync (P8)
+        run: python scripts/sync_schemas.py --check
+
       - name: Check docs and README links
         # --offline: external URLs are flaky from CI (anti-bot 412s, geo
         # blocks); the site-link and relative-link rules catch the failures
