@@ -1,8 +1,8 @@
 <script>
 (function () {
   function init() {
-    // Deduplicate TOCs: the theme's built-in "On this page" aside is replaced
-    // by the fixed right-hand toc-right, so remove the built-in one first.
+    /* GitHub Pages collapses this HTML to a single line, so inline scripts
+       must use block comments only - a // comment would swallow all code. */
     document.querySelectorAll('.main-content aside.toc, .main-content .toc > ul').forEach(function (node) {
       var root = node.closest('aside') || node;
       if (!root.classList.contains('toc-right')) {

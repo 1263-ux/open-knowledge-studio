@@ -31,9 +31,10 @@
 </script>
 
 <script>
-// Keep each documentation section independently expanded across page changes.
-// Just the Docs opens the current page's ancestry after every navigation; this
-// restores the sections the reader explicitly opened as well.
+/* Keep each documentation section independently expanded across page changes.
+   Just the Docs opens the current page's ancestry after every navigation; this
+   restores the sections the reader explicitly opened as well.
+   Pages collapses inline HTML to one line: use block comments only here. */
 (function () {
   var storageKey = 'oks-open-nav-sections';
 
@@ -57,7 +58,7 @@
     try {
       window.localStorage.setItem(storageKey, JSON.stringify(open));
     } catch (error) {
-      // Navigation still works when storage is unavailable.
+      /* Navigation still works when storage is unavailable. */
     }
   }
 
