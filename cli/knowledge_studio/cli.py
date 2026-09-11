@@ -2981,9 +2981,61 @@ def mail_archive(
                 thread_state="closed",
             )
         else:
-            content = message["path"].read_text(encoding="utf-8").replace("read: false", "read: true", 1)
-            store._atomic_write(message["path"], content)
+            # Legacy Markdown is shared by all recipients.  Keep archive state
+            # in this Agent's recipient projection instead of mutating the
+            # shared `read` marker (or leaking a global archived state).
+            changes = {"archived_at": archived_at, "thread_state": "closed"}
+            state_path = mail_domain.recipient_state_path(root, agent, str(message["meta"].get("message_id")))
+            if not state_path.is_file() and str(message["meta"].get("read", "false")).lower() == "true":
+                changes["read_at"] = (
+                    message["meta"].get("read_at")
+                    or message["meta"].get("timestamp")
+                    or mail_domain.iso_now()
+                )
+            mail_domain.update_recipient_state(
+                root,
+                agent,
+                str(message["meta"].get("message_id")),
+                **changes,
+            )
     console.print(f"[green]Archived for @{agent.lstrip('@')}:[/green] {id}")
+
+
+@mail_app.command("setup")
+def mail_setup(
+    agent: str = typer.Option(..., "--agent", help="Stable identity for this Agent"),
+    skills_dir: Path = typer.Option(..., "--skills-dir", help="Host skills directory, e.g. .agents/skills"),
+    path: Optional[str] = typer.Option(None, "--path", help="Knowledge base root"),
+) -> None:
+    """Install a portable oks-mail Skill bound to this KB and Agent."""
+    from knowledge_studio.mail_setup import install_skill
+    try:
+        destination = install_skill(_instance_root(path), agent, skills_dir)
+    except (ValueError, OSError) as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(2)
+    console.print(f"Mail Skill installed: {destination}")
+
+
+@mail_app.command("serve")
+def mail_serve(
+    path: Optional[str] = typer.Option(None, "--path", help="Knowledge base root"),
+    port: int = typer.Option(3182, "--port", min=1, max=65535),
+) -> None:
+    """Open a local human Mail workspace; Agents use the CLI or oks-mail Skill."""
+    from knowledge_studio.mail_web import create_server
+    try:
+        server = create_server(_instance_root(path), port)
+    except (ValueError, OSError) as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(2)
+    console.print(f"OKS Mail: http://127.0.0.1:{server.server_port}/ — Ctrl+C to stop")
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        server.server_close()
 
 
 @mail_app.command("view")

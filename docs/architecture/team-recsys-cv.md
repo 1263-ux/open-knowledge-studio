@@ -2,7 +2,7 @@
 title: Team 大型版设计
 nav_order: 3
 parent: 设计蓝图
-grand_parent: 工作原理
+grand_parent: 概念
 ---
 
 # Team 大型版 — fun-rec 架构 1:1 CV 设计（两部分 + 工业栈）

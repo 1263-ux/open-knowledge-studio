@@ -549,6 +549,10 @@ def iter_messages(root: Path, agent_id: str = "") -> Iterable[dict[str, Any]]:
         if not wanted or wanted in message["meta"].get("to", []) or "@all" in message["meta"].get("to", []) or sender == wanted:
             if wanted and sender == wanted:
                 message["self"] = True
+            if wanted:
+                state_path = recipient_state_path(root, wanted, message_id)
+                if state_path.is_file():
+                    message["state"] = load_state(root, wanted, message_id)
             yield message
 
 

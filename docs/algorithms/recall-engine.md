@@ -2,9 +2,21 @@
 title: 召回引擎
 nav_order: 1
 parent: 算法引擎
-grand_parent: 工作原理
+grand_parent: 概念
 ---
 # 召回引擎（OKS Triple-Layer Recall）
+
+<figure>
+  <img src="../assets/diagrams/triple-layer-recall.svg" alt="Triple-Layer Recall 三层示意：Node-BM25 检索层决定哪些命中，Soul Boost 注入层决定哪些到达 Agent，Memory Curve 衰减层决定多旧的知识还值得出现，最后按预算分层注入上下文。">
+</figure>
+
+## 一眼看到的命令行为
+
+<figure>
+  <img src="../assets/diagrams/terminal-recall.svg" alt="终端示例：oks recall --explain 返回命中的 wiki 页、相关性、tier、匹配节点与注入预算用量。">
+</figure>
+
+> 以上为排版示意图，实际输出以当前版本为准；`--explain` 会展示每个命中的因子得分与匹配路径。
 
 `oks recall` 是唯一召回入口。默认合并 Raw episodic 与 Wiki knowledge；`--knowledge-only` 只查 Wiki。`raw/executions/` 和 `raw/.logs/` 是 provenance，不参与召回。
 

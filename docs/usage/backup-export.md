@@ -1,7 +1,8 @@
 ---
 title: 备份与导出
-nav_order: 4
-parent: 参考
+nav_order: 9
+parent: 指南
+redirect_from: /connect/backup-export.html
 ---
 # 备份与导出
 

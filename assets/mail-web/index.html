@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>OKS Mail · 让对话继续</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="layout.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <header class="runtime-bar" aria-live="polite"><span id="runtimeText">正在连接本地 OKS Mail…</span><button id="refresh" type="button">刷新</button></header>
+  <nav class="workspace-mobile" aria-label="工作台导航"></nav>
+  <div class="shell">
+    <nav class="rail" aria-label="工作台导航">
+      <a class="logo" href="/" aria-label="OKS Mail 首页"><span class="mark">o</span><span>OKS <strong>Mail</strong></span></a>
+      <div class="workspace"><span class="workspace-icon">O</span><div><b>我的协作空间</b><small>消息留在这里，对话接着走</small></div></div>
+      <div class="workspace-nav">
+        <div class="workspace-nav-title">工作台</div>
+        <button data-view="mail"><span>✉</span> 对话 <small>继续之前的讨论</small></button>
+        <button data-view="communication"><span>↔</span> 通信方式 <small>一段对话，四种继续方式</small></button>
+        <button data-view="agents"><span>◎</span> 连接 <small>让 Agent 帮你接入</small></button>
+        <button data-view="memory"><span>✦</span> 记忆 <small>查看上下文与召回说明</small></button>
+      </div>
+      <button id="new" class="primary">＋ 新建对话</button>
+      <div class="nav-label">我的消息</div>
+      <button class="nav-item active" data-filter="all">全部对话 <span id="total"></span></button>
+      <button class="nav-item" data-filter="unread">未读消息 <span id="unread"></span></button>
+      <button class="nav-item" data-filter="archived">已归档</button>
+      <div class="rail-bottom"><div class="identity"><span class="avatar ink">你</span><span><b>你</b><small>当前设备 · human 身份</small></span></div></div>
+    </nav>
+    <section class="inbox" aria-label="对话列表">
+      <header><div><span class="eyebrow">我的消息</span><h1 id="listTitle">全部对话</h1></div><button id="mobileNew" aria-label="新建对话">＋</button></header>
+      <label class="search"><span>⌕</span><input id="search" placeholder="搜索对话或参与者" aria-label="搜索对话或参与者"></label>
+      <div class="mobile-filters"><button data-filter="all">全部</button><button data-filter="unread">未读</button><button data-filter="archived">归档</button></div>
+      <div id="threadList"></div>
+      <footer><span class="status-dot"></span> <span id="syncLabel">正在读取…</span></footer>
+    </section>
+    <main id="conversation">
+      <header class="conversation-head"><button id="back" aria-label="返回对话列表">←</button><div class="head-text"><div id="participants" class="eyebrow"></div><h2 id="subject"></h2><div id="conversationModes" class="conversation-modes" aria-label="这段对话的状态"></div></div><button id="moreActions" aria-haspopup="dialog" aria-expanded="false" disabled>更多</button><button id="archive" hidden>归档</button><button id="unarchive" hidden>取消归档</button><button id="details" hidden aria-expanded="false">对话详情 ⓘ</button></header>
+      <div id="messages" aria-label="对话消息"></div>
+      <form id="replyForm"><div class="compose-meta"><span>以 <b>你（此设备）</b> 的身份回复</span><span id="replyTo"></span></div><label class="sr-only" for="reply">回复这段对话</label><textarea id="reply" rows="3" placeholder="继续这段对话…"></textarea><div id="replyError" class="error" role="alert"></div><div class="compose-actions"><span>回复会留在同一段对话里</span><button id="send" class="primary" type="submit">发送回复 ↑</button></div></form>
+      <p class="footnote">发送后写入知识库，由对方 Agent 在会话中读取。</p>
+    </main>
+    <aside id="detailPanel" hidden aria-label="对话详情"><header><h3>对话详情</h3><button id="closeDetails" aria-label="关闭对话详情">×</button></header><div id="detailContent"></div></aside>
+    <section id="workspacePage" hidden aria-label="工作台内容"></section>
+  </div>
+  <dialog id="composeDialog"><form id="newForm"><header><div><span class="eyebrow">新建 Mail</span><h2>开始一段新对话</h2></div><button type="button" data-close aria-label="关闭新建对话">×</button></header><p class="muted-text">写下收件 Agent、主题和第一条消息。发送会真实写入当前知识库。</p><label class="field">收件 Agent<input id="recipient" name="person" required placeholder="例如：claude、codex、reviewer（多个用逗号分隔）"><small>这里填写对方已绑定的 Agent 身份。</small></label><label class="field">主题<input id="newTitle" required maxlength="120" placeholder="例如：继续讨论项目的记忆方案"></label><label class="field">第一条消息<textarea id="newBody" required rows="4" maxlength="12000" placeholder="直接说明问题和需要的帮助"></textarea></label><div class="error" id="newError" role="alert"></div><footer><span id="composeModeHint">写入当前知识库</span><button type="submit" class="primary">发起对话 ↑</button></footer></form></dialog>
+  <dialog id="threadActionsDialog" class="action-dialog"><header><div><span class="eyebrow">这段对话</span><h2>更多操作</h2></div><button type="button" data-close aria-label="关闭更多操作">×</button></header><div id="threadActionMenu" class="thread-action-menu"><button type="button" data-thread-action="continue"><b>在新会话中继续</b><small>给 Agent 留下一条明确的继续请求</small></button><button type="button" data-thread-action="invite"><b>邀请其他 Agent</b><small>把一个助手加入这段对话</small></button><button type="button" data-thread-action="details"><b>查看详情</b><small>查看参与者、来源和同步状态</small></button><button type="button" data-thread-action="archive"><b>归档这段对话</b><small>从当前列表隐藏，之后仍可找回</small></button><button type="button" data-thread-action="unarchive" hidden><b>取消归档</b><small>把这段对话放回全部对话</small></button></div><div id="threadActionContent" hidden></div></dialog>
+  <dialog id="infoDialog"><header><h2 id="infoTitle"></h2><button data-close aria-label="关闭说明">×</button></header><div id="infoBody"></div></dialog>
+  <div id="toast" role="status" aria-live="polite"></div>
+</body>
+</html>

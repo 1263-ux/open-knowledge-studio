@@ -1,7 +1,7 @@
 ---
 title: 架构总览
-nav_order: 2
-parent: 工作原理
+nav_order: 4
+parent: 概念
 ---
 
 # 架构总览
@@ -10,10 +10,14 @@ OKS 不是一个单独的“记忆插件”。它是一套让 **用户、Agent�
 
 ## OKS Mail 的产品定位
 
-OKS Mail 是 OKS 的跨 Host 持久协作协议，不是 DSH 的附属功能，也不是
-一个只能在面板里查看的知识桶。它把 Message、Thread、Agent 状态和
-Session Receipt 保存在文件中，供不同 Agent 与 Session 继续同一项工作；
-Mail 不因此变成 Wiki，也不承诺唤醒进程或保证任务执行。
+OKS Mail 是 OKS 的跨 Host、跨机器持久协作协议，不是 DSH 的附属功能，也不是
+一个只能在面板里查看的知识桶。它把 Message、Thread、Agent 状态、Session Receipt
+和成果引用保存在文件中，供不同 Session、Subagent、Agent、Host 和人员继续同一项
+工作；Mail 不因此变成 Wiki，也不承诺唤醒进程或保证任务执行。
+
+`oks` CLI/Core 是 Agent-native 协作的第一等入口。DSH、Claude、Codex、Pi 等只负责
+把宿主能力接入 Core；控制面可以替换，Mail 的持久事实和 Git 迁移边界不能随某个 UI
+改变。
 
 ### Agent-native 的两层使用模型
 
@@ -50,6 +54,28 @@ Claude、Codex、DSH 以及未来的 Pi、桌面或 Web Host 都是同一 Mail C
 操作的工作面；它通过 `oks mail` 访问 Core，Core 不依赖 DSH，也不要求
 所有 Host 都有 UI。
 
+### 跨执行边界的持续协作
+
+```text
+机器 A                         Git sync                         机器 B
+Claude / Codex / Pi ───────→  canonical Mail Thread  ───────→  另一 Host / 人
+      │                         Message + Receipt                  │
+      └──── Session / evidence ────────────────────────→ 新 Session 继续
+```
+
+同一 Thread 是用户可见的连续上下文；Session、Agent、Host 和 Machine 是消息与回执的
+provenance。消息正文只写一次，Receipt Event 追加记录事实，Thread 与收件箱投影可以
+从这些文件重建。因此不同 clone 可以各自写入新的 Message，再通过普通 Git 操作
+交换；当前已验证 Git transport，物理双机往返、自动同步和实时唤醒仍是后续门禁。
+
+宿主内部的即时 SendMessage、MCP Mail 或 Agent Teams 仍可承担高频临时通信；需要跨
+Session、跨机器、可审计地留下的交接、决定和 Evidence Ref，才进入 OKS Mail。这样
+Mail 是持久协调层，而不是重复造一个在线聊天系统。
+
+<figure>
+  <img src="../assets/diagrams/knowledge-pipeline.svg" alt="知识流水线：来源经证据片段、清单、Raw Bundle、Candidate 和人审后成为 Wiki，再被召回。">
+</figure>
+
 <picture>
   <source media="(max-width: 50rem)" srcset="../assets/architecture/oks-overview-mobile.svg">
   <img src="../assets/architecture/oks-overview.svg" alt="OKS 完整架构：用户和 Agent 在上方发起任务；profiles、raw、drafts、wiki、mail 构成文件化知识工作区；右侧是 API-free CLI、能力目录、安全契约与 Office 交付；人审门控制 Candidate 进入 Wiki，召回将资料带回下一次任务。">
@@ -65,7 +91,9 @@ Claude、Codex、DSH 以及未来的 Pi、桌面或 Web Host 都是同一 Mail C
 - `raw/` 放原始来源与机械提取结果；
 - `drafts/` 放 Agent 的 Candidate；
 - `wiki/` 只放人审后的可复用知识；
-- `mail/` 与 Trace 留下协作和执行证据，但不冒充长期知识；`settings/`、`_meta/` 和 `security/` 提供配置、Schema 与脱敏边界。
+- `mail/` 与 Trace 留下协作和执行证据，但不冒充长期知识；Mail 通过 Git 成为跨机器
+  的持久状态，仍不承担实时唤醒；`settings/`、`_meta/` 和 `security/` 提供配置、
+  Schema 与脱敏边界。
 
 右侧是运行时：`oks` CLI 负责文件操作、召回和状态，不在核心中调用模型 API；Agent 根据 Recipe、Provider 和 Capability 选择网页、PDF、Office、图片、音视频等处理能力。明确要交付文件时，Office 工作流才会接手 Word、PDF、PPT 或 Excel。飞书的 Base、表单与 IM 审核则是一个**可选参考实现**：它可以承担采集和移动审核入口，但不属于 CLI 核心，也不会绕开人审门。
 
@@ -78,7 +106,7 @@ Claude、Codex、DSH 以及未来的 Pi、桌面或 Web Host 都是同一 Mail C
 - 想收集不同类型的材料，阅读[收集来源](../usage/ingest.html)。
 - 想理解审核和晋升，阅读[审核候选](../usage/review.html)。
 - 想了解召回如何选择知识，阅读[召回与注入](../usage/recall.html)。
-- 维护者需要完整文件桶、只读 VFS、Hooks 与可选飞书集成时，阅读[宪法（A1-A5）](constitution.html)和[参考手册](../reference/)。
+- 维护者需要完整文件桶、只读 VFS、Hooks、Mail 与可选飞书集成时，阅读[宪法（A1-A8）](constitution.html)和[参考手册](../reference/)。
 
 ## 架构边界
 
@@ -87,3 +115,6 @@ Claude、Codex、DSH 以及未来的 Pi、桌面或 Web Host 都是同一 Mail C
 - **Hooks 和飞书是可选入口**：它们可以改变收集或反馈的位置，但不会取消人工审核。
 - **信任来自证据和审核**：`[verified]` 只应来自 Trace 证据或 `human_reviewed_at`，而不是使用次数。
 - **协议细节不等于用户界面**：Mail Core 保留确定性的 Agent 路由键；Host 应将其封装为自然语言任务和友好 Agent 选择。
+- **适配器不拥有 Mail**：DSH、Claude、Codex、Pi 可以投影或代调用 Core，但不能各自
+  建立第二份消息库；宿主在线状态、唤醒和调度缺失时，Core 仍只保存真实的 queued/
+  receipt 事实。

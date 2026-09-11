@@ -232,9 +232,12 @@ open-knowledge-studio/
 ├── drafts/                       # ④ Dreaming candidates
 │   ├── {slug}.md
 │   └── rejected/{ts}-{slug}.json # Review receipts — a human "no" is a decision
-├── mail/                         # ⑤ Agent communication
-│   ├── inbox/{ts}-{from}.md     # Unread messages (@all broadcast or @agent-id)
-│   └── sent/{agent-id}/{ts}.md # Outbox archive per agent
+├── mail/                         # ⑤ Durable Agent coordination
+│   ├── messages/{message-id}.md  # Canonical Message;正文只写一次
+│   ├── inbox/{agent}/{message-id}.json # 收件人 projection
+│   ├── receipts/{session}/{message-id}.json # Receipt latest snapshot
+│   ├── receipt-events/{session}/{message-id}/ # append-only Receipt facts
+│   └── notifications/{agent}/    # 通知意图 projection，不是消息事实
 ├── settings/                     # ⑥ Config layer
 │   ├── input-sources.json        # Scheduled intake sources
 └── _meta/                        # ⑦ Schema layer
@@ -467,26 +470,42 @@ The date prefix reflects OKS's **memory**定位 (a dated event, decayed by
 evolution is modeled by the A4 relationship chain (supersedes/enriches), not
 by rewriting one stable filename.
 
-### A7: Mail storage layout
+### A7: Mail durable coordination layout
 
-`mail/inbox/` is **date-organized**, not flat. A busy instance accumulates
-hundreds of messages; one flat directory is unreadable by humans and slow to
-glob. The layout is derived from the slug, which `oks mail send` already stamps
-with a `YYYYMMDD` timestamp prefix.
+Mail is a Git-backed coordination layer, not a second knowledge bucket and not a
+host-owned mailbox. The canonical message is immutable; delivery state is recorded
+as append-only Receipt events; Thread, inbox and latest Receipt views are projections
+that can be rebuilt. This makes Session, Agent, Host and Machine boundaries explicit
+without requiring a shared database.
 
-- **Inbox path** = `mail/inbox/{YYYY}/{MM}/{DD}/{slug}.md`, where the date is
-  extracted from the first 8 digits of the slug. A slug without a date prefix
-  falls back to flat `mail/inbox/{slug}.md` (legacy compatibility).
-- **Slug** = `f"{YYYYMMDD}T{HHMMSS}-{from_id}"` (stamped by `oks mail send`).
-- **Sent outbox** = `mail/sent/{agent_id}/{ts}.md` (per-agent archive, P6).
-- **Listing** (`oks mail inbox`/`count`) uses `rglob("*.md")` so date-organized
-  and legacy flat mails are both found.
-- **`oks mail migrate`** moves legacy flat mails into date subdirs; idempotent.
+- **Canonical Message** = `mail/messages/{message-id}.md`. The body is written once
+  and carries `thread_id`, sender/recipients, session provenance, reason and any
+  validated Evidence Ref.
+- **Recipient projection** = `mail/inbox/{agent}/{message-id}.json`. It stores
+  recipient-local read/archive state and is not the canonical message.
+- **Receipt snapshot** = `mail/receipts/{session}/{message-id}.json`. It is a
+  compatibility latest-state view, not the only source of Receipt truth.
+- **Receipt events** =
+  `mail/receipt-events/{session}/{message-id}/evt_{timestamp}_{random}.json`.
+  `presented` and `acknowledged` are append-only facts; repeated writes are
+  idempotent for the same Session and Message.
+- **Notification projection** = `mail/notifications/{agent}/`. It records a
+  request to notify a Host; without a wake adapter it must remain `queued` and
+  must not start or impersonate an Agent.
+- **Machine identity** = user-level `~/.oks/machine.json`. It is opaque provenance,
+  not authentication, and is not copied into the knowledge-base Git repository.
 
-Reference implementation: `cli.py::_mail_inbox_dir`, `mail_send`,
-`mail_inbox`, `mail_count`. The read path (`show`/`read`) resolves through
-`_mail_path`, which derives the date dir from the slug — so reader and writer
-agree by construction, never by convention.
+Thread views are derived from canonical Messages and their timestamps/IDs; no
+shared `thread.json` or mutable central mailbox is required. Different Git clones
+may create different immutable Messages and Receipt events, then exchange them with
+normal Git operations. Git transport does not imply realtime delivery, online state,
+automatic wake or exactly-once task execution.
+
+Reference implementation: `cli/knowledge_studio/mail.py`,
+`cli/knowledge_studio/mail_runtime.py` and the `oks mail` CLI
+commands. The normative field and state contract is maintained in
+`docs/reference/mail-protocol.md`; older flat/date-organized inbox files remain
+readable only where the implementation provides legacy compatibility.
 
 ### A8: Triple-Layer Recall architecture
 

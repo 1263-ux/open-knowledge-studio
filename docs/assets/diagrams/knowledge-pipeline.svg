@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="940" height="150" viewBox="0 0 940 150" font-family="-apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif">
+<defs><marker id="a" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#2563eb"/></marker></defs>
+<rect width="100%" height="100%" rx="12" fill="#f8fafc"/>
+<rect x="20" y="45" width="150" height="74" rx="10" fill="#ffffff" stroke="#dbe4f0" stroke-width="1.5"/>
+<rect x="20" y="45" width="150" height="4" rx="2" fill="#2563eb"/>
+<text x="95" y="75" text-anchor="middle" fill="#0f172a" font-size="14.5" font-weight="700">来源 Source</text>
+<text x="95" y="95" text-anchor="middle" fill="#64748b" font-size="11">文章/视频</text>
+<text x="95" y="111" text-anchor="middle" fill="#64748b" font-size="11">文件/网页</text>
+<line x1="172" y1="82" x2="141" y2="82" stroke="#2563eb" stroke-width="2" marker-end="url(#a)"/>
+<rect x="145" y="45" width="150" height="74" rx="10" fill="#ffffff" stroke="#dbe4f0" stroke-width="1.5"/>
+<rect x="145" y="45" width="150" height="4" rx="2" fill="#1d4ed8"/>
+<text x="220" y="75" text-anchor="middle" fill="#0f172a" font-size="14.5" font-weight="700">证据片段</text>
+<text x="220" y="95" text-anchor="middle" fill="#64748b" font-size="11">Provider 机械提取</text>
+<text x="220" y="111" text-anchor="middle" fill="#64748b" font-size="11">EvidenceFragment</text>
+<line x1="297" y1="82" x2="266" y2="82" stroke="#2563eb" stroke-width="2" marker-end="url(#a)"/>
+<rect x="270" y="45" width="150" height="74" rx="10" fill="#ffffff" stroke="#dbe4f0" stroke-width="1.5"/>
+<rect x="270" y="45" width="150" height="4" rx="2" fill="#1d4ed8"/>
+<text x="345" y="75" text-anchor="middle" fill="#0f172a" font-size="14.5" font-weight="700">清单 Manifest</text>
+<text x="345" y="95" text-anchor="middle" fill="#64748b" font-size="11">完整性校验</text>
+<text x="345" y="111" text-anchor="middle" fill="#64748b" font-size="11">指纹</text>
+<line x1="422" y1="82" x2="391" y2="82" stroke="#2563eb" stroke-width="2" marker-end="url(#a)"/>
+<rect x="395" y="45" width="150" height="74" rx="10" fill="#ffffff" stroke="#dbe4f0" stroke-width="1.5"/>
+<rect x="395" y="45" width="150" height="4" rx="2" fill="#1d4ed8"/>
+<text x="470" y="75" text-anchor="middle" fill="#0f172a" font-size="14.5" font-weight="700">Raw Bundle</text>
+<text x="470" y="95" text-anchor="middle" fill="#64748b" font-size="11">raw-commit 落盘</text>
+<text x="470" y="111" text-anchor="middle" fill="#64748b" font-size="11">{YYYY}/{MM}/{DD}</text>
+<line x1="547" y1="82" x2="516" y2="82" stroke="#2563eb" stroke-width="2" marker-end="url(#a)"/>
+<rect x="520" y="45" width="150" height="74" rx="10" fill="#ffffff" stroke="#dbe4f0" stroke-width="1.5"/>
+<rect x="520" y="45" width="150" height="4" rx="2" fill="#1d4ed8"/>
+<text x="595" y="75" text-anchor="middle" fill="#0f172a" font-size="14.5" font-weight="700">Candidate</text>
+<text x="595" y="95" text-anchor="middle" fill="#64748b" font-size="11">Agent 提议</text>
+<text x="595" y="111" text-anchor="middle" fill="#64748b" font-size="11">drafts/</text>
+<line x1="672" y1="82" x2="641" y2="82" stroke="#2563eb" stroke-width="2" marker-end="url(#a)"/>
+<rect x="645" y="45" width="150" height="74" rx="10" fill="#ffffff" stroke="#dbe4f0" stroke-width="1.5"/>
+<rect x="645" y="45" width="150" height="4" rx="2" fill="#1d4ed8"/>
+<text x="720" y="75" text-anchor="middle" fill="#0f172a" font-size="14.5" font-weight="700">人审</text>
+<text x="720" y="95" text-anchor="middle" fill="#64748b" font-size="11">接受/修改/拒绝</text>
+<text x="720" y="111" text-anchor="middle" fill="#64748b" font-size="11">唯一晋升门</text>
+<line x1="797" y1="82" x2="766" y2="82" stroke="#2563eb" stroke-width="2" marker-end="url(#a)"/>
+<rect x="770" y="45" width="150" height="74" rx="10" fill="#ffffff" stroke="#dbe4f0" stroke-width="1.5"/>
+<rect x="770" y="45" width="150" height="4" rx="2" fill="#2563eb"/>
+<text x="845" y="75" text-anchor="middle" fill="#0f172a" font-size="14.5" font-weight="700">Wiki</text>
+<text x="845" y="95" text-anchor="middle" fill="#64748b" font-size="11">已审核知识</text>
+<text x="845" y="111" text-anchor="middle" fill="#64748b" font-size="11">参与召回</text>
+<text x="470.0" y="138" text-anchor="middle" fill="#94a3b8" font-size="11.5">Agent 可以提出知识，但不能批准自己的 Candidate —— 每条长期记忆都经过人审</text>
+</svg>

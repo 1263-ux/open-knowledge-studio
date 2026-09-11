@@ -1,10 +1,10 @@
 ---
-title: 工作原理
+title: 概念
 nav_order: 5
 has_children: true
 ---
 
-# 工作原理
+# 概念
 
 这些页面解释 OKS 为什么这样工作。你不需要先读懂它们才能完成第一次学习循环。
 

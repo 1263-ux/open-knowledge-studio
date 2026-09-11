@@ -1,10 +1,10 @@
 ---
-title: 日常任务
+title: 指南
 nav_order: 4
 has_children: true
 ---
 
-# 日常任务
+# 指南
 
 日常使用时，你只需要表达意图和做决定。收集、整理、保存与召回由 Agent 调用 OKS 完成。
 

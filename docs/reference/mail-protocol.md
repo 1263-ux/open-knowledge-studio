@@ -1,9 +1,14 @@
 ---
 title: Mail 协议
-nav_order: 4
+nav_order: 5
 parent: 参考
 ---
 # Mail 协议
+
+
+<figure>
+  <img src="../assets/diagrams/mail-model.svg" alt="Mail 对象模型：Thread 承载有主题边界的通信，Message 携带意图与证据，Session Receipt 记录每次独立投递，各 Host Adapter 共享同一 Mail Core。">
+</figure>
 
 OKS Mail 是 Git-backed 的持久通信层。Human 和 Agent 可用耐久的 Thread 在
 Session、Agent、Host 和机器之间继续消息、回复、Receipt 事实和 Evidence Ref；它
@@ -102,8 +107,10 @@ DSH 面板默认是人类通信工作面：它显示连续的 Thread，把 Sessi
   Host 和隔离测试；未设置时 OKS 在用户级 `~/.oks/machine.json` 中生成并
   复用一个随机 opaque ID。它不从主机名、用户名、仓库路径或 MAC 地址推导。
 - 协议审计 tuple 是 `(agent_id, machine_id, session_id)`：同一个 Agent 在
-  两台机器上保持相同 `agent_id`，由不同 `machine_id` 区分；每次新的 Host
-  运行使用新的 `session_id`。Mail Core 将这些 opaque 身份字段分别写入
+  两台机器上保持相同 `agent_id`，由不同 `machine_id` 区分；通常每次新的
+  Host 运行使用新的 `session_id`。为避免同一台机器重启本地 Mail Web 时累积
+  Session，Mail Web 适配器可按 `machine_id` 指纹与监听端口稳定复用其 UI Session；
+  这不改变 Agent Session 的一次运行语义。Mail Core 将这些 opaque 身份字段分别写入
   canonical Message、Session Registry 和 Receipt 路径，保证跨机器同步时
   不依赖主机名或本地路径推导唯一性。
 - `sender_kind` (`human`、`agent`、`unknown`) 是适配器提供的来源标记，
@@ -133,6 +140,8 @@ Message
 
 `presented` 只证明某个 Session 看到了消息；`acknowledged` 证明该 Session
 显式确认收到；`archived` 是收件人级隐藏状态。它们都不等价于任务完成。
+收件人归档时的 `thread_state: closed` 只是该收件人 projection 的实现值；
+取消归档会恢复为 `open`，不会隐式改变 `read_at`。
 
 ## 三层文件模型
 
@@ -226,7 +235,7 @@ Canonical Message 是不可变单文件；Receipt transition 是 append-only 事
 是按时间戳和 Message ID 排序得到的 derived view。两台隔离 Git clone 可以各自
 创建消息并合并，而不共同编辑 `thread.json`。Gate 4 的本地 bare-remote 双 clone
 试验是 Git transport 的真实验证，但不声称完成物理多机器部署、实时 wake 或 daemon。
-当前没有 `oks mail sync` 这个隐藏的中心服务：跨机器先使用团队已有的 Git remote，
+当前没有 mail sync 这个隐藏的中心服务：跨机器先使用团队已有的 Git remote，
 按普通 fetch/merge/push 流程交换文件；冲突、离线和同步结果必须与“对方已读取”
 “对方已完成”分开显示。自动同步与唤醒属于后续 Adapter/运行时设计，不属于 Mail
 Core 的隐含行为。

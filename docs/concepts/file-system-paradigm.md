@@ -1,7 +1,7 @@
 ---
 title: 文件即记忆
-nav_order: 5
-parent: 工作原理
+nav_order: 2
+parent: 概念
 ---
 
 # 文件即记忆：文件系统范式
@@ -27,6 +27,10 @@ OKS 不把知识放进一个黑盒向量库，而是把记忆做成**人可读�
 | `settings/`、`_meta/` | 配置与 schema | 基础设施，不是记忆 |
 
 这条边界是 OKS 的核心纪律：**一个 Agent 可以写出 Candidate，但不能批准自己的 Candidate**。使用次数只能证明"常被需要"，不能证明"正确"（见[知识即模型](philosophy.html)与[宪法](constitution.html)）。
+
+<figure>
+  <img src="../assets/diagrams/terminal-status.svg" alt="终端示例：oks status 显示 wiki 页数、域分布、tier 分布与质量分。">
+</figure>
 
 ## 与向量库路线的分工
 

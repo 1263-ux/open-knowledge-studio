@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="780" height="362" viewBox="0 0 780 362" font-family="'JetBrains Mono', Consolas, Menlo, monospace">
+<rect width="100%" height="100%" rx="12" fill="#0f172a"/>
+<rect width="100%" height="30" rx="12" fill="#1e293b"/>
+<circle cx="22" cy="17" r="6" fill="#f87171"/><circle cx="42" cy="17" r="6" fill="#fbbf24"/><circle cx="62" cy="17" r="6" fill="#34d399"/>
+<text x="390.0" y="21" text-anchor="middle" fill="#94a3b8" font-size="12">oks recall --explain</text>
+<text x="18" y="54" xml:space="preserve" fill="#4ade80" font-size="13">$ oks recall &quot;知识 即 模型 人类 反馈&quot; --explain --limit 2</text>
+<text x="18" y="76" xml:space="preserve" fill="#e2e8f0" font-size="13"></text>
+<text x="18" y="98" xml:space="preserve" fill="#e2e8f0" font-size="13">Semantic Memory (wiki/)</text>
+<text x="18" y="120" xml:space="preserve" fill="#64748b" font-size="13">┌─  知识即模型 (concepts/philosophy)  rel=0.87 ─────────┐</text>
+<text x="18" y="142" xml:space="preserve" fill="#64748b" font-size="13">│ human_reviewed_at: 2026-08-30   tier: hot            │</text>
+<text x="18" y="164" xml:space="preserve" fill="#64748b" font-size="13">│ match: Node-BM25 @## 为什么是人审 | boost: type+0.15 │</text>
+<text x="18" y="186" xml:space="preserve" fill="#64748b" font-size="13">└──────────────────────────────────────────────────────┘</text>
+<text x="18" y="208" xml:space="preserve" fill="#64748b" font-size="13">┌─  记忆模型 (concepts/memory-model)  rel=0.74 ─────────┐</text>
+<text x="18" y="230" xml:space="preserve" fill="#64748b" font-size="13">│ human_reviewed_at: 2026-09-11   tier: warm           │</text>
+<text x="18" y="252" xml:space="preserve" fill="#64748b" font-size="13">│ match: Node-BM25 @## 六类记忆                        │</text>
+<text x="18" y="274" xml:space="preserve" fill="#64748b" font-size="13">└──────────────────────────────────────────────────────┘</text>
+<text x="18" y="296" xml:space="preserve" fill="#e2e8f0" font-size="13"></text>
+<text x="18" y="318" xml:space="preserve" fill="#e2e8f0" font-size="13">injected 2 pages (budget 4000 chars, used 1370)  p50 31ms</text>
+</svg>

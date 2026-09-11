@@ -14,7 +14,7 @@
 
 它不是模型训练，也不会把 Agent 看过的内容自动变成“团队共识”。材料先被保留，Agent 可以提出 Candidate，是否留下仍由人决定。
 
-## OKS Mail：跨 Session 的持续通信层
+## OKS Mail：跨执行边界的持续协作层
 
 OKS Mail 是 Git-backed、独立于宿主的持久通信层：Human 和 Agent 可以在同一
 个 durable Thread 中跨 Session、Agent、Host 和机器继续消息、回复、Receipt
@@ -33,6 +33,12 @@ Adapter；它调用 `oks mail` 提供可视化和人工操作，Mail Core 不依
 但它默认把 Session、机器和协议 ID 收在来源详情中；用户应感受到的是同一段对话
 可以继续，而不是一次次独立执行。自然语言路由和命名 Human 身份仍是后续需要单独
 设计的能力。
+
+Mail 的核心场景不止是本机两个 Agent 互发消息：同一 Agent 换 Session、不同 Agent
+或 Host 接力、以及团队在不同机器上继续同一个 Thread，都共享同一套持久事实。高频的
+在线临时消息可以继续使用宿主自带的 SendMessage、MCP Mail 或 Agent Teams；需要跨
+运行、跨机器、可审计保留的交接、决定和成果引用才写入 OKS Mail。当前跨机器路径以
+普通 Git 同步为边界，已验证 Git transport，但还没有默认自动同步、daemon 或实时唤醒。
 
 ## 先看它怎么工作
 

@@ -1,7 +1,7 @@
 ---
 title: 确认 Agent 真的学会了
 nav_order: 3
-parent: 开始使用
+parent: 快速开始
 ---
 
 # 确认 Agent 真的学会了
@@ -35,4 +35,4 @@ parent: 开始使用
 | 新任务没有召回 | 已审核知识、问题描述、当前目标与召回入口 |
 | Agent 自动引用失败 | 自动召回是否启用，以及宿主是否已重新加载 |
 
-仍无法定位时，让 Agent 打开[故障排除](reference/troubleshooting.html)，并保留原始错误，不要只记录“失败了”。
+仍无法定位时，让 Agent 打开[故障排除](usage/troubleshooting.html)，并保留原始错误，不要只记录“失败了”。

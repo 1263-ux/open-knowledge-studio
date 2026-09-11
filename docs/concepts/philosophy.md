@@ -1,7 +1,7 @@
 ---
 title: 知识即模型
 nav_order: 1
-parent: 工作原理
+parent: 概念
 ---
 
 # 知识即模型

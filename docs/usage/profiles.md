@@ -1,7 +1,7 @@
 ---
 title: Goal 与 Profile
-nav_order: 5
-parent: 日常任务
+nav_order: 6
+parent: 指南
 ---
 
 # Goal 与 Profile

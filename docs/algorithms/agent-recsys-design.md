@@ -2,7 +2,7 @@
 title: 召回复杂版设计
 nav_order: 2
 parent: 设计蓝图
-grand_parent: 工作原理
+grand_parent: 概念
 ---
 
 # Agent Recall System — 复杂版设计（基于 Triple-Layer Recall）

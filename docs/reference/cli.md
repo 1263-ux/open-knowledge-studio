@@ -7,31 +7,72 @@ parent: 参考
 
 `oks` 命令清单 + 关键契约。日常用前几个，后几个是改协议 / 写 Provider / 做评测时才查。
 
-## 命令清单
+## 命令树
+
+命令分组镜像 `oks --help` 的输出结构；完整参数以 `oks <command> --help` 为准。
+
+### 实例与状态
 
 | 命令 | 用途 |
 |------|------|
 | `oks init <path>` | 创建实例（物化认知桶、配置、Schema 与 Agent skills） |
+| `oks skills-install` | 物化 Agent skills 到 `.claude/` `.agents/` 等宿主目录 |
 | `oks status` | 知识库概览（wiki/raw 计数 + tier + 质量） |
-| `oks metrics [--html]` | 知识指标；可生成基于注入与反馈记录的本地 HTML 报告和调参建议 |
-| `oks recall "<q>"` | 召回（fts5 node-level，双路 wiki + raw） |
-| `oks fs ls/tree/stat/read/overview/find` | 通过 canonical `oks://` URI 只读浏览当前实例 |
-| `oks ingest run <src>` | 摄入材料 → Raw Bundle |
+| `oks metrics [--html]` | 知识指标；`--html` 生成注入与反馈的本地 HTML 报告 |
+| `oks team init <path>` | 创建共享团队知识实例 |
+| `oks config init/show/set` | 全局配置（`~/.oks/config.json`） |
+
+### 摄入（Ingest）
+
+| 命令 | 用途 |
+|------|------|
+| `oks raw-commit <manifest-dir>` | 校验 Agent manifest 并组装 Raw Bundle v0.2 |
 | `oks ingest prepare <src>` | 生成 ingest 协议骨架 |
-| `oks wiki create/list/get/pin/archive/use/export` | wiki 页管理 + OKF 导出 |
-| `oks drafts list/promote/reject` | draft 候选队列与状态变更；完整内容通过 `/promote` Skill 审阅，晋升与拒绝都必须保留人工决定 |
-| `oks distill [--dry-run]` | 衰减 + 演化（dreaming 后半） |
-| `oks capability list/install/status/guide` | 能力注册与选择指导 |
-| `oks hook install/status` | opt-in 自动 recall + 文件冲突检测注入 |
-| `oks team init [path] [--name NAME]` | 创建共享团队知识实例 |
-| `oks schema show <name>` | 输出协议文档的校验示例 |
-| `oks trace *` | 执行追踪（provenance） |
-| `oks mail delegate/send/sent/reply/inbox/thread/read/archive/count/ack/view/snapshot/wait` | Agent-native 意图交接、Agent 间协调接口、Thread/Session 投影、可写状态操作与无 Host push 时的本地等待降级；不属于 `oks recall` 结果；详见 [Mail 协议](mail-protocol.html) |
-| `oks registry list/bind/remove` | 终端注册表（agent+cwd → profile/goal） |
-| `oks lint` | 扫 wiki/ 一致性 |
-| `oks config init/show/set` | 配置 |
-| `oks security sanitize <file>` | 凭据脱敏 |
+| `oks ingest run <src>` | 兼容入口；机械提取委托独立发布的 `oks-connector` |
+
+协议对象形状见 [Schema 参考](schemas.html)。
+
+### 召回与注入
+
+| 命令 | 用途 |
+|------|------|
+| `oks recall "<q>"` | 召回（默认 fts5 节点级，episodic + knowledge 双路） |
+| `oks fs ls/tree/stat/read/overview/find` | 只读虚拟文件系统，canonical `oks://` URI（见下） |
 | `oks eval recall <dataset>` | 召回离线评测 |
+
+召回参数与注入预算见 [参数表](parameters.html)。
+
+### 知识管理
+
+| 命令 | 用途 |
+|------|------|
+| `oks wiki create/list/get/pin/archive/use/export` | wiki 页管理 + OKF 导出 |
+| `oks drafts list/promote/reject` | draft 候选队列；晋升与拒绝都必须保留人工决定 |
+| `oks distill [--dry-run]` | 维护循环：衰减 + 演化（dreaming 后半） |
+| `oks decay` | 按阈值衰减淘汰 wiki 页 |
+| `oks lint` | 扫 wiki/ 一致性 |
+
+### Agent 接入
+
+| 命令 | 用途 |
+|------|------|
+| `oks hook install/status` | 自动召回 + 冲突检测 hook（见[接入你的 Agent](../usage/connect-your-agent.html)） |
+| `oks capability list/install/status/guide` | 可选模态能力注册与选择 |
+
+### 协作与追踪
+
+| 命令 | 用途 |
+|------|------|
+| `oks mail delegate/send/sent/reply/inbox/thread/read/archive/count/ack/view/snapshot/wait` | Agent 间协作与任务交接；协议见 [Mail 协议](mail-protocol.html) |
+| `oks registry list/bind/remove` | 终端注册表（agent+cwd → profile/goal） |
+| `oks trace *` | 执行追踪（provenance，见下） |
+
+### 治理与安全
+
+| 命令 | 用途 |
+|------|------|
+| `oks schema show <name>` | 输出协议对象的校验示例（见 [Schema 参考](schemas.html)） |
+| `oks security sanitize <file>` | 凭据脱敏 |
 
 Windows 原生运行 Claude 或 Codex 时，执行对应的 `oks hook install --editor ...`
 会把 `UserPromptSubmit` 与 `PostToolUse` 直接绑定到 Python hook，不依赖 Bash；安装器
@@ -68,6 +109,17 @@ oks mail reply thr_... --session-id codex-s1 \
 Evidence Ref 只保存 `trace`、`run`、`capability`、`bundle`、`commit` 的 `id` 或
 `candidate` 的相对 `path`，不会把证据正文复制进 Mail。
 
+### 跨机器协作的当前边界
+
+`oks mail` 负责在当前 OKS 实例写入 canonical Message、Receipt Event 和可重建投影；
+它不启动中心服务，也不隐藏执行 Git。团队在不同机器或不同 clone 间继续同一个
+Thread 时，先用已有 Git remote 按团队规则执行 fetch、merge/rebase 和 push，再由
+各机器的 Agent/Host 读取同步后的 Mail 文件。
+
+当前已验证的是本地 bare-remote / 双 clone 的 Git transport；物理双机往返、自动
+同步、离线冲突引导和实时唤醒仍未完成。因此 CLI 清单暂不虚构 mail sync 命令，也
+不会把“文件已同步”显示成“对方已收到”或“任务已完成”。
+
 ## 只读虚拟文件系统
 
 `oks fs` 为当前 OKS 实例提供统一的只读访问层。六个命令的准确形式是：
@@ -89,19 +141,15 @@ oks fs find <literal-query> --under <uri> [--max-results 1..200] [--format table
 
 VFS 没有 `write`、`mkdir`、`mv`、`rm`、`cp` 或其他修改命令。Raw 写入、Draft 审核和 Wiki promotion 仍必须走各自领域命令，VFS 不能绕过治理门控。`overview` 只做机械目录统计，不生成摘要或 sidecar；`find` 不调用 LLM、embedding、reranker 或递归 Agent。
 
-### hook 可调参数（env）
+### 身份与环境变量
+
+召回参数类环境变量已收口到[参数表](parameters.html)。身份类变量由 hook 与 Mail 命令共用：
 
 | env | 默认 | 用途 |
 |-----|------|------|
-| `OKS_RECALL_FLOOR` | 0.7 | 最小 relevance 才注入 |
-| `OKS_RECALL_TOPN` | 3 | 最多注入条数 |
-| `OKS_RECALL_COOLDOWN` | 10 | 同 slug 重注入间隔（轮）|
-| `OKS_MAIL_TOPN` | 3 | 当前 Agent/Session 最多注入的协调 mail 数；注入写 Delivery Receipt，不会自动标记已读 |
-| `OKS_CONFLICT_WINDOW` | 300 | 文件冲突检测窗口（秒）|
-| `OKS_AGENT_ID` | cwd basename | Agent 身份（registry key）|
-| `OKS_SEARCH_BACKEND` | native | search backend：`native` \| `fts5` \| `fusion` \| `<connector-name>`（见下） |
-| `OKS_POSTTOOL_FLOOR` | 0.9 | PostToolUse recall 补位最小 relevance（比 UserPromptSubmit 高，避免噪声）|
-| `OKS_POSTTOOL_TOPN` | 2 | PostToolUse 最多注入条数（比 UserPromptSubmit 少）|
+| `OKS_AGENT_ID` | cwd basename | Agent 身份（registry key、mail 收件人匹配） |
+| `OKS_SESSION_ID` | — | 会话标识（Session Receipt、ack 作用域） |
+| `OKS_ROOT` | OKS_ROOT env → config → cwd | 实例根目录解析 |
 
 ### 可插拔 search backend
 

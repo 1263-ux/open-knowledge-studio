@@ -1,7 +1,7 @@
 ---
 title: 导入已有对话
-nav_order: 6
-parent: 日常任务
+nav_order: 7
+parent: 指南
 ---
 
 # 导入已有对话

@@ -2,7 +2,7 @@
 title: 召回评估
 nav_order: 3
 parent: 算法引擎
-grand_parent: 工作原理
+grand_parent: 概念
 ---
 # 召回评估（OKS Triple-Layer Recall 消融实验）
 

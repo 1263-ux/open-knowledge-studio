@@ -2,7 +2,7 @@
 title: 规模光谱
 nav_order: 4
 parent: 设计蓝图
-grand_parent: 工作原理
+grand_parent: 概念
 ---
 
 # 规模光谱 — 三层在 mini → cluster 的部署变形

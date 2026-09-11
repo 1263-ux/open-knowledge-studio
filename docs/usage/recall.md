@@ -1,7 +1,7 @@
 ---
 title: 召回与注入
 nav_order: 3
-parent: 日常任务
+parent: 指南
 ---
 
 # 召回与注入

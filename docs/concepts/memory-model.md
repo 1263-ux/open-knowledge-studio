@@ -1,7 +1,7 @@
 ---
 title: 记忆模型
-nav_order: 6
-parent: 工作原理
+nav_order: 3
+parent: 概念
 ---
 
 # 记忆模型：六类记忆与注入次序

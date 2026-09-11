@@ -145,7 +145,7 @@ oks skills-install                # 打包 skills + agent-config 到 .claude/.qo
 接下来：
 
 - CLI 参考、hook 配置、评估：[CLI 文档](https://1263-ux.github.io/open-knowledge-studio/reference/cli.html) · [上下文注入](https://1263-ux.github.io/open-knowledge-studio/usage/recall.html)
-- 备份、导出、会话：[备份与导出](https://1263-ux.github.io/open-knowledge-studio/connect/backup-export.html)
+- 备份、导出、会话：[备份与导出](https://1263-ux.github.io/open-knowledge-studio/usage/backup-export.html)
 
 ## 跟你的 Agent 一起用
 

@@ -111,6 +111,8 @@ records/inject.jsonl
 # Local experiment/scratch directories (not part of the Studio source tree)
 /tmp/
 /artifacts/
+# Mail Skill bindings contain machine-local knowledge base paths.
+**/skills/oks-mail/binding.json
 /output/
 
 # ZCode client-local session state

@@ -1,8 +1,8 @@
 ---
 title: 算法引擎
-nav_order: 3
-parent: 工作原理
-grand_parent: 工作原理
+nav_order: 5
+parent: 概念
+grand_parent: 概念
 has_children: true
 ---
 

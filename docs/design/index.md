@@ -1,7 +1,7 @@
 ---
 title: 设计蓝图
-nav_order: 4
-parent: 工作原理
+nav_order: 6
+parent: 概念
 has_children: true
 ---
 

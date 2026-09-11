@@ -1,7 +1,8 @@
 ---
 title: 故障排除
-nav_order: 3
-parent: 参考
+nav_order: 8
+parent: 指南
+redirect_from: /reference/troubleshooting.html
 ---
 # 故障排除
 

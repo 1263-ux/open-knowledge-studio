@@ -2,7 +2,7 @@
 title: 衰减系统
 nav_order: 2
 parent: 算法引擎
-grand_parent: 工作原理
+grand_parent: 概念
 ---
 # 衰减系统（记忆曲线）
 

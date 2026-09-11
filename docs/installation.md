@@ -1,7 +1,7 @@
 ---
 title: 从零上手
 nav_order: 1
-parent: 开始使用
+parent: 快速开始
 ---
 
 # 从零上手
@@ -30,6 +30,6 @@ Agent 的报告至少应包括：
 - 自动召回是否启用；
 - 下一步如何完成第一条知识闭环。
 
-需要手工安装、CI 配置或排错时，再查看[命令参考](reference/cli.html)和[故障排除](reference/troubleshooting.html)。普通使用不从命令行开始。
+需要手工安装、CI 配置或排错时，再查看[命令参考](reference/cli.html)和[故障排除](usage/troubleshooting.html)。普通使用不从命令行开始。
 
 下一步：[完成第一次学习循环](first-knowledge-loop.html)。
