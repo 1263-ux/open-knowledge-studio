@@ -14,6 +14,7 @@ import math
 import os
 import re
 import tempfile
+import threading
 import time
 import uuid
 from collections.abc import Callable
@@ -32,6 +33,16 @@ except ImportError:  # POSIX
     msvcrt = None
 
 _logger = logging.getLogger(__name__)
+
+_windows_lock_registry_guard = threading.Lock()
+_windows_thread_locks: dict[str, threading.RLock] = {}
+
+
+def _windows_thread_lock(lock_path: Path) -> threading.RLock:
+    """Serialize same-process callers before entering the Windows CRT lock."""
+    key = os.path.normcase(str(lock_path.resolve()))
+    with _windows_lock_registry_guard:
+        return _windows_thread_locks.setdefault(key, threading.RLock())
 
 DECAY_LAMBDA: dict[str, float] = {
     "concept": 0.0,
@@ -151,29 +162,39 @@ def _save_access_counts(counts: dict[str, int]) -> None:
 def _file_lock(lock_path: Path):
     """Serialize a local read/modify/write or append sequence."""
     lock_path.parent.mkdir(parents=True, exist_ok=True)
-    if msvcrt is not None:
-        _ensure_windows_lock_file(lock_path)
-    handle = lock_path.open("r+b" if msvcrt is not None else "a+b")
+    thread_lock = _windows_thread_lock(lock_path) if msvcrt is not None else None
+    if thread_lock is not None:
+        # The CRT can report Resource deadlock avoided when two threads in one
+        # process lock the same byte through separate file handles. Keep the
+        # OS lock for cross-process coordination, but serialize local callers.
+        thread_lock.acquire()
     try:
-        if fcntl is not None:
-            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
-        elif msvcrt is not None:
-            handle.seek(0, os.SEEK_END)
-            if handle.tell() == 0:
-                handle.write(b"\0")
-                handle.flush()
-            handle.seek(0)
-            msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
-        yield
+        if msvcrt is not None:
+            _ensure_windows_lock_file(lock_path)
+        handle = lock_path.open("r+b" if msvcrt is not None else "a+b")
+        try:
+            if fcntl is not None:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+            elif msvcrt is not None:
+                handle.seek(0, os.SEEK_END)
+                if handle.tell() == 0:
+                    handle.write(b"\0")
+                    handle.flush()
+                handle.seek(0)
+                msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
+            yield
+        finally:
+            if fcntl is not None:
+                with contextlib.suppress(OSError):
+                    fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+            elif msvcrt is not None:
+                handle.seek(0)
+                with contextlib.suppress(OSError):
+                    msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+            handle.close()
     finally:
-        if fcntl is not None:
-            with contextlib.suppress(OSError):
-                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
-        elif msvcrt is not None:
-            handle.seek(0)
-            with contextlib.suppress(OSError):
-                msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
-        handle.close()
+        if thread_lock is not None:
+            thread_lock.release()
 
 
 def _ensure_windows_lock_file(lock_path: Path) -> None:
