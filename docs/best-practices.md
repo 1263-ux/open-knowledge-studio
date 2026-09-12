@@ -6,4 +6,4 @@ search_exclude: true
 
 <meta http-equiv="refresh" content="0; url=usage/">
 
-操作建议已合并到[日常使用](usage/)。
+操作建议已合并到[指南](usage/)。

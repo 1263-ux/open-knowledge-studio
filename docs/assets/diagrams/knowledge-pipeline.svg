@@ -1,46 +1,89 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="940" height="150" viewBox="0 0 940 150" font-family="-apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif">
-<defs><marker id="a" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#2563eb"/></marker></defs>
-<rect width="100%" height="100%" rx="12" fill="#f8fafc"/>
-<rect x="20" y="45" width="150" height="74" rx="10" fill="#ffffff" stroke="#dbe4f0" stroke-width="1.5"/>
-<rect x="20" y="45" width="150" height="4" rx="2" fill="#2563eb"/>
-<text x="95" y="75" text-anchor="middle" fill="#0f172a" font-size="14.5" font-weight="700">来源 Source</text>
-<text x="95" y="95" text-anchor="middle" fill="#64748b" font-size="11">文章/视频</text>
-<text x="95" y="111" text-anchor="middle" fill="#64748b" font-size="11">文件/网页</text>
-<line x1="172" y1="82" x2="141" y2="82" stroke="#2563eb" stroke-width="2" marker-end="url(#a)"/>
-<rect x="145" y="45" width="150" height="74" rx="10" fill="#ffffff" stroke="#dbe4f0" stroke-width="1.5"/>
-<rect x="145" y="45" width="150" height="4" rx="2" fill="#1d4ed8"/>
-<text x="220" y="75" text-anchor="middle" fill="#0f172a" font-size="14.5" font-weight="700">证据片段</text>
-<text x="220" y="95" text-anchor="middle" fill="#64748b" font-size="11">Provider 机械提取</text>
-<text x="220" y="111" text-anchor="middle" fill="#64748b" font-size="11">EvidenceFragment</text>
-<line x1="297" y1="82" x2="266" y2="82" stroke="#2563eb" stroke-width="2" marker-end="url(#a)"/>
-<rect x="270" y="45" width="150" height="74" rx="10" fill="#ffffff" stroke="#dbe4f0" stroke-width="1.5"/>
-<rect x="270" y="45" width="150" height="4" rx="2" fill="#1d4ed8"/>
-<text x="345" y="75" text-anchor="middle" fill="#0f172a" font-size="14.5" font-weight="700">清单 Manifest</text>
-<text x="345" y="95" text-anchor="middle" fill="#64748b" font-size="11">完整性校验</text>
-<text x="345" y="111" text-anchor="middle" fill="#64748b" font-size="11">指纹</text>
-<line x1="422" y1="82" x2="391" y2="82" stroke="#2563eb" stroke-width="2" marker-end="url(#a)"/>
-<rect x="395" y="45" width="150" height="74" rx="10" fill="#ffffff" stroke="#dbe4f0" stroke-width="1.5"/>
-<rect x="395" y="45" width="150" height="4" rx="2" fill="#1d4ed8"/>
-<text x="470" y="75" text-anchor="middle" fill="#0f172a" font-size="14.5" font-weight="700">Raw Bundle</text>
-<text x="470" y="95" text-anchor="middle" fill="#64748b" font-size="11">raw-commit 落盘</text>
-<text x="470" y="111" text-anchor="middle" fill="#64748b" font-size="11">{YYYY}/{MM}/{DD}</text>
-<line x1="547" y1="82" x2="516" y2="82" stroke="#2563eb" stroke-width="2" marker-end="url(#a)"/>
-<rect x="520" y="45" width="150" height="74" rx="10" fill="#ffffff" stroke="#dbe4f0" stroke-width="1.5"/>
-<rect x="520" y="45" width="150" height="4" rx="2" fill="#1d4ed8"/>
-<text x="595" y="75" text-anchor="middle" fill="#0f172a" font-size="14.5" font-weight="700">Candidate</text>
-<text x="595" y="95" text-anchor="middle" fill="#64748b" font-size="11">Agent 提议</text>
-<text x="595" y="111" text-anchor="middle" fill="#64748b" font-size="11">drafts/</text>
-<line x1="672" y1="82" x2="641" y2="82" stroke="#2563eb" stroke-width="2" marker-end="url(#a)"/>
-<rect x="645" y="45" width="150" height="74" rx="10" fill="#ffffff" stroke="#dbe4f0" stroke-width="1.5"/>
-<rect x="645" y="45" width="150" height="4" rx="2" fill="#1d4ed8"/>
-<text x="720" y="75" text-anchor="middle" fill="#0f172a" font-size="14.5" font-weight="700">人审</text>
-<text x="720" y="95" text-anchor="middle" fill="#64748b" font-size="11">接受/修改/拒绝</text>
-<text x="720" y="111" text-anchor="middle" fill="#64748b" font-size="11">唯一晋升门</text>
-<line x1="797" y1="82" x2="766" y2="82" stroke="#2563eb" stroke-width="2" marker-end="url(#a)"/>
-<rect x="770" y="45" width="150" height="74" rx="10" fill="#ffffff" stroke="#dbe4f0" stroke-width="1.5"/>
-<rect x="770" y="45" width="150" height="4" rx="2" fill="#2563eb"/>
-<text x="845" y="75" text-anchor="middle" fill="#0f172a" font-size="14.5" font-weight="700">Wiki</text>
-<text x="845" y="95" text-anchor="middle" fill="#64748b" font-size="11">已审核知识</text>
-<text x="845" y="111" text-anchor="middle" fill="#64748b" font-size="11">参与召回</text>
-<text x="470.0" y="138" text-anchor="middle" fill="#94a3b8" font-size="11.5">Agent 可以提出知识，但不能批准自己的 Candidate —— 每条长期记忆都经过人审</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="330" viewBox="0 0 1080 330" font-family="-apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif"><defs>
+  <filter id="sh" x="-20%" y="-20%" width="140%" height="140%">
+    <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#0f172a" flood-opacity="0.08"/>
+  </filter>
+  <linearGradient id="gblue" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#3b82f6"/><stop offset="1" stop-color="#1d4ed8"/>
+  </linearGradient>
+  <linearGradient id="gviolet" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#8b5cf6"/><stop offset="1" stop-color="#6d28d9"/>
+  </linearGradient>
+  <linearGradient id="gamber" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#f59e0b"/><stop offset="1" stop-color="#d97706"/>
+  </linearGradient>
+  <marker id="ar" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+    <path d="M0,0 L9,4.5 L0,9 z" fill="#2563eb"/>
+  </marker>
+</defs>
+<g filter="url(#sh)">
+<rect x="26" y="34" width="220" height="92" rx="12" fill="#ffffff" stroke="#e2e8f0"/>
+<rect x="26" y="34" width="220" height="42" rx="12" fill="url(#gblue)"/>
+<rect x="26" y="64" width="220" height="12" fill="url(#gblue)"/>
+<circle cx="50" cy="55" r="11" fill="#2563eb"/><text x="50" y="59" text-anchor="middle" fill="#ffffff" font-size="12" font-weight="700" font-family="-apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif">1</text>
+<text x="136.0" y="61" text-anchor="middle" fill="#ffffff" font-size="15.5" font-weight="700" font-family="-apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif">来源</text>
+<text x="136.0" y="98" text-anchor="middle" fill="#64748b" font-size="12.3" font-weight="normal" font-family="-apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif">文章/视频/文件/网页</text>
+<text x="136.0" y="115" text-anchor="middle" fill="#64748b" font-size="12.3" font-weight="normal" font-family="-apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif">人提供或授权采集</text>
+</g>
+<g filter="url(#sh)">
+<rect x="288" y="34" width="220" height="92" rx="12" fill="#ffffff" stroke="#e2e8f0"/>
+<rect x="288" y="34" width="220" height="42" rx="12" fill="url(#gblue)"/>
+<rect x="288" y="64" width="220" height="12" fill="url(#gblue)"/>
+<circle cx="312" cy="55" r="11" fill="#2563eb"/><text x="312" y="59" text-anchor="middle" fill="#ffffff" font-size="12" font-weight="700" font-family="-apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif">2</text>
+<text x="398.0" y="61" text-anchor="middle" fill="#ffffff" font-size="15.5" font-weight="700" font-family="-apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif">证据片段</text>
+<text x="398.0" y="98" text-anchor="middle" fill="#64748b" font-size="12.3" font-weight="normal" font-family="-apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif">Provider 机械提取</text>
+<text x="398.0" y="115" text-anchor="middle" fill="#64748b" font-size="12.3" font-weight="normal" font-family="-apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif">只换格式不换知识</text>
+</g>
+<g filter="url(#sh)">
+<rect x="550" y="34" width="220" height="92" rx="12" fill="#ffffff" stroke="#e2e8f0"/>
+<rect x="550" y="34" width="220" height="42" rx="12" fill="url(#gblue)"/>
+<rect x="550" y="64" width="220" height="12" fill="url(#gblue)"/>
+<circle cx="574" cy="55" r="11" fill="#2563eb"/><text x="574" y="59" text-anchor="middle" fill="#ffffff" font-size="12" font-weight="700" font-family="-apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif">3</text>
+<text x="660.0" y="61" text-anchor="middle" fill="#ffffff" font-size="15.5" font-weight="700" font-family="-apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif">清单 Manifest</text>
+<text x="660.0" y="98" text-anchor="middle" fill="#64748b" font-size="12.3" font-weight="normal" font-family="-apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif">完整性校验 + 指纹</text>
+<text x="660.0" y="115" text-anchor="middle" fill="#64748b" font-size="12.3" font-weight="normal" font-family="-apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif">可回溯到 locator</text>
+</g>
+<g filter="url(#sh)">
+<rect x="812" y="34" width="220" height="92" rx="12" fill="#ffffff" stroke="#e2e8f0"/>
+<rect x="812" y="34" width="220" height="42" rx="12" fill="url(#gblue)"/>
+<rect x="812" y="64" width="220" height="12" fill="url(#gblue)"/>
+<circle cx="836" cy="55" r="11" fill="#2563eb"/><text x="836" y="59" text-anchor="middle" fill="#ffffff" font-size="12" font-weight="700" font-family="-apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif">4</text>
+<text x="922.0" y="61" text-anchor="middle" fill="#ffffff" font-size="15.5" font-weight="700" font-family="-apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif">Raw Bundle</text>
+<text x="922.0" y="98" text-anchor="middle" fill="#64748b" font-size="12.3" font-weight="normal" font-family="-apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif">raw-commit 落盘</text>
+<text x="922.0" y="115" text-anchor="middle" fill="#64748b" font-size="12.3" font-weight="normal" font-family="-apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif">raw/{YYYY}/{MM}/{DD}/</text>
+</g>
+<g filter="url(#sh)">
+<rect x="812" y="176" width="220" height="92" rx="12" fill="#ffffff" stroke="#e2e8f0"/>
+<rect x="812" y="176" width="220" height="42" rx="12" fill="url(#gviolet)"/>
+<rect x="812" y="206" width="220" height="12" fill="url(#gviolet)"/>
+<circle cx="836" cy="197" r="11" fill="#2563eb"/><text x="836" y="201" text-anchor="middle" fill="#ffffff" font-size="12" font-weight="700" font-family="-apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif">5</text>
+<text x="922.0" y="203" text-anchor="middle" fill="#ffffff" font-size="15.5" font-weight="700" font-family="-apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif">Candidate</text>
+<text x="922.0" y="240" text-anchor="middle" fill="#64748b" font-size="12.3" font-weight="normal" font-family="-apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif">Agent 提议 → drafts/</text>
+<text x="922.0" y="257" text-anchor="middle" fill="#64748b" font-size="12.3" font-weight="normal" font-family="-apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif">带来源与缺口</text>
+</g>
+<g filter="url(#sh)">
+<rect x="550" y="176" width="220" height="92" rx="12" fill="#ffffff" stroke="#e2e8f0"/>
+<rect x="550" y="176" width="220" height="42" rx="12" fill="url(#gamber)"/>
+<rect x="550" y="206" width="220" height="12" fill="url(#gamber)"/>
+<circle cx="574" cy="197" r="11" fill="#2563eb"/><text x="574" y="201" text-anchor="middle" fill="#ffffff" font-size="12" font-weight="700" font-family="-apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif">6</text>
+<text x="660.0" y="203" text-anchor="middle" fill="#ffffff" font-size="15.5" font-weight="700" font-family="-apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif">人审</text>
+<text x="660.0" y="240" text-anchor="middle" fill="#64748b" font-size="12.3" font-weight="normal" font-family="-apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif">接受 / 修改 / 拒绝</text>
+<text x="660.0" y="257" text-anchor="middle" fill="#64748b" font-size="12.3" font-weight="normal" font-family="-apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif">唯一的晋升门</text>
+</g>
+<g filter="url(#sh)">
+<rect x="288" y="176" width="220" height="92" rx="12" fill="#ffffff" stroke="#e2e8f0"/>
+<rect x="288" y="176" width="220" height="42" rx="12" fill="url(#gblue)"/>
+<rect x="288" y="206" width="220" height="12" fill="url(#gblue)"/>
+<circle cx="312" cy="197" r="11" fill="#2563eb"/><text x="312" y="201" text-anchor="middle" fill="#ffffff" font-size="12" font-weight="700" font-family="-apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif">7</text>
+<text x="398.0" y="203" text-anchor="middle" fill="#ffffff" font-size="15.5" font-weight="700" font-family="-apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif">Wiki</text>
+<text x="398.0" y="240" text-anchor="middle" fill="#64748b" font-size="12.3" font-weight="normal" font-family="-apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif">已审核长期知识</text>
+<text x="398.0" y="257" text-anchor="middle" fill="#64748b" font-size="12.3" font-weight="normal" font-family="-apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif">进入召回与衰减</text>
+</g>
+<line x1="249" y1="80.0" x2="284" y2="80.0" stroke="#2563eb" stroke-width="2.5" marker-end="url(#ar)"/>
+<line x1="511" y1="80.0" x2="546" y2="80.0" stroke="#2563eb" stroke-width="2.5" marker-end="url(#ar)"/>
+<line x1="773" y1="80.0" x2="808" y2="80.0" stroke="#2563eb" stroke-width="2.5" marker-end="url(#ar)"/>
+<path d="M 922.0 129 L 922.0 170" fill="none" stroke="#2563eb" stroke-width="2.5" marker-end="url(#ar)"/>
+<line x1="809" y1="222.0" x2="775" y2="222.0" stroke="#2563eb" stroke-width="2.5" marker-end="url(#ar)"/>
+<line x1="547" y1="222.0" x2="513" y2="222.0" stroke="#2563eb" stroke-width="2.5" marker-end="url(#ar)"/>
+<line x1="285" y1="222.0" x2="251" y2="222.0" stroke="#2563eb" stroke-width="2.5" marker-end="url(#ar)"/>
+<text x="540.0" y="316" text-anchor="middle" fill="#94a3b8" font-size="12.5" font-weight="normal" font-family="-apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif">Agent 可以提出知识，但不能批准自己的 Candidate —— 每条长期记忆都经过人审（宪法 A1 / P9）</text>
 </svg>

@@ -10,6 +10,11 @@ grand_parent: 概念
 > 生产级蓝图：把推荐系统工程架构一比一迁移到"面向 Agent 的文档召回/搜索"。
 > 蓝本：datawhalechina/fun-rec `chapter_10_projects`（电影推荐 → 文档推荐）。
 > 定位：OKS 的 recall 引擎升级为漏斗式三阶段流水线，生产级可用。
+>
+> {: .warning }
+> **现状校准**：本文写作时默认召回层是 native 6+1 因子。宪法 A8 定名 Triple-Layer
+> 后，**默认后端已是 fts5（Node-BM25）**，6+1 仅是兼容后端，"灵魂"也已移到注入层
+> Soul Boost。阅读下文"OKS 现状"相关表述时以此为准；Phase 路线图中的迁移目标不变。
 
 ---
 

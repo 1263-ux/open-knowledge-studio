@@ -42,7 +42,7 @@ oks skills-install
 | Skill | 何时用 |
 |---|---|
 | `/ingest` | 把文章、文件、视频、对话变成可追溯来源 |
-| `/query` | 6 因素召回 → 注入 → 带引用回答 |
+| `/query` | Triple-Layer 召回 → 注入 → 带引用回答 |
 | `/promote` | 审核 Agent 提出的 Candidate（晋升/拒绝都必须由人决定） |
 | `/compile` | 从来源重编译概念页 → drafts |
 | `/lint` | 扫 wiki/ 一致性、孤儿页、断链 |

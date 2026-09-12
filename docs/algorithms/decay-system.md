@@ -89,7 +89,7 @@ Nowledge Mem（外部产品参考，公开文档链接当前待确认）的衰�
 
 **关键差异：搜索强化 vs 防自我强化**：
 
-- **nowledge v0.6.6**：每次搜索展示都更新记忆的 `last_accessed` + `access_count`，“出现在结果里也算一次轻度访问”，避免有用记忆悄悄衰减。
+- **OKS v0.6.6**：每次搜索展示都更新记忆的 `last_accessed` + `access_count`，“出现在结果里也算一次轻度访问”，避免有用记忆悄悄衰减。
 - **OKS**：反向选择——召回（`oks recall`）不算使用，不推 `access_count`；只有 `oks wiki use <slug>` 才 +1。记忆热度反映“真被用上”而非“被搜过几次”。
 
 这是 CONSTITUTION P9（防自我强化）的直接体现：被读多 → 显得可信 → 更优先 → 被读更多，是正反馈回路。OKS 让 `access_count` 只进排序（`ln` 项）不进可信度（`confidence`），且只在 Agent 主动 `wiki use` 时增长——切断了“召回即强化”的回路。代价：记忆热度更新慢（要 Agent 主动报 use），换稳定性。
