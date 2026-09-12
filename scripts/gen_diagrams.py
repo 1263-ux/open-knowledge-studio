@@ -118,8 +118,8 @@ b1.append(text(W / 2, H - 14, "Agent 可以提出知识，但不能批准自己�
 wrap("docs/assets/diagrams/knowledge-pipeline.svg", "\n".join(b1), W, H)
 
 # ============ 2. triple-layer: vertical architecture bands ============
-W, H = 1080, 390
-BX, BW = 250, 660
+W, H = 1120, 390
+BX, BW = 240, 660
 b2 = ['<rect width="100%" height="100%" rx="14" fill="#f8fafc"/>',
       f'<rect x="{BX+BW/2-100}" y="16" width="200" height="38" rx="19" fill="#0f172a"/>',
       text(BX + BW / 2, 40, 'oks recall "<query>"', size=14.5, fill="#ffffff", mono=True),
