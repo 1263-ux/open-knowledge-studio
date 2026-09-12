@@ -1,35 +1,76 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 40 880 390" width="880" height="390" style="background:#ffffff">
-<defs><marker id="ah" markerWidth="12" markerHeight="8" refX="12" refY="4" orient="auto"><polygon points="0 0, 12 4, 0 8" fill="#333333"/></marker><marker id="ah-light" markerWidth="12" markerHeight="8" refX="12" refY="4" orient="auto"><polygon points="0 0, 12 4, 0 8" fill="#999999"/></marker></defs>
-<rect x="20" y="55" width="400" height="170" rx="6" fill="#ffffff" stroke="#333333" stroke-width="2"/>
-<text x="220" y="78" font-family="Arial, 'Helvetica Neue', Helvetica, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="20" fill="#333333" text-anchor="middle" dominant-baseline="central" font-weight="bold">传统分块（无上下文）</text>
-<rect x="40" y="95" width="360" height="50" rx="4" fill="#f5f5f5" stroke="#999999" stroke-width="2"/>
-<text x="50" y="112" font-family="'Courier New', Courier, monospace" font-size="14" fill="#333333" text-anchor="start" dominant-baseline="central">该公司第二季度的收入增长了3%，</text>
-<text x="50" y="132" font-family="'Courier New', Courier, monospace" font-size="14" fill="#333333" text-anchor="start" dominant-baseline="central">主要由新产品线驱动。</text>
-<text x="220" y="170" font-family="Arial, 'Helvetica Neue', Helvetica, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="16" fill="#666666" text-anchor="middle" dominant-baseline="central" font-weight="normal">问题：&quot;该公司&quot;是谁？哪一年？</text>
-<text x="220" y="195" font-family="Arial, 'Helvetica Neue', Helvetica, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="16" fill="#666666" text-anchor="middle" dominant-baseline="central" font-weight="normal">→ 检索时匹配大量无关公司的收入数据</text>
-<rect x="460" y="55" width="400" height="170" rx="6" fill="#ffffff" stroke="#333333" stroke-width="2"/>
-<text x="660" y="78" font-family="Arial, 'Helvetica Neue', Helvetica, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="20" fill="#333333" text-anchor="middle" dominant-baseline="central" font-weight="bold">上下文感知分块</text>
-<rect x="480" y="95" width="360" height="35" rx="6" fill="#d0d0d0" stroke="#333333" stroke-width="2"/>
-<text x="490" y="113" font-family="'Courier New', Courier, monospace" font-size="14" fill="#333333" text-anchor="start" dominant-baseline="central">[ACME公司 2025年Q2财报·关键业绩指标]</text>
-<rect x="480" y="130" width="360" height="50" rx="4" fill="#f5f5f5" stroke="#999999" stroke-width="2"/>
-<text x="490" y="148" font-family="'Courier New', Courier, monospace" font-size="14" fill="#333333" text-anchor="start" dominant-baseline="central">该公司第二季度的收入增长了3%，</text>
-<text x="490" y="168" font-family="'Courier New', Courier, monospace" font-size="14" fill="#333333" text-anchor="start" dominant-baseline="central">主要由新产品线驱动。</text>
-<text x="660" y="200" font-family="Arial, 'Helvetica Neue', Helvetica, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="16" fill="#666666" text-anchor="middle" dominant-baseline="central" font-weight="normal">→ 精确匹配 ACME + Q2 + 收入增长</text>
-<text x="440" y="140" font-family="Arial, 'Helvetica Neue', Helvetica, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="24" fill="#333333" text-anchor="middle" dominant-baseline="central" font-weight="bold">→</text>
-<line x1="20" y1="250" x2="860" y2="250" stroke="#999999" stroke-width="2" stroke-dasharray="8,4"/>
-<text x="440.0" y="275" font-family="Arial, 'Helvetica Neue', Helvetica, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="20" fill="#333333" text-anchor="middle" dominant-baseline="central" font-weight="bold">索引阶段：LLM 生成上下文前缀</text>
-<rect x="30" y="300" width="180" height="55" rx="6" fill="#f0f0f0" stroke="#333333" stroke-width="2"/>
-<text x="120.0" y="327.5" font-family="Arial, 'Helvetica Neue', Helvetica, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="20" fill="#333333" text-anchor="middle" dominant-baseline="central" font-weight="bold">原始文档</text>
-<line x1="210" y1="327" x2="248" y2="327" stroke="#333333" stroke-width="2" marker-end="url(#ah)"/>
-<rect x="250" y="300" width="180" height="55" rx="6" fill="#f0f0f0" stroke="#333333" stroke-width="2"/>
-<text x="340.0" y="327.5" font-family="Arial, 'Helvetica Neue', Helvetica, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="20" fill="#333333" text-anchor="middle" dominant-baseline="central" font-weight="bold">分块</text>
-<line x1="430" y1="327" x2="468" y2="327" stroke="#333333" stroke-width="2" marker-end="url(#ah)"/>
-<rect x="470" y="300" width="180" height="55" rx="6" fill="#d0d0d0" stroke="#333333" stroke-width="2"/>
-<text x="560.0" y="317.9" font-family="Arial, 'Helvetica Neue', Helvetica, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="16" fill="#333333" text-anchor="middle" dominant-baseline="central" font-weight="bold">LLM 生成前缀</text>
-<text x="560.0" y="338.7" font-family="Arial, 'Helvetica Neue', Helvetica, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="16" fill="#333333" text-anchor="middle" dominant-baseline="central" font-weight="bold">(prompt caching)</text>
-<line x1="650" y1="327" x2="688" y2="327" stroke="#333333" stroke-width="2" marker-end="url(#ah)"/>
-<rect x="690" y="300" width="170" height="55" rx="6" fill="#f0f0f0" stroke="#333333" stroke-width="2"/>
-<text x="775.0" y="317.9" font-family="Arial, 'Helvetica Neue', Helvetica, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="16" fill="#333333" text-anchor="middle" dominant-baseline="central" font-weight="bold">前缀 + 原文</text>
-<text x="775.0" y="338.7" font-family="Arial, 'Helvetica Neue', Helvetica, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="16" fill="#333333" text-anchor="middle" dominant-baseline="central" font-weight="bold">→ 索引</text>
-<text x="440.0" y="410" font-family="Arial, 'Helvetica Neue', Helvetica, 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="16" fill="#666666" text-anchor="middle" dominant-baseline="central" font-weight="normal">效果：检索失败率 ↓49%（+BM25），↓67%（+重排序）—— Anthropic 数据</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 396" width="880" height="396" role="img" aria-labelledby="cr-title cr-desc">
+  <title id="cr-title">上下文感知检索：传统分块与加上下文前缀的对比</title>
+  <desc id="cr-desc">上半部分对比两种分块方式。左侧传统分块完全脱离了原文语境，同一句话里「该公司」指谁、哪一年都无从判断，检索时会匹配到大量无关公司的收入数据。右侧在分块前由 LLM 生成上下文前缀，例如标注出这是 ACME 公司 2025 年 Q2 财报的关键业绩指标，于是检索能精确命中。下半部分说明索引阶段的四个步骤：原始文档经分块后，由 LLM 生成上下文前缀并利用 prompt caching 控制成本，最后把前缀与原文一起送入索引。</desc>
+  <defs>
+    <style>
+      .h     { font: 600 16px -apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif; }
+      .h-mut { fill:#475569; }
+      .h-acc { fill:#1D4ED8; }
+      .mono  { font: 400 13px ui-monospace,SFMono-Regular,Menlo,Consolas,'Courier New',monospace; fill:#334155; }
+      .mono-acc { font: 400 13px ui-monospace,SFMono-Regular,Menlo,Consolas,'Courier New',monospace; fill:#1D4ED8; }
+      .note  { font: 400 13px -apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif; fill:#64748B; }
+      .step  { font: 600 15px -apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif; fill:#334155; }
+      .step-acc { font: 600 15px -apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif; fill:#1D4ED8; }
+      .step-sub { font: 400 12px ui-monospace,SFMono-Regular,Menlo,Consolas,'Courier New',monospace; fill:#64748B; }
+      .sec   { font: 600 15px -apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif; fill:#0F172A; }
+      .panel { fill:#FFFFFF; stroke:#E2E8F0; stroke-width:1.5; }
+      .panel-acc { fill:#FFFFFF; stroke:#BFDBFE; stroke-width:1.5; }
+      .well  { fill:#F8FAFC; stroke:#E2E8F0; stroke-width:1; }
+      .well-acc { fill:#EFF6FF; stroke:#BFDBFE; stroke-width:1; }
+      .stepbox { fill:#F8FAFC; stroke:#E2E8F0; stroke-width:1; }
+      .stepbox-acc { fill:#EFF6FF; stroke:#BFDBFE; stroke-width:1; }
+    </style>
+    <marker id="cr-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0 1L9 5L0 9Z" fill="#94A3B8"/>
+    </marker>
+  </defs>
+
+  <!-- Panel A: traditional chunking -->
+  <rect class="panel" x="0.75" y="0.75" width="422.5" height="202.5" rx="12"/>
+  <text class="h h-mut" x="20" y="31">传统分块（无上下文）</text>
+  <rect class="well" x="20" y="48" width="384" height="58" rx="8"/>
+  <text class="mono" x="34" y="72">该公司第二季度的收入增长了 3%，</text>
+  <text class="mono" x="34" y="92">主要由新产品线驱动。</text>
+  <rect class="well" x="20" y="118" width="384" height="66" rx="8"/>
+  <text class="note" x="34" y="142">问题：「该公司」是谁？哪一年？</text>
+  <text class="note" x="34" y="164">→ 检索时匹配大量无关公司的收入数据</text>
+
+  <!-- Panel B: context-aware chunking -->
+  <rect class="panel-acc" x="456.75" y="0.75" width="422.5" height="202.5" rx="12"/>
+  <text class="h h-acc" x="476" y="31">上下文感知分块</text>
+  <rect class="well-acc" x="476" y="48" width="384" height="32" rx="8"/>
+  <text class="mono-acc" x="490" y="68">[ACME 公司 2025 年 Q2 财报 · 关键业绩指标]</text>
+  <rect class="well" x="476" y="90" width="384" height="58" rx="8"/>
+  <text class="mono" x="490" y="114">该公司第二季度的收入增长了 3%，</text>
+  <text class="mono" x="490" y="134">主要由新产品线驱动。</text>
+  <rect class="well-acc" x="476" y="160" width="384" height="32" rx="8"/>
+  <text class="mono-acc" x="490" y="180">→ 精确匹配 ACME + Q2 + 收入增长</text>
+
+  <!-- Divider -->
+  <line x1="0" y1="234" x2="880" y2="234" stroke="#E2E8F0" stroke-width="1" stroke-dasharray="6 5"/>
+
+  <!-- Index stage -->
+  <text class="sec" x="440" y="266" text-anchor="middle">索引阶段：LLM 生成上下文前缀</text>
+
+  <rect class="stepbox" x="0.5" y="290.5" width="195" height="57" rx="10"/>
+  <text class="step" x="98" y="324" text-anchor="middle">原始文档</text>
+
+  <line x1="200" y1="319" x2="222" y2="319" stroke="#94A3B8" stroke-width="1.5" marker-end="url(#cr-arrow)"/>
+
+  <rect class="stepbox" x="228.5" y="290.5" width="195" height="57" rx="10"/>
+  <text class="step" x="326" y="324" text-anchor="middle">分块</text>
+
+  <line x1="428" y1="319" x2="450" y2="319" stroke="#94A3B8" stroke-width="1.5" marker-end="url(#cr-arrow)"/>
+
+  <rect class="stepbox-acc" x="456.5" y="290.5" width="195" height="57" rx="10"/>
+  <text class="step-acc" x="554" y="314" text-anchor="middle">LLM 生成前缀</text>
+  <text class="step-sub" x="554" y="333" text-anchor="middle">(prompt caching)</text>
+
+  <line x1="656" y1="319" x2="678" y2="319" stroke="#94A3B8" stroke-width="1.5" marker-end="url(#cr-arrow)"/>
+
+  <rect class="stepbox" x="684.5" y="290.5" width="195" height="57" rx="10"/>
+  <text class="step" x="782" y="314" text-anchor="middle">前缀 + 原文</text>
+  <text class="step-sub" x="782" y="333" text-anchor="middle">→ 索引</text>
+
+  <text class="note" x="440" y="378" text-anchor="middle">效果：检索失败率 ↓49%（+BM25）、↓67%（+重排序）— Anthropic 数据</text>
 </svg>

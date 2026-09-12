@@ -1,3 +1,9 @@
+<!-- 中文检索补丁：lunr 默认的 trimmer / 分词规则会让中文词条无法进入索引，
+     导致任何含中文的查询都返回 0 条。本脚本在浏览器端覆盖 lunr 的分词行为，
+     必须在 just-the-docs.js 之后、DOMContentLoaded（initSearch）之前执行。
+     实现说明与取舍见 docs/assets/js/oks-search-cjk.js 文件头。 -->
+<script src="{{ '/assets/js/oks-search-cjk.js' | relative_url }}"></script>
+
 <!-- Render kramdown's Mermaid code fences on GitHub Pages. -->
 <script type="module">
   import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";

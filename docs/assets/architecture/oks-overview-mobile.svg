@@ -1,62 +1,143 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 1780" role="img" aria-labelledby="title desc">
-  <title id="title">Open Knowledge Studio 完整工作架构，手机端</title>
-  <desc id="desc">用户与 Agent、知识工作区、运行时能力和交付关系的垂直架构图。</desc>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 340 1684" width="340" height="1684" role="img" aria-labelledby="okm-title okm-desc">
+  <title id="okm-title">Open Knowledge Studio 工作架构（窄屏版）</title>
+  <desc id="okm-desc">窄屏下自上而下阅读：任务面由用户、Agent 编排器与新任务构成；知识工作区依次是 profiles、raw、drafts，经人审门进入 wiki，另有 mail 与 executions；运行时与能力层包含核心 CLI、能力目录、安全契约，以及可选的飞书与 Office 交付实现。底部是三条不跨越的线。</desc>
   <defs>
     <style>
-      .title{fill:#10213d;font:700 22px -apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif}.sub{fill:#607087;font:400 13px -apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif}.zone{fill:#344767;font:700 15px -apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif}.tag{fill:#2563eb;font:700 12px -apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif}.head{fill:#13233d;font:700 18px -apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif}.body{fill:#53647c;font:400 13px -apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif}.edge{fill:#516178;font:700 12px -apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif}
+      .title  { font:700 17px -apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif; fill:#0F172A; }
+      .sub    { font:400 11.5px -apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif; fill:#64748B; }
+      .zone   { font:700 12px -apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif; fill:#334155; letter-spacing:.3px; }
+      .zsub   { font:400 10.5px -apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif; fill:#94A3B8; }
+      .tag    { font:700 9.5px -apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif; letter-spacing:.4px; }
+      .ntitle { font:700 13.5px -apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif; fill:#0F172A; }
+      .nbody  { font:400 11.5px -apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif; fill:#475569; }
+      .mono   { font:400 10.5px ui-monospace,SFMono-Regular,Menlo,Consolas,'Courier New',monospace; fill:#475569; }
+      .lane   { fill:#FFFFFF; stroke:#E2E8F0; stroke-width:1.5; }
+      .c-blue   { fill:#EFF6FF; stroke:#BFDBFE; stroke-width:1.5; }
+      .c-neutral{ fill:#F8FAFC; stroke:#E2E8F0; stroke-width:1.5; }
+      .c-amber  { fill:#FFFBEB; stroke:#FCD34D; stroke-width:1.5; }
+      .c-violet { fill:#F5F3FF; stroke:#C4B5FD; stroke-width:1.5; }
+      .t-blue   { fill:#1D4ED8; }
+      .t-neutral{ fill:#475569; }
+      .t-amber  { fill:#B45309; }
+      .t-violet { fill:#6D28D9; }
+      .t-faint  { fill:#64748B; }
     </style>
-    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10Z" fill="#91a0b8"/></marker>
-    <marker id="green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10Z" fill="#16a34a"/></marker>
+    <marker id="om-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0 1L9 5L0 9Z" fill="#94A3B8"/>
+    </marker>
   </defs>
-  <rect width="420" height="1780" rx="20" fill="#f6f8fc"/>
-  <text x="26" y="44" class="title">OKS 完整工作架构</text>
-  <text x="26" y="68" class="sub">Agent 编排，人审核；文件化知识能在下一次任务复用。</text>
 
-  <rect x="22" y="94" width="376" height="184" rx="16" fill="#fff" stroke="#d9e2ef" stroke-width="2"/>
-  <text x="42" y="124" class="zone">任务面：用户与 Agent</text>
-  <rect x="42" y="144" width="336" height="48" rx="10" fill="#eef4ff" stroke="#93c5fd" stroke-width="2"/>
-  <text x="58" y="173" class="head">用户：任务、来源、目标与审核</text>
-  <path d="M210 194v20" fill="none" stroke="#91a0b8" stroke-width="3" marker-end="url(#arrow)"/>
-  <rect x="42" y="224" width="336" height="36" rx="10" fill="#eef8ff" stroke="#60a5fa" stroke-width="2"/>
-  <text x="58" y="248" class="body">Agent：选择能力、提出 Candidate、说明依据与缺口</text>
+  <text class="title" x="14" y="28">OKS：让 Agent 接着用已确认的判断</text>
+  <text class="sub" x="14" y="48">文件化知识库是底座；人保留审核与对外决策权。</text>
 
-  <path d="M210 278v30" fill="none" stroke="#91a0b8" stroke-width="3" marker-end="url(#arrow)"/>
-  <rect x="22" y="326" width="376" height="754" rx="16" fill="#fff" stroke="#d9e2ef" stroke-width="2"/>
-  <text x="42" y="356" class="zone">知识工作区（文件 + Git）</text>
-  <text x="42" y="378" class="sub">每个桶都有自己的信任与召回边界。</text>
+  <!-- ===== 任务面 ===== -->
+  <rect class="lane" x="8.75" y="62.75" width="322.5" height="227.5" rx="12"/>
+  <text class="zone" x="24" y="86">任务面 · 用户与 Agent</text>
 
-  <rect x="42" y="404" width="336" height="104" rx="12" fill="#eef4ff" stroke="#93c5fd" stroke-width="2"/>
-  <text x="58" y="430" class="tag">稳定上下文</text><text x="58" y="458" class="head">profiles/</text><text x="58" y="482" class="body">用户、项目、Recipe、Goal；Goal 只影响相关性。</text>
-  <rect x="42" y="530" width="336" height="104" rx="12" fill="#effaf2" stroke="#86efac" stroke-width="2"/>
-  <text x="58" y="556" class="tag">来源与证据</text><text x="58" y="584" class="head">raw/</text><text x="58" y="608" class="body">原文、转换结果与对话；材料不是结论。</text>
-  <path d="M210 634v24" fill="none" stroke="#f97316" stroke-width="3" marker-end="url(#arrow)"/>
-  <rect x="42" y="678" width="336" height="112" rx="12" fill="#fff7ed" stroke="#fdba74" stroke-width="2"/>
-  <text x="58" y="704" class="tag">Agent 的提议</text><text x="58" y="732" class="head">drafts/</text><text x="58" y="756" class="body">Candidate 与蒸馏草稿；没有人审，不能进入长期知识。</text>
-  <path d="M210 790v24" fill="none" stroke="#16a34a" stroke-width="3" marker-end="url(#green)"/>
-  <text x="226" y="810" class="edge">人审</text>
-  <rect x="42" y="834" width="336" height="112" rx="12" fill="#f3efff" stroke="#c4b5fd" stroke-width="2"/>
-  <text x="58" y="860" class="tag">经人审核</text><text x="58" y="888" class="head">wiki/</text><text x="58" y="912" class="body">可复用知识；按相关性、Goal 与记忆曲线召回。</text>
-  <rect x="42" y="968" width="162" height="86" rx="12" fill="#f8fafc" stroke="#cbd5e1" stroke-width="2"/>
-  <text x="58" y="994" class="tag">协作证据</text><text x="58" y="1022" class="head">mail/</text><text x="58" y="1044" class="body">不属于长期知识</text>
-  <rect x="216" y="968" width="162" height="86" rx="12" fill="#f8fafc" stroke="#cbd5e1" stroke-width="2"/>
-  <text x="232" y="994" class="tag">执行轨迹</text><text x="232" y="1022" class="head">Trace</text><text x="232" y="1044" class="body">可追溯，不回灌</text>
+  <rect class="c-blue" x="24" y="98" width="292" height="48" rx="9"/>
+  <text class="ntitle" x="36" y="120">用户</text>
+  <text class="nbody" x="36" y="138">任务、来源、目标与审核</text>
 
-  <path d="M210 1080v30" fill="none" stroke="#2563eb" stroke-width="3" marker-end="url(#arrow)"/>
-  <rect x="22" y="1128" width="376" height="500" rx="16" fill="#fff" stroke="#d9e2ef" stroke-width="2"/>
-  <text x="42" y="1158" class="zone">OKS 运行时与能力层</text>
-  <rect x="42" y="1180" width="336" height="76" rx="12" fill="#eef4ff" stroke="#93c5fd" stroke-width="2"/>
-  <text x="58" y="1207" class="tag">核心 CLI（API-free）</text><text x="58" y="1235" class="head">oks：文件操作、召回与状态</text><text x="58" y="1251" class="body">raw-commit · drafts · wiki · recall · trace</text>
-  <rect x="42" y="1272" width="336" height="86" rx="12" fill="#effaf2" stroke="#86efac" stroke-width="2"/>
-  <text x="58" y="1299" class="tag">能力选择与收录</text><text x="58" y="1327" class="head">Recipe + Provider / Capability</text><text x="58" y="1349" class="body">网页、PDF、Office、图像、音频、视频等。</text>
-  <rect x="42" y="1374" width="336" height="64" rx="12" fill="#f8fafc" stroke="#cbd5e1" stroke-width="2"/>
-  <text x="58" y="1401" class="tag">安全、契约与入口</text><text x="58" y="1427" class="body">settings · schema · security · Hooks · 只读 VFS</text>
-  <rect x="42" y="1454" width="336" height="64" rx="12" fill="#f3efff" stroke="#c4b5fd" stroke-width="2"/>
-  <text x="58" y="1481" class="tag">可选参考实现（不随核心 CLI 分发）</text><text x="58" y="1507" class="body">飞书：Base · 表单 · IM 审核入口</text>
-  <rect x="42" y="1534" width="336" height="82" rx="12" fill="#fff7ed" stroke="#fdba74" stroke-width="2"/>
-  <text x="58" y="1561" class="tag">明确要求交付时才启用</text><text x="58" y="1589" class="head">Office 工作流</text><text x="58" y="1611" class="body">Word / PDF / PPT / Excel → 渲染检查</text>
+  <line x1="170" y1="148" x2="170" y2="156" stroke="#94A3B8" stroke-width="1.5" marker-end="url(#om-arrow)"/>
 
-  <rect x="22" y="1650" width="376" height="92" rx="14" fill="#10213d"/>
-  <text x="42" y="1684" fill="#fff" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="14" font-weight="700">不跨越：</text>
-  <text x="42" y="1710" fill="#dbeafe" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="13">Raw ≠ 结论 · Candidate ≠ 长期知识</text>
-  <text x="42" y="1732" fill="#dbeafe" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="13">相关性 ≠ 真实性 · 自动化 ≠ 代替人的决定</text>
+  <rect class="c-blue" x="24" y="160" width="292" height="64" rx="9"/>
+  <text class="ntitle" x="36" y="182">Agent 编排器（Claude / Codex 等宿主）</text>
+  <text class="nbody" x="36" y="200">选择能力、解释证据、提出 Candidate；</text>
+  <text class="nbody" x="36" y="216">不替人越权。</text>
+
+  <line x1="170" y1="226" x2="170" y2="234" stroke="#94A3B8" stroke-width="1.5" marker-end="url(#om-arrow)"/>
+
+  <rect class="c-neutral" x="24" y="238" width="292" height="48" rx="9"/>
+  <text class="ntitle" x="36" y="260">新任务与可交付文件</text>
+  <text class="nbody" x="36" y="278">回答、代码、决策、Word / PDF</text>
+
+  <!-- ===== 知识工作区 ===== -->
+  <rect class="lane" x="8.75" y="304.75" width="322.5" height="695.5" rx="12"/>
+  <text class="zone" x="24" y="328">知识工作区 · 文件 + Git</text>
+  <text class="zsub" x="24" y="344">五个桶用途不同，不能相互冒充。</text>
+
+  <rect class="c-blue" x="24" y="354" width="292" height="90" rx="10"/>
+  <text class="tag t-blue" x="36" y="376">稳定上下文</text>
+  <text class="ntitle" x="36" y="398">profiles/</text>
+  <text class="nbody" x="36" y="418">用户、项目、Recipe、Goal；直接读取。</text>
+  <text class="nbody" x="36" y="434">Goal 只影响相关性，不升级信任。</text>
+
+  <rect class="c-neutral" x="24" y="454" width="292" height="90" rx="10"/>
+  <text class="tag t-neutral" x="36" y="476">来源与证据</text>
+  <text class="ntitle" x="36" y="498">raw/</text>
+  <text class="nbody" x="36" y="518">原文、转换结果、对话；保留来源。</text>
+  <text class="nbody" x="36" y="534">材料本身不等于结论。</text>
+
+  <rect class="c-amber" x="24" y="554" width="292" height="90" rx="10"/>
+  <text class="tag t-amber" x="36" y="576">Agent 的提议</text>
+  <text class="ntitle" x="36" y="598">drafts/</text>
+  <text class="nbody" x="36" y="618">Candidate、蒸馏草稿与拒绝回执；</text>
+  <text class="nbody" x="36" y="634">未经人审，不进入长期知识。</text>
+
+  <line x1="170" y1="644" x2="170" y2="656" stroke="#2563EB" stroke-width="2"/>
+  <circle cx="170" cy="658" r="12" fill="#FFFFFF" stroke="#2563EB" stroke-width="2"/>
+  <path d="M164.5 658.5l4 4 7-8.5" fill="none" stroke="#2563EB" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <text class="tag t-blue" x="190" y="662">人审门：唯一通道</text>
+
+  <rect class="c-violet" x="24" y="670" width="292" height="90" rx="10"/>
+  <text class="tag t-violet" x="36" y="692">经人审核</text>
+  <text class="ntitle" x="36" y="714">wiki/</text>
+  <text class="nbody" x="36" y="734">可复用的概念、策略与反模式；</text>
+  <text class="nbody" x="36" y="750">按相关性、Goal 与记忆曲线召回。</text>
+
+  <rect class="c-neutral" x="24" y="770" width="292" height="90" rx="10"/>
+  <text class="tag t-neutral" x="36" y="792">协作证据</text>
+  <text class="ntitle" x="36" y="814">mail/</text>
+  <text class="nbody" x="36" y="834">短期 Agent 协作、冲突通知与人工反馈；</text>
+  <text class="nbody" x="36" y="850">不当作长期知识。</text>
+
+  <rect class="c-neutral" x="24" y="870" width="292" height="90" rx="10"/>
+  <text class="tag t-neutral" x="36" y="892">可追溯发生过什么</text>
+  <text class="ntitle" x="36" y="914">raw/executions/ 与 Trace</text>
+  <text class="nbody" x="36" y="934">执行记录与评判；可被证据链接，</text>
+  <text class="nbody" x="36" y="950">不被当成知识回灌。</text>
+
+  <rect x="24.5" y="968.5" width="291" height="21" rx="6" fill="#EFF6FF" stroke="#BFDBFE" stroke-width="1" stroke-dasharray="5 4"/>
+  <text class="tag t-blue" x="36" y="983">召回：Profile + Wiki + 必要的 Raw</text>
+
+  <!-- ===== 运行时与能力层 ===== -->
+  <rect class="lane" x="8.75" y="1014.75" width="322.5" height="555.5" rx="12"/>
+  <text class="zone" x="24" y="1038">OKS 运行时与能力层</text>
+  <text class="zsub" x="24" y="1054">核心不调用 AI API；Agent 通过工具编排。</text>
+
+  <rect class="c-blue" x="24" y="1064" width="292" height="90" rx="10"/>
+  <text class="tag t-blue" x="36" y="1086">核心 · 不调用 AI API</text>
+  <text class="ntitle" x="36" y="1108">oks：文件、召回与状态</text>
+  <text class="mono" x="36" y="1128">init · raw-commit · drafts · wiki</text>
+  <text class="mono" x="36" y="1144">recall · trace · lint</text>
+
+  <rect class="c-neutral" x="24" y="1164" width="292" height="90" rx="10"/>
+  <text class="tag t-neutral" x="36" y="1186">能力选择与收录</text>
+  <text class="ntitle" x="36" y="1208">Recipe + Provider</text>
+  <text class="nbody" x="36" y="1228">文本、网页、PDF、Office、图片、音视频。</text>
+  <text class="nbody" x="36" y="1244">按可用性、成本与完成条件选择。</text>
+
+  <rect class="c-neutral" x="24" y="1264" width="292" height="90" rx="10"/>
+  <text class="tag t-neutral" x="36" y="1286">安全与契约</text>
+  <text class="ntitle" x="36" y="1308">settings/ · _meta/</text>
+  <text class="nbody" x="36" y="1328">配置、Schema、脱敏；</text>
+  <text class="nbody" x="36" y="1344">Hooks 与只读 VFS。</text>
+
+  <rect class="c-neutral" x="24" y="1364" width="292" height="90" rx="10" stroke-dasharray="6 4"/>
+  <text class="tag t-faint" x="36" y="1386">可选参考实现 · 不随核心 CLI 分发</text>
+  <text class="ntitle" x="36" y="1408">飞书：Base · 表单 · IM 审核</text>
+  <text class="nbody" x="36" y="1428">采集与审核入口：来源 → Raw → Candidate</text>
+  <text class="nbody" x="36" y="1444">→ 最终由人决定。</text>
+
+  <rect class="c-amber" x="24" y="1464" width="292" height="90" rx="10"/>
+  <text class="tag t-amber" x="36" y="1486">只有明确要求交付时才启用</text>
+  <text class="ntitle" x="36" y="1508">Office 工作流</text>
+  <text class="nbody" x="36" y="1528">已审核知识 + 来源约束 →</text>
+  <text class="nbody" x="36" y="1544">Word / PDF / PPT / Excel，渲染检查后交付。</text>
+
+  <!-- ===== 不跨越的线 ===== -->
+  <rect x="8" y="1586" width="324" height="80" rx="10" fill="#0F172A"/>
+  <text x="24" y="1610" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="12" font-weight="700" fill="#FFFFFF">三条不跨越的线</text>
+  <text x="24" y="1632" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="10.5" fill="#BFDBFE">Raw ≠ 结论　　Candidate ≠ 长期知识</text>
+  <text x="24" y="1652" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" font-size="10.5" fill="#BFDBFE">相关性 ≠ 真实性　自动化 ≠ 代替人的决定</text>
 </svg>

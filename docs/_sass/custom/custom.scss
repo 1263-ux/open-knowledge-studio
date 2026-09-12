@@ -1,4 +1,67 @@
-// ===== 内容区左对齐、紧贴导航、占满右侧（参考 nowledge）=====
+// =============================================================================
+//  Open Knowledge Studio · 视觉系统覆盖层
+//  落点：_sass/custom/custom.scss（just-the-docs 最后引入此文件，覆盖始终生效）
+//  不修改主题自带文件。主题升级时本文件无需跟着改。
+//
+//  设计约定
+//    · 颜色只承担「信任层级」的语义，不承担装饰：
+//        蓝 = 系统与已确认的稳定上下文
+//        琥珀 = 待人工判断 / 条件触发
+//        紫 = 经人审核的长期知识
+//        中性 = 结构、来源与证据
+//      SVG 图表沿用同一组色值，见 assets/ 下的 <style> 块。
+//    · 圆角、间距、字号全部走下面的 token，正文里不再出现裸色值。
+// =============================================================================
+
+:root {
+  // ---- 中性 ----
+  --oks-ink:            #0F172A;
+  --oks-ink-soft:       #1E293B;
+  --oks-body:           #334155;
+  --oks-muted:          #64748B;
+  --oks-faint:          #94A3B8;
+  --oks-border:         #E2E8F0;
+  --oks-border-strong:  #CBD5E1;
+  --oks-surface:        #F8FAFC;
+  --oks-surface-2:      #F1F5F9;
+
+  // ---- 强调（唯一）----
+  --oks-accent:         #1D4ED8;
+  --oks-accent-hover:   #1E3A8A;
+  --oks-accent-soft:    #EFF6FF;
+  --oks-accent-line:    #BFDBFE;
+  --oks-focus:          #2563EB;
+
+  // ---- 语义 ----
+  --oks-amber:          #B45309;
+  --oks-amber-soft:     #FFFBEB;
+  --oks-amber-line:     #FCD34D;
+  --oks-violet:         #6D28D9;
+  --oks-violet-soft:    #F5F3FF;
+  --oks-violet-line:    #C4B5FD;
+  --oks-green:          #047857;
+  --oks-green-soft:     #ECFDF5;
+  --oks-green-line:     #6EE7B7;
+
+  // ---- 字体 ----
+  --oks-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "PingFang SC", "Microsoft YaHei", "Noto Sans SC", "Helvetica Neue", Arial,
+    sans-serif;
+  --oks-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+    "Liberation Mono", monospace;
+
+  // ---- 节奏 ----
+  --oks-radius-sm: 6px;
+  --oks-radius:    10px;
+  --oks-radius-lg: 14px;
+  --oks-measure:   66rem;   // 正文栏宽：图表需要宽度，故给到 66rem
+}
+
+// =============================================================================
+//  1 · 版面骨架
+//  侧栏固定宽度、正文占满右侧（沿用原有意图，补齐移动端边界）
+// =============================================================================
+
 @media (min-width: 66.5rem) {
   .side-bar {
     width: $nav-width !important;
@@ -8,11 +71,19 @@
   }
   .main {
     max-width: none !important;
-    margin: 0 !important;
+    margin-right: 0 !important;
   }
 }
 
-// ===== side-bar 子项撑满宽度（默认 align-items:flex-end 会导致搜索框缩小、按钮溢出）=====
+.main-content {
+  max-width: var(--oks-measure);
+}
+
+.main-content-wrap {
+  padding-top: 1.25rem !important;
+}
+
+// 侧栏内的几块都要撑满，否则搜索框缩水、按钮溢出
 @media (min-width: 66.5rem) {
   .side-bar .site-header,
   .side-bar .search,
@@ -23,106 +94,733 @@
     align-self: stretch !important;
   }
 }
-.side-bar .site-header {
-  justify-content: space-between !important;
-  padding: 0 0.75rem !important;
-  min-height: 3rem !important;
-}
 
-// ===== 导航分组可独立展开；展开状态会跨页面保留 =====
-.nav-list > .nav-list-item > .nav-list-link {
-  color: #2c2c2c !important;
-  font-weight: 700 !important;
-}
-.nav-list .nav-list .nav-list-link {
-  color: #7a7a7a !important;
-}
+// =============================================================================
+//  2 · 全局排版
+// =============================================================================
 
-.site-title {
-  white-space: nowrap !important;
-  font-size: 1rem !important;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.breadcrumb-nav {
-  display: none !important;
-}
-.main-header {
-  display: none !important;
-}
-
-// ===== 正文排版（参考 nowledge）=====
 body,
 .main-content {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-    "PingFang SC", "Microsoft YaHei", "Noto Sans SC", "Helvetica Neue", Arial,
-    sans-serif;
-  color: #334155;
+  font-family: var(--oks-font);
+  color: var(--oks-body);
   font-size: 1rem;
   line-height: 1.75;
+  -webkit-font-smoothing: antialiased;
 }
-h1, h2, h3, h4, h5, h6 { color: #0f172a; }
-h1 { font-size: 2rem; font-weight: 600; }
-h2 { font-size: 1.5rem; font-weight: 500; }
-h3 { font-size: 1.25rem; font-weight: 500; }
-h4 { font-weight: 500; }
-.main-content a { color: #1d4ed8; }
-.main-content a:hover { color: #1e3a8a; }
 
-// ===== Mermaid diagrams =====
+.main-content {
+  h1, h2, h3, h4, h5, h6 {
+    color: var(--oks-ink);
+    font-family: var(--oks-font);
+    text-wrap: balance;
+  }
+
+  h1 {
+    font-size: 2rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1.3;
+    margin-bottom: 1rem;
+  }
+
+  // 中文标题的字距要比拉丁更紧一点，否则显得松散
+  h2 {
+    font-size: 1.5rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    line-height: 1.4;
+    margin-top: 2.75rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--oks-border);
+  }
+
+  h3 {
+    font-size: 1.1875rem;
+    font-weight: 600;
+    line-height: 1.45;
+    margin-top: 2rem;
+  }
+
+  h4 {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--oks-ink-soft);
+  }
+
+  p, li {
+    line-height: 1.8;
+  }
+
+  a {
+    color: var(--oks-accent);
+    text-decoration: none;
+    text-underline-offset: 0.2em;
+    text-decoration-thickness: 1px;
+
+    &:hover {
+      color: var(--oks-accent-hover);
+      text-decoration: underline;
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--oks-focus);
+      outline-offset: 2px;
+      border-radius: 3px;
+    }
+  }
+
+  strong {
+    color: var(--oks-ink);
+    font-weight: 600;
+  }
+
+  hr {
+    border: 0;
+    border-top: 1px solid var(--oks-border);
+    margin: 3rem 0;
+  }
+
+  // 列表标记跟着正文色走，别用主题默认的重色
+  ul > li::marker,
+  ol > li::marker {
+    color: var(--oks-faint);
+  }
+
+  // 行内代码
+  code {
+    font-family: var(--oks-mono);
+    font-size: 0.875em;
+    color: var(--oks-ink-soft);
+    background: var(--oks-surface-2);
+    border: 1px solid var(--oks-border);
+    border-radius: var(--oks-radius-sm);
+    padding: 0.125em 0.375em;
+  }
+
+  // 代码块
+  // 站内多数围栏块装的是 ASCII 架构图（```text），不是需要高亮的代码，
+  // 所以走浅色底：既贴合正文，也保留 rouge 的浅色 token 配色。
+  // 注意：主题把背景画在内层 .highlight 上，只改外层会被盖住。
+  div.highlighter-rouge,
+  figure.highlight {
+    margin: 1.5rem 0;
+    background: var(--oks-surface);
+    border: 1px solid var(--oks-border);
+    border-radius: var(--oks-radius);
+    overflow: hidden;
+
+    .highlight {
+      background: transparent;
+    }
+
+    pre {
+      margin: 0;
+      padding: 1rem 1.125rem;
+      background: transparent;
+      font-family: var(--oks-mono);
+      font-size: 0.8125rem;
+      line-height: 1.6;
+      overflow-x: auto;
+
+      code {
+        background: none;
+        border: 0;
+        padding: 0;
+        color: var(--oks-body);
+        font-size: inherit;
+      }
+    }
+  }
+
+  // 表格
+  // 注意：保留主题默认的 display:block + overflow-x:auto，
+  // 这样宽表在窄屏可以横向滚动；改成 display:table 会让表格被压扁。
+  table {
+    font-size: 0.9375rem;
+    border-collapse: separate;
+    border-spacing: 0;
+    border: 1px solid var(--oks-border);
+    border-radius: var(--oks-radius);
+    margin: 1.5rem 0;
+    max-width: 100%;
+
+    th {
+      background: var(--oks-surface);
+      color: var(--oks-ink);
+      font-weight: 600;
+      text-align: left;
+      border-bottom: 1px solid var(--oks-border);
+      padding: 0.625rem 0.875rem;
+    }
+
+    td {
+      border-bottom: 1px solid var(--oks-border);
+      padding: 0.625rem 0.875rem;
+      vertical-align: top;
+    }
+
+    tr:last-child td {
+      border-bottom: 0;
+    }
+  }
+
+  // 引用块：左边一条强调线，比主题默认的灰条更明确
+  blockquote {
+    margin: 1.5rem 0;
+    padding: 0.875rem 1.25rem;
+    background: var(--oks-surface);
+    border: 1px solid var(--oks-border);
+    border-left: 3px solid var(--oks-accent);
+    border-radius: 0 var(--oks-radius) var(--oks-radius) 0;
+    color: var(--oks-body);
+
+    > p:last-child {
+      margin-bottom: 0;
+    }
+  }
+}
+
+// =============================================================================
+//  3 · Callout
+//  _config.yml 里已声明 note / tip / warning / important / highlight，
+//  但主题输出的类名在版本间有差异，这里两套都覆盖。
+// =============================================================================
+
+@mixin oks-callout($tint, $line, $label) {
+  background: $tint;
+  border: 1px solid $line;
+  border-left-width: 3px;
+  border-radius: 0 var(--oks-radius) var(--oks-radius) 0;
+  padding: 0.875rem 1.125rem;
+  margin: 1.5rem 0;
+  // 主题默认给 callout 加了投影，这里统一去掉——本站不用装饰性阴影
+  box-shadow: none;
+
+  > p:last-child,
+  > ul:last-child,
+  > ol:last-child {
+    margin-bottom: 0;
+  }
+
+  // 主题的 ::before 会插入 _config.yml 里的 title（提示 / 建议 / 注意 …），
+  // 内容保留，只接管排版。
+  &::before {
+    color: $label;
+    font-weight: 600;
+    font-size: 0.8125rem;
+    letter-spacing: 0.04em;
+    text-transform: none;
+    padding-bottom: 0.25rem;
+  }
+
+  .callout-title,
+  > .title {
+    color: $label;
+    font-weight: 600;
+  }
+}
+
+.main-content {
+  .note,
+  .callout.note {
+    @include oks-callout(var(--oks-accent-soft), var(--oks-accent-line), var(--oks-accent));
+  }
+
+  .tip,
+  .callout.tip {
+    @include oks-callout(var(--oks-green-soft), var(--oks-green-line), var(--oks-green));
+  }
+
+  .warning,
+  .callout.warning {
+    // 站点没有单独的红，用琥珀承担「需要人判断」的语义
+    @include oks-callout(var(--oks-amber-soft), var(--oks-amber-line), var(--oks-amber));
+  }
+
+  .important,
+  .callout.important {
+    @include oks-callout(var(--oks-violet-soft), var(--oks-violet-line), var(--oks-violet));
+  }
+
+  .highlight,
+  .callout.highlight {
+    @include oks-callout(var(--oks-surface-2), var(--oks-border-strong), var(--oks-body));
+  }
+}
+
+// =============================================================================
+//  4 · 图与图注
+//  图是这套文档的主力内容，给它干净的外框和足够的上下留白。
+// =============================================================================
+
+.main-content {
+  img {
+    border: 1px solid var(--oks-border);
+    border-radius: var(--oks-radius);
+    background: #FFFFFF;
+    display: block;
+    margin: 0 auto;
+    max-width: 100%;
+    height: auto;
+  }
+
+  // 紧跟图片的那段说明文字（图 1 / 图 2 …）
+  p > img {
+    margin-bottom: 0.75rem;
+  }
+
+  p > img + em,
+  p > img ~ em {
+    color: var(--oks-muted);
+    font-style: normal;
+    font-size: 0.875rem;
+  }
+}
+
+// 表格 / 图表在窄屏允许横向滚动，避免被压扁
 .oks-mermaid {
   max-width: 100%;
   overflow-x: auto;
   padding: 0.75rem 0;
   text-align: center;
-}
-.oks-mermaid svg {
-  max-width: 100%;
-  height: auto;
+
+  svg {
+    max-width: 100%;
+    height: auto;
+  }
 }
 
-.main-content-wrap {
-  padding-top: 1rem !important;
+// =============================================================================
+//  5 · 侧栏与导航
+// =============================================================================
+
+.side-bar {
+  border-right: 1px solid var(--oks-border);
+
+  .site-header {
+    justify-content: space-between !important;
+    padding: 0 0.875rem !important;
+    min-height: 3.25rem !important;
+    border-bottom: 1px solid var(--oks-border);
+  }
+
+  .site-title {
+    font-family: var(--oks-font);
+    font-size: 0.9375rem !important;
+    font-weight: 600 !important;
+    color: var(--oks-ink) !important;
+    white-space: nowrap !important;
+    overflow: hidden;
+    text-overflow: ellipsis;
+
+    &:hover {
+      text-decoration: none !important;
+      color: var(--oks-accent) !important;
+    }
+  }
 }
 
-// ===== Task-first landing page =====
-.main-content {
-  max-width: 72rem;
+// 分组标题与条目：拉开层级，别挤在一起
+.site-nav {
+  padding-top: 0.5rem;
+
+  .nav-list {
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+  }
+
+  .nav-list-item {
+    margin: 0;
+  }
+
+  .nav-list-link {
+    font-family: var(--oks-font);
+    font-size: 0.875rem;
+    line-height: 1.5;
+    padding: 0.4375rem 0.75rem;
+    border-radius: var(--oks-radius-sm);
+    color: var(--oks-muted);
+    transition: background-color 0.12s ease, color 0.12s ease;
+
+    &:hover {
+      background: var(--oks-surface);
+      color: var(--oks-ink);
+      text-decoration: none;
+    }
+  }
+
+  // 一级：可展开的分组，字重更重、色更深
+  > .nav-list > .nav-list-item > .nav-list-link {
+    color: var(--oks-ink) !important;
+    font-weight: 600 !important;
+    font-size: 0.875rem;
+  }
+
+  // 二级：具体页面
+  .nav-list .nav-list .nav-list-link {
+    color: var(--oks-muted) !important;
+    font-weight: 400;
+    font-size: 0.8125rem;
+    padding-left: 1.125rem;
+  }
+
+  // 当前页：左侧竖条 + 强调色，与设计稿一致
+  .nav-list-link.active {
+    color: var(--oks-accent) !important;
+    font-weight: 600 !important;
+    background: var(--oks-accent-soft);
+    box-shadow: inset 2px 0 0 var(--oks-accent);
+  }
+
+  .nav-list-expander {
+    color: var(--oks-faint);
+  }
 }
+
+// 搜索框：胶囊化，功能不动（仍是 lunr）
+.side-bar .search {
+  flex-grow: 0 !important;
+  height: auto !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  padding: 0.75rem 0.875rem !important;
+  margin: 0 !important;
+}
+
+.side-bar .search-input-wrap {
+  box-sizing: border-box !important;
+  height: 2.25rem !important;
+  box-shadow: none !important;
+  border: 1px solid var(--oks-border) !important;
+  background: var(--oks-surface);
+  border-radius: 9999px;
+  transition: border-color 0.12s ease, background-color 0.12s ease;
+
+  &:focus-within {
+    border-color: var(--oks-accent) !important;
+    background: #FFFFFF;
+  }
+}
+
+.side-bar .search-input {
+  font-family: var(--oks-font);
+  font-size: 0.8125rem;
+  background: transparent;
+}
+
+// 搜索结果面板（JtD 在激活时把它变成覆盖全屏的浮层）
+// just-the-docs 的搜索原本长在顶栏上，激活时把整块 .search 变成覆盖全屏的浮层。
+// 本站把搜索框搬到了侧栏，于是有两个坑：
+//   1. 主题在桌面断点写了 `.search { position: relative !important }`，
+//      `!important` 压过特异性，所以 `.search-active .search { position: fixed }`
+//      根本不会生效 —— .search 的宽度仍然只有侧栏的 16.5rem，
+//      面板里的 `left: 50%` 会按 264px 解算，结果被甩到视口左侧外面；
+//   2. 主题的 `max-height: calc(100vh - 200%)` 是按「.search 高度 = 顶栏高度」
+//      推出来的，侧栏布局下会算成负值，把面板压成 0 高。
+// 结论：不去和主题抢 .search 的定位，直接让浮层里的两个元素相对视口 fixed。
+// 这里的 !important 是为了压过主题同样带 !important 的基础规则。
+.search-overlay {
+  background: rgba(15, 23, 42, 0.36);
+  backdrop-filter: blur(2px);
+}
+
+.search-active .search {
+  z-index: 5;
+}
+
+// 关键的一层：主题里 .side-bar 是 position: fixed + z-index: 0，
+// 只要 z-index 不是 auto 就会形成**层叠上下文**。搜索框长在侧栏里，
+// 于是浮层自己的 z-index 再高也被困在侧栏内部；而 .search-overlay 是
+// 侧栏之外、DOM 更靠后的兄弟，z-index: 1 > 侧栏的 0，
+// 结果是遮罩把整个面板压住了 —— 面板真的画出来了，只是被盖住。
+// 因此激活搜索时必须把侧栏整体抬到遮罩之上。
+.search-active .side-bar {
+  z-index: 6;
+}
+
+// 侧栏被抬到遮罩之上后，主题的 .search-overlay 就压不到侧栏了，
+// 导航会「漏亮」在弹层旁边。这里在侧栏内部补一层同色遮罩，
+// z-index 低于 .search（5），所以只压导航，不会压住输入框和结果面板。
+.search-active .side-bar::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  background: rgba(15, 23, 42, 0.36);
+  pointer-events: none;
+}
+
+// 输入框浮到视口上方居中，做成一次「搜索态」而不是侧栏的下拉
+.search-active .search-input-wrap {
+  position: fixed !important;
+  z-index: 6;
+  top: 6rem !important;
+  left: 50% !important;
+  right: auto !important;
+  bottom: auto !important;
+  transform: translateX(-50%);
+  width: 38rem !important;
+  max-width: calc(100vw - 3rem) !important;
+  height: 3rem !important;
+  background: #FFFFFF;
+  border: 1px solid var(--oks-accent-line) !important;
+  border-radius: 9999px !important;
+  box-shadow: 0 18px 44px rgba(15, 23, 42, 0.18);
+}
+
+.search-active .search-input {
+  height: 100%;
+  padding-left: 3rem;
+  font-size: 1rem;
+  background: transparent;
+}
+
+.search-active .search-label {
+  padding-left: 1.15rem;
+}
+
+// 放大镜图标：主题在 :focus 状态下用 `.search-input:focus + .search-label
+// .search-icon` 指定了自带的紫色，特异性高于普通选择器，必须照样匹配才压得住
+.search-active .search-label .search-icon,
+.search-active .search-input:focus + .search-label .search-icon {
+  color: var(--oks-accent);
+}
+
+.search-active .search-results {
+  display: block;
+  position: fixed !important;
+  z-index: 6;
+  top: 9.75rem !important;
+  left: 50% !important;
+  right: auto !important;
+  bottom: auto !important;
+  transform: translateX(-50%);
+  width: 38rem !important;
+  max-width: calc(100vw - 3rem) !important;
+  max-height: calc(100vh - 12.5rem) !important;
+  overflow-y: auto;
+  padding: 0.375rem;
+  background: #FFFFFF;
+  border: 1px solid var(--oks-border);
+  border-radius: 0 0 var(--oks-radius-lg) var(--oks-radius-lg);
+  box-shadow: 0 24px 56px rgba(15, 23, 42, 0.16);
+}
+
+.search-results-list {
+  padding-left: 0;
+  margin-bottom: 0;
+}
+
+.search-results-list-item + .search-results-list-item {
+  border-top: 1px solid var(--oks-surface-2);
+}
+
+.search-result {
+  display: block;
+  padding: 0.625rem 0.875rem;
+  border-radius: var(--oks-radius-sm);
+  color: var(--oks-body);
+  transition: background-color 0.1s ease;
+
+  &:hover,
+  &.active {
+    background: var(--oks-accent-soft);
+  }
+}
+
+.search-result-doc .search-result-icon {
+  color: var(--oks-accent);
+}
+
+.search-result-doc .search-result-doc-title {
+  color: var(--oks-ink);
+  font-weight: 600;
+}
+
+// 「父级页面」那一行要退到次级，避免和真正的命中标题抢注意力
+.search-result-doc.search-result-doc-parent {
+  opacity: 1;
+
+  .search-result-doc-title {
+    color: var(--oks-muted);
+    font-weight: 400;
+  }
+}
+
+.search-result-section {
+  color: var(--oks-ink-soft);
+}
+
+.search-result-rel-url {
+  color: var(--oks-faint);
+  font-family: var(--oks-mono);
+}
+
+.search-result-previews {
+  color: var(--oks-muted);
+  border-left-color: var(--oks-border);
+}
+
+.search-result-highlight {
+  background: var(--oks-accent-soft);
+  color: var(--oks-accent);
+  font-weight: 600;
+  border-radius: 2px;
+}
+
+// 「No results found」是写死在主题 JS 里的英文字符串，站点是中文站。
+// 与其把整个 just-the-docs.js 拷进仓库冻结起来（那会失去主题升级能力），
+// 不如在这里用零字号的伪元素替换文案。
+.search-no-result {
+  padding: 1.25rem 0.875rem;
+  color: var(--oks-muted);
+  font-size: 0 !important;
+  text-align: center;
+
+  &::after {
+    content: '没有找到相关结果';
+    font-size: 0.875rem;
+  }
+}
+
+.side-bar .site-footer {
+  border-top: 1px solid var(--oks-border);
+  padding: 0 !important;
+}
+
+.oks-sidebar-footer {
+  margin: 0;
+  padding: 0.875rem 0.875rem;
+  color: var(--oks-faint);
+  font-size: 0.75rem;
+  line-height: 1.6;
+
+  a {
+    color: var(--oks-muted);
+    text-decoration: none;
+
+    &:hover {
+      color: var(--oks-accent);
+      text-decoration: underline;
+    }
+  }
+}
+
+// 顶栏上原本隐藏的两块：站点已用侧栏导航，保持隐藏
+.breadcrumb-nav,
+.main-header {
+  display: none !important;
+}
+
+// =============================================================================
+//  6 · 右侧「本页目录」
+//  说明：原先的断点是 96rem(1536px)，1440 屏上永远不显示。
+//  但窄于此宽度时正文栏 + 目录确实放不下，硬开会和正文重叠。
+//  折中方案：断点降到 98rem 并同时收窄正文栏，二者不重叠。
+// =============================================================================
+
+.toc-right {
+  display: none;
+  position: fixed;
+  top: 5.5rem;
+  right: 2rem;
+  width: 12rem;
+  max-height: calc(100vh - 9rem);
+  overflow-y: auto;
+  font-family: var(--oks-font);
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  border-left: 1px solid var(--oks-border);
+  padding-left: 0.875rem;
+
+  .toc-right-title {
+    font-weight: 600;
+    color: var(--oks-ink);
+    margin-bottom: 0.5rem;
+    font-size: 0.6875rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+
+  li {
+    margin: 0.25rem 0;
+  }
+
+  a {
+    color: var(--oks-muted);
+    text-decoration: none;
+    display: block;
+
+    &:hover {
+      color: var(--oks-accent);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--oks-focus);
+      outline-offset: 2px;
+      border-radius: 3px;
+    }
+  }
+}
+
+@media (min-width: 98rem) {
+  .toc-right {
+    display: block;
+  }
+
+  // 收窄到 64rem，给目录留出位置且与正文不重叠
+  .main-content {
+    max-width: 64rem;
+  }
+}
+
+// =============================================================================
+//  7 · 落地页组件
+// =============================================================================
 
 .oks-hero {
-  margin: 0 0 3rem;
-  padding: 3.5rem 3.25rem;
-  border: 1px solid #dbe4f0;
-  border-radius: 1rem;
+  margin: 0 0 2.5rem;
+  padding: 3.25rem 3rem;
+  border: 1px solid var(--oks-border);
+  border-radius: var(--oks-radius-lg);
   background:
-    radial-gradient(circle at 88% 12%, rgba(37, 99, 235, 0.14), transparent 34%),
-    linear-gradient(145deg, #f8fbff 0%, #ffffff 68%);
-}
-
-.oks-hero h1 {
-  max-width: 12ch;
-  margin: 0 0 1rem;
-  font-size: clamp(2.4rem, 6vw, 4.5rem);
-  line-height: 1.04;
-  letter-spacing: -0.04em;
-  font-weight: 700;
+    radial-gradient(circle at 86% 8%, rgba(37, 99, 235, 0.10), transparent 38%),
+    linear-gradient(160deg, #FBFDFF 0%, #FFFFFF 62%);
 }
 
 .oks-eyebrow {
-  margin-bottom: 1rem;
-  color: #2563eb;
-  font-size: 0.76rem;
+  margin: 0 0 0.875rem;
+  color: var(--oks-accent);
+  font-size: 0.6875rem;
   font-weight: 700;
   letter-spacing: 0.16em;
 }
 
+.oks-hero h1 {
+  // 原先是 max-width:12ch，中文会断成「团队已经确认的 / 判断」这种孤字行，
+  // 甚至把「团队」从中间劈开。放宽到 36ch 并交给 balance 均分。
+  max-width: 36ch;
+  margin: 0 0 1rem;
+  font-size: clamp(2rem, 4.4vw, 3.25rem);
+  line-height: 1.18;
+  letter-spacing: -0.02em;
+  font-weight: 700;
+  color: var(--oks-ink);
+  text-wrap: balance;
+}
+
 .oks-lead {
-  max-width: 42rem;
-  color: #475569;
-  font-size: 1.2rem;
-  line-height: 1.75;
+  max-width: 44rem;
+  margin: 0;
+  color: var(--oks-body);
+  font-size: 1.125rem;
+  line-height: 1.8;
 }
 
 .oks-actions {
@@ -130,118 +828,145 @@ h4 { font-weight: 500; }
   flex-wrap: wrap;
   gap: 0.75rem;
   margin-top: 1.75rem;
-}
 
-.oks-actions .btn {
-  min-height: 2.75rem;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
+  .btn {
+    min-height: 2.75rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--oks-font);
+    border-radius: 9999px;
+    padding: 0.5rem 1.25rem;
+    // CJK 标签在固定高按钮里需要显式行高，否则字形会顶在一起
+    line-height: 1.4;
+    letter-spacing: 0.02em;
+    transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+  }
 
-.oks-actions a.btn.btn-primary {
-  border-color: #1d4ed8 !important;
-  background-color: #1d4ed8 !important;
-  background-image: none !important;
-  color: #ffffff !important;
-  font-weight: 700;
-  /* CJK labels need explicit line-height and letter-spacing so glyphs do not
-     overlap inside the fixed-height button. */
-  line-height: 1.4;
-  letter-spacing: 0.02em;
-  padding: 0.5rem 1.1rem;
-}
+  a.btn.btn-primary {
+    border-color: var(--oks-accent) !important;
+    background-color: var(--oks-accent) !important;
+    background-image: none !important;
+    color: #FFFFFF !important;
+    font-weight: 600;
 
-.oks-actions a.btn.btn-primary:hover {
-  border-color: #1e40af !important;
-  background-color: #1e40af !important;
-  background-image: none !important;
-  color: #ffffff !important;
-}
+    &:hover {
+      border-color: var(--oks-accent-hover) !important;
+      background-color: var(--oks-accent-hover) !important;
+      color: #FFFFFF !important;
+    }
+  }
 
-.oks-actions .btn:focus-visible {
-  outline: 3px solid #f59e0b;
-  outline-offset: 3px;
-}
+  .btn:not(.btn-primary) {
+    border-color: var(--oks-accent-line) !important;
+    background-color: #FFFFFF !important;
+    background-image: none !important;
+    color: var(--oks-accent) !important;
+    font-weight: 600;
 
-.oks-card-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 1rem;
-  margin: 1.5rem 0 2.5rem;
-}
+    &:hover {
+      border-color: var(--oks-accent) !important;
+      background-color: var(--oks-accent-soft) !important;
+    }
+  }
 
-.oks-card {
-  padding: 1.25rem 1.35rem;
-  border: 1px solid #e2e8f0;
-  border-radius: 0.75rem;
-  background: #ffffff;
-}
-
-.oks-card h3 {
-  margin-top: 0;
-  font-size: 1.05rem;
-  font-weight: 650;
-}
-
-.oks-card p {
-  margin-bottom: 0;
-  color: #64748b;
-  font-size: 0.94rem;
+  .btn:focus-visible {
+    outline: 2px solid var(--oks-focus);
+    outline-offset: 3px;
+  }
 }
 
 .oks-proof-strip {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.75rem;
-  margin: -1.5rem 0 2.5rem;
-  padding: 0.85rem 1rem;
-  border: 1px solid #dbe4f0;
-  border-radius: 0.75rem;
-  background: #f8fafc;
+  margin: -1.25rem 0 2.75rem;
+  padding: 0.875rem 1rem;
+  border: 1px solid var(--oks-border);
+  border-radius: var(--oks-radius);
+  background: var(--oks-surface);
+
+  div {
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+    padding: 0.25rem 0.875rem;
+    border-left: 2px solid var(--oks-accent);
+  }
+
+  strong {
+    color: var(--oks-ink);
+    font-size: 0.9375rem;
+    font-weight: 600;
+  }
+
+  span {
+    color: var(--oks-muted);
+    font-size: 0.8125rem;
+    line-height: 1.5;
+  }
 }
 
-.oks-proof-strip div {
-  display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
-  padding: 0.2rem 0.75rem;
-  border-left: 2px solid #2563eb;
+.oks-card-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+  margin: 1.5rem 0 2.75rem;
 }
 
-.oks-proof-strip strong {
-  color: #0f172a;
-  font-size: 0.94rem;
+.oks-card {
+  padding: 1.375rem 1.375rem;
+  border: 1px solid var(--oks-border);
+  border-radius: var(--oks-radius);
+  background: #FFFFFF;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+
+  &:hover {
+    border-color: var(--oks-accent-line);
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  }
+
+  h3 {
+    margin: 0 0 0.5rem;
+    font-size: 1.0625rem;
+    font-weight: 600;
+    color: var(--oks-ink);
+  }
+
+  p {
+    margin-bottom: 0;
+    color: var(--oks-muted);
+    font-size: 0.9375rem;
+    line-height: 1.7;
+  }
 }
 
-.oks-proof-strip span {
-  color: #64748b;
-  font-size: 0.84rem;
-  line-height: 1.45;
-}
-
-.main-content img {
-  border: 1px solid #e2e8f0;
-  border-radius: 0.6rem;
-}
+// =============================================================================
+//  8 · 窄屏与可访问性
+// =============================================================================
 
 @media (max-width: 50rem) {
   .oks-hero {
-    padding: 2.25rem 1.35rem;
-    border-radius: 0.75rem;
+    padding: 2rem 1.25rem;
+    border-radius: var(--oks-radius);
+  }
+
+  .oks-hero h1 {
+    max-width: none;
+    font-size: clamp(1.75rem, 7vw, 2.25rem);
   }
 
   .oks-lead {
-    font-size: 1.05rem;
+    font-size: 1rem;
   }
 
   .oks-actions {
     align-items: stretch;
     flex-direction: column;
-  }
 
-  .oks-actions .btn {
-    width: 100%;
+    .btn {
+      width: 100%;
+    }
   }
 
   .oks-card-grid {
@@ -250,78 +975,32 @@ h4 { font-weight: 500; }
 
   .oks-proof-strip {
     grid-template-columns: 1fr;
-    margin-top: -1rem;
+    margin-top: -0.75rem;
   }
 }
 
-// ===== side-bar 内搜索框（修正默认 flex-grow:1/height:4rem + box-sizing）=====
-.side-bar .search {
-  flex-grow: 0 !important;
-  height: auto !important;
-  width: 100% !important;
-  box-sizing: border-box !important;
-  padding: 0.4rem 1.25rem !important;
-  margin: 0 !important;
-}
-.side-bar .search-input-wrap {
-  box-sizing: border-box !important;
-  height: 2.125rem !important;
-  box-shadow: none !important;
-  border: 1px solid #e2e8f0 !important;
-  background: #f8fafc;
-  border-radius: 0.375rem;
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
 }
 
-.oks-sidebar-footer {
-  margin: 0;
-  padding: 0.75rem 1rem;
-  color: #64748b;
-  font-size: 0.78rem;
-  line-height: 1.5;
-}
-
-.oks-sidebar-footer a {
-  color: #475569;
-  text-decoration: none;
-}
-
-.oks-sidebar-footer a:hover {
-  color: #1d4ed8;
-  text-decoration: underline;
-}
-
-// ===== Just the Docs 原生 Menu 按钮负责移动端导航 =====
-.side-bar {
-  transition: transform 0.2s ease;
-}
-
-// ===== 右侧 "On this page" TOC =====
-.toc-right {
-  display: none;
-  position: fixed;
-  top: 5rem;
-  right: 1.5rem;
-  width: 13rem;
-  max-height: calc(100vh - 8rem);
-  overflow-y: auto;
-  font-size: 0.8rem;
-  color: #64748b;
-  border-left: 2px solid #e2e8f0;
-  padding-left: 0.75rem;
-}
-.toc-right-title {
-  font-weight: 600;
-  color: #334155;
-  margin-bottom: 0.5rem;
-  font-size: 0.72rem;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-.toc-right ul { list-style: none; padding: 0; margin: 0; }
-.toc-right li { margin: 0.2rem 0; }
-.toc-right a { color: #64748b; text-decoration: none; display: block; }
-.toc-right a:hover { color: #1d4ed8; }
-@media (min-width: 96rem) {
-  .toc-right { display: block; }
-  .main-content { padding-right: 15rem; }
-}
+// =============================================================================
+//  9 · 未采用（保留记录，避免以后被当成遗漏）
+//
+//  · Sarasa Gothic SC 全量 CJK 字体
+//      设计稿上好看，但单字重体积过大，在 GitHub Pages 上是首屏阻塞级代价。
+//      Apple 观感来自字重、字距与块间距，不来自字体文件本身。
+//      → 改用系统字体栈，零下载字节。
+//
+//  · 手绘「窗中窗」产品预览
+//      文档站里再画一个文档站等于两份维护，站点一改截图就过期。
+//      → 首屏只留文案与 CTA。
+//
+//  · 右侧常驻 TOC 的 96rem 断点
+//      不是没做，是 96rem 以下正文栏与目录会重叠。已在第 6 节降为 98rem
+//      并同步收窄正文栏，二者不再冲突。
+// =============================================================================

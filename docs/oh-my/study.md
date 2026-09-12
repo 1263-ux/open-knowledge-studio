@@ -44,7 +44,7 @@ Agent 如何在**人机协同**中持续学习，并保证**长任务执行**的
 
 开始前先确认 Agent 现在知道什么，避免把演示环境已有页面误当成本轮新知识。
 
-![学习前的 OKS 状态，Wiki、Draft 和 Raw 计数清晰分开](../assets/hosted-learning/01-before-learning.png)
+![学习前的 OKS 状态，Wiki、Draft 和 Raw 计数清晰分开](../assets/hosted-learning/01-before-learning.webp)
 
 图 1：这张图只证明 DSH（当前的人机协作工作台，Mail 的 Human/Work UI Adapter）连接到了一个本地 OKS 实例，且 Wiki、Draft、Raw 是不同状态；它不证明本轮研究已经生成或审核了知识。
 
@@ -57,7 +57,7 @@ Agent 如何在**人机协同**中持续学习，并保证**长任务执行**的
 
 B 站没有提供可直接使用的平台字幕，因此实际路径是本地媒体 → 音频 → 本地 ASR → 关键帧 → Raw Bundle。YouTube 来源使用了用户提供的转写文本。ASR 中的同音词、专有名词错误保留在 Raw；人工修正只能作为带说明的 Candidate 提议。
 
-![两个来源形成 Raw Bundle 后的列表](../assets/hosted-learning/02-evidence-raw.png)
+![两个来源形成 Raw Bundle 后的列表](../assets/hosted-learning/02-evidence-raw.webp)
 
 图 2：这张图只证明来源和机械提取结果已保存；它不证明材料中的主张已经被确认。
 
@@ -71,7 +71,7 @@ Candidate 需要明确区分：
 - 哪些能力判断需要固定数据集 benchmark；
 - 哪些 ASR 内容需要人工听校。
 
-![待审核 Candidate 保留证据范围和待核验主张](../assets/hosted-learning/03-candidate-review.png)
+![待审核 Candidate 保留证据范围和待核验主张](../assets/hosted-learning/03-candidate-review.webp)
 
 图 3：这张图只证明 Agent 提出了待审核 Candidate 并显示其证据范围；它不证明 Candidate 已被接受或可在新任务中使用。
 
@@ -91,7 +91,7 @@ Candidate 需要明确区分：
 
 隔离验收副本曾用于测试 Promote 与 Recall 的界面流转，但它不替代正式实例的人审。下面的召回结果反而展示了正确边界：已有 Kimi 页面只覆盖视频中的模型介绍，不足以支持“智能文档分析系统”的设计结论；其余命中是噪声，不应采信。
 
-![召回结果明确指出已审核知识不足，并排除无关命中](../assets/hosted-learning/04-recall-boundary.png)
+![召回结果明确指出已审核知识不足，并排除无关命中](../assets/hosted-learning/04-recall-boundary.webp)
 
 图 4：这张图只证明隔离验收副本能显示证据不足和无关命中；它不替代正式实例的人审，也不证明 Kimi 的能力结论。
 

@@ -6,6 +6,26 @@
     </button>
   </div>
 
+  {%- comment -%}
+    搜索输入框。
+    背景：_config.yml 里 search_enabled: true 且配置完整，主题也照常生成了
+    assets/js/search-data.json；但 components/header.html 被覆盖成了空 div，
+    连同 components/search_header.html 一起被删掉，导致索引白白构建却无法使用。
+    class 名与 id 必须与主题 just-the-docs.js 保持一致（#search-input、#search-results）。
+  {%- endcomment -%}
+  {% if site.search_enabled != false %}
+    <div class="search" role="search">
+      <div class="search-input-wrap">
+        <input type="text" id="search-input" class="search-input" tabindex="0" placeholder="搜索文档" autocomplete="off">
+        <label for="search-input" class="search-label">
+          <span class="sr-only">搜索文档</span>
+          <svg viewBox="0 0 24 24" class="search-icon" aria-hidden="true"><use xlink:href="#svg-search"></use></svg>
+        </label>
+      </div>
+      <div id="search-results" class="search-results"></div>
+    </div>
+  {% endif %}
+
   {% include_cached components/site_nav.html %}
 
   <div class="d-md-block d-none site-footer">
