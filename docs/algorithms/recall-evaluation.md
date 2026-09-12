@@ -34,6 +34,14 @@ OKS 定位在第一层 + 第二层基础：`oks recall` 是 Recall 原语，第�
 
 工业报告常见"检索失败率" = 1 − recall@k（如 top-20 未命中率）。跨来源比较先弄清 k 取多少、recall@k 是命中率还是相关文档比例。
 
+## 当前结论
+
+以下三条是历年实验稳定复现、当前仍然成立的设计结论；它们解释了默认配置为什么长这样。数字与实验过程见下文[实验编年史](#实验编年史)。
+
+1. **Node-BM25 是精度主力**。检索层用 fts5 node-level 后，语义改写 50-case 上 R@1 +57%、MRR +44%；page-level 的 native 6+1 退为兼容后端。
+2. **"灵魂"在注入层，不在召回层**。把 type boost / review bonus / memory curve 搬回召回层 re-rank（fusion）是负优化——不相关页高分挤掉精确命中。这正是注入层 Soul Boost 独立存在的依据。
+3. **字面优先，语义兜底**。中文技术词重叠高的查询上，fts5 字面命中比 embedding 语义泛化更准也快得多（93ms vs 18.3s）；embedding 只作 fts5 未命中时的 fallback。
+
 ## OKS 现状
 
 `oks eval recall <dataset.yaml> --output <run.json>` 跑评测：
@@ -44,7 +52,11 @@ OKS 定位在第一层 + 第二层基础：`oks recall` 是 Recall 原语，第�
 
 **阻塞**：OKS 无官方标注数据集——三指标要 query + 期望命中页，需人工标注。社区可自建（把常用 query + 该命中的 wiki 页标好）。在标注数据集就绪前，召回评分权重不盲调（P9 精神）——只能用 `--explain` 做定性检查。
 
-## v0.6.1 实测：OKS Triple-Layer Recall 消融实验
+## 实验编年史
+
+以下按版本顺序保留原始实验记录与数字。结论已提炼到[当前结论](#当前结论)；数字是固定数据集与当时运行的历史基准，修改代码或环境后按文末命令重跑。
+
+### v0.6.1：Triple-Layer 消融实验
 
 v0.6.1 把三层架构（召回 fts5 node-level / 注入 Soul Boost / 衰减 Memory Curve）定名 **OKS Triple-Layer Recall**。在 50 个语义改写 case（query 不含 slug 关键词，测试同义词/改写召回，严格精确 slug 匹配）上做消融实验：
 
@@ -69,7 +81,7 @@ v0.6.1 把三层架构（召回 fts5 node-level / 注入 Soul Boost / 衰减 Mem
 | 去 Node-BM25 | 召回层 fts5→native 6+1 | 0.525 | 0.630 | Node-BM25 是精度主力（-36%） |
 | 去 Soul Boost（fusion re-rank 误用） | 灵魂因子搬回召回层 re-rank | 0.805 | 0.900 | 灵魂在注入层才对，召回层 re-rank 是负优化 |
 
-### embedding backend 对比（语义召回 connector 扩展）
+### v0.6.2：embedding backend 对比（语义召回 connector 扩展）
 
 v0.6.2 加 embedding backend（oks-connector[embedding]，sentence-transformers
 本地 MiniLM，不调远程 API）。语义召回本应解决同义词鸿沟，实测却反直觉：

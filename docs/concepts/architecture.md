@@ -10,7 +10,7 @@ OKS 不是一个单独的“记忆插件”。它是一套让 **用户、Agent�
 
 ## OKS Mail 的产品定位
 
-OKS Mail 是 OKS 的跨 Host、跨机器持久协作协议，不是 DSH 的附属功能，也不是
+OKS Mail 是 OKS 的跨 Host、跨机器持久协作协议，不是 DSH（当前的人机协作工作台，Mail 的 Human/Work UI Adapter）的附属功能，也不是
 一个只能在面板里查看的知识桶。它把 Message、Thread、Agent 状态、Session Receipt
 和成果引用保存在文件中，供不同 Session、Subagent、Agent、Host 和人员继续同一项
 工作；Mail 不因此变成 Wiki，也不承诺唤醒进程或保证任务执行。

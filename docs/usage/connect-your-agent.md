@@ -70,3 +70,9 @@ oks mail delegate --to codex --task "检查登录模块" \
 3. 跑 `oks status`，确认实例有内容、tier 分布正常。
 
 什么都没发生时，从[故障排除](troubleshooting.html)的"召回层"一节查起。
+
+## 怎么确认做成了
+
+- `oks hook status` 显示 wired / importable，没有 blocker；
+- 提问一句已审核知识相关的话，回答能说出依据页；
+- 换一个无关问题，没有注入（说明召回阈值在工作）。

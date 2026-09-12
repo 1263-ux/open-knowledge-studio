@@ -39,3 +39,9 @@ Agent 会按当前环境选择足够完成任务的能力，并生成来源、�
 - 涉及远程处理时遵守 SourceEnvelope 的数据处理策略。
 
 协议对象与底层处理能力见[摄入协议](../reference/ingest.html)。
+
+## 怎么确认做成了
+
+- 来源落在了 `raw/{YYYY}/{MM}/{DD}/{source}/`，能回溯到原始出处；
+- Raw Bundle 校验通过；`partial`、`failed`、`skipped` 如实保留，没有被补成成功；
+- 提出的 Candidate 带来源引用，等待审核而不是直接进了 Wiki。

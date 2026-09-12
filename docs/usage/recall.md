@@ -40,3 +40,9 @@ Hook 是可选入口：
 5. 对过时或冲突知识补充新 Evidence，走一次新的审核循环。
 
 算法细节见[召回引擎](../algorithms/recall-engine.html)。
+
+## 怎么确认做成了
+
+- Agent 能说出命中了哪个页面、为什么相关（`--explain` 有逐项分数）；
+- 命中页的来源标签（`[verified]` / `[inferred]` / `[stale]`）与审核状态一致；
+- 无关任务没有注入，说明 floor / topn 起了作用而不是碰巧。

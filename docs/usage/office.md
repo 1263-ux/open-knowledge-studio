@@ -40,3 +40,9 @@ Office 不是 OKS 核心运行时依赖，也不会因为安装 OKS 就自动具
 如果你只是在讨论、写一段普通文本或做计划，OKS 不会自行触发 Office 工作流。只有明确要求 Office 文件时，才会进入这一条路径。
 
 想了解 Agent 侧的执行边界，参见仓库中的 [OKS Office Skill](https://github.com/open-agent-power/open-knowledge-studio/tree/main/assets/skills/office)。
+
+## 怎么确认做成了
+
+- 生成前存在 `oks-office-evidence/v1` 证据包，每条表述可回溯到来源；
+- 原 Word 保持不动，新版本只重组与本次任务有关的表达；
+- 没有把「接触过」写成「精通」，缺口保留为「下一步补齐」。

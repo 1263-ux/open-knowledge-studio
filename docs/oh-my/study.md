@@ -46,7 +46,7 @@ Agent 如何在**人机协同**中持续学习，并保证**长任务执行**的
 
 ![学习前的 OKS 状态，Wiki、Draft 和 Raw 计数清晰分开](../assets/hosted-learning/01-before-learning.png)
 
-图 1：这张图只证明 DSH 连接到了一个本地 OKS 实例，且 Wiki、Draft、Raw 是不同状态；它不证明本轮研究已经生成或审核了知识。
+图 1：这张图只证明 DSH（当前的人机协作工作台，Mail 的 Human/Work UI Adapter）连接到了一个本地 OKS 实例，且 Wiki、Draft、Raw 是不同状态；它不证明本轮研究已经生成或审核了知识。
 
 ## 2. 收集：保留来源，而不是先写答案
 
