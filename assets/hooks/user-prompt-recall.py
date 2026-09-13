@@ -81,9 +81,23 @@ def _mail_value(value: object) -> str:
 def _load_payload() -> dict:
     try:
         payload = json.load(sys.stdin)
-    except Exception:
+    except Exception as exc:
+        # A malformed payload must not crash the hook, but the cwd fallback can
+        # quietly target a different knowledge base; make the fallback audible.
+        print(
+            f"oks-hook: prompt payload is not valid JSON ({exc!r}); "
+            "falling back to cwd-based knowledge base resolution.",
+            file=sys.stderr,
+        )
         return {}
-    return payload if isinstance(payload, dict) else {}
+    if not isinstance(payload, dict):
+        print(
+            "oks-hook: prompt payload is not an object; "
+            "falling back to cwd-based knowledge base resolution.",
+            file=sys.stderr,
+        )
+        return {}
+    return payload
 
 
 def _kb_root(cwd: str = "") -> Path | None:
@@ -288,6 +302,7 @@ def _load_unread_mail(
                 if not message_id or mail_domain.has_delivery_receipt(kb_root, sid, message_id):
                     continue
                 mail_domain.record_delivery(kb_root, sid, message, agent_id=agent_id)
+                mail_domain.mark_notification_presented(kb_root, agent_id, message_id, session_id=sid)
                 meta = message["meta"]
                 mails.append({
                     "slug": message_id,
@@ -681,7 +696,7 @@ def main() -> int:
             return _finish_hook(_hook_response("skipped_cooldown", candidates=candidates, threshold=floor, reason="cooldown"))
         return _finish_hook(_hook_response("empty", candidates=candidates, threshold=floor, reason="no_match"))
 
-    out = ['<recalled-memory source="oks">']
+    out = [f'<recalled-memory source="oks" kb="{_mail_value(kb_root.name)}">']
     out.extend(sections)
     # 自评闭环：AI 用完后自评，对实际引用的记忆调 oks wiki use，无需人类手动
     if picked:
