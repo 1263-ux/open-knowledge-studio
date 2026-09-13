@@ -154,6 +154,55 @@ def test_hook_install_migrates_codex_relative_lifecycle_paths(tmp_path):
         assert Path(command).resolve() == (target / ".codex" / "hooks" / script_name).resolve()
 
 
+def test_codex_session_start_emits_structured_json_context(tmp_path):
+    """Codex 必须收到标准 SessionStart JSON，不能直接收到纯文本。"""
+    target = _init_instance(tmp_path)
+    domain = target / "wiki" / "computing"
+    domain.mkdir()
+    (domain / "hooks.md").write_text("# Hooks\n", encoding="utf-8")
+    script = target / ".codex" / "hooks" / "session-start.sh"
+
+    result = _run_hook(
+        script,
+        {
+            "hook_event_name": "SessionStart",
+            "session_id": "codex-session",
+            "source": "startup",
+            "cwd": str(target),
+        },
+        target,
+    )
+
+    assert result.returncode == 0, result.stderr
+    output = json.loads(result.stdout)
+    hook_output = output["hookSpecificOutput"]
+    assert hook_output["hookEventName"] == "SessionStart"
+    assert "[Knowledge Studio]" in hook_output["additionalContext"]
+
+
+def test_codex_session_start_handles_an_empty_wiki(tmp_path):
+    """空 Wiki 尚无 domain 时，SessionStart 也必须成功并返回合法 JSON。"""
+    target = _init_instance(tmp_path)
+    script = target / ".codex" / "hooks" / "session-start.sh"
+
+    result = _run_hook(
+        script,
+        {
+            "hook_event_name": "SessionStart",
+            "session_id": "codex-session",
+            "source": "startup",
+            "cwd": str(target),
+        },
+        target,
+    )
+
+    assert result.returncode == 0, result.stderr
+    output = json.loads(result.stdout)
+    context = output["hookSpecificOutput"]["additionalContext"]
+    assert "0 wiki pages" in context
+    assert "Domains: none" in context
+
+
 def test_codex_posttool_apply_patch_records_files_and_emits_json_context(tmp_path):
     target = _init_instance(tmp_path)
     script = target / ".codex" / "hooks" / "post-tool-edit.py"

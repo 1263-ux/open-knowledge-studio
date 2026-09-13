@@ -3340,7 +3340,18 @@ def hook_status(
     shown_dirs = []
     blockers: list[str] = []
     warnings: list[str] = []
-    any_wired = False
+    wiring: dict[str, tuple[bool, bool]] = {}
+    active_hook_dirs: set[Path] = set()
+    for name, rel in _HOOK_EDITORS.items():
+        settings_path = root / rel
+        prompt_wired = _hook_is_wired(settings_path)
+        post_wired = _hook_event_is_wired(
+            settings_path, "PostToolUse", _POST_TOOL_SCRIPT_NAME
+        )
+        wiring[name] = (prompt_wired, post_wired)
+        if prompt_wired or post_wired:
+            active_hook_dirs.add(root / _HOOK_SCRIPT_DIRS[name])
+    any_wired = bool(active_hook_dirs)
     for name in _HOOK_EDITORS:
         hooks_dir = root / _HOOK_SCRIPT_DIRS[name]
         if hooks_dir in shown_dirs:
@@ -3350,7 +3361,8 @@ def hook_status(
         label = "script" if name == "claude" else f"{name} script"
         console.print(f"  {label}: {'present' if script.is_file() else 'missing'} ({script})")
         if not script.is_file():
-            blockers.append(f"{label} is missing — run `oks hook install`")
+            if hooks_dir in active_hook_dirs:
+                blockers.append(f"{label} is missing — run `oks hook install`")
             continue
         m = re.search(r"\$\{OKS_PYTHON:-([^}]+)\}", script.read_text(encoding="utf-8"))
         py = os.environ.get("OKS_PYTHON") or (m.group(1) if m else "python3")
@@ -3365,7 +3377,7 @@ def hook_status(
                  else "[red]hook script has stale interpreter — "
                       "run `oks hook install` to re-bake[/red]")
         console.print(f"  {label} engine: {state} (python: {py})")
-        if not ok:
+        if not ok and hooks_dir in active_hook_dirs:
             blockers.append(
                 f"{label} interpreter cannot import knowledge_studio ({py}) — "
                 "run `oks hook install` to re-bake"
@@ -3383,15 +3395,9 @@ def hook_status(
         else:
             console.print(f"  {label} engine version: [green]current[/green]")
     for name, rel in _HOOK_EDITORS.items():
-        settings_path = root / rel
-        wired = _hook_is_wired(settings_path)
-        any_wired = any_wired or wired
+        wired, post_wired = wiring[name]
         state = "[green]wired[/green]" if wired else "[dim]not wired[/dim]"
         console.print(f"  {name}: {state}")
-        post_wired = _hook_event_is_wired(
-            settings_path, "PostToolUse", _POST_TOOL_SCRIPT_NAME
-        )
-        any_wired = any_wired or post_wired
         post_state = "[green]wired[/green]" if post_wired else "[dim]not wired[/dim]"
         console.print(f"  {name} PostToolUse: {post_state}")
         if name == "codex":
