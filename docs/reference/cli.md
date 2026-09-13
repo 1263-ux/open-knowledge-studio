@@ -28,7 +28,8 @@ parent: 参考
 | `oks team sync [--push]` | 提交共享目录、rebase 远端并可推送（mail/raw/drafts/wiki/profiles） |
 | `oks schema show <name>` | 输出协议文档的校验示例 |
 | `oks trace *` | 执行追踪（provenance） |
-| `oks mail send/inbox/show/read/count` | Agent 间消息接口；不属于 `oks recall` 结果 |
+| `oks mail send/reply/thread/inbox/sent/read/archive/count/ack/snapshot/wait/delegate` | Agent 间持久协作与交接；协议见 [Mail 协议](mail-protocol.html) |
+| `oks mail serve/setup/migrate/view` | 本机人类 Mail 工作面、库外宿主 portable binding、旧版扁平 inbox 迁移、只读快照 |
 | `oks registry list/bind/remove` | 终端注册表（agent+cwd → profile/goal） |
 | `oks lint` | 扫 wiki/ 一致性 |
 | `oks config init/show/set` | 配置 |
