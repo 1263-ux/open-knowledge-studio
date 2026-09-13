@@ -3317,6 +3317,26 @@ def _ensure_recall_scripts(root: Path, hooks_dir: Path | None = None) -> list[st
     return created
 
 
+def _stale_hook_engines(hooks_dir: Path) -> list[str]:
+    """Return installed Python hook engines that differ from bundled assets."""
+    base = _asset_source()
+    if base is None:
+        return []
+    stale: list[str] = []
+    for name in (*_HOOK_SUPPORT_FILES, *_RECALL_HOOK_SCRIPTS):
+        if not name.endswith(".py"):
+            continue
+        src, dest = base / "hooks" / name, hooks_dir / name
+        if not src.is_file() or not dest.is_file():
+            continue
+        try:
+            if src.read_bytes() != dest.read_bytes():
+                stale.append(name)
+        except OSError:
+            continue
+    return stale
+
+
 def _wire_userpromptsubmit(
     settings_path: Path, command: str, args: list[str] | None = None
 ) -> str:
@@ -3728,7 +3748,7 @@ def hook_status(
         settings_path = root / rel
         prompt_wired = _hook_is_wired(settings_path)
         post_wired = _hook_event_is_wired(
-            settings_path, "PostToolUse", _POST_TOOL_SCRIPT_NAME
+            settings_path, "PostToolUse", _POST_TOOL_SCRIPT_NAMES
         )
         wiring[name] = (prompt_wired, post_wired)
         if prompt_wired or post_wired:
