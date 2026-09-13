@@ -284,24 +284,25 @@ def mark_notification_presented(
 ) -> dict[str, Any] | None:
     """Close one notification intent once a Session actually saw the message.
 
-    The projection stays honest: presenters (``mail wait`` or the Hook) call
-    this after recording delivery, so nothing lingers as ``pending`` forever.
-    Idempotent — a second call never rewrites ``presented_at``.
+    Presenters (``mail wait`` or the Hook) call this after recording delivery
+    so the projection tracks what was actually presented.  Idempotent — a
+    second call never rewrites ``presented_at``.
     """
     path = notifications_dir(root, agent_id) / f"{safe_id(message_id)}.json"
     if not path.is_file():
         return None
-    try:
-        notification = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return None
-    if not isinstance(notification, dict) or notification.get("status") == "presented":
-        return notification if isinstance(notification, dict) else None
-    notification["status"] = "presented"
-    notification["presented_at"] = iso_now()
-    if session_id:
-        notification["presented_by_session"] = session_id
-    store._atomic_write(path, json.dumps(notification, ensure_ascii=False, indent=2) + "\n")
+    with store._file_lock(path.with_name(".notification.lock")):
+        try:
+            notification = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return None
+        if not isinstance(notification, dict) or notification.get("status") == "presented":
+            return notification if isinstance(notification, dict) else None
+        notification["status"] = "presented"
+        notification["presented_at"] = iso_now()
+        if session_id:
+            notification["presented_by_session"] = session_id
+        store._atomic_write(path, json.dumps(notification, ensure_ascii=False, indent=2) + "\n")
     return notification
 
 
