@@ -99,3 +99,18 @@ def test_all_expands_from_session_registry_without_profile_registry(tmp_path):
         delivery_reason="system",
     )
     assert set(result["recipients"]) == {"@codex", "@claude"}
+
+
+def test_notification_intent_closes_when_a_session_presents(tmp_path):
+    runtime = FileMailRuntime(tmp_path, "codex", "session-runtime")
+    message = mail.write_message(tmp_path, body="wake me", sender="claude", recipients="@codex", notify=True)
+    notification_path = tmp_path / "mail" / "notifications" / "codex" / f"{message['message_id']}.json"
+    assert json.loads(notification_path.read_text(encoding="utf-8"))["status"] == "pending"
+    assert mail.mark_notification_presented(tmp_path, "codex", message["message_id"], session_id="session-runtime")
+    presented = json.loads(notification_path.read_text(encoding="utf-8"))
+    assert presented["status"] == "presented"
+    assert presented["presented_by_session"] == "session-runtime"
+    stamped = presented["presented_at"]
+    remarked = mail.mark_notification_presented(tmp_path, "codex", message["message_id"])
+    assert remarked["presented_at"] == stamped
+    assert mail.mark_notification_presented(tmp_path, "codex", "msg_missing") is None
