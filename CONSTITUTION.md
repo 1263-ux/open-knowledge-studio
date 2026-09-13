@@ -295,7 +295,7 @@ recall, scope, and decay:
 | User Memory | `profiles/users/{id}.md` | Direct read | None | `user_id` |
 | Project Memory | `profiles/projects/{slug}.md` | Direct read | None | `project_slug` |
 | Episodic Memory | `raw/{YYYY}/{MM}/{DD}/{source}/` | Keyword + freshness | None | `source`, `date` |
-| Semantic Memory | `wiki/{domain}/{type}/{slug}.md` | 6+1-factor relevance + curve | Type-specific λ | `domain` |
+| Semantic Memory | `wiki/{domain}/{type}/{slug}.md` | Triple-Layer Recall (Node-BM25 召回 + Soul Boost 注入 + Memory Curve 衰减, A8) | Type-specific λ | `domain` |
 | Procedural Memory | `.claude/skills/{slug}/` | Keyword trigger | None | — |
 | Draft Memory | `drafts/{slug}.md` | N/A | None | N/A |
 
@@ -440,6 +440,97 @@ read-modify-write records must use their lock for the full critical section.
 
 **Do not** write wiki pages or config with bare `open(path, 'w')`.
 
+### A6: Wiki page slug and filename
+
+A wiki page's filename is its slug, and the slug is **date-prefixed and
+CJK-preserving**. This is not cosmetic — it is what makes backlinks stable,
+sorts pages by creation time on a plain `ls`, and keeps Chinese-titled pages
+from degrading to `untitled`.
+
+- **Slug** = `f"{YYYYMMDD}-{make_slug(title)}"` where `YYYYMMDD` is the page's
+  creation date. `make_slug` keeps CJK characters
+  (`[^a-z0-9\u4e00-\u9fff]+ → "-"`, truncated to 60, stripped) — Chinese
+  titles yield Chinese slugs, not the `untitled` fallback. English titles yield
+  kebab-case.
+- **Path** = `wiki/{area}/{type}/{slug}.md`. `area` is a free string (default
+  `computing`); `type` ∈ {concept, strategy, anti-pattern}.
+- **Collision** = `{slug}-{counter}.md` (counter increments until free).
+- **Backlinks** reference the slug verbatim (`relates_to`, `supersedes`,
+  `enriches`). Renaming a page without updating every backlink breaks recall —
+  use `oks wiki` commands, not manual `mv`.
+
+Reference implementation: `store.py::make_slug` and `create_wiki_page`
+(`slug = f"{date_str}-{slug}"`, `file_path = type_dir / f"{slug}.md"`).
+
+The date prefix reflects OKS's **memory**定位 (a dated event, decayed by
+`created` age), not an encyclopedia entry that evolves in place — concept
+evolution is modeled by the A4 relationship chain (supersedes/enriches), not
+by rewriting one stable filename.
+
+### A7: Mail storage layout
+
+`mail/inbox/` is **date-organized**, not flat. A busy instance accumulates
+hundreds of messages; one flat directory is unreadable by humans and slow to
+glob. The layout is derived from the slug, which `oks mail send` already stamps
+with a `YYYYMMDD` timestamp prefix.
+
+- **Inbox path** = `mail/inbox/{YYYY}/{MM}/{DD}/{slug}.md`, where the date is
+  extracted from the first 8 digits of the slug. A slug without a date prefix
+  falls back to flat `mail/inbox/{slug}.md` (legacy compatibility).
+- **Slug** = `f"{YYYYMMDD}T{HHMMSS}-{from_id}"` (stamped by `oks mail send`).
+- **Sent outbox** = `mail/sent/{agent_id}/{ts}.md` (per-agent archive, P6).
+- **Listing** (`oks mail inbox`/`count`) uses `rglob("*.md")` so date-organized
+  and legacy flat mails are both found.
+- **`oks mail migrate`** moves legacy flat mails into date subdirs; idempotent.
+
+Reference implementation: `cli.py::_mail_inbox_dir`, `mail_send`,
+`mail_inbox`, `mail_count`. The read path (`show`/`read`) resolves through
+`_mail_path`, which derives the date dir from the slug — so reader and writer
+agree by construction, never by convention.
+
+### A8: Triple-Layer Recall architecture
+
+Recall is **three decoupled layers**, not one scoring function. This split is
+a measured decision, not taste: the 50-case ablation (v0.6.1) proved that the
+"soul" factors (memory curve / goal boost / type boost / review bonus) **drop
+recall precision when re-ranking at the retrieval layer** (fusion R@1=0.805 <
+fts5 R@1=0.825) — an irrelevant page boosted high displaces an exact hit.
+So retrieval finds what is accurate, injection orders what is shown, decay
+governs long-term quality. Mixing them is a measured negative optimization.
+
+| Layer | Role | Default impl | Reference |
+|-------|------|-------------|-----------|
+| **Retrieval** (召回层) | find accurate candidates | Node-BM25: SQLite FTS5 + node-level (per `##` heading) + column weights + incremental diff | `search/fts5.py::FTS5Backend`, `recall.py::dispatch` (`search_backend`, default `fts5` in `settings/recall.yaml`) |
+| **Injection** (注入层) | order what is shown, label confidence | Soul Boost: `injection_boost` (type×1.5/0.8/0.6 + review×1.2 + generic×0.5) + goal reorder + memory-curve score from decay layer | `recall.py::_injection_boost` (L967), goal reorder in `dispatch` |
+| **Decay** (衰减层) | long-term quality, tier classification | Memory Curve: type-specific λ → `score = importance×e^(-λ×days) + 0.5×ln(1+access) + pin` → tier (hot/warm/cold/evictable) | `store.py::compute_tier` (L330), `store.py::apply_decay` (L630) |
+
+**Backends are pluggable** at the retrieval layer via
+`entry_points(group="oks_search_backend")` — `fts5` (default), `native` (6+1
+factor, backward-compat, v0.6.0-pre default), `fusion` (experiment, negative
+optimization), and connectors (embedding / code AST / third-party search).
+`native`'s 6+1 factor (token overlap / substring / topic trace / type boost /
+review bonus / memory curve / goal boost) is **not** the current retrieval
+scorer — its "soul" factors moved to the injection layer in v0.6.0, and its
+retrieval-scoring parts (token/substring/topic) were superseded by Node-BM25.
+
+**Do not** re-rank retrieval results with soul factors at the retrieval
+layer (measured negative optimization, see fusion ablation). **Do not**
+treat `native` 6+1 as the default — `settings/recall.yaml` defaults to
+`fts5`; `native` is backward-compat only.
+
+**Scale spectrum** (not an invariant yet — design direction): the same three
+layers scale from a personal mini machine (local FTS5 db + local boost + local
+cron decay) to a cluster (distributed index + multi-agent collaborative
+boost + distributed decay). See `docs/architecture/scale-spectrum.md`. The
+three layers do not become four; retrieval widens to multi-route recall
+(CF / I2I / dual-tower / sequence as new backends alongside fts5), injection
+widens to multi-agent collaborative boost — the layer count stays three.
+
+Reference implementation: `recall.py::dispatch` (retrieval entry),
+`recall.py::_injection_boost` (injection), `store.py::apply_decay` /
+`compute_tier` (decay). P6 auditable: `oks recall "<q>" --explain` exposes
+`fts5_score` + `injection_boost` + `backend` + `node` per hit.
+
 ---
 
 ## Revision history
@@ -485,3 +576,32 @@ archaeology through 20k-line diffs.
 - **2026-07-31 — A4 relationships reachable**: `promote_draft` dropped
   `relates_to` / `relationship`, so no production path could mark a page
   superseded. Promotion now carries them through.
+- **2026-08-31 — A8 added; Triple-Layer Recall is now an invariant; A2 corrected.**
+  Recall was described in prose (`docs/algorithms/recall-engine.md`) but never
+  in the constitution, and A2's memory-type table still read `6+1-factor
+  relevance + curve` — a v0.6.0-pre description that survived three minor
+  releases because nothing flagged the drift. A contributor核实 recall code
+  against A2 and found the mismatch: the default is `fts5` (Node-BM25, R@1=0.825),
+  not `native` 6+1 (R@1=0.525, backward-compat); `recall.py::dispatch` docstring
+  still said "native (default)". Both fixed. **A8 pins the three layers**
+  (retrieval Node-BM25 / injection Soul Boost / decay Memory Curve) and the
+  decoupling invariant (soul re-rank at retrieval is a measured negative
+  optimization — fusion R@1=0.805 < fts5 R@1=0.825), so future contributors
+  don't re-mix them. A2's Semantic Memory row now reads Triple-Layer Recall.
+  The scale-spectrum note is a design direction, not an invariant — three
+  layers scale, they do not multiply.
+- **2026-08-30 — A6 + A7 added; wiki naming and mail layout are now invariants.**
+  Two layouts that lived only in code are now written invariants, because a
+  layout enforced by convention erodes under manual edits and forks.
+  **A6 (wiki slug/filename)** pins the `{YYYYMMDD}-{make_slug(title)}.md`
+  format and `make_slug`'s CJK preservation — so Chinese-titled pages stay
+  Chinese (not `untitled`), backlinks are stable, and `ls` sorts by creation.
+  The date prefix reflects the memory-not-encyclopedia positioning: evolution
+  is the A4 relationship chain, not rewriting one filename.
+  **A7 (mail storage layout)** pins `mail/inbox/{YYYY}/{MM}/{DD}/{slug}.md`
+  (date derived from the slug's `YYYYMMDD` prefix), per-agent
+  `mail/sent/{agent_id}/{ts}.md`, and `rglob` listing. Introduced with
+  `oks mail migrate` (v0.6.16) so existing flat inboxes upgrade in place.
+  Both cite their reference implementation so P6 (ships match docs) stays
+  auditable: `store.py::make_slug`/`create_wiki_page` for A6,
+  `cli.py::_mail_inbox_dir`/`mail_send`/`mail_inbox`/`mail_count` for A7.

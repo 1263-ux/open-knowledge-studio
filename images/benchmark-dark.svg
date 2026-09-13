@@ -1,67 +1,74 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 580" font-family="system-ui,-apple-system,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" role="img" aria-label="OKS benchmark: 50-case ablation R@1 82.5% (fts5) vs 52.5% (native); LoCoMo 1540-case recall@1 92.0% vs OpenViking QA accuracy 82.86%; embedding 61.7% at 197× latency.">
-  <rect width="880" height="580" fill="#0d1117"/>
-  <rect x="150" y="4" width="14" height="14" rx="3" fill="#22c55e"/><text x="170" y="15" font-size="12" fill="#8b949e">OKS fts5 (Node-BM25, default)</text>
-  <rect x="330" y="4" width="14" height="14" rx="3" fill="#6e7681"/><text x="350" y="15" font-size="12" fill="#8b949e">ablated / other system</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 720" font-family="system-ui,-apple-system,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif" role="img" aria-label="OKS benchmark: 50-case ablation fts5 R@1=82.5 R@3=92.5 MRR=90.7 vs native 52.5/64.7/63.0 vs fusion 80.5/90.5/90.0; embedding 61.7% at 197×; LoCoMo 1540-case recall@1 92.0% vs OpenViking 82.86%.">
+  <rect width="880" height="720" fill="#0d1117"/>
+  <rect x="150" y="4" width="14" height="14" rx="3" fill="#22c55e"/><text x="170" y="15" font-size="12" fill="#8b949e">fts5 (Node-BM25, default)</text>
+  <rect x="330" y="4" width="14" height="14" rx="3" fill="#6e7681"/><text x="350" y="15" font-size="12" fill="#8b949e">ablated / other</text>
 
-  <text x="150" y="48" font-size="13" font-weight="600" fill="#e6edf3">Retrieval ablation — 50-case semantic-paraphrase · R@1</text>
-  <line x1="150.0" y1="62" x2="150.0" y2="215" stroke="#30363d" stroke-width="1"/>
-  <text x="150.0" y="231" font-size="10" fill="#8b949e" text-anchor="middle">0%</text>
+  <text x="150" y="48" font-size="13" font-weight="600" fill="#e6edf3">Triple-Layer ablation — 50-case · R@1 / R@3 / MRR</text>
+  <line x1="150" y1="62" x2="150" y2="215" stroke="#30363d" stroke-width="1"/>
+  <text x="150" y="231" font-size="10" fill="#8b949e" text-anchor="middle">0</text>
   <line x1="312.5" y1="62" x2="312.5" y2="215" stroke="#21262d" stroke-width="1"/>
-  <text x="312.5" y="231" font-size="10" fill="#8b949e" text-anchor="middle">25%</text>
-  <line x1="475.0" y1="62" x2="475.0" y2="215" stroke="#21262d" stroke-width="1"/>
-  <text x="475.0" y="231" font-size="10" fill="#8b949e" text-anchor="middle">50%</text>
+  <text x="312.5" y="231" font-size="10" fill="#8b949e" text-anchor="middle">.25</text>
+  <line x1="475" y1="62" x2="475" y2="215" stroke="#21262d" stroke-width="1"/>
+  <text x="475" y="231" font-size="10" fill="#8b949e" text-anchor="middle">.50</text>
   <line x1="637.5" y1="62" x2="637.5" y2="215" stroke="#21262d" stroke-width="1"/>
-  <text x="637.5" y="231" font-size="10" fill="#8b949e" text-anchor="middle">75%</text>
-  <line x1="800.0" y1="62" x2="800.0" y2="215" stroke="#21262d" stroke-width="1"/>
-  <text x="800.0" y="231" font-size="10" fill="#8b949e" text-anchor="middle">100%</text>
+  <text x="637.5" y="231" font-size="10" fill="#8b949e" text-anchor="middle">.75</text>
+  <line x1="800" y1="62" x2="800" y2="215" stroke="#21262d" stroke-width="1"/>
+  <text x="800" y="231" font-size="10" fill="#8b949e" text-anchor="middle">1.0</text>
 
-  <text x="138" y="87" font-size="12" fill="#8b949e" text-anchor="end">fts5 (Node-BM25)</text>
-  <path d="M150,80 L150,62 L809,62 Q813,62 813,66 L813,76 Q813,80 809,80 Z" fill="#22c55e"/>
-  <text x="820" y="75" font-size="11" font-weight="600" fill="#e6edf3">82.5%</text>
+  <text x="138" y="92" font-size="12" fill="#8b949e" text-anchor="end">fts5</text>
+  <rect x="160" y="80" width="529" height="11" fill="#22c55e" opacity="0.9"/><text x="695" y="89" font-size="10" fill="#e6edf3">R@1 .825</text>
+  <rect x="160" y="93" width="594" height="11" fill="#22c55e" opacity="0.6"/><text x="760" y="102" font-size="10" fill="#8b949e">R@3 .925</text>
+  <rect x="160" y="106" width="582" height="11" fill="#22c55e" opacity="0.4"/><text x="748" y="115" font-size="10" fill="#8b949e">MRR .907</text>
 
-  <text x="138" y="124" font-size="12" fill="#8b949e" text-anchor="end">fusion (+native re-rank)</text>
-  <path d="M150,117 L150,99 L790.6,99 Q794.6,99 794.6,103 L794.6,113 Q794.6,117 790.6,117 Z" fill="#6e7681"/>
-  <text x="801.6" y="112" font-size="11" fill="#8b949e">80.5%</text>
+  <text x="138" y="142" font-size="12" fill="#8b949e" text-anchor="end">fusion</text>
+  <rect x="160" y="130" width="517" height="11" fill="#6e7681" opacity="0.9"/><text x="683" y="139" font-size="10" fill="#8b949e">R@1 .805</text>
+  <rect x="160" y="143" width="581" height="11" fill="#6e7681" opacity="0.6"/><text x="747" y="152" font-size="10" fill="#8b949e">R@3 .905</text>
+  <rect x="160" y="156" width="578" height="11" fill="#6e7681" opacity="0.4"/><text x="744" y="165" font-size="10" fill="#8b949e">MRR .900</text>
 
-  <text x="138" y="161" font-size="12" fill="#8b949e" text-anchor="end">native (page-level 6+1)</text>
-  <path d="M150,154 L150,136 L471.5,136 Q475.5,136 475.5,140 L475.5,150 Q475.5,154 471.5,154 Z" fill="#6e7681"/>
-  <text x="482.5" y="149" font-size="11" fill="#8b949e">52.5%</text>
+  <text x="138" y="192" font-size="12" fill="#8b949e" text-anchor="end">native</text>
+  <rect x="160" y="180" width="337" height="11" fill="#6e7681" opacity="0.9"/><text x="503" y="189" font-size="10" fill="#8b949e">R@1 .525</text>
+  <rect x="160" y="193" width="415" height="11" fill="#6e7681" opacity="0.6"/><text x="581" y="202" font-size="10" fill="#8b949e">R@3 .647</text>
+  <rect x="160" y="206" width="404" height="11" fill="#6e7681" opacity="0.4"/><text x="570" y="215" font-size="10" fill="#8b949e">MRR .630</text>
 
-  <text x="150" y="267" font-size="13" font-weight="600" fill="#e6edf3">LoCoMo long-conversation — 1540-case recall vs OpenViking QA accuracy</text>
-  <line x1="150.0" y1="281" x2="150.0" y2="395" stroke="#30363d" stroke-width="1"/>
-  <text x="150.0" y="411" font-size="10" fill="#8b949e" text-anchor="middle">0%</text>
-  <line x1="312.5" y1="281" x2="312.5" y2="395" stroke="#21262d" stroke-width="1"/>
-  <text x="312.5" y="411" font-size="10" fill="#8b949e" text-anchor="middle">25%</text>
-  <line x1="475.0" y1="281" x2="475.0" y2="395" stroke="#21262d" stroke-width="1"/>
-  <text x="475.0" y="411" font-size="10" fill="#8b949e" text-anchor="middle">50%</text>
-  <line x1="637.5" y1="281" x2="637.5" y2="395" stroke="#21262d" stroke-width="1"/>
-  <text x="637.5" y="411" font-size="10" fill="#8b949e" text-anchor="middle">75%</text>
-  <line x1="800.0" y1="281" x2="800.0" y2="395" stroke="#21262d" stroke-width="1"/>
-  <text x="800.0" y="411" font-size="10" fill="#8b949e" text-anchor="middle">100%</text>
+  <text x="150" y="267" font-size="13" font-weight="600" fill="#e6edf3">Embedding vs literal — semantic recall · R@1</text>
+  <line x1="150" y1="281" x2="150" y2="375" stroke="#30363d" stroke-width="1"/>
+  <text x="150" y="391" font-size="10" fill="#8b949e" text-anchor="middle">0</text>
+  <line x1="475" y1="281" x2="475" y2="375" stroke="#21262d" stroke-width="1"/>
+  <text x="475" y="391" font-size="10" fill="#8b949e" text-anchor="middle">.50</text>
+  <line x1="800" y1="281" x2="800" y2="375" stroke="#21262d" stroke-width="1"/>
+  <text x="800" y="391" font-size="10" fill="#8b949e" text-anchor="middle">1.0</text>
+  <text x="138" y="306" font-size="12" fill="#8b949e" text-anchor="end">fts5</text>
+  <rect x="160" y="294" width="529" height="16" rx="3" fill="#22c55e"/><text x="695" y="306" font-size="11" font-weight="600" fill="#e6edf3">.825 · 93ms</text>
+  <text x="138" y="343" font-size="12" fill="#8b949e" text-anchor="end">embedding</text>
+  <rect x="160" y="331" width="396" height="16" rx="3" fill="#6e7681"/><text x="562" y="343" font-size="11" fill="#8b949e">.617 · 18304ms (197×)</text>
 
-  <text x="138" y="306" font-size="12" fill="#8b949e" text-anchor="end">OKS recall@1</text>
-  <path d="M150,299 L150,281 L891.2,281 Q895.2,281 895.2,285 L895.2,295 Q895.2,299 891.2,299 Z" fill="#22c55e"/>
-  <text x="820" y="294" font-size="11" font-weight="600" fill="#e6edf3">92.0% · 31ms</text>
+  <text x="150" y="427" font-size="13" font-weight="600" fill="#e6edf3">LoCoMo long-conversation — 1540-case · OKS recall@1 vs OpenViking QA accuracy</text>
+  <line x1="150" y1="441" x2="150" y2="535" stroke="#30363d" stroke-width="1"/>
+  <text x="150" y="551" font-size="10" fill="#8b949e" text-anchor="middle">0</text>
+  <line x1="475" y1="441" x2="475" y2="535" stroke="#21262d" stroke-width="1"/>
+  <text x="475" y="551" font-size="10" fill="#8b949e" text-anchor="middle">.50</text>
+  <line x1="800" y1="441" x2="800" y2="535" stroke="#21262d" stroke-width="1"/>
+  <text x="800" y="551" font-size="10" fill="#8b949e" text-anchor="middle">1.0</text>
+  <text x="138" y="466" font-size="12" fill="#8b949e" text-anchor="end">OKS recall@1</text>
+  <rect x="160" y="454" width="590" height="16" rx="3" fill="#22c55e"/><text x="756" y="466" font-size="11" font-weight="600" fill="#e6edf3">.920 · 31ms</text>
+  <text x="138" y="503" font-size="12" fill="#8b949e" text-anchor="end">OpenViking QA</text>
+  <rect x="160" y="491" width="531" height="16" rx="3" fill="#2a78d6"/><text x="697" y="503" font-size="11" fill="#8b949e">.8286</text>
+  <text x="150" y="570" font-size="10" fill="#8b949e">Note: OKS = recall hit (upper-bounds QA); OpenViking = full QA (recall + LLM answer + judge). Not identical metrics.</text>
 
-  <text x="138" y="343" font-size="12" fill="#8b949e" text-anchor="end">OpenViking QA acc (best)</text>
-  <path d="M150,336 L150,318 L805.2,318 Q809.2,318 809.2,322 L809.2,332 Q809.2,336 805.2,336 Z" fill="#2a78d6"/>
-  <text x="820" y="331" font-size="11" fill="#8b949e">82.86%</text>
-
-  <text x="150" y="368" font-size="10" fill="#8b949e">Note: OKS = recall hit (recall upper-bounds QA); OpenViking = full QA (recall + LLM answer + judge). Not identical metrics.</text>
-
-  <text x="150" y="448" font-size="13" font-weight="600" fill="#e6edf3">Embedding vs literal — 50-case · R@1 and p50 latency</text>
-  <line x1="150.0" y1="462" x2="150.0" y2="545" stroke="#30363d" stroke-width="1"/>
-  <text x="150.0" y="561" font-size="10" fill="#8b949e" text-anchor="middle">0%</text>
-  <line x1="475.0" y1="462" x2="475.0" y2="545" stroke="#21262d" stroke-width="1"/>
-  <text x="475.0" y="561" font-size="10" fill="#8b949e" text-anchor="middle">50%</text>
-  <line x1="800.0" y1="462" x2="800.0" y2="545" stroke="#21262d" stroke-width="1"/>
-  <text x="800.0" y="561" font-size="10" fill="#8b949e" text-anchor="middle">100%</text>
-
-  <text x="138" y="487" font-size="12" fill="#8b949e" text-anchor="end">fts5 (literal)</text>
-  <path d="M150,480 L150,462 L809,462 Q813,462 813,466 L813,476 Q813,480 809,480 Z" fill="#22c55e"/>
-  <text x="820" y="475" font-size="11" font-weight="600" fill="#e6edf3">82.5% · 93ms</text>
-
-  <text x="138" y="524" font-size="12" fill="#8b949e" text-anchor="end">embedding (MiniLM)</text>
-  <path d="M150,517 L150,499 L626.8,499 Q630.8,499 630.8,503 L630.8,513 Q630.8,517 626.8,517 Z" fill="#6e7681"/>
-  <text x="637.8" y="512" font-size="11" fill="#8b949e">61.7% · 18304ms (197×)</text>
+  <text x="150" y="608" font-size="13" font-weight="600" fill="#e6edf3">Layer-by-layer ablation — remove one layer at a time · R@1 / MRR</text>
+  <line x1="150" y1="622" x2="150" y2="700" stroke="#30363d" stroke-width="1"/>
+  <text x="150" y="716" font-size="10" fill="#8b949e" text-anchor="middle">0</text>
+  <line x1="475" y1="622" x2="475" y2="700" stroke="#21262d" stroke-width="1"/>
+  <text x="475" y="716" font-size="10" fill="#8b949e" text-anchor="middle">.50</text>
+  <line x1="800" y1="622" x2="800" y2="700" stroke="#21262d" stroke-width="1"/>
+  <text x="800" y="716" font-size="10" fill="#8b949e" text-anchor="middle">1.0</text>
+  <text x="138" y="642" font-size="11" fill="#8b949e" text-anchor="end">full Triple-Layer</text>
+  <rect x="160" y="631" width="529" height="9" fill="#22c55e" opacity="0.9"/><text x="695" y="639" font-size="9" fill="#e6edf3">R@1 .825</text>
+  <rect x="160" y="641" width="582" height="9" fill="#22c55e" opacity="0.5"/><text x="748" y="649" font-size="9" fill="#8b949e">MRR .907</text>
+  <text x="138" y="667" font-size="11" fill="#8b949e" text-anchor="end">−Node-BM25</text>
+  <rect x="160" y="656" width="337" height="9" fill="#6e7681" opacity="0.9"/><text x="503" y="664" font-size="9" fill="#8b949e">R@1 .525 (−36%)</text>
+  <rect x="160" y="666" width="404" height="9" fill="#6e7681" opacity="0.5"/><text x="570" y="674" font-size="9" fill="#8b949e">MRR .630</text>
+  <text x="138" y="692" font-size="11" fill="#8b949e" text-anchor="end">−Soul Boost (fusion)</text>
+  <rect x="160" y="681" width="517" height="9" fill="#6e7681" opacity="0.9"/><text x="683" y="689" font-size="9" fill="#8b949e">R@1 .805</text>
+  <rect x="160" y="691" width="578" height="9" fill="#6e7681" opacity="0.5"/><text x="744" y="699" font-size="9" fill="#8b949e">MRR .900</text>
 </svg>
