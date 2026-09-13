@@ -129,6 +129,12 @@ class FileMailRuntime:
                         agent_id=self.agent_id,
                         machine_id=self.machine_id,
                     )
+                    mail.mark_notification_presented(
+                        self.root,
+                        self.agent_id,
+                        str(message["meta"].get("message_id", "")),
+                        session_id=self.session_id,
+                    )
                     item["receipt"] = {
                         "status": receipt.get("status", "presented"),
                         "session_id": receipt.get("session_id", self.session_id),
