@@ -302,7 +302,11 @@ def _load_unread_mail(
                 if not message_id or mail_domain.has_delivery_receipt(kb_root, sid, message_id):
                     continue
                 mail_domain.record_delivery(kb_root, sid, message, agent_id=agent_id)
-                mail_domain.mark_notification_presented(kb_root, agent_id, message_id, session_id=sid)
+                mark_presented = getattr(mail_domain, "mark_notification_presented", None)
+                if mark_presented is not None:
+                    # Version skew: an older installed package may not have
+                    # the notification lifecycle yet — degrade, never abort.
+                    mark_presented(kb_root, agent_id, message_id, session_id=sid)
                 meta = message["meta"]
                 mails.append({
                     "slug": message_id,
