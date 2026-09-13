@@ -3336,11 +3336,16 @@ def _ensure_recall_scripts(root: Path, hooks_dir: Path | None = None) -> list[st
         if dest.exists():
             try:
                 dest_text = dest.read_text(encoding="utf-8")
-                if name.endswith(".sh"):
-                    if baked in dest_text:
+                if src_dir is not None and (src_dir / name).is_file():
+                    bundled = (src_dir / name).read_text(encoding="utf-8")
+                    expected = bundled
+                    if name.endswith(".sh"):
+                        # A matching bake must not shield an outdated wrapper
+                        # body from an upstream fix: compare against the
+                        # bundled template re-baked for this interpreter.
+                        expected = bundled.replace('"${OKS_PYTHON:-python3}"', baked)
+                    if dest_text == expected:
                         continue
-                elif src_dir is not None and (src_dir / name).read_text(encoding="utf-8") == dest_text:
-                    continue
             except OSError:
                 pass
             # Outdated wrapper body or stale interpreter bake — re-copy + re-bake.
