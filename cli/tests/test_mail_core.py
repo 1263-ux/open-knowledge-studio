@@ -83,3 +83,19 @@ def test_legacy_date_organized_inbox_remains_readable(tmp_path):
     messages = list(mail.iter_messages(tmp_path, "reviewer"))
     assert len(messages) == 1
     assert messages[0]["title"] == "Legacy"
+
+
+def test_all_expands_from_session_registry_without_profile_registry(tmp_path):
+    """A missing profiles/agents/registry.jsonl must not disable @all: live
+    sessions in mail/sessions/ are routable identities on their own."""
+    mail.register_session(tmp_path, "codex-s1", "codex")
+    mail.register_session(tmp_path, "claude-s1", "claude")
+    assert not (tmp_path / "profiles" / "agents" / "registry.jsonl").exists()
+    result = mail.write_message(
+        tmp_path,
+        body="Broadcast",
+        sender="human",
+        recipients="@all",
+        delivery_reason="system",
+    )
+    assert set(result["recipients"]) == {"@codex", "@claude"}
