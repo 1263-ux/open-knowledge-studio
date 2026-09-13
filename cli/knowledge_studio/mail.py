@@ -26,6 +26,7 @@ RECEIPT_EVENT_VERSION = "mail.delivery-receipt-event.v1"
 SESSION_VERSION = "mail.session.v1"
 DEFAULT_REASON = "direct"
 REASONS = {"direct", "mention", "conflict", "review_request", "thread_reply", "system", "handoff"}
+RECORD_KINDS = {"message", "handoff", "result", "blocked", "note", "knowledge_ref"}
 SENDER_KINDS = {"human", "agent", "unknown"}
 EVIDENCE_REF_TYPES = {"trace", "run", "capability", "bundle", "candidate", "commit"}
 
@@ -72,6 +73,14 @@ def normalise_sender_kind(value: str, sender: str = "") -> str:
         return "human" if _normalise_agent(sender) == "@human" else "agent"
     if candidate not in SENDER_KINDS:
         raise ValueError("sender_kind must be one of: human, agent, unknown")
+    return candidate
+
+
+def normalise_record_kind(value: str) -> str:
+    """Return a small fact classification, independent of delivery reason."""
+    candidate = str(value or "").strip().lower() or "message"
+    if candidate not in RECORD_KINDS:
+        raise ValueError("record_kind must be one of: message, handoff, result, blocked, note, knowledge_ref")
     return candidate
 
 
@@ -284,25 +293,24 @@ def mark_notification_presented(
 ) -> dict[str, Any] | None:
     """Close one notification intent once a Session actually saw the message.
 
-    Presenters (``mail wait`` or the Hook) call this after recording delivery
-    so the projection tracks what was actually presented.  Idempotent — a
-    second call never rewrites ``presented_at``.
+    The projection stays honest: presenters (``mail wait`` or the Hook) call
+    this after recording delivery, so nothing lingers as ``pending`` forever.
+    Idempotent — a second call never rewrites ``presented_at``.
     """
     path = notifications_dir(root, agent_id) / f"{safe_id(message_id)}.json"
     if not path.is_file():
         return None
-    with store._file_lock(path.with_name(".notification.lock")):
-        try:
-            notification = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            return None
-        if not isinstance(notification, dict) or notification.get("status") == "presented":
-            return notification if isinstance(notification, dict) else None
-        notification["status"] = "presented"
-        notification["presented_at"] = iso_now()
-        if session_id:
-            notification["presented_by_session"] = session_id
-        store._atomic_write(path, json.dumps(notification, ensure_ascii=False, indent=2) + "\n")
+    try:
+        notification = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(notification, dict) or notification.get("status") == "presented":
+        return notification if isinstance(notification, dict) else None
+    notification["status"] = "presented"
+    notification["presented_at"] = iso_now()
+    if session_id:
+        notification["presented_by_session"] = session_id
+    store._atomic_write(path, json.dumps(notification, ensure_ascii=False, indent=2) + "\n")
     return notification
 
 
@@ -357,6 +365,9 @@ def parse_message(path: Path) -> dict[str, Any] | None:
     meta.setdefault("sender_kind", "unknown")
     meta.setdefault("read", "false")
     meta.setdefault("delivery_reason", "direct")
+    # Legacy messages did not distinguish what a record is from why it was
+    # delivered.  Treat them as ordinary messages without rewriting history.
+    meta.setdefault("record_kind", "message")
     return {"path": path, "meta": meta, "title": title or "(no title)", "body": "\n".join(body_lines).strip()}
 
 
@@ -426,6 +437,7 @@ def write_message(
     origin_session_id: str = "",
     origin_machine_id: str = "",
     delivery_reason: str = DEFAULT_REASON,
+    record_kind: str = "message",
     notify: bool = False,
     session_policy: str = "next_prompt",
     evidence_refs: Any = None,
@@ -436,6 +448,7 @@ def write_message(
     message_id = _message_id()
     thread_id = thread_id.strip() or _thread_id()
     reason = delivery_reason if delivery_reason in REASONS else DEFAULT_REASON
+    fact_kind = normalise_record_kind(record_kind)
     refs = normalise_evidence_refs(evidence_refs)
     now = iso_now()
     meta = {
@@ -450,6 +463,7 @@ def write_message(
         "sender_kind": sender_kind,
         "to": resolved,
         "delivery_reason": reason,
+        "record_kind": fact_kind,
         "timestamp": now,
         "type": kind,
         "priority": priority,
@@ -519,6 +533,7 @@ def delegate_message(
         origin_session_id=origin_session_id,
         origin_machine_id=origin_machine_id,
         evidence_refs=evidence_refs,
+        record_kind="handoff",
         delivery_reason="handoff",
         notify=notify,
         session_policy="notify" if notify else "next_prompt",
@@ -539,9 +554,7 @@ def _iter_legacy(root: Path) -> Iterable[dict[str, Any]]:
     directory = root / "mail" / "inbox"
     if not directory.is_dir():
         return
-    # Legacy instances may already be date-organized under inbox/YYYY/MM/DD.
-    # Keep the compatibility reader recursive so hooks and CLI see those mails.
-    for path in sorted(directory.rglob("*.md"), key=lambda p: p.stat().st_mtime if p.exists() else 0, reverse=True):
+    for path in sorted(directory.glob("*.md"), key=lambda p: p.stat().st_mtime if p.exists() else 0, reverse=True):
         message = parse_message(path)
         if message:
             yield message
@@ -581,6 +594,10 @@ def iter_messages(root: Path, agent_id: str = "") -> Iterable[dict[str, Any]]:
         if not wanted or wanted in message["meta"].get("to", []) or "@all" in message["meta"].get("to", []) or sender == wanted:
             if wanted and sender == wanted:
                 message["self"] = True
+            if wanted:
+                state_path = recipient_state_path(root, wanted, message_id)
+                if state_path.is_file():
+                    message["state"] = load_state(root, wanted, message_id)
             yield message
 
 
@@ -773,6 +790,7 @@ def snapshot_data(root: Path, agent_id: str, *, max_threads: int = 100, max_mess
                 "origin_machine_id": str(meta.get("origin_machine_id", "unknown") or "unknown"),
                 "evidence_refs": normalise_evidence_refs(meta.get("evidence_refs", [])),
                 "delivery_reason": str(meta.get("delivery_reason", DEFAULT_REASON)),
+                "record_kind": str(meta.get("record_kind", "message")),
                 "read_at": state.get("read_at"),
                 "archived_at": state.get("archived_at"),
                 "thread_state": str(state.get("thread_state", "open")),
