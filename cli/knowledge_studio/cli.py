@@ -2293,9 +2293,31 @@ def team_init(
         "  2. Commit and share this folder through your normal Git workflow\n"
         "  3. Each member clones it, installs OKS skills, and binds their profile with:\n"
         "     oks registry bind --profile <user-id> --goals team\n"
+        "     Run `oks team sync --push` when you want to exchange team files.\n"
         "  4. Use /query and the knowledge-to-word skill against the shared Wiki"
     )
 
+
+
+@team_app.command("sync")
+def team_sync_command(
+    path: Optional[str] = typer.Option(None, "--path", help="Knowledge base root"),
+    push: bool = typer.Option(False, "--push/--no-push", help="Push the committed team files to origin"),
+    message: str = typer.Option("同步 OKS 团队资料", "--message", help="Commit message for shared files"),
+) -> None:
+    """One-step team transport: commit shared files, rebase, optionally push."""
+    from knowledge_studio.team_sync import TeamSyncError, sync
+
+    try:
+        result = sync(_instance_root(path), push=push, message=message)
+    except TeamSyncError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(2)
+    actions = " → ".join(result.get("actions", [])) or "无变更"
+    remote = "已配置 origin" if result.get("remote") else "未配置 origin"
+    console.print(f"[green]团队同步完成:[/green] {actions} · {remote}")
+    if result.get("ignored_changes"):
+        console.print(f"[yellow]有 {result['ignored_changes']} 个非团队目录变更未纳入同步。[/yellow]")
 
 # ── Optional editor hooks (opt-in auto-recall) ───────────────────
 
