@@ -625,7 +625,12 @@ def test_file_runtime_wait_and_notify_fallback(tmp_path):
     assert runtime.wait(timeout=0)["status"] == "timeout"
     other_session = FileMailRuntime(tmp_path, "codex", "session-other")
     assert other_session.wait(timeout=0)["messages"][0]["message_id"] == message["message_id"]
-    assert (tmp_path / "mail" / "notifications" / "codex" / f"{message['message_id']}.json").is_file()
+    notification_path = tmp_path / "mail" / "notifications" / "codex" / f"{message['message_id']}.json"
+    assert notification_path.is_file()
+    presented = json.loads(notification_path.read_text(encoding="utf-8"))
+    assert presented["status"] == "presented"
+    assert presented["presented_by_session"] == "session-runtime"
+    assert mail.mark_notification_presented(tmp_path, "codex", message["message_id"])["status"] == "presented"
     assert result["messages"][0]["receipt"]["status"] == "presented"
     assert runtime.notify(message["message_id"])["wake_supported"] is False
 
