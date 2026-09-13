@@ -121,21 +121,20 @@ def normalise_evidence_refs(value: Any) -> list[dict[str, str]]:
 
 
 def _registry_agents(root: Path) -> list[str]:
-    path = root / "profiles" / "agents" / "registry.jsonl"
-    if not path.is_file():
-        return []
     agents: list[str] = []
-    try:
-        for line in path.read_text(encoding="utf-8").splitlines():
-            try:
-                record = json.loads(line)
-            except (TypeError, json.JSONDecodeError):
-                continue
-            agent = str(record.get("agent_id", "") or "").strip()
-            if agent and _normalise_agent(agent) not in agents:
-                agents.append(_normalise_agent(agent))
-    except OSError:
-        pass
+    path = root / "profiles" / "agents" / "registry.jsonl"
+    if path.is_file():
+        try:
+            for line in path.read_text(encoding="utf-8").splitlines():
+                try:
+                    record = json.loads(line)
+                except (TypeError, json.JSONDecodeError):
+                    continue
+                agent = str(record.get("agent_id", "") or "").strip()
+                if agent and _normalise_agent(agent) not in agents:
+                    agents.append(_normalise_agent(agent))
+        except OSError:
+            pass
     # A live runtime session is also a routable Agent identity.  This keeps
     # @all useful for hosts that do not maintain a separate profile registry.
     session_root = sessions_dir(root)
