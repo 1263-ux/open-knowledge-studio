@@ -1927,7 +1927,7 @@ _SHARED_ASSETS = ("templates", "_meta", "settings", "profiles")
 # components under assets/. Supporting another agent is one line here.
 _AGENT_TARGETS = {
     ".claude": {"config": "claude", "skills": True, "hooks": True, "rules": True},
-    ".qoder": {"config": "qoder", "skills": True, "hooks": True, "rules": True},
+    ".qoder": {"config": "qoder", "skills": True, "hooks": False, "rules": True},  # plan A (qoder-cli): .qoder/hooks 是死重量 — settings.json 指 .claude/hooks, 铺了无引用 (P8)
     ".pi": {"config": "pi", "skills": False, "hooks": False, "rules": False},
     ".codex": {"config": "codex", "skills": False, "hooks": True, "rules": False},
     ".agents": {"config": None, "skills": True, "hooks": False, "rules": False},
@@ -1954,6 +1954,34 @@ def _materialize_assets(root: Path, base: Path, overwrite: bool) -> list[str]:
     """Assemble instance directories from the single-source asset tree."""
     import shutil
 
+    # Editor config files carry the live hook wiring that `oks hook install`
+    # writes. Re-copying the pristine asset over them silently un-wires
+    # UserPromptSubmit and reverts migrated absolute paths, so an upgrade must
+    # leave an existing one alone; a fresh init still gets it.
+    wiring_state = {root / rel for rel in _HOOK_EDITORS.values()}
+
+    # The interpreter baked into a wrapper's OKS_PYTHON fallback is also live
+    # install state, written by `oks hook install`. Copying the pristine asset
+    # resets it to `python3`, which cannot import knowledge_studio on a
+    # pipx/venv install — so an upgrade would refresh the engines and disable
+    # the hooks in the same breath. Snapshot each bake and restore it after.
+    default_bake = '"${OKS_PYTHON:-python3}"'
+    preserved_bakes: dict[Path, str] = {}
+    for dest_name, spec in _AGENT_TARGETS.items():
+        if not spec["hooks"]:
+            continue
+        for name in _RECALL_HOOK_SCRIPTS:
+            if not name.endswith(".sh"):
+                continue
+            wrapper = root / dest_name / "hooks" / name
+            try:
+                body = wrapper.read_text(encoding="utf-8")
+            except OSError:
+                continue
+            found = re.search(r"\$\{OKS_PYTHON:-([^}]+)\}", body)
+            if found and found.group(1) != "python3":
+                preserved_bakes[wrapper] = f'"${{OKS_PYTHON:-{found.group(1)}}}"'
+
     def copy_into(src: Path, dest: Path) -> bool:
         """Merge per file: never clobber what the user changed unless upgrading.
 
@@ -1966,7 +1994,7 @@ def _materialize_assets(root: Path, base: Path, overwrite: bool) -> list[str]:
             if item.is_dir():
                 target.mkdir(parents=True, exist_ok=True)
                 continue
-            if target.exists() and not overwrite:
+            if target.exists() and (not overwrite or target in wiring_state):
                 continue
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(item, target)
@@ -1992,6 +2020,13 @@ def _materialize_assets(root: Path, base: Path, overwrite: bool) -> list[str]:
                 wrote |= copy_into(src, dest / component)
         if wrote:
             done.append(dest_name)
+    for wrapper, bake in preserved_bakes.items():
+        try:
+            body = wrapper.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        if default_bake in body:
+            wrapper.write_text(body.replace(default_bake, bake), encoding="utf-8")
     _bake_codex_lifecycle_hooks(root)
     return done
 
@@ -2420,6 +2455,69 @@ def _instance_root(path: str | None) -> Path:
     return get_kb_root()
 
 
+def _mail_agent_id(explicit: str = "") -> str:
+    """Sender identity: --from > OKS_AGENT_ID > cwd basename.
+
+    P7/P9: no fallback to "human". "human" is the review gate in the OKS
+    pipeline, so an unset environment must not silently sign mail as the
+    highest-trust identity. The chain matches assets/hooks/*.py and
+    docs/reference/cli.md so one contract has one implementation (P8).
+    """
+    import os as _os
+    from pathlib import Path as _Path
+
+    for candidate in (explicit, _os.environ.get("OKS_AGENT_ID", ""), _Path.cwd().name):
+        agent_id = candidate.strip()
+        if not agent_id:
+            continue
+        # from_id is interpolated into mail/sent/{from_id}/ and into the inbox
+        # slug, so it must be one safe path component.
+        if agent_id in {".", ".."} or any(c in agent_id for c in '/\\:\0\n\r'):
+            console.print(f"[red]Invalid agent id:[/red] {agent_id!r}")
+            raise typer.Exit(1)
+        return agent_id
+    console.print(
+        "[red]Cannot resolve sender identity.[/red] "
+        "Pass --from, or set OKS_AGENT_ID."
+    )
+    raise typer.Exit(1)
+
+
+def _mail_inbox_dir(root: Path, slug: str) -> Path:
+    """Return the inbox dir for a mail slug, date-organized when the slug
+    starts with ``YYYYMMDD`` (the ``oks mail send`` timestamp format).
+
+    Date subdirs keep ``mail/inbox/`` from becoming one flat directory with
+    hundreds of files. ``inbox``/``count`` use ``rglob`` so legacy flat mails
+    (pre-date-organization) are still found.
+    """
+    if len(slug) >= 8 and slug[:8].isdigit():
+        return root / "mail" / "inbox" / slug[:4] / slug[4:6] / slug[6:8]
+    return root / "mail" / "inbox"
+
+
+def _mail_path(root: Path, id: str) -> Path:
+    """Resolve an inbox mail path, rejecting ids that escape mail/inbox/."""
+    slug = id.strip()
+    if not slug or slug in {".", ".."} or any(c in slug for c in '/\\\0\n\r'):
+        console.print(f"[red]Invalid mail id:[/red] {id!r}")
+        raise typer.Exit(1)
+    return _mail_inbox_dir(root, slug) / f"{slug}.md"
+
+
+def _mail_field(name: str, value: str) -> str:
+    """Reject line breaks in values written into the mail frontmatter.
+
+    Frontmatter is trust-bearing (from/read/priority). A newline here would let
+    a sender inject extra keys, e.g. forge `from:` or set `read: true` to hide
+    the mail from `inbox`/`count`.
+    """
+    if any(c in value for c in "\n\r\0"):
+        console.print(f"[red]Invalid {name}:[/red] line breaks are not allowed")
+        raise typer.Exit(1)
+    return value
+
+
 @mail_app.command("send")
 def mail_send(
     body: str = typer.Option(..., "--body", "-b", help="Mail body text"),
@@ -2427,16 +2525,19 @@ def mail_send(
     type: str = typer.Option("message", "--type", help="message | conflict | handoff"),
     title: str = typer.Option("", "--title", "-t", help="Mail title"),
     priority: str = typer.Option("normal", "--priority", help="normal | urgent"),
+    from_: str = typer.Option("", "--from", help="Sender id (default: OKS_AGENT_ID, else cwd basename)"),
 ) -> None:
     """Send a mail to inbox/ (Agent-to-agent communication)."""
     from datetime import datetime
-    import os as _os
     root = _instance_root(None)
     inbox = root / "mail" / "inbox"
     inbox.mkdir(parents=True, exist_ok=True)
     now = datetime.now()
     ts = now.strftime("%Y%m%dT%H%M%S")
-    from_id = _os.environ.get("OKS_AGENT_ID", "human")
+    from_id = _mail_agent_id(from_)
+    to = _mail_field("--to", to)
+    type = _mail_field("--type", type)
+    priority = _mail_field("--priority", priority)
     to_field = to if to.startswith("@") else f"@{to}"
     title_line = title or "(no title)"
     content = (
@@ -2457,8 +2558,11 @@ def mail_send(
     # 之前只写 inbox, sent/ 从未写入 = P6 违规 (CONSTITUTION 写的路径实现不存在).
     # v0.6.11: 补 sent/ 写入 + 用 _atomic_write (P2/A5 原子写, 不再裸 write_text).
     # inbox 是被 inbox/count/read 并发读的一侧, 必须与 sent/ 同强度持久化.
+    # v0.6.16: inbox 按日期分目录 (inbox/{YYYY}/{MM}/{DD}/), 避免 flat 堆积.
     from .store import _atomic_write
-    _atomic_write(inbox / f"{slug}.md", content)
+    inbox_dir = _mail_inbox_dir(root, slug)
+    inbox_dir.mkdir(parents=True, exist_ok=True)
+    _atomic_write(inbox_dir / f"{slug}.md", content)
     sent_dir = root / "mail" / "sent" / from_id
     sent_dir.mkdir(parents=True, exist_ok=True)
     _atomic_write(sent_dir / f"{ts}.md", content)
@@ -2474,7 +2578,7 @@ def mail_inbox() -> None:
         console.print("[dim]No mail inbox.[/dim]")
         return
     unread = []
-    for f in sorted(inbox.glob("*.md")):
+    for f in sorted(inbox.rglob("*.md")):
         try:
             text = f.read_text(encoding="utf-8")
             parts = text.split("---")
@@ -2495,13 +2599,28 @@ def mail_inbox() -> None:
         console.print(f"  - [cyan]{slug}[/cyan]  {title}")
 
 
+@mail_app.command("show")
+def mail_show(
+    id: str = typer.Argument(..., help="Mail slug (timestamp-from)"),
+) -> None:
+    """Print a mail's full content. Does not change its read state."""
+    root = _instance_root(None)
+    f = _mail_path(root, id)
+    if not f.exists():
+        console.print(f"[red]Mail not found:[/red] {id}")
+        raise typer.Exit(1)
+    # Print verbatim: frontmatter carries from/to/type/priority, and any
+    # reformatting here would be a second mail parser to keep in sync (P8).
+    print(f.read_text(encoding="utf-8"), end="")
+
+
 @mail_app.command("read")
 def mail_read(
     id: str = typer.Argument(..., help="Mail slug (timestamp-from)"),
 ) -> None:
-    """Mark a mail as read."""
+    """Mark a mail as read (does not print the body; use `oks mail show`)."""
     root = _instance_root(None)
-    f = root / "mail" / "inbox" / f"{id}.md"
+    f = _mail_path(root, id)
     if not f.exists():
         console.print(f"[red]Mail not found:[/red] {id}")
         raise typer.Exit(1)
@@ -2540,7 +2659,7 @@ def mail_count() -> None:
         print("0")
         return
     n = 0
-    for f in inbox.glob("*.md"):
+    for f in inbox.rglob("*.md"):
         try:
             text = f.read_text(encoding="utf-8")
             parts = text.split("---")
@@ -2549,6 +2668,43 @@ def mail_count() -> None:
         except Exception:
             continue
     print(n)
+
+
+@mail_app.command("migrate")
+def mail_migrate() -> None:
+    """Migrate legacy flat inbox mails into date-organized subdirs.
+
+    v0.6.16 organizes ``mail/inbox/`` by date (``{YYYY}/{MM}/{DD}/{slug}.md``)
+    so a busy instance does not accumulate one flat directory of hundreds of
+    files. Existing instances created before v0.6.16 have flat mails at
+    ``mail/inbox/{slug}.md``; this command moves them into date subdirs based
+    on the ``YYYYMMDD`` prefix that ``oks mail send`` already stamps. Idempotent
+    — mails already in a date subdir are left untouched.
+    """
+    root = _instance_root(None)
+    inbox = root / "mail" / "inbox"
+    if not inbox.is_dir():
+        console.print("[dim]No mail inbox.[/dim]")
+        return
+    moved = 0
+    # Only top-level *.md are legacy flat mails; date-organized ones live in
+    # subdirs and are skipped by glob("*.md").
+    for f in sorted(inbox.glob("*.md")):
+        slug = f.stem
+        dest_dir = _mail_inbox_dir(root, slug)
+        if dest_dir == inbox:
+            continue  # slug has no date prefix — leave flat (still readable)
+        dest = dest_dir / f.name
+        if dest == f:
+            continue
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(f.read_bytes())
+        f.unlink()
+        moved += 1
+    if moved:
+        console.print(f"[green]Migrated[/green] {moved} mail(s) into date subdirs.")
+    else:
+        console.print("[dim]No flat mails to migrate.[/dim]")
 
 
 @registry_app.command("list")
@@ -2694,9 +2850,10 @@ def _ensure_recall_scripts(root: Path, hooks_dir: Path | None = None) -> list[st
     """Copy/refresh the recall hook scripts into an agent's hooks directory.
 
     The .sh wrapper gets the current interpreter baked into its OKS_PYTHON
-    fallback. If an existing .sh lacks the current bake (fresh copy still on
-    `python3`, or baked against a stale interpreter), it is re-copied from
-    the asset source and re-baked. The .py engine is only copied if missing.
+    fallback, and is re-copied whenever it differs from the bundled asset —
+    that covers both a stale interpreter bake and an outdated wrapper body, so
+    an upstream wrapper fix reaches instances created before it. The .py engine
+    is only copied if missing; `oks init --upgrade` refreshes those.
     """
     import shutil
     import stat
@@ -2729,11 +2886,20 @@ def _ensure_recall_scripts(root: Path, hooks_dir: Path | None = None) -> list[st
             if not name.endswith(".sh"):
                 continue
             try:
-                if baked in dest.read_text(encoding="utf-8"):
+                current = dest.read_text(encoding="utf-8")
+                if src_dir is not None and (src_dir / name).is_file():
+                    expected = (
+                        (src_dir / name)
+                        .read_text(encoding="utf-8")
+                        .replace('"${OKS_PYTHON:-python3}"', baked)
+                    )
+                    if current == expected:
+                        continue
+                elif baked in current:
                     continue
             except OSError:
                 pass
-            # Stale interpreter bake — fall through to re-copy + re-bake.
+            # Outdated wrapper body or stale interpreter bake — re-copy + re-bake.
         if src_dir is None or not (src_dir / name).is_file():
             raise FileNotFoundError(
                 f"bundled hook script not found: {name} (asset source: {src_dir})"
@@ -2747,6 +2913,33 @@ def _ensure_recall_scripts(root: Path, hooks_dir: Path | None = None) -> list[st
         dest.chmod(dest.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
         created.append(name)
     return created
+
+
+def _stale_hook_engines(hooks_dir: Path) -> list[str]:
+    """Installed Python hook files whose content differs from the bundled asset.
+
+    `_ensure_recall_scripts` preserves an existing ``.py`` so a customized
+    engine survives a re-install. The cost is that an instance created before an
+    upstream engine fix keeps the old file indefinitely, and the interpreter
+    probe in `oks hook status` still reports "importable" — the interpreter is
+    fine, only the engine is old. `oks init --upgrade` re-copies them.
+    """
+    base = _asset_source()
+    if base is None:
+        return []
+    stale: list[str] = []
+    for name in (*_HOOK_SUPPORT_FILES, *_RECALL_HOOK_SCRIPTS):
+        if not name.endswith(".py"):
+            continue
+        src, dest = base / "hooks" / name, hooks_dir / name
+        if not src.is_file() or not dest.is_file():
+            continue
+        try:
+            if src.read_bytes() != dest.read_bytes():
+                stale.append(name)
+        except OSError:
+            continue
+    return stale
 
 
 def _wire_userpromptsubmit(settings_path: Path, command: str) -> str:
@@ -3050,9 +3243,11 @@ def hook_install(
 ):
     """Wire prompt recall and post-tool conflict hooks into editor settings (opt-in).
 
-    Copies the hook scripts into the chosen editor's hook directory (if missing)
-    and adds UserPromptSubmit + PostToolUse entries. Idempotent and
-    non-destructive: existing settings and hooks are preserved.
+    Adds UserPromptSubmit + PostToolUse entries and installs the hook scripts
+    into the chosen editor's hook directory. Idempotent. Existing settings are
+    preserved, and so is an existing `.py` engine — only the `.sh` wrappers are
+    rewritten, to re-bake the interpreter that can import knowledge_studio. Use
+    `oks init <root> --upgrade` to refresh the engines themselves.
     """
     editor = editor.lower().strip()
     if editor not in ("claude", "qoder", "codex", "both"):
@@ -3143,6 +3338,9 @@ def hook_status(
     import re
     import subprocess
     shown_dirs = []
+    blockers: list[str] = []
+    warnings: list[str] = []
+    any_wired = False
     for name in _HOOK_EDITORS:
         hooks_dir = root / _HOOK_SCRIPT_DIRS[name]
         if hooks_dir in shown_dirs:
@@ -3151,32 +3349,67 @@ def hook_status(
         script = hooks_dir / _RECALL_HOOK_SCRIPT_NAME
         label = "script" if name == "claude" else f"{name} script"
         console.print(f"  {label}: {'present' if script.is_file() else 'missing'} ({script})")
-        if script.is_file():
-            m = re.search(r"\$\{OKS_PYTHON:-([^}]+)\}", script.read_text(encoding="utf-8"))
-            py = os.environ.get("OKS_PYTHON") or (m.group(1) if m else "python3")
-            try:
-                ok = subprocess.run(
-                    [py, "-c", "import knowledge_studio"],
-                    capture_output=True, timeout=15,
-                ).returncode == 0
-            except (OSError, subprocess.TimeoutExpired):
-                ok = False
-            state = ("[green]importable[/green]" if ok
-                     else "[red]hook script has stale interpreter — "
-                          "run `oks hook install` to re-bake[/red]")
-            console.print(f"  {label} engine: {state} (python: {py})")
+        if not script.is_file():
+            blockers.append(f"{label} is missing — run `oks hook install`")
+            continue
+        m = re.search(r"\$\{OKS_PYTHON:-([^}]+)\}", script.read_text(encoding="utf-8"))
+        py = os.environ.get("OKS_PYTHON") or (m.group(1) if m else "python3")
+        try:
+            ok = subprocess.run(
+                [py, "-c", "import knowledge_studio"],
+                capture_output=True, timeout=15,
+            ).returncode == 0
+        except (OSError, subprocess.TimeoutExpired):
+            ok = False
+        state = ("[green]importable[/green]" if ok
+                 else "[red]hook script has stale interpreter — "
+                      "run `oks hook install` to re-bake[/red]")
+        console.print(f"  {label} engine: {state} (python: {py})")
+        if not ok:
+            blockers.append(
+                f"{label} interpreter cannot import knowledge_studio ({py}) — "
+                "run `oks hook install` to re-bake"
+            )
+        stale = _stale_hook_engines(hooks_dir)
+        if stale:
+            console.print(
+                f"  {label} engine version: [yellow]outdated[/yellow] ({', '.join(stale)})"
+            )
+            warnings.append(
+                f"{label} engine differs from the bundled one ({', '.join(stale)}) — "
+                f"run `oks init {root} --upgrade`; `oks hook install` keeps an "
+                "existing engine and cannot refresh it"
+            )
+        else:
+            console.print(f"  {label} engine version: [green]current[/green]")
     for name, rel in _HOOK_EDITORS.items():
         settings_path = root / rel
         wired = _hook_is_wired(settings_path)
+        any_wired = any_wired or wired
         state = "[green]wired[/green]" if wired else "[dim]not wired[/dim]"
         console.print(f"  {name}: {state}")
         post_wired = _hook_event_is_wired(
             settings_path, "PostToolUse", _POST_TOOL_SCRIPT_NAME
         )
+        any_wired = any_wired or post_wired
         post_state = "[green]wired[/green]" if post_wired else "[dim]not wired[/dim]"
         console.print(f"  {name} PostToolUse: {post_state}")
         if name == "codex":
             console.print("  codex trust: review with `/hooks`")
+    if blockers:
+        console.print(
+            "\n  [red]verdict: a hook cannot inject context.[/red] "
+            "[yellow]`wired` above only means the settings entry exists.[/yellow]"
+        )
+    elif warnings:
+        console.print(
+            "\n  [yellow]verdict: hooks run, but an engine is not the bundled "
+            "version — it may lack upstream fixes.[/yellow]"
+        )
+    elif any_wired:
+        console.print("\n  [green]verdict: scripts are healthy and wired.[/green]")
+    for item in (*blockers, *warnings):
+        console.print(f"    - {item}")
 
 
 if __name__ == "__main__":

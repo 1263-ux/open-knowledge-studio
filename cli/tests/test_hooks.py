@@ -563,3 +563,111 @@ def test_hook_recall_diagnostics_are_opt_in(tmp_path, monkeypatch):
     assert with_diagnostics["diagnostic"] == (
         "RuntimeError: hook exited 7: child hook failed: import error"
     )
+
+
+def test_hook_install_refreshes_an_outdated_wrapper_body(tmp_path):
+    """A correct bake must not shield an old wrapper body from an upstream fix."""
+    target = _init_instance(tmp_path)
+    args = ["hook", "install", "--editor", "codex", "--path", str(target)]
+    assert runner.invoke(app, args).exit_code == 0
+    wrapper = target / ".codex" / "hooks" / "user-prompt-recall.sh"
+    baked = f'"${{OKS_PYTHON:-{sys.executable}}}"'
+    wrapper.write_text(
+        f"#!/usr/bin/env bash\nexec {baked} \"$(dirname \"$0\")\"/x.py 2>/dev/null\n",
+        encoding="utf-8",
+    )
+
+    assert runner.invoke(app, args).exit_code == 0
+
+    refreshed = wrapper.read_text(encoding="utf-8")
+    assert "exec " not in refreshed
+    assert baked in refreshed
+    bundled = (cli_module._asset_source() / "hooks" / "user-prompt-recall.sh").read_text(
+        encoding="utf-8"
+    )
+    assert refreshed == bundled.replace('"${OKS_PYTHON:-python3}"', baked)
+
+
+def test_hook_status_reports_a_differing_engine_as_a_warning(tmp_path):
+    """An engine that differs from the bundle still runs — do not call it blocked."""
+    target = _init_instance(tmp_path)
+    assert runner.invoke(
+        app, ["hook", "install", "--editor", "codex", "--path", str(target)]
+    ).exit_code == 0
+    engine = target / ".codex" / "hooks" / "user-prompt-recall.py"
+    engine.write_text(engine.read_text(encoding="utf-8") + "# local edit\n", encoding="utf-8")
+
+    result = runner.invoke(app, ["hook", "status", "--path", str(target)])
+
+    assert result.exit_code == 0, result.output
+    output = " ".join(result.output.split())
+    assert "outdated" in output
+    assert "--upgrade" in output
+    assert "cannot inject context" not in output
+
+
+def test_recall_wrapper_surfaces_engine_failure_and_still_exits_zero(tmp_path):
+    """A crashed engine must be visible, and must never block the prompt."""
+    target = _init_instance(tmp_path)
+    script = target / ".claude" / "hooks" / "user-prompt-recall.sh"
+
+    result = _run_hook(
+        script,
+        {"prompt": "wrapper failure probe", "session_id": "s1", "cwd": str(target)},
+        target,
+        env_overrides={"OKS_PYTHON": str(tmp_path / "no-such-python")},
+    )
+
+    assert result.returncode == 0
+    assert "recall engine exited" in result.stderr
+    assert "oks hook install" in result.stderr
+
+
+def test_init_upgrade_refreshes_engines_without_unwiring_hooks(tmp_path):
+    """`hook status` sends users to --upgrade, so it must not drop the wiring."""
+    target = _init_instance(tmp_path)
+    assert runner.invoke(
+        app, ["hook", "install", "--editor", "codex", "--path", str(target)]
+    ).exit_code == 0
+    engine = target / ".codex" / "hooks" / "user-prompt-recall.py"
+    engine.write_text("# stale\n", encoding="utf-8")
+    before = (target / ".codex" / "hooks.json").read_text(encoding="utf-8")
+    assert _codex_commands(_load_codex_hooks(target), "UserPromptSubmit")
+
+    assert runner.invoke(
+        app, ["init", str(target), "--no-git", "--no-set-default", "--upgrade"]
+    ).exit_code == 0
+
+    assert engine.read_text(encoding="utf-8") != "# stale\n"
+    assert (target / ".codex" / "hooks.json").read_text(encoding="utf-8") == before
+    assert _codex_commands(_load_codex_hooks(target), "UserPromptSubmit")
+
+
+def test_init_upgrade_keeps_the_baked_interpreter(tmp_path):
+    """Refreshing the wrapper body must not reset OKS_PYTHON to bare python3.
+
+    `python3` cannot import knowledge_studio on a pipx/venv install, so losing
+    the bake turns the upgrade into a silent hook outage.
+    """
+    target = _init_instance(tmp_path)
+    assert runner.invoke(
+        app, ["hook", "install", "--editor", "codex", "--path", str(target)]
+    ).exit_code == 0
+    baked = f"${{OKS_PYTHON:-{sys.executable}}}"
+    wrappers = [
+        target / ".codex" / "hooks" / name
+        for name in ("user-prompt-recall.sh", "post-tool-edit.sh")
+    ]
+    for wrapper in wrappers:
+        assert baked in wrapper.read_text(encoding="utf-8")
+    # Force a body refresh so the copy actually happens.
+    wrappers[0].write_text(f'#!/usr/bin/env bash\n"{baked}" old\n', encoding="utf-8")
+
+    assert runner.invoke(
+        app, ["init", str(target), "--no-git", "--no-set-default", "--upgrade"]
+    ).exit_code == 0
+
+    for wrapper in wrappers:
+        body = wrapper.read_text(encoding="utf-8")
+        assert baked in body, body
+        assert "${OKS_PYTHON:-python3}" not in body

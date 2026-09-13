@@ -633,17 +633,22 @@ def _recall_knowledge_via_backend(
     type_filter: str | None = None,
     search_backend: str | None = None,
 ) -> list[dict[str, Any]]:
-    """Dispatch knowledge recall to native or a pluggable search backend.
+    """Dispatch knowledge recall — Triple-Layer Recall 召回层 (CONSTITUTION A8).
 
-    native (default) → OKS 6+1 factor recall (jieba + IDF + title boost).
-    fts5 → SQLite FTS5 + BM25 (CV from TreeSearch, persistent index).
-    fusion → native top-3 + fts5 supplement-2 (experiment-validated optimal).
-    other → connector entry_points(group="oks_search_backend").
+    三层架构: 召回层 (本函数, 可插拔 backend) + 注入层 (Soul Boost,
+      _injection_boost) + 衰减层 (Memory Curve, store.apply_decay).
+
+    backends (settings/recall.yaml `search_backend`, 默认 fts5):
+      fts5 (默认) → SQLite FTS5 + node-level BM25 (CV from TreeSearch,
+        persistent index). R@1=0.825. 每 ## heading 段一 FTS5 row.
+      native (向后兼容, v0.6.0 前默认) → OKS 6+1 factor recall (jieba +
+        IDF + title boost). page-level, R@1=0.525. --search-backend native 仍可跑.
+      fusion (实验) → fts5 + native re-rank. R@1=0.805, re-rank 负优化 (P6 实测).
+      other → connector entry_points(group="oks_search_backend").
     """
-    # native (default) → OKS 6+1 factor recall (jieba + IDF + title boost +
-    # memory curve + goal boost). oks 原创召回，不走 get_backend。
-    # fts5 → SQLite FTS5 + BM25 (CV from TreeSearch, flat page-level).
-    # fusion → native top-3 + fts5 supplement-2 (default for best of both).
+    # fts5 (默认, recall.yaml) → Node-BM25 召回, 灵魂因子在注入层 boost.
+    # native (向后兼容) → 6+1 因子召回算分, v0.6.0 前默认, 仍可 --search-backend native.
+    # fusion → 实验位, 灵魂 re-rank 在召回层是负优化 (R@1 0.825→0.805).
     if not search_backend or search_backend in ("native", "legacy"):
         # v0.6.1: backend None 时读 settings/recall.yaml（CLI recall() 同逻辑）
         # 之前 None 直接走 native，导致 eval 测不到 fts5/fusion
