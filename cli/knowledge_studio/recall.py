@@ -218,6 +218,9 @@ def set_recall_yaml_param(kb_root: Path, location: tuple[str | None, str], value
             f.flush()
             os.fsync(f.fileno())
         os.replace(tmp, ypath)
+        # Persist the directory entry as well as the file contents. Some
+        # platforms do not support opening a directory for fsync; the rename
+        # remains atomic and the best-effort sync is intentionally portable.
         try:
             dir_fd = os.open(str(ypath.parent), os.O_RDONLY)
             try:
@@ -298,7 +301,10 @@ def load_recall_params(root=None):
         "OKS_RECALL_TOPN": ("recall_topn", int),
         "OKS_RECALL_MINLEN": ("recall_minlen", int),
         "OKS_RECALL_COOLDOWN": ("recall_cooldown", int),
+        "OKS_POSTTOOL_FLOOR": ("posttool_floor", float),
+        "OKS_POSTTOOL_TOPN": ("posttool_topn", int),
         "OKS_POSTTOOL_MODE": ("posttool_mode", str),
+        "OKS_POSTTOOL_RECALL": ("posttool_recall", int),
         "OKS_POSTTOOL_SIGNAL_REL_FLOOR": ("posttool_signal_rel_floor", float),
         "OKS_CONFLICT_WINDOW": ("conflict_window", int),
         "OKS_SEARCH_BACKEND": ("search_backend", str),

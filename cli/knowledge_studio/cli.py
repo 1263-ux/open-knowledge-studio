@@ -1880,6 +1880,9 @@ Thumbs.db
 # Trace append locks (runtime state, not trace content)
 raw/executions/*/.append.lock
 
+# Mail runtime locks (derived synchronization state, not coordination facts)
+mail/**/*.lock
+
 # NOTE: wiki/, drafts/, profiles/ are intentionally TRACKED — they ARE your
 # memory. Unlike the open-knowledge-studio code repo (which ignores wiki/ &
 # drafts/ so it ships clean), an instance commits its knowledge to git.
@@ -2292,10 +2295,32 @@ def team_init(
         "Next steps:\n"
         f"  1. Review the team profile and goal in {root}\n"
         "  2. Commit and share this folder through your normal Git workflow\n"
-        "  3. Each member clones it, installs OKS skills, and binds their profile with:\n"
-        "     oks registry bind --profile <user-id> --goals team\n"
+        "  3. Each member clones it; OKS Mail/skills are already bundled.\n"
+        "     Optional profile selection: `oks registry bind --profile <user-id> --goals team`.\n"
+        "     Run `oks team sync --push` when you want to exchange team files.\n"
         "  4. Use /query and the knowledge-to-word skill against the shared Wiki"
     )
+
+
+@team_app.command("sync")
+def team_sync_command(
+    path: Optional[str] = typer.Option(None, "--path", help="Knowledge base root"),
+    push: bool = typer.Option(False, "--push/--no-push", help="Push the committed team files to origin"),
+    message: str = typer.Option("同步 OKS 团队资料", "--message", help="Commit message for shared files"),
+) -> None:
+    """One-step team transport: commit shared files, rebase, optionally push."""
+    from knowledge_studio.team_sync import TeamSyncError, sync
+
+    try:
+        result = sync(_instance_root(path), push=push, message=message)
+    except TeamSyncError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(2)
+    actions = " → ".join(result.get("actions", [])) or "无变更"
+    remote = "已配置 origin" if result.get("remote") else "未配置 origin"
+    console.print(f"[green]团队同步完成:[/green] {actions} · {remote}")
+    if result.get("ignored_changes"):
+        console.print(f"[yellow]有 {result['ignored_changes']} 个非团队目录变更未纳入同步。[/yellow]")
 
 
 # ── Optional editor hooks (opt-in auto-recall) ───────────────────
@@ -2383,12 +2408,7 @@ def _codex_python_hook_command(
     if native_windows:
         # Keep dependency warnings off Codex's hook stdout contract.  The
         # Python hook itself is fail-open, so stderr suppression is safe here.
-        # Use native separators even when tests simulate Windows on POSIX.
-        # Preserve the host's directory spelling while using a Windows
-        # separator between the directory and script name. This also makes
-        # native-Windows formatting deterministic in cross-platform tests.
-        script_text = str(script.parent) + "\\" + script.name
-        return subprocess.list2cmdline([sys.executable, script_text]) + " 2>NUL"
+        return subprocess.list2cmdline([sys.executable, str(script)]) + " 2>NUL"
     return script.as_posix()
 
 
@@ -2515,8 +2535,8 @@ def _instance_root(path: str | None) -> Path:
     return get_kb_root()
 
 
-def _mail_agent_id() -> str:
-    explicit = os.environ.get("OKS_AGENT_ID", "").strip()
+def _mail_agent_id(explicit_value: str = "", *, fallback: str = "human") -> str:
+    explicit = explicit_value.strip() or os.environ.get("OKS_AGENT_ID", "").strip()
     if explicit:
         return explicit
     # Native Claude launches child shell commands without the OKS-specific
@@ -2526,7 +2546,7 @@ def _mail_agent_id() -> str:
         return "claude"
     if os.environ.get("CODEX_SESSION_ID", "").strip() or os.environ.get("CODEX_CLI", "").strip():
         return "codex"
-    return "human"
+    return fallback
 
 
 def _mail_session_id(value: str = "") -> str:
@@ -2562,6 +2582,7 @@ def _mail_action_result(result: dict[str, Any], *, sender_kind: str, notify: boo
         "recipients": [str(recipient) for recipient in result["recipients"]],
         "sender_kind": sender_kind,
         "origin_machine_id": str(result.get("meta", {}).get("origin_machine_id", "unknown")),
+        "record_kind": str(result.get("meta", {}).get("record_kind", "message")),
         "evidence_refs": result.get("evidence_refs", []),
         "attention": {
             "requested": notify,
@@ -2591,16 +2612,18 @@ def mail_send(
     thread: str = typer.Option("", "--thread", help="Existing Thread ID (for a reply)"),
     session_id: str = typer.Option("", "--session-id", help="Originating Agent session ID"),
     delivery_reason: str = typer.Option("direct", "--delivery-reason", help="direct | conflict | review_request | handoff | system"),
+    record_kind: str = typer.Option("message", "--record-kind", help="message | handoff | result | blocked | note | knowledge_ref"),
     notify: bool = typer.Option(False, "--notify/--no-notify", help="Request host notification; safe queued fallback when unsupported"),
     session_policy: str = typer.Option("next_prompt", "--session-policy", help="next_prompt | wait | notify"),
     sender_kind: str = typer.Option("", "--sender-kind", help="Message provenance: human | agent | unknown"),
+    from_id: str = typer.Option("", "--from", help="Explicit sender identity; use human only for a human-authored CLI message"),
     evidence_ref: list[str] = typer.Option([], "--evidence-ref", help="Evidence ref JSON object; repeatable"),
     output_format: str = typer.Option("text", "--format", help="text | json"),
     path: Optional[str] = typer.Option(None, "--path", help="Instance root (default: active KB)"),
 ) -> None:
     """Write one canonical message and recipient projections."""
     root = _instance_root(path)
-    sender = _mail_agent_id()
+    sender = _mail_agent_id(from_id, fallback="unknown")
     try:
         resolved_sender_kind = mail_domain.normalise_sender_kind(sender_kind, sender)
     except ValueError as exc:
@@ -2630,6 +2653,7 @@ def mail_send(
             origin_machine_id=mid,
             evidence_refs=refs,
             delivery_reason=delivery_reason,
+            record_kind=record_kind,
             notify=notify,
             session_policy=session_policy,
         )
@@ -2658,13 +2682,14 @@ def mail_delegate(
     session_id: str = typer.Option("", "--session-id", help="Originating Agent session ID"),
     notify: bool = typer.Option(False, "--notify/--no-notify", help="Request host notification; safe queued fallback when unsupported"),
     sender_kind: str = typer.Option("agent", "--sender-kind", help="Message provenance: human | agent | unknown"),
+    from_id: str = typer.Option("", "--from", help="Explicit sender identity; use human only for a human-authored CLI message"),
     evidence_ref: list[str] = typer.Option([], "--evidence-ref", help="Evidence ref JSON object; repeatable"),
     output_format: str = typer.Option("text", "--format", help="text | json"),
     path: Optional[str] = typer.Option(None, "--path", help="Instance root (default: active KB)"),
 ) -> None:
     """Submit a task handoff without requiring callers to assemble Mail fields."""
     root = _instance_root(path)
-    sender = _mail_agent_id()
+    sender = _mail_agent_id(from_id, fallback="unknown")
     try:
         resolved_sender_kind = mail_domain.normalise_sender_kind(sender_kind, sender)
     except ValueError as exc:
@@ -2793,13 +2818,15 @@ def mail_reply(
     session_id: str = typer.Option("", "--session-id", help="Replying Agent session ID"),
     notify: bool = typer.Option(False, "--notify/--no-notify", help="Request host notification"),
     sender_kind: str = typer.Option("", "--sender-kind", help="Message provenance: human | agent | unknown"),
+    from_id: str = typer.Option("", "--from", help="Explicit sender identity; use human only for a human-authored CLI message"),
     evidence_ref: list[str] = typer.Option([], "--evidence-ref", help="Evidence ref JSON object; repeatable"),
+    record_kind: str = typer.Option("message", "--record-kind", help="message | handoff | result | blocked | note | knowledge_ref"),
     output_format: str = typer.Option("text", "--format", help="text | json"),
     path: Optional[str] = typer.Option(None, "--path", help="Instance root (default: active KB)"),
 ) -> None:
     """Append a message to an existing Thread."""
     root = _instance_root(path)
-    sender = _mail_agent_id()
+    sender = _mail_agent_id(from_id, fallback="unknown")
     try:
         resolved_sender_kind = mail_domain.normalise_sender_kind(sender_kind, sender)
     except ValueError as exc:
@@ -2841,6 +2868,7 @@ def mail_reply(
             origin_machine_id=mid,
             evidence_refs=refs,
             delivery_reason="thread_reply",
+            record_kind=record_kind,
             notify=notify,
             session_policy="notify" if notify else "next_prompt",
         )
@@ -2854,6 +2882,27 @@ def mail_reply(
         output_format=output_format,
         text=f"[green]Replied:[/green] {result['message_id']} (thread {thread_id})",
     )
+
+
+@mail_app.command("show")
+def mail_show(
+    id: str = typer.Argument(..., help="Mail slug (timestamp-from)"),
+) -> None:
+    """Print a mail's full content. Does not change its read state."""
+    root = _instance_root(None)
+    agent = _mail_agent_id()
+    found = next(
+        (m for m in mail_domain.iter_messages(root, agent)
+         if m["meta"].get("message_id") == id or m["path"].stem == id),
+        None,
+    )
+    if not found:
+        console.print(f"[red]Mail not found:[/red] {id}")
+        raise typer.Exit(1)
+    f = found["path"]
+    # Print verbatim: frontmatter carries from/to/type/priority, and any
+    # reformatting here would be a second mail parser to keep in sync (P8).
+    print(f.read_text(encoding="utf-8"), end="")
 
 
 @mail_app.command("read")
@@ -2962,8 +3011,23 @@ def mail_archive(
                 thread_state="closed",
             )
         else:
-            content = message["path"].read_text(encoding="utf-8").replace("read: false", "read: true", 1)
-            store._atomic_write(message["path"], content)
+            # Legacy Markdown is shared by all recipients.  Keep archive state
+            # in this Agent's recipient projection instead of mutating the
+            # shared `read` marker (or leaking a global archived state).
+            changes = {"archived_at": archived_at, "thread_state": "closed"}
+            state_path = mail_domain.recipient_state_path(root, agent, str(message["meta"].get("message_id")))
+            if not state_path.is_file() and str(message["meta"].get("read", "false")).lower() == "true":
+                changes["read_at"] = (
+                    message["meta"].get("read_at")
+                    or message["meta"].get("timestamp")
+                    or mail_domain.iso_now()
+                )
+            mail_domain.update_recipient_state(
+                root,
+                agent,
+                str(message["meta"].get("message_id")),
+                **changes,
+            )
     console.print(f"[green]Archived for @{agent.lstrip('@')}:[/green] {id}")
 
 
@@ -2973,15 +3037,14 @@ def mail_setup(
     skills_dir: Path = typer.Option(..., "--skills-dir", help="Host skills directory, e.g. .agents/skills"),
     path: Optional[str] = typer.Option(None, "--path", help="Knowledge base root"),
 ) -> None:
-    """Install the generic oks-mail Skill bound to this KB and Agent."""
+    """Create an optional portable oks-mail binding for a host outside this KB."""
     from knowledge_studio.mail_setup import install_skill
-
     try:
         destination = install_skill(_instance_root(path), agent, skills_dir)
     except (ValueError, OSError) as exc:
         console.print(f"[red]{exc}[/red]")
         raise typer.Exit(2)
-    console.print(f"Mail Skill installed: {destination}")
+    console.print(f"Portable Mail binding written: {destination}")
 
 
 @mail_app.command("serve")
@@ -2989,9 +3052,8 @@ def mail_serve(
     path: Optional[str] = typer.Option(None, "--path", help="Knowledge base root"),
     port: int = typer.Option(3182, "--port", min=1, max=65535),
 ) -> None:
-    """Serve the real local Mail workspace for a human browser."""
+    """Open a local human Mail workspace; Agents use the CLI or oks-mail Skill."""
     from knowledge_studio.mail_web import create_server
-
     try:
         server = create_server(_instance_root(path), port)
     except (ValueError, OSError) as exc:
@@ -3049,6 +3111,46 @@ def mail_wait(
     root = _instance_root(path)
     runtime = FileMailRuntime(root, agent.strip() or _mail_agent_id(), session_id.strip() or _mail_session_id())
     _emit_json(runtime.wait(timeout=timeout))
+
+
+@mail_app.command("migrate")
+def mail_migrate() -> None:
+    """Migrate legacy flat inbox mails into date-organized subdirs.
+
+    v0.6.16 organizes ``mail/inbox/`` by date (``{YYYY}/{MM}/{DD}/{slug}.md``)
+    so a busy instance does not accumulate one flat directory of hundreds of
+    files. Existing instances created before v0.6.16 have flat mails at
+    ``mail/inbox/{slug}.md``; this command moves them into date subdirs based
+    on the ``YYYYMMDD`` prefix that ``oks mail send`` already stamps. Idempotent
+    — mails already in a date subdir are left untouched.
+    """
+    root = _instance_root(None)
+    inbox = root / "mail" / "inbox"
+    if not inbox.is_dir():
+        console.print("[dim]No mail inbox.[/dim]")
+        return
+    moved = 0
+    # Only top-level *.md are legacy flat mails; date-organized ones live in
+    # subdirs and are skipped by glob("*.md").
+    for f in sorted(inbox.glob("*.md")):
+        slug = f.stem
+        if len(slug) >= 8 and slug[:8].isdigit():
+            dest_dir = inbox / slug[:4] / slug[4:6] / slug[6:8]
+        else:
+            dest_dir = inbox
+        if dest_dir == inbox:
+            continue  # slug has no date prefix — leave flat (still readable)
+        dest = dest_dir / f.name
+        if dest == f:
+            continue
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(f.read_bytes())
+        f.unlink()
+        moved += 1
+    if moved:
+        console.print(f"[green]Migrated[/green] {moved} mail(s) into date subdirs.")
+    else:
+        console.print("[dim]No flat mails to migrate.[/dim]")
 
 
 @registry_app.command("list")
@@ -3196,15 +3298,14 @@ def _ensure_recall_scripts(root: Path, hooks_dir: Path | None = None) -> list[st
     The .sh wrapper gets the current interpreter baked into its OKS_PYTHON
     fallback. If an existing .sh lacks the current bake (fresh copy still on
     `python3`, or baked against a stale interpreter), it is re-copied from
-    the asset source and re-baked. Explicit hook installation refreshes
-    existing Python engines; the init compatibility path preserves custom
-    engines and only adds missing support files.
+    the asset source and re-baked. Existing hook engines are refreshed when
+    their bundled source has changed, so protocol updates reach installed
+    instances too.
     """
     import shutil
     import stat
     import sys
 
-    refresh_existing_engines = hooks_dir is not None
     hooks_dir = hooks_dir or (root / ".claude" / "hooks")
     hooks_dir.mkdir(parents=True, exist_ok=True)
 
@@ -3233,8 +3334,6 @@ def _ensure_recall_scripts(root: Path, hooks_dir: Path | None = None) -> list[st
     for name in _RECALL_HOOK_SCRIPTS:
         dest = hooks_dir / name
         if dest.exists():
-            if not refresh_existing_engines and name.endswith(".py"):
-                continue
             try:
                 dest_text = dest.read_text(encoding="utf-8")
                 if name.endswith(".sh"):
@@ -3244,7 +3343,7 @@ def _ensure_recall_scripts(root: Path, hooks_dir: Path | None = None) -> list[st
                     continue
             except OSError:
                 pass
-            # Stale interpreter bake — fall through to re-copy + re-bake.
+            # Outdated wrapper body or stale interpreter bake — re-copy + re-bake.
         if src_dir is None or not (src_dir / name).is_file():
             raise FileNotFoundError(
                 f"bundled hook script not found: {name} (asset source: {src_dir})"
@@ -3370,8 +3469,8 @@ _HOOK_RECALL_STATUSES = {
 }
 
 
-def _hook_recall_error(reason: str) -> dict:
-    return {
+def _hook_recall_error(reason: str, *, diagnostic: str = "") -> dict:
+    result = {
         "schema": _HOOK_RECALL_SCHEMA,
         "status": "error",
         "context": "",
@@ -3383,6 +3482,11 @@ def _hook_recall_error(reason: str) -> dict:
         },
         "reason": reason,
     }
+    if diagnostic and os.environ.get("OKS_HOOK_DIAGNOSTICS", "").lower() in {
+        "1", "true", "yes"
+    }:
+        result["diagnostic"] = diagnostic[-1000:]
+    return result
 
 
 def _valid_hook_number(value: object, *, allow_none: bool = False) -> bool:
@@ -3428,6 +3532,9 @@ def _validate_hook_recall_response(data: object) -> Optional[dict]:
 
 
 def _hook_recall_script() -> Path:
+    assets = _asset_source()
+    if assets is not None:
+        return assets / "hooks" / "user-prompt-recall.py"
     return Path(__file__).resolve().parent / "_assets" / "hooks" / "user-prompt-recall.py"
 
 
@@ -3445,6 +3552,11 @@ def _run_hook_recall(
     env = os.environ.copy()
     env["OKS_ROOT"] = str(root)
     env["OKS_HOOK_OUTPUT"] = "json"
+    # The Hook Bridge exchanges JSON with a Python child process. Force UTF-8
+    # instead of inheriting a Windows console code page that cannot round-trip
+    # Chinese prompts or recall context.
+    env["PYTHONIOENCODING"] = "utf-8"
+    env["PYTHONUTF8"] = "1"
     package_root = str(Path(__file__).resolve().parents[1])
     inherited_pythonpath = env.get("PYTHONPATH", "")
     env["PYTHONPATH"] = os.pathsep.join([package_root, inherited_pythonpath]).rstrip(os.pathsep)
@@ -3463,13 +3575,20 @@ def _run_hook_recall(
             check=False,
         )
         if completed.returncode != 0:
-            raise RuntimeError(f"hook exited {completed.returncode}")
+            detail = f"hook exited {completed.returncode}"
+            stderr = str(getattr(completed, "stderr", "") or "").strip()
+            if stderr:
+                detail += f": {stderr[-1000:]}"
+            raise RuntimeError(detail)
         data = _validate_hook_recall_response(json.loads(completed.stdout))
         if data is None:
             raise ValueError("invalid hook response")
         return data
-    except Exception:
-        return _hook_recall_error("hook_bridge_failed")
+    except Exception as exc:
+        return _hook_recall_error(
+            "hook_bridge_failed",
+            diagnostic=f"{type(exc).__name__}: {exc}",
+        )
 
 
 def _read_hook_history(root: Path, limit: int, session_id: str, cwd: str) -> dict:
@@ -3551,9 +3670,11 @@ def hook_install(
 ):
     """Wire prompt recall and post-tool conflict hooks into editor settings (opt-in).
 
-    Copies the hook scripts into the chosen editor's hook directory (if missing)
-    and adds UserPromptSubmit + PostToolUse entries. Idempotent and
-    non-destructive: existing settings and hooks are preserved.
+    Adds UserPromptSubmit + PostToolUse entries and installs the hook scripts
+    into the chosen editor's hook directory. Idempotent. Existing settings are
+    preserved, and so is an existing `.py` engine — only the `.sh` wrappers are
+    rewritten, to re-bake the interpreter that can import knowledge_studio. Use
+    `oks init <root> --upgrade` to refresh the engines themselves.
     """
     editor = editor.lower().strip()
     if editor not in ("claude", "qoder", "codex", "both"):
@@ -3663,6 +3784,9 @@ def hook_status(
     import re
     import subprocess
     shown_dirs = []
+    blockers: list[str] = []
+    warnings: list[str] = []
+    any_wired = False
     for name in _HOOK_EDITORS:
         hooks_dir = root / _HOOK_SCRIPT_DIRS[name]
         if hooks_dir in shown_dirs:
@@ -3700,10 +3824,25 @@ def hook_status(
         post_wired = _hook_event_is_wired(
             settings_path, "PostToolUse", _POST_TOOL_SCRIPT_NAMES
         )
+        any_wired = any_wired or post_wired
         post_state = "[green]wired[/green]" if post_wired else "[dim]not wired[/dim]"
         console.print(f"  {name} PostToolUse: {post_state}")
         if name == "codex":
             console.print("  codex trust: review with `/hooks`")
+    if blockers:
+        console.print(
+            "\n  [red]verdict: a hook cannot inject context.[/red] "
+            "[yellow]`wired` above only means the settings entry exists.[/yellow]"
+        )
+    elif warnings:
+        console.print(
+            "\n  [yellow]verdict: hooks run, but an engine is not the bundled "
+            "version — it may lack upstream fixes.[/yellow]"
+        )
+    elif any_wired:
+        console.print("\n  [green]verdict: scripts are healthy and wired.[/green]")
+    for item in (*blockers, *warnings):
+        console.print(f"    - {item}")
 
 
 if __name__ == "__main__":

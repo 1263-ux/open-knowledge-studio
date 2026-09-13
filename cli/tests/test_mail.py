@@ -45,6 +45,29 @@ def test_message_has_recipient_state_and_independent_session_receipts(tmp_path):
     assert mail.receipt_path(tmp_path, "ses_b", result["message_id"]).is_file()
 
 
+def test_record_kind_is_a_fact_classification_separate_from_delivery_reason(tmp_path):
+    from knowledge_studio import mail
+
+    result = mail.write_message(
+        tmp_path,
+        body="Candidate is ready for review.",
+        sender="claude",
+        recipients="@human",
+        record_kind="knowledge_ref",
+        delivery_reason="review_request",
+    )
+    message = mail.parse_message(result["path"])
+    assert message is not None
+    assert message["meta"]["record_kind"] == "knowledge_ref"
+    assert message["meta"]["delivery_reason"] == "review_request"
+
+    legacy = tmp_path / "mail" / "messages" / "legacy.md"
+    legacy.write_text("---\nmessage_id: legacy\nfrom: @claude\nto: @human\n---\n\n# Legacy\n\nbody\n", encoding="utf-8")
+    parsed_legacy = mail.parse_message(legacy)
+    assert parsed_legacy is not None
+    assert parsed_legacy["meta"]["record_kind"] == "message"
+
+
 def test_delegate_is_an_intent_facade_over_a_normal_handoff(tmp_path):
     from knowledge_studio import mail
 
@@ -113,6 +136,24 @@ def test_all_expands_to_registered_agents_without_global_projection(tmp_path):
     assert not (tmp_path / "mail" / "inbox" / f"{result['message_id']}.md").exists()
 
 
+def test_all_expands_from_session_registry_without_profile_registry(tmp_path):
+    """A missing profiles/agents/registry.jsonl must not disable @all: live
+    sessions in mail/sessions/ are routable identities on their own."""
+    from knowledge_studio import mail
+
+    mail.register_session(tmp_path, "codex-s1", "codex")
+    mail.register_session(tmp_path, "claude-s1", "claude")
+    assert not (tmp_path / "profiles" / "agents" / "registry.jsonl").exists()
+    result = mail.write_message(
+        tmp_path,
+        body="Broadcast",
+        sender="human",
+        recipients="@all",
+        delivery_reason="system",
+    )
+    assert set(result["recipients"]) == {"@codex", "@claude"}
+
+
 def test_cli_send_and_reply_keep_thread_and_session(monkeypatch, tmp_path):
     from knowledge_studio import cli
 
@@ -136,6 +177,29 @@ def test_cli_send_and_reply_keep_thread_and_session(monkeypatch, tmp_path):
     assert any(m["meta"].get("message_id") == message_id for m in messages)
     reply_messages = list(__import__("knowledge_studio.mail", fromlist=["iter_messages"]).iter_messages(tmp_path))
     assert any(m["meta"].get("thread_id") == thread_id and m["meta"].get("origin_session_id") == "ses_b" for m in reply_messages)
+
+
+def test_cli_send_never_silently_claims_human_identity(monkeypatch, tmp_path):
+    from knowledge_studio import cli, mail
+
+    monkeypatch.setenv("OKS_ROOT", str(tmp_path))
+    for key in ("OKS_AGENT_ID", "CLAUDE_CODE_SESSION_ID", "CLAUDECODE", "CODEX_SESSION_ID", "CODEX_CLI"):
+        monkeypatch.delenv(key, raising=False)
+    runner = CliRunner()
+    unknown = runner.invoke(cli.app, [
+        "mail", "send", "--to", "@codex", "--body", "unattributed", "--title", "No identity",
+    ])
+    assert unknown.exit_code == 0, unknown.stdout
+    row = next(mail.iter_messages(tmp_path, "codex"))
+    assert row["meta"]["from"] == "unknown"
+    assert row["meta"]["sender_kind"] == "agent"
+
+    explicit = runner.invoke(cli.app, [
+        "mail", "send", "--from", "human", "--to", "@codex", "--body", "human-authored", "--title", "Explicit human",
+    ])
+    assert explicit.exit_code == 0, explicit.stdout
+    rows = list(mail.iter_messages(tmp_path, "codex"))
+    assert any(row["meta"]["from"] == "human" and row["meta"]["sender_kind"] == "human" for row in rows)
 
 
 def test_message_sender_kind_is_compatible_and_visible_in_snapshot(tmp_path):
@@ -630,7 +694,9 @@ def test_file_runtime_wait_and_notify_fallback(tmp_path):
     presented = json.loads(notification_path.read_text(encoding="utf-8"))
     assert presented["status"] == "presented"
     assert presented["presented_by_session"] == "session-runtime"
-    assert mail.mark_notification_presented(tmp_path, "codex", message["message_id"])["status"] == "presented"
+    stamped = presented["presented_at"]
+    remarked = mail.mark_notification_presented(tmp_path, "codex", message["message_id"])
+    assert remarked["presented_at"] == stamped
     assert result["messages"][0]["receipt"]["status"] == "presented"
     assert runtime.notify(message["message_id"])["wake_supported"] is False
 
