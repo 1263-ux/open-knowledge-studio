@@ -185,6 +185,7 @@ async function choose(threadId) {
 }
 
 function openCompose(intent = 'handoff', context = {}) {
+  $('newForm').reset();
   $('newError').textContent = '';
   $('newIntent').value = intent;
   if (context.evidencePath) $('newEvidencePath').value = context.evidencePath;
