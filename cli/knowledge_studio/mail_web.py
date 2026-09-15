@@ -1,11 +1,13 @@
 """Packaged loopback Mail workspace; all persistence uses Mail Core."""
 import json
 import hashlib
+import re
+from datetime import date, datetime, time, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
-from knowledge_studio import identity, mail
+from knowledge_studio import identity, mail, store
 from knowledge_studio.mail_activity import activity_data, delivery_records
 from knowledge_studio.mail_setup import asset_root, validate_root, agent_id
 from knowledge_studio import team_sync
@@ -173,16 +175,244 @@ def memory_status(root):
     raw = files_under("raw", exclude={"executions", ".logs"})
     drafts = files_under("drafts")
     wiki = files_under("wiki")
-    latest = sorted(wiki + drafts, key=lambda path: path.stat().st_mtime, reverse=True)[:12]
+    knowledge = wiki + drafts
+    visible = []
+    excluded = 0
+    for path in knowledge:
+        meta, _body = _memory_meta(path)
+        if _memory_is_visible(meta):
+            visible.append(path)
+        else:
+            excluded += 1
+    latest = sorted(visible, key=lambda path: _memory_event_time(_memory_meta(path)[0], path)[0], reverse=True)[:12]
+    recent = []
+    facets = {"areas": {}, "types": {}}
+    for path in visible:
+        meta, body = _memory_meta(path)
+        item = _memory_summary(meta, body, path)
+        for facet_name, value in (("areas", item["area"]), ("types", item["type"])):
+            facets[facet_name][value] = facets[facet_name].get(value, 0) + 1
+        if path in latest:
+            item["path"] = path.relative_to(root).as_posix()
+            recent.append(item)
+    recent.sort(key=lambda item: item["updated_at"], reverse=True)
     return {
         "schema": "memory.snapshot.v1",
-        "counts": {"raw": len(raw), "drafts": len(drafts), "wiki": len(wiki)},
+        "counts": {
+            "raw": len(raw),
+            "drafts": sum(1 for path in drafts if path in visible),
+            "wiki": sum(1 for path in wiki if path in visible),
+            "drafts_total": len(drafts),
+            "wiki_total": len(wiki),
+            "excluded": excluded,
+        },
         "lifecycle": ["raw", "candidate", "human_review", "wiki", "recall", "explicit_feedback"],
-        "recent": [
-            {"path": path.relative_to(root).as_posix(), "kind": "wiki" if "wiki" in path.relative_to(root).parts else "candidate"}
-            for path in latest
-        ],
+        "recent": recent,
+        "facets": facets,
     }
+
+
+def _memory_plain(value: str, limit: int = 240) -> str:
+    """Make a small, safe human-facing summary without pretending to render Markdown."""
+    value = re.sub(r"`([^`]*)`", r"\1", str(value or ""))
+    value = re.sub(r"!?(?:\[([^\]]+)\]\([^)]*\))", r"\1", value)
+    value = re.sub(r"[*_~]", "", value)
+    value = re.sub(r"\s+", " ", value).strip()
+    return value if len(value) <= limit else value[: limit - 1].rstrip() + "…"
+
+
+_MEMORY_TIME_KEYS = (
+    "updated_at",
+    "updated",
+    "modified_at",
+    "ingested_at",
+    "human_reviewed_at",
+    "created",
+)
+
+
+def _parse_memory_time(value):
+    if isinstance(value, datetime):
+        parsed = value
+    elif isinstance(value, date):
+        parsed = datetime.combine(value, time.min)
+    elif isinstance(value, str) and value.strip():
+        raw = value.strip().replace("Z", "+00:00")
+        try:
+            parsed = datetime.fromisoformat(raw)
+        except ValueError:
+            try:
+                parsed = datetime.combine(date.fromisoformat(raw), time.min)
+            except ValueError:
+                return None
+    else:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _memory_event_time(meta: dict, path: Path) -> tuple[datetime, str]:
+    """Prefer durable knowledge timestamps; use mtime only as a compatibility fallback."""
+    for key in _MEMORY_TIME_KEYS:
+        parsed = _parse_memory_time(meta.get(key))
+        if parsed is not None:
+            return parsed, key
+    return datetime.fromtimestamp(path.stat().st_mtime, timezone.utc), "file_mtime"
+
+
+def _memory_is_visible(meta: dict) -> bool:
+    status = str(meta.get("status") or "active").strip().lower()
+    archived = meta.get("archived") is True or str(meta.get("archived") or "").strip().lower() in {"1", "true", "yes"}
+    return not archived and status not in {"dropped", "superseded", "retired", "archived"}
+
+
+def _memory_meta(path: Path) -> tuple[dict, str]:
+    parsed = store.parse_wiki_file(path) or {}
+    body = str(parsed.pop("body", "") or "")
+    return parsed, body
+
+
+def _memory_title(meta: dict, body: str, path: Path) -> str:
+    for key in ("title", "name"):
+        value = meta.get(key)
+        if isinstance(value, str) and value.strip():
+            return _memory_plain(value.strip(), 140)
+    for line in body.splitlines():
+        match = re.match(r"^\s{0,3}#{1,6}\s+(.+?)\s*#*\s*$", line)
+        if match and match.group(1).strip():
+            return _memory_plain(match.group(1), 140)
+    return _memory_plain(path.stem.replace("-", " ").replace("_", " "), 140) or "未命名知识"
+
+
+def _memory_summary(meta: dict, body: str, path: Path) -> dict:
+    summary = ""
+    for key in ("summary", "description", "abstract"):
+        value = meta.get(key)
+        if isinstance(value, str) and value.strip():
+            summary = _memory_plain(value)
+            break
+    if not summary:
+        paragraph = []
+        for line in body.splitlines():
+            clean = line.strip()
+            if not clean:
+                if paragraph:
+                    break
+                continue
+            if clean.startswith("#") or clean.startswith("---"):
+                continue
+            paragraph.append(clean)
+        summary = _memory_plain(" ".join(paragraph))
+    if not summary:
+        summary = "这份知识还没有可显示的摘要，打开详情查看原文。"
+    kind = "wiki" if "wiki" in path.parts else "candidate"
+    area = str(meta.get("area") or meta.get("domain") or "未分类").strip() or "未分类"
+    memory_type = str(meta.get("type") or ("wiki" if kind == "wiki" else "candidate")).strip() or ("wiki" if kind == "wiki" else "candidate")
+    tags = meta.get("tags", [])
+    if isinstance(tags, str):
+        tags = [tag.strip() for tag in tags.split(",") if tag.strip()]
+    elif not isinstance(tags, list):
+        tags = []
+    event_time, event_source = _memory_event_time(meta, path)
+    status = str(meta.get("status", "active" if kind == "wiki" else "pending")).strip() or ("active" if kind == "wiki" else "pending")
+    status_label = {
+        "active": "可复用",
+        "pending": "待审核",
+        "provisional": "待确认",
+        "stale": "需要更新",
+    }.get(status, status)
+    return {
+        "path": str(path),
+        "kind": kind,
+        "kind_label": "已审核 Wiki" if kind == "wiki" else "Candidate 候选",
+        "title": _memory_title(meta, body, path),
+        "summary": summary,
+        "area": area,
+        "type": memory_type,
+        "tags": [str(tag) for tag in tags[:12]],
+        "status": status,
+        "status_label": status_label,
+        "updated_at": event_time.isoformat(),
+        "timestamp_source": event_source,
+    }
+
+
+def _memory_item(root: Path, relative: str) -> dict:
+    """Read one Markdown knowledge item, refusing paths outside wiki/drafts."""
+    if not relative or Path(relative).is_absolute():
+        raise ValueError("memory path must be a relative wiki/ or drafts/ path")
+    candidate = (root / relative).resolve()
+    allowed = [(root / "wiki").resolve(), (root / "drafts").resolve()]
+    if candidate.suffix.lower() != ".md" or not candidate.is_file() or not any(candidate.is_relative_to(base) for base in allowed):
+        raise FileNotFoundError("memory item not found")
+    meta, body = _memory_meta(candidate)
+    summary = _memory_summary(meta, body, candidate)
+    summary["path"] = candidate.relative_to(root).as_posix()
+    summary["body"] = body[:12000]
+    summary["truncated"] = len(body) > 12000
+    summary["metadata"] = {
+        key: _json_safe(value)
+        for key, value in meta.items()
+        if key not in {"file_path", "slug"}
+    }
+    return summary
+
+
+def member_profiles(root: Path) -> dict:
+    """Project shared Agent role profiles without exposing private user files.
+
+    A profile is descriptive shared context. It is not a runtime connection,
+    installation record, or proof that an Agent is currently available.
+    """
+    base = root / "profiles"
+    paths = []
+    team_path = base / "team.md"
+    if team_path.is_file():
+        paths.append((team_path, "team"))
+    agents_dir = base / "agents"
+    if agents_dir.is_dir():
+        paths.extend(
+            (path, "assistant")
+            for path in sorted(agents_dir.glob("*.md"))
+            if not path.name.startswith("_")
+        )
+    profiles = []
+    for path, kind in paths:
+        try:
+            meta, body = _memory_meta(path)
+            stat = path.stat()
+        except (OSError, ValueError):
+            continue
+        title = _memory_title(meta, body, path)
+        summary = _memory_summary(meta, body, path)["summary"]
+        role = meta.get("role") or meta.get("responsibility") or meta.get("responsibilities") or ""
+        scope = meta.get("scope") or meta.get("areas") or meta.get("area") or ""
+        if isinstance(scope, (list, tuple)):
+            scope = "、".join(str(item) for item in scope)
+        profiles.append({
+            "id": str(meta.get("id") or path.stem),
+            "kind": kind,
+            "title": title,
+            "summary": summary,
+            "role": str(role),
+            "scope": str(scope),
+            "status": str(meta.get("status") or "active"),
+            "profile_kind": str(meta.get("profile_kind") or ("agent" if kind == "assistant" else "team")),
+            "path": path.relative_to(root).as_posix(),
+            "updated_at": datetime.fromtimestamp(stat.st_mtime, timezone.utc).isoformat(),
+        })
+    return {"schema": "oks.members.v1", "profiles": profiles}
+
+
+def _json_safe(value):
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, dict):
+        return {str(key): _json_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [_json_safe(item) for item in value]
+    return str(value)
 
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
@@ -216,8 +446,20 @@ class Handler(BaseHTTPRequestHandler):
         if route == "/api/mail/team":
             self.send_json(200, team_sync.status(self.server.kb_root))
             return
+        if route in {"/api/mail/members", "/api/members"}:
+            self.send_json(200, member_profiles(self.server.kb_root))
+            return
         if route in {"/api/memory", "/api/mail/memory"}:
             self.send_json(200, memory_status(self.server.kb_root))
+            return
+        if route in {"/api/memory/item", "/api/mail/memory/item"}:
+            relative = parse_qs(urlsplit(self.path).query).get("path", [""])[0]
+            try:
+                self.send_json(200, _memory_item(self.server.kb_root, relative))
+            except FileNotFoundError as exc:
+                self.send_json(404, {"error": str(exc)})
+            except ValueError as exc:
+                self.send_json(400, {"error": str(exc)})
             return
         if route == "/api/mail/snapshot":
             self.send_json(200, mail.snapshot_data(self.server.kb_root, UI_AGENT))
@@ -283,6 +525,11 @@ class Handler(BaseHTTPRequestHandler):
                 recipient = ["@" + agent_id(value) for value in recipient.split(",")]
                 if len(title) > 120 or len(body) > 12000:
                     raise ValueError("title/body too long")
+                record_kind = mail.normalise_record_kind(payload.get("record_kind", "message"))
+                delivery_reason = str(payload.get("delivery_reason", "direct") or "direct").strip().lower()
+                if delivery_reason not in mail.REASONS:
+                    raise ValueError("unsupported delivery reason")
+                evidence_refs = mail.normalise_evidence_refs(payload.get("evidence_refs", []))
                 result = mail.write_message(
                     self.server.kb_root,
                     body=body,
@@ -292,11 +539,12 @@ class Handler(BaseHTTPRequestHandler):
                     title=title,
                     origin_session_id=self.server.session_id,
                     origin_machine_id=identity.normalise_machine_id(),
-                    delivery_reason="direct",
-                    record_kind="message",
+                    delivery_reason=delivery_reason,
+                    record_kind=record_kind,
+                    evidence_refs=evidence_refs,
                     session_policy="next_prompt",
                 )
-                self.send_json(201, {"status": "saved", "message_id": result["message_id"], "thread_id": result["thread_id"]})
+                self.send_json(201, {"status": "saved", "message_id": result["message_id"], "thread_id": result["thread_id"], "record_kind": record_kind, "evidence_refs": evidence_refs})
                 return
             if route == "/api/mail/reply":
                 thread_id = str(payload.get("thread_id", "")).strip()

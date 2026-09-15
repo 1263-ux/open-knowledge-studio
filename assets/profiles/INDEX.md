@@ -10,10 +10,12 @@
 | `team.md` | 团队画像（技术栈、成员） | 每月 | 仅 frontmatter | ~200 |
 | `users/<id>/profile.md` | 个人偏好 | 每季度 | 按需加载 | ~100 |
 | `projects/<name>.md` | 项目 onboarding profile | 每次贡献前 | 按需加载 | ~200 |
+| `agents/<id>.md` | 团队共享 Agent 角色 | 职责变化时 | 按需加载 | ~200 |
 
 ## Frontmatter 字段规范
 
 **完整 schema 见 `_meta/frontmatter-schema.md` §2.2 (team.md) + §2.3 (users/<id>.md)**。
+Agent 档案沿用 profile 层约束，字段见下方“Agent 档案”。
 
 本层差异（profile 层特定）：
 - `type` 必须是 `profile`
@@ -23,6 +25,26 @@
 - profiles 不允许包含 PII / 敏感数据（见下方反模式）
 
 参考现有 user profile 作样板：`users/itxaiohanglover/profile.md`
+
+### Agent 档案
+
+`agents/<id>.md` 是团队共享的角色事实，不是运行时连接、权限授予或在线状态。
+只有人或负责操纵 OKS 的 Agent 明确建立/审核后才写入；Mail/Session provenance
+不能自动升级为档案。建议 frontmatter：
+
+```yaml
+id: reviewer
+title: 审核助手
+type: profile
+profile_kind: agent
+role: 候选知识初审
+scope: [research, engineering]
+status: active # proposed | active | retired
+source: human-approved
+```
+
+正文补充稳定职责、输入输出和协作边界，不写 token、密钥或机器私有路径。
+`agents/_template.md` 只是初始化样板，不能被识别为真实成员档案。
 
 ## Distill 规则
 

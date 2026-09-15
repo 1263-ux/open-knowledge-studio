@@ -73,7 +73,7 @@ dialog header{margin-bottom:24px}
 dialog h2{font-size:24px;line-height:1.25}
 .person-choice{min-height:62px;border-radius:13px;padding:12px}
 .field{font-size:13px;gap:8px;margin:18px 0}
-.field input,.field textarea{font-size:14px;border-radius:11px;padding:12px 13px}
+.field input,.field textarea,.field select{font-size:14px;border-radius:11px;padding:12px 13px}
 dialog footer{font-size:12px}
 #toast{border-radius:12px;padding:13px 20px;font-size:13px}
 body:not([data-view="mail"]) .shell{grid-template-columns:248px minmax(0,1fr)}
