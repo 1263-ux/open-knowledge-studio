@@ -14,7 +14,7 @@ from typer.testing import CliRunner
 
 from knowledge_studio.cli import app
 from knowledge_studio import mail
-from knowledge_studio.mail_setup import install_skill
+from knowledge_studio.mail_setup import asset_root, install_skill
 from knowledge_studio.mail_web import create_server
 
 
@@ -90,7 +90,10 @@ def test_web_generic_recipient_and_origin(kb):
         with request("/favicon.svg") as response:
             assert response.headers["Content-Type"].startswith("image/svg+xml")
             assert b"<svg" in response.read()
-        (kb / "wiki" / "memory.md").write_text("# Memory\n", encoding="utf-8")
+        (kb / "wiki" / "memory.md").write_text("---\ntitle: 团队记忆\narea: engineering\ntype: concept\n---\n# Memory\n", encoding="utf-8")
+        (kb / "profiles" / "agents").mkdir(parents=True)
+        (kb / "profiles" / "agents" / "reviewer.md").write_text("---\ntitle: 审核助手\nrole: 候选知识初审\nscope: engineering\n---\n负责审查候选知识。\n", encoding="utf-8")
+        (kb / "profiles" / "agents" / "_template.md").write_text("---\ntitle: 不应显示\n---\n", encoding="utf-8")
         (kb / "raw" / "executions" / "run-1").mkdir(parents=True)
         (kb / "raw" / "executions" / "run-1" / "trace.md").write_text("# Trace\n", encoding="utf-8")
         with request("/api/memory") as response:
@@ -101,6 +104,13 @@ def test_web_generic_recipient_and_origin(kb):
         assert memory["lifecycle"][-1] == "explicit_feedback"
         with request("/api/mail/memory") as response:
             assert json.load(response)["schema"] == "memory.snapshot.v1"
+        with request("/api/mail/members") as response:
+            members = json.load(response)
+        assert members["schema"] == "oks.members.v1"
+        assert members["profiles"][0]["id"] == "reviewer"
+        assert members["profiles"][0]["role"] == "候选知识初审"
+        assert members["profiles"][0]["profile_kind"] == "agent"
+        assert all(profile["id"] != "_template" for profile in members["profiles"])
         with request("/api/mail/team") as response:
             team = json.load(response)
         assert team["schema"] == "oks.team-sync.v1"
@@ -108,14 +118,18 @@ def test_web_generic_recipient_and_origin(kb):
         with pytest.raises(HTTPError) as error:
             request("/api/mail/team/sync", {"push": True})
         assert error.value.code == 409
-        with request("/api/mail/send", {"to": "custom-agent,reviewer", "title": "Hi", "body": "hello"}) as response:
+        with request("/api/mail/send", {"to": "custom-agent,reviewer", "title": "Hi", "body": "hello", "record_kind": "knowledge_ref", "delivery_reason": "review_request", "evidence_refs": [{"type": "wiki", "path": "wiki/memory.md"}]}) as response:
             result = json.load(response)
+        assert result["record_kind"] == "knowledge_ref"
+        assert result["evidence_refs"] == [{"type": "wiki", "path": "wiki/memory.md"}]
         assert len(mail.snapshot_data(kb, "custom-agent")["threads"]) == 1
         long_body = "全文" * 3000
         mail.write_message(kb, sender="custom-agent", recipients="human", body=long_body, thread_id=result["thread_id"])
         with request("/api/mail/thread?id=" + result["thread_id"]) as response:
             full = json.load(response)
         assert full["messages"][-1]["body"] == long_body
+        assert full["messages"][0]["record_kind"] == "knowledge_ref"
+        assert full["messages"][0]["evidence_refs"] == [{"type": "wiki", "path": "wiki/memory.md"}]
         mail.write_message(kb, sender="custom-agent", recipients="human", body="reply", thread_id=result["thread_id"])
         with request("/api/mail/reply", {"thread_id": result["thread_id"], "body": "continue"}) as response:
             assert response.status == 201
@@ -157,6 +171,131 @@ def test_web_generic_recipient_and_origin(kb):
         server.shutdown()
         server.server_close()
         worker.join(timeout=5)
+
+
+def test_web_memory_projection_is_readable_and_path_safe(kb):
+    wiki = kb / "wiki" / "engineering" / "repro.md"
+    wiki.parent.mkdir(parents=True)
+    wiki.write_text(
+        "---\n"
+        "title: 可复现性检查清单\n"
+        "area: engineering\n"
+        "type: strategy\n"
+        "status: active\n"
+        "---\n\n"
+        "# 可复现性检查清单\n\n"
+        "先固定环境，再记录运行命令和证据。\n",
+        encoding="utf-8",
+    )
+    draft = kb / "drafts" / "feedback.md"
+    draft.parent.mkdir(parents=True)
+    draft.write_text(
+        "---\n"
+        "title: 一次真实复用后的反馈\n"
+        "summary: 需要补充运行前置条件\n"
+        "---\n\n候选补充。\n",
+        encoding="utf-8",
+    )
+    server = create_server(kb, 0)
+    worker = threading.Thread(target=server.serve_forever, daemon=True)
+    worker.start()
+    base = f"http://127.0.0.1:{server.server_port}"
+
+    def request(route):
+        return urlopen(Request(base + route), timeout=5)
+
+    try:
+        with request("/api/memory") as response:
+            snapshot = json.load(response)
+        item = next(row for row in snapshot["recent"] if row["path"] == "wiki/engineering/repro.md")
+        assert item["title"] == "可复现性检查清单"
+        assert item["kind"] == "wiki"
+        assert item["kind_label"] == "已审核 Wiki"
+        assert item["area"] == "engineering"
+        assert snapshot["facets"]["areas"]["engineering"] == 1
+        assert "固定环境" in item["summary"]
+        assert item["updated_at"]
+
+        with request("/api/memory/item?path=wiki/engineering/repro.md") as response:
+            detail = json.load(response)
+        assert detail["path"] == "wiki/engineering/repro.md"
+        assert detail["title"] == item["title"]
+        assert "运行命令" in detail["body"]
+        assert detail["metadata"]["type"] == "strategy"
+
+        for unsafe in ("../mail/messages/secret.md", "mail/messages/secret.md", "wiki/../mail/x.md"):
+            with pytest.raises(HTTPError) as error:
+                request("/api/memory/item?path=" + unsafe)
+            assert error.value.code in {400, 404}
+    finally:
+        server.shutdown()
+        server.server_close()
+        worker.join(timeout=5)
+
+
+def test_web_memory_projection_uses_durable_time_and_hides_inactive(kb):
+    wiki = kb / "wiki"
+    (wiki / "engineering").mkdir(parents=True)
+    (wiki / "engineering" / "active.md").write_text(
+        "---\n"
+        "title: 活跃知识\n"
+        "area: engineering\n"
+        "type: practice\n"
+        "status: active\n"
+        "created: 2026-01-01\n"
+        "updated_at: 2026-09-15T08:00:00+00:00\n"
+        "---\n\n正文摘要。\n",
+        encoding="utf-8",
+    )
+    (wiki / "engineering" / "dropped.md").write_text(
+        "---\n"
+        "title: 已丢弃知识\n"
+        "area: engineering\n"
+        "status: dropped\n"
+        "updated_at: 2026-09-20T08:00:00+00:00\n"
+        "---\n\n不应出现在可复用列表。\n",
+        encoding="utf-8",
+    )
+    (wiki / "engineering" / "archived.md").write_text(
+        "---\n"
+        "title: 已归档知识\n"
+        "area: engineering\n"
+        "archived: true\n"
+        "updated_at: 2026-09-19T08:00:00+00:00\n"
+        "---\n\n不应出现在可复用列表。\n",
+        encoding="utf-8",
+    )
+    server = create_server(kb, 0)
+    worker = threading.Thread(target=server.serve_forever, daemon=True)
+    worker.start()
+    try:
+        with urlopen(f"http://127.0.0.1:{server.server_port}/api/memory", timeout=5) as response:
+            snapshot = json.load(response)
+        assert [item["title"] for item in snapshot["recent"]] == ["活跃知识"]
+        assert snapshot["recent"][0]["timestamp_source"] == "updated_at"
+        assert snapshot["counts"]["wiki"] == 1
+        assert snapshot["counts"]["wiki_total"] == 3
+        assert snapshot["counts"]["excluded"] == 2
+        assert snapshot["facets"]["areas"] == {"engineering": 1}
+    finally:
+        server.shutdown()
+        server.server_close()
+        worker.join(timeout=5)
+
+
+def test_web_empty_state_actions_use_presence_checks():
+    app = (asset_root() / "mail-web" / "app.js").read_text(encoding="utf-8")
+    assert "button.hasAttribute('data-create')" in app
+    assert "button.hasAttribute('data-refresh-memory')" in app
+    assert "button.hasAttribute('data-team-sync')" in app
+    assert "const MAIL_INTENTS" in app
+    assert "data-create-intent" in app
+    assert "data-memory-collab-path" in app
+    assert "threadSessions" in app
+    html = (asset_root() / "mail-web" / "index.html").read_text(encoding="utf-8")
+    assert 'id="newIntent"' in html
+    assert '发起协作' in html
+    assert 'id="agentChoices"' in html
 
 
 def test_web_connection_status_and_mail_verification(kb):
