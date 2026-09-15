@@ -73,7 +73,7 @@ Session，并在后台调用 CLI；用户通常不需要手写 `@`、复制
 因此 Mail 有两种入口，但只有一套 Core：
 
 ```text
-普通用户：通信意图 → Host/Agent 解析接收方 → Mail Core
+普通用户：上下文 Skill 动作 → Host/Agent 解析接收方 → Mail Core
 Agent/维护者：
 oks mail send --to @agent-id
 或 oks mail reply <thread-id>
@@ -241,8 +241,8 @@ oks mail reply thr_... --session-id codex-s1 \
   --body "结果已完成" --format json
 ```
 
-允许的类型是 `trace`、`run`、`capability`、`bundle`、`commit`（使用 `id`）和
-`candidate`（使用相对 KB 的 `path`）。绝对路径、`..` 穿越、未知字段、未知类型
+允许的类型是 `trace`、`run`、`capability`、`bundle`、`commit`（使用 `id`）以及
+`candidate`、`wiki`（使用相对 KB 的 `path`）。绝对路径、`..` 穿越、未知字段、未知类型
 和证据正文都会被拒绝。Ref 出现在 canonical Message 和 snapshot 元数据中，正文
 仍只保存协作事实。
 
