@@ -59,8 +59,8 @@ python .agents/skills/oks-mail/scripts/mail.py --session SESSION_ID reply THREAD
 
 `binding.json` 是本机配置，不应进入团队 Git；源码库和安装包不包含个人绑定。
 在新机器使用同一个知识库 clone；若宿主在库外，再运行一次 setup 生成本机 binding。
-团队通过 `oks team sync --push` 或 Web 的“一键同步团队资料”交换持久消息。
-Mail 不会开启后台轮询或远程唤醒。
+团队通过各自的 Git 提交流程交换持久消息；如果团队同步适配器已启用，也可以使用
+其提供的一键同步入口。Mail 不会开启后台轮询或远程唤醒。
 
 「成员与来源」页的“添加助手/添加成员档案”是一个结构化建档申请入口。填写负责
 操纵 OKS 的 Agent、稳定 ID、职责和范围后，Web 会发送一条 `record_kind=handoff`
