@@ -452,6 +452,48 @@ def test_short_prompt_still_injects_mail(tmp_path):
     assert mail.receipt_path(tmp_path, "short-session", message["message_id"]).is_file()
 
 
+def test_prompt_hook_delivers_same_agent_mail_to_a_different_session(tmp_path):
+    """An explicit self-addressed Mail can hand off between Agent Sessions.
+
+    The stable Agent identity is shared by Sessions, while delivery receipts
+    remain Session-scoped.  This is the supported path for one Agent runtime
+    handing context from Session A to Session B.
+    """
+    from knowledge_studio import mail
+
+    message = mail.write_message(
+        tmp_path,
+        body="continue the paused review",
+        sender="claude",
+        recipients="@claude",
+        title="Cross-session handoff",
+        origin_session_id="claude-s1",
+        delivery_reason="handoff",
+        record_kind="handoff",
+    )
+    script = __import__("pathlib").Path(__file__).parents[2] / "assets" / "hooks" / "user-prompt-recall.py"
+    env = {
+        "OKS_ROOT": str(tmp_path),
+        "OKS_AGENT_ID": "claude",
+        "PYTHONPATH": str(script.parents[2] / "cli"),
+        "OKS_HOOK_OUTPUT": "json",
+    }
+    payload = json.dumps({"prompt": "继续", "session_id": "claude-s2", "cwd": str(tmp_path), "agent_id": "claude"})
+    result = subprocess.run(
+        [sys.executable, str(script)],
+        input=payload,
+        text=True,
+        encoding="utf-8",
+        capture_output=True,
+        env={**os.environ, **env},
+    )
+
+    assert result.returncode == 0
+    assert "Cross-session handoff" in result.stdout
+    assert mail.receipt_path(tmp_path, "claude-s2", message["message_id"]).is_file()
+    assert not mail.receipt_path(tmp_path, "claude-s1", message["message_id"]).is_file()
+
+
 def test_prompt_hook_uses_claude_host_identity_and_payload_cwd(tmp_path):
     from knowledge_studio import mail
 
@@ -955,6 +997,7 @@ def test_evidence_refs_round_trip_without_copying_content(tmp_path, monkeypatch)
         {"type": "capability", "id": "recall"},
         {"type": "bundle", "id": "bundle_123"},
         {"type": "candidate", "path": "drafts/foo.md"},
+        {"type": "wiki", "path": "wiki/foo.md"},
         {"type": "commit", "id": "abc123"},
         {"type": "trace", "id": "trace_123"},
     ]
@@ -984,6 +1027,7 @@ def test_evidence_refs_round_trip_without_copying_content(tmp_path, monkeypatch)
         {"type": "candidate", "path": "../secrets.txt"},
         {"type": "candidate", "path": "C:/outside.txt"},
         {"type": "candidate", "path": "drafts//foo.md"},
+        {"type": "wiki", "path": "../secrets.txt"},
     ],
 )
 def test_evidence_refs_reject_unknown_content_and_traversal(tmp_path, bad_ref):

@@ -28,7 +28,7 @@ DEFAULT_REASON = "direct"
 REASONS = {"direct", "mention", "conflict", "review_request", "thread_reply", "system", "handoff"}
 RECORD_KINDS = {"message", "handoff", "result", "blocked", "note", "knowledge_ref"}
 SENDER_KINDS = {"human", "agent", "unknown"}
-EVIDENCE_REF_TYPES = {"trace", "run", "capability", "bundle", "candidate", "commit"}
+EVIDENCE_REF_TYPES = {"trace", "run", "capability", "bundle", "candidate", "wiki", "commit"}
 
 
 def utc_now() -> datetime:
@@ -108,7 +108,7 @@ def normalise_evidence_refs(value: Any) -> list[dict[str, str]]:
         ref_type = str(raw.get("type", "") or "").strip().lower()
         if ref_type not in EVIDENCE_REF_TYPES:
             raise ValueError(f"unsupported evidence ref type: {ref_type or '(empty)'}")
-        expected_key = "path" if ref_type == "candidate" else "id"
+        expected_key = "path" if ref_type in {"candidate", "wiki"} else "id"
         if set(raw) != {"type", expected_key}:
             raise ValueError(f"{ref_type} evidence ref must contain only type and {expected_key}")
         locator = str(raw.get(expected_key, "") or "").strip()
@@ -117,9 +117,9 @@ def normalise_evidence_refs(value: Any) -> list[dict[str, str]]:
         if expected_key == "path":
             candidate_path = locator.replace("\\", "/")
             if candidate_path.startswith("/") or re.match(r"^[A-Za-z]:/", candidate_path):
-                raise ValueError("candidate evidence path must be relative to the KB")
+                raise ValueError("knowledge evidence path must be relative to the KB")
             if any(part in {"", ".", ".."} for part in candidate_path.split("/")):
-                raise ValueError("candidate evidence path must not contain traversal or empty segments")
+                raise ValueError("knowledge evidence path must not contain traversal or empty segments")
             locator = candidate_path
         ref = {"type": ref_type, expected_key: locator}
         fingerprint = json.dumps(ref, ensure_ascii=False, sort_keys=True)
