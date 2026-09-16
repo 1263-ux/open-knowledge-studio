@@ -28,8 +28,8 @@ Open Knowledge Studio（OKS）是一个开源的**文件化外部记忆**，面�
 
 ## 为什么选 Open Knowledge Studio
 
-- **一套文件系统装下所有记忆。** profiles、raw、wiki、drafts、mail 各占一个目录，有不同的信任边界。Agent 确定性地定位和操作上下文，就像开发者操作文件一样。→ [文件系统范式](https://open-agent-power.github.io/open-knowledge-studio/concepts/file-system-paradigm/) · [记忆模型](https://open-agent-power.github.io/open-knowledge-studio/concepts/memory-model/)
-- **人工审核是唯一入口。** 原始材料 ≠ 结论，Candidate ≠ 长期知识。任何东西都不会自动晋升到 Wiki——每条持久记忆都经过人审。→ [Dreaming 周期](https://open-agent-power.github.io/open-knowledge-studio/concepts/memory-model/#dreaming)
+- **一套文件系统装下所有记忆。** profiles、raw、wiki、drafts、mail 各占一个目录，有不同的信任边界。Agent 确定性地定位和操作上下文，就像开发者操作文件一样。→ [架构总览](https://open-agent-power.github.io/open-knowledge-studio/concepts/architecture/) · [宪法](https://open-agent-power.github.io/open-knowledge-studio/concepts/constitution/)
+- **人工审核是唯一入口。** 原始材料 ≠ 结论，Candidate ≠ 长期知识。任何东西都不会自动晋升到 Wiki——每条持久记忆都经过人审。→ [审核候选](https://open-agent-power.github.io/open-knowledge-studio/usage/review/)
 - **三层召回压制幻觉。** Node-BM25 召回*什么*匹配，Soul Boost 重排*什么到达* Agent（反模式 ×1.5、review bonus、generic 降权），Memory Curve 评分*多新鲜*——所以置信度永远不会盖过事实。→ [召回引擎](https://open-agent-power.github.io/open-knowledge-studio/algorithms/recall-engine/)
 - **知识像真实记忆一样衰减。** 不用的页面沿着 hot → warm → cold → evictable 降温；用过的页面会浮现。`importance × e^(-λ×days) + ln(1+access) + pin_bonus`。→ [衰减系统](https://open-agent-power.github.io/open-knowledge-studio/algorithms/decay-system/)
 - **每次召回都可观测。** 每个查询都保留各因子分数和匹配路径（`oks recall "<q>" --explain`）；每次注入都记到 `records/inject.jsonl`。结果看着不对时，你能看到是哪个因子产生的。→ [评估](https://open-agent-power.github.io/open-knowledge-studio/algorithms/recall-evaluation/)

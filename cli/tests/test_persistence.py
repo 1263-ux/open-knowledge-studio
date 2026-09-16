@@ -129,7 +129,7 @@ def test_user_prompt_recall_reads_date_organized_mail(tmp_path, monkeypatch):
 def test_mail_d2_filters_by_to_and_skips_self_sent(tmp_path):
     """D2: _load_unread_mail filters by `to:` (@all/@self) and skips self-sent."""
     import importlib.util, sys
-    hook = Path(__file__).parent.parent / "knowledge_studio" / "_assets" / "hooks" / "user-prompt-recall.py"
+    hook = _hook_script("user-prompt-recall.py")
     sys.path.insert(0, str(hook.parent))
     spec = importlib.util.spec_from_file_location("_upr_d2", hook)
     mod = importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)
@@ -155,7 +155,7 @@ def test_mail_d1_per_agent_read_state(tmp_path):
     """D1: marking read is per-agent; @all broadcast reaches a 2nd agent
     even after the 1st agent's hook marked it read."""
     import importlib.util, sys
-    hook = Path(__file__).parent.parent / "knowledge_studio" / "_assets" / "hooks" / "user-prompt-recall.py"
+    hook = _hook_script("user-prompt-recall.py")
     sys.path.insert(0, str(hook.parent))
     spec = importlib.util.spec_from_file_location("_upr_d1", hook)
     mod = importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)
