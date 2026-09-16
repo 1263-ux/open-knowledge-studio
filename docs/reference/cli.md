@@ -25,6 +25,7 @@ parent: 参考
 | `oks capability list/install/status/guide` | 能力注册与选择指导 |
 | `oks hook install/status` | opt-in 自动 recall + 文件冲突检测注入 |
 | `oks team init [path] [--name NAME]` | 创建共享团队知识实例 |
+| `oks team sync [--push]` | 提交共享目录、rebase 远端并可推送（mail/raw/drafts/wiki/profiles） |
 | `oks schema show <name>` | 输出协议文档的校验示例 |
 | `oks trace *` | 执行追踪（provenance） |
 | `oks mail send/inbox/show/read/count` | Agent 间消息接口；不属于 `oks recall` 结果 |
