@@ -51,5 +51,3 @@ def install_skill(root: Path, agent: str, skills_dir: Path) -> Path:
         target.parent.mkdir(parents=True, exist_ok=True)
         store._atomic_write(target, content)
     return destination
-
-

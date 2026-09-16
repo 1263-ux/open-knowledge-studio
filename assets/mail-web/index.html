@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>OKS Studio · 知识工作台</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="layout.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <header class="runtime-bar" aria-live="polite"><span id="runtimeText">正在连接本地 OKS Mail…</span><button id="refresh" type="button">刷新</button></header>
+  <nav class="workspace-mobile" aria-label="工作台导航"></nav>
+  <div class="shell">
+    <nav class="rail" aria-label="工作台导航">
+      <a class="logo" href="/" aria-label="OKS 协作首页"><span class="mark">o</span><span>OKS <strong>Studio</strong></span></a>
+      <div class="workspace"><span class="workspace-icon">O</span><div><b>我的协作空间</b><small>消息留在这里，对话接着走</small></div></div>
+      <div class="workspace-nav">
+        <div class="workspace-nav-title">工作台</div>
+        <button data-view="mail"><span>✉</span> 协作记录 <small>明确留下的协作事实</small></button>
+        <button data-view="memory"><span>◇</span> 记忆 <small>raw、candidate、wiki 与召回</small></button>
+        <button data-view="agents"><span>◎</span> 成员与来源 <small>Agent、Session、Machine 与证据</small></button>
+      </div>
+      <button id="new" class="primary">＋ 发起协作</button>
+      <div class="nav-label">协作记录</div>
+      <button class="nav-item active" data-filter="all">全部记录 <span id="total"></span></button>
+      <button class="nav-item" data-filter="unread">未读消息 <span id="unread"></span></button>
+      <button class="nav-item" data-filter="archived">已归档</button>
+      <div class="rail-bottom"><div class="identity"><span class="avatar ink">你</span><span><b>你</b><small>当前设备 · human 身份</small></span></div></div>
+    </nav>
+    <section class="inbox" aria-label="对话列表">
+      <header><div><span class="eyebrow">协作记录</span><h1 id="listTitle">全部记录</h1></div><button id="mobileNew" aria-label="发起协作">＋</button></header>
+      <label class="search"><span>⌕</span><input id="search" placeholder="搜索对话或参与者" aria-label="搜索对话或参与者"></label>
+      <div class="mobile-filters"><button data-filter="all">全部</button><button data-filter="unread">未读</button><button data-filter="archived">归档</button></div>
+      <div id="threadList"></div>
+      <footer><span class="status-dot"></span> <span id="syncLabel">正在读取…</span></footer>
+    </section>
+    <main id="conversation">
+      <header class="conversation-head"><button id="back" aria-label="返回协作记录">←</button><div class="head-text"><div id="participants" class="eyebrow"></div><h2 id="subject"></h2><div id="conversationModes" class="conversation-modes" aria-label="这段记录的状态"></div></div><button id="moreActions" aria-haspopup="dialog" aria-expanded="false" disabled>更多</button><button id="archive" hidden>归档</button><button id="unarchive" hidden>取消归档</button><button id="details" hidden aria-expanded="false">记录详情 ⓘ</button></header>
+      <div id="messages" aria-label="对话消息"></div>
+      <form id="replyForm"><div class="compose-meta"><span>以 <b>你（此设备）</b> 的身份继续这段协作</span><span id="replyTo"></span></div><label class="sr-only" for="reply">继续这段协作</label><textarea id="reply" rows="3" maxlength="12000" placeholder="写下新的事实、进展或需要确认的事项…"></textarea><div id="replyError" class="error" role="alert"></div><div class="compose-actions"><span>追加到同一 Thread；不会自动唤醒对方</span><button id="send" class="primary" type="submit">继续协作 ↑</button></div></form>
+      <p class="footnote">只保存明确发送到 Mail 的记录；是否读取、确认或执行均以真实回执为准。</p>
+    </main>
+    <aside id="detailPanel" hidden aria-label="详情"><header><h3 id="detailTitle">对话详情</h3><button id="closeDetails" aria-label="关闭详情">×</button></header><div id="detailContent"></div></aside>
+    <section id="workspacePage" hidden aria-label="工作台内容"></section>
+  </div>
+  <dialog id="composeDialog"><form id="newForm"><header><div><span class="eyebrow">发起协作</span><h2>选择一个协作动作</h2></div><button type="button" data-close aria-label="关闭协作窗口">×</button></header><p class="muted-text">这是 Skill 的用户入口：先说清楚要做什么，系统再写入一条可跨 Session 继续的协作记录。不会自动唤醒、启动或执行 Agent。</p><label class="field">协作对象<input id="recipient" name="person" list="agentChoices" required placeholder="例如：Claude、DSH"><datalist id="agentChoices"></datalist><small>优先选择已有成员档案；跨 Session 会按同一个稳定身份继续。</small></label><label class="field">协作动作<select id="newIntent"><option value="handoff">交接一项工作</option><option value="result">报告已完成结果</option><option value="blocked">报告当前阻塞</option><option value="knowledge_ref">请对方查看或审核一条知识</option><option value="note">补充说明</option><option value="message">留下一条重要消息</option></select><small>系统会自动填写协议字段，动作只描述已经发生或明确提出的协作事实。</small></label><input id="newRecordKind" type="hidden" value="handoff"><input id="newDeliveryReason" type="hidden" value="handoff"><label class="field">关联知识（可选）<input id="newEvidencePath" placeholder="wiki/... 或 drafts/..."><small>只保存路径型 Evidence，不复制知识正文；跨机器后由同一知识库路径解析。</small></label><label class="field">事项标题<input id="newTitle" required maxlength="120" placeholder="例如：候选知识需要审核"></label><label class="field">说明<textarea id="newBody" required rows="4" maxlength="12000" placeholder="写清楚发生了什么、希望对方确认什么，或留下什么结果"></textarea></label><div class="error" id="newError" role="alert"></div><footer><span id="composeModeHint">写入协作记录；Agent 下次检查时可读</span><button type="submit" class="primary">保存协作记录 ↑</button></footer></form></dialog>
+  <dialog id="memberDialog"><form id="memberForm"><header><div><span class="eyebrow">成员档案申请</span><h2 id="memberDialogTitle">添加助手</h2></div><button type="button" data-close aria-label="关闭成员档案窗口">×</button></header><p class="muted-text">这不是连接、安装或启动。它会把一份结构化建档申请交给负责操纵 OKS 的 Agent，由 Agent 按团队约定建立共享档案。</p><input id="memberKind" type="hidden" value="assistant"><label class="field">负责建档的 Agent ID<input id="memberController" required placeholder="例如：oks-manager"><small>填写会读取 Mail 并处理档案的稳定 Agent ID。</small></label><label class="field">成员稳定 ID<input id="memberId" required maxlength="120" pattern="[A-Za-z0-9_.@-]+" placeholder="例如：reviewer"></label><label class="field">显示名称<input id="memberName" required maxlength="120" placeholder="例如：审稿助手"></label><label class="field">职责<input id="memberRole" required maxlength="200" placeholder="例如：负责候选知识初审"></label><label class="field">工作范围（可选）<input id="memberScope" maxlength="240" placeholder="例如：science、engineering"></label><label class="field">补充说明（可选）<textarea id="memberNotes" rows="3" maxlength="4000" placeholder="交接约定、输入输出或注意事项"></textarea></label><div class="error" id="memberError" role="alert"></div><footer><span>会写入一条 handoff Mail</span><button type="submit" class="primary">发送建档申请 ↑</button></footer></form></dialog>
+  <dialog id="threadActionsDialog" class="action-dialog"><header><div><span class="eyebrow">这段记录</span><h2>更多操作</h2></div><button type="button" data-close aria-label="关闭更多操作">×</button></header><div id="threadActionMenu" class="thread-action-menu"><button type="button" data-thread-action="details"><b>查看事实与证据</b><small>查看参与者、来源、回执和证据引用</small></button><button type="button" data-thread-action="archive"><b>归档记录</b><small>从当前列表隐藏，之后仍可找回</small></button><button type="button" data-thread-action="unarchive" hidden><b>取消归档</b><small>把记录放回全部记录</small></button></div><div id="threadActionContent" hidden></div></dialog>
+  <dialog id="infoDialog"><header><h2 id="infoTitle"></h2><button data-close aria-label="关闭说明">×</button></header><div id="infoBody"></div></dialog>
+  <div id="toast" role="status" aria-live="polite"></div>
+</body>
+</html>

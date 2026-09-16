@@ -45,6 +45,29 @@ def test_message_has_recipient_state_and_independent_session_receipts(tmp_path):
     assert mail.receipt_path(tmp_path, "ses_b", result["message_id"]).is_file()
 
 
+def test_record_kind_is_a_fact_classification_separate_from_delivery_reason(tmp_path):
+    from knowledge_studio import mail
+
+    result = mail.write_message(
+        tmp_path,
+        body="Candidate is ready for review.",
+        sender="claude",
+        recipients="@human",
+        record_kind="knowledge_ref",
+        delivery_reason="review_request",
+    )
+    message = mail.parse_message(result["path"])
+    assert message is not None
+    assert message["meta"]["record_kind"] == "knowledge_ref"
+    assert message["meta"]["delivery_reason"] == "review_request"
+
+    legacy = tmp_path / "mail" / "messages" / "legacy.md"
+    legacy.write_text("---\nmessage_id: legacy\nfrom: @claude\nto: @human\n---\n\n# Legacy\n\nbody\n", encoding="utf-8")
+    parsed_legacy = mail.parse_message(legacy)
+    assert parsed_legacy is not None
+    assert parsed_legacy["meta"]["record_kind"] == "message"
+
+
 def test_delegate_is_an_intent_facade_over_a_normal_handoff(tmp_path):
     from knowledge_studio import mail
 
@@ -113,6 +136,24 @@ def test_all_expands_to_registered_agents_without_global_projection(tmp_path):
     assert not (tmp_path / "mail" / "inbox" / f"{result['message_id']}.md").exists()
 
 
+def test_all_expands_from_session_registry_without_profile_registry(tmp_path):
+    """A missing profiles/agents/registry.jsonl must not disable @all: live
+    sessions in mail/sessions/ are routable identities on their own."""
+    from knowledge_studio import mail
+
+    mail.register_session(tmp_path, "codex-s1", "codex")
+    mail.register_session(tmp_path, "claude-s1", "claude")
+    assert not (tmp_path / "profiles" / "agents" / "registry.jsonl").exists()
+    result = mail.write_message(
+        tmp_path,
+        body="Broadcast",
+        sender="human",
+        recipients="@all",
+        delivery_reason="system",
+    )
+    assert set(result["recipients"]) == {"@codex", "@claude"}
+
+
 def test_cli_send_and_reply_keep_thread_and_session(monkeypatch, tmp_path):
     from knowledge_studio import cli
 
@@ -136,6 +177,29 @@ def test_cli_send_and_reply_keep_thread_and_session(monkeypatch, tmp_path):
     assert any(m["meta"].get("message_id") == message_id for m in messages)
     reply_messages = list(__import__("knowledge_studio.mail", fromlist=["iter_messages"]).iter_messages(tmp_path))
     assert any(m["meta"].get("thread_id") == thread_id and m["meta"].get("origin_session_id") == "ses_b" for m in reply_messages)
+
+
+def test_cli_send_never_silently_claims_human_identity(monkeypatch, tmp_path):
+    from knowledge_studio import cli, mail
+
+    monkeypatch.setenv("OKS_ROOT", str(tmp_path))
+    for key in ("OKS_AGENT_ID", "CLAUDE_CODE_SESSION_ID", "CLAUDECODE", "CODEX_SESSION_ID", "CODEX_CLI"):
+        monkeypatch.delenv(key, raising=False)
+    runner = CliRunner()
+    unknown = runner.invoke(cli.app, [
+        "mail", "send", "--to", "@codex", "--body", "unattributed", "--title", "No identity",
+    ])
+    assert unknown.exit_code == 0, unknown.stdout
+    row = next(mail.iter_messages(tmp_path, "codex"))
+    assert row["meta"]["from"] == "unknown"
+    assert row["meta"]["sender_kind"] == "agent"
+
+    explicit = runner.invoke(cli.app, [
+        "mail", "send", "--from", "human", "--to", "@codex", "--body", "human-authored", "--title", "Explicit human",
+    ])
+    assert explicit.exit_code == 0, explicit.stdout
+    rows = list(mail.iter_messages(tmp_path, "codex"))
+    assert any(row["meta"]["from"] == "human" and row["meta"]["sender_kind"] == "human" for row in rows)
 
 
 def test_message_sender_kind_is_compatible_and_visible_in_snapshot(tmp_path):
@@ -388,6 +452,48 @@ def test_short_prompt_still_injects_mail(tmp_path):
     assert mail.receipt_path(tmp_path, "short-session", message["message_id"]).is_file()
 
 
+def test_prompt_hook_delivers_same_agent_mail_to_a_different_session(tmp_path):
+    """An explicit self-addressed Mail can hand off between Agent Sessions.
+
+    The stable Agent identity is shared by Sessions, while delivery receipts
+    remain Session-scoped.  This is the supported path for one Agent runtime
+    handing context from Session A to Session B.
+    """
+    from knowledge_studio import mail
+
+    message = mail.write_message(
+        tmp_path,
+        body="continue the paused review",
+        sender="claude",
+        recipients="@claude",
+        title="Cross-session handoff",
+        origin_session_id="claude-s1",
+        delivery_reason="handoff",
+        record_kind="handoff",
+    )
+    script = __import__("pathlib").Path(__file__).parents[2] / "assets" / "hooks" / "user-prompt-recall.py"
+    env = {
+        "OKS_ROOT": str(tmp_path),
+        "OKS_AGENT_ID": "claude",
+        "PYTHONPATH": str(script.parents[2] / "cli"),
+        "OKS_HOOK_OUTPUT": "json",
+    }
+    payload = json.dumps({"prompt": "继续", "session_id": "claude-s2", "cwd": str(tmp_path), "agent_id": "claude"})
+    result = subprocess.run(
+        [sys.executable, str(script)],
+        input=payload,
+        text=True,
+        encoding="utf-8",
+        capture_output=True,
+        env={**os.environ, **env},
+    )
+
+    assert result.returncode == 0
+    assert "Cross-session handoff" in result.stdout
+    assert mail.receipt_path(tmp_path, "claude-s2", message["message_id"]).is_file()
+    assert not mail.receipt_path(tmp_path, "claude-s1", message["message_id"]).is_file()
+
+
 def test_prompt_hook_uses_claude_host_identity_and_payload_cwd(tmp_path):
     from knowledge_studio import mail
 
@@ -630,7 +736,9 @@ def test_file_runtime_wait_and_notify_fallback(tmp_path):
     presented = json.loads(notification_path.read_text(encoding="utf-8"))
     assert presented["status"] == "presented"
     assert presented["presented_by_session"] == "session-runtime"
-    assert mail.mark_notification_presented(tmp_path, "codex", message["message_id"])["status"] == "presented"
+    stamped = presented["presented_at"]
+    remarked = mail.mark_notification_presented(tmp_path, "codex", message["message_id"])
+    assert remarked["presented_at"] == stamped
     assert result["messages"][0]["receipt"]["status"] == "presented"
     assert runtime.notify(message["message_id"])["wake_supported"] is False
 
@@ -889,6 +997,7 @@ def test_evidence_refs_round_trip_without_copying_content(tmp_path, monkeypatch)
         {"type": "capability", "id": "recall"},
         {"type": "bundle", "id": "bundle_123"},
         {"type": "candidate", "path": "drafts/foo.md"},
+        {"type": "wiki", "path": "wiki/foo.md"},
         {"type": "commit", "id": "abc123"},
         {"type": "trace", "id": "trace_123"},
     ]
@@ -918,6 +1027,7 @@ def test_evidence_refs_round_trip_without_copying_content(tmp_path, monkeypatch)
         {"type": "candidate", "path": "../secrets.txt"},
         {"type": "candidate", "path": "C:/outside.txt"},
         {"type": "candidate", "path": "drafts//foo.md"},
+        {"type": "wiki", "path": "../secrets.txt"},
     ],
 )
 def test_evidence_refs_reject_unknown_content_and_traversal(tmp_path, bad_ref):

@@ -3080,6 +3080,28 @@ def mail_setup(
     console.print(f"Mail Skill installed: {destination}")
 
 
+@mail_app.command("serve")
+def mail_serve(
+    path: Optional[str] = typer.Option(None, "--path", help="Knowledge base root"),
+    port: int = typer.Option(3182, "--port", min=1, max=65535),
+) -> None:
+    """Serve the real local Mail workspace for a human browser."""
+    from knowledge_studio.mail_web import create_server
+
+    try:
+        server = create_server(_instance_root(path), port)
+    except (ValueError, OSError) as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(2)
+    console.print(f"OKS Mail: http://127.0.0.1:{server.server_port}/ — Ctrl+C to stop")
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        server.server_close()
+
+
 @mail_app.command("view")
 def mail_view(
     output: Path = typer.Option(..., "--output", "-o", help="Standalone HTML output path"),
@@ -3311,11 +3333,16 @@ def _ensure_recall_scripts(root: Path, hooks_dir: Path | None = None) -> list[st
                 continue
             try:
                 dest_text = dest.read_text(encoding="utf-8")
-                if name.endswith(".sh"):
-                    if baked in dest_text:
+                if src_dir is not None and (src_dir / name).is_file():
+                    bundled = (src_dir / name).read_text(encoding="utf-8")
+                    expected = bundled
+                    if name.endswith(".sh"):
+                        # A matching bake must not shield an outdated wrapper
+                        # body from an upstream fix: compare against the
+                        # bundled template re-baked for this interpreter.
+                        expected = bundled.replace('"${OKS_PYTHON:-python3}"', baked)
+                    if dest_text == expected:
                         continue
-                elif src_dir is not None and (src_dir / name).read_text(encoding="utf-8") == dest_text:
-                    continue
             except OSError:
                 pass
             # Stale interpreter bake — fall through to re-copy + re-bake.
