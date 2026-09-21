@@ -2611,6 +2611,31 @@ def _instance_root(path: str | None) -> Path:
     return get_kb_root()
 
 
+# Characters that cannot appear in a single portable path component: the POSIX
+# separator, the Windows separator, and the characters Windows forbids in a
+# filename. The id becomes a directory name under ``mail/sent/`` and part of
+# the inbox slug, so a value containing any of them would write outside the
+# intended tree — or fail to be created at all.
+_UNSAFE_AGENT_ID_CHARS = '/\\:*?"<>|\0\n\r'
+# Windows rejects these device names in any directory, with or without an
+# extension: ``CON`` and ``CON.txt`` both resolve to the CON device.
+_WINDOWS_RESERVED_NAMES = frozenset(
+    {"con", "prn", "aux", "nul"}
+    | {f"com{index}" for index in range(1, 10)}
+    | {f"lpt{index}" for index in range(1, 10)}
+)
+
+
+def _is_safe_agent_id(agent_id: str) -> bool:
+    """Whether *agent_id* can serve as one portable path component."""
+    if agent_id in {".", ".."} or not agent_id.strip():
+        return False
+    if any(char in _UNSAFE_AGENT_ID_CHARS for char in agent_id):
+        return False
+    # ``CON`` is reserved and so is ``CON.txt``: compare the stem.
+    return agent_id.split(".")[0].lower() not in _WINDOWS_RESERVED_NAMES
+
+
 def _mail_agent_id(explicit: str = "") -> str:
     """Resolve the sender identity without ever claiming to be the human.
 
@@ -2625,8 +2650,8 @@ def _mail_agent_id(explicit: str = "") -> str:
         if not agent_id:
             continue
         # The id is interpolated into mail/sent/{id}/ and into the inbox slug,
-        # so it must be one safe path component.
-        if agent_id in {".", ".."} or any(c in agent_id for c in '/\\:\0\n\r'):
+        # so it must be one portable path component.
+        if not _is_safe_agent_id(agent_id):
             console.print(f"[red]Invalid agent id:[/red] {agent_id!r}")
             raise typer.Exit(1)
         return agent_id
