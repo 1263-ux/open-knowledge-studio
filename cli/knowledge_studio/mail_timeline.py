@@ -37,6 +37,11 @@ STEP_LABELS = {
     "acknowledged": "该 Session 已确认收到",
 }
 
+# Lifecycle order of one recipient's steps. Same-instant steps used to fall back
+# to alphabetical order, which puts "acknowledged" before "presented" and so
+# renders the confirmation above the event it confirms.
+STEP_ORDER = {"injected": 0, "presented": 1, "acknowledged": 2}
+
 STATE_LABELS = {
     "created": "已保存，等待对方读取",
     "notified": "已通知，尚未读取",
@@ -246,7 +251,7 @@ def _delivery_evidence(root: Path, rows: list, deliveries: dict) -> dict:
                         "session_id": str(session.get("session_id") or ""),
                         "machine_id": str(session.get("machine_id") or ""),
                     })
-            steps.sort(key=lambda item: (item["at"], item["step"]))
+            steps.sort(key=lambda item: (item["at"], STEP_ORDER.get(item["step"], len(STEP_ORDER))))
             acknowledged = any(step["step"] == "acknowledged" for step in steps)
             read_at = recipient.get("read_at")
             if acknowledged:
@@ -364,10 +369,16 @@ def _build_stage_ladder(rows: list, deliveries: dict) -> list[dict]:
             elif any(_stage_match(p, meta, refs, acknowledged) for p in rule["enter"]):
                 enter_hits.append(_stage_evidence_item(meta, row))
 
+        done_times = [hit["at"] for hit in done_hits if hit["at"]]
+        enter_times = [hit["at"] for hit in enter_hits if hit["at"]]
         if done_hits:
-            status, at = "done", min(hit["at"] for hit in done_hits)
+            # An evidence item without a timestamp must not win ``min``: "" sorts
+            # before every real timestamp, so a finished stage would be stamped
+            # with no time at all, and the cursor (which only advances on a real
+            # time) would then stop moving for every later stage.
+            status, at = "done", min(done_times) if done_times else ""
         elif enter_hits:
-            status, at = "active", max(hit["at"] for hit in enter_hits)
+            status, at = "active", max(enter_times) if enter_times else ""
         else:
             status, at = "pending", ""
 
@@ -534,8 +545,11 @@ def timeline_data(root: Path, viewer: str = "human", limit: int = DEFAULT_LIMIT)
                 "cross_session": False,
                 "evidence_refs": [],
                 "delivery": [],
-                "sessions": [step["session_id"] for step in item.get("steps", []) if step.get("session_id")],
-                "machines": [step["machine_id"] for step in item.get("steps", []) if step.get("machine_id")],
+                # One Session contributes several steps, so the id would repeat.
+                # This module already treats the roster as a set elsewhere; the
+                # ack node was the one place that did not.
+                "sessions": sorted({step["session_id"] for step in item.get("steps", []) if step.get("session_id")}),
+                "machines": sorted({step["machine_id"] for step in item.get("steps", []) if step.get("machine_id")}),
                 "protocol": {"ack_of": node["id"], "ack_peer": peer},
             })
     nodes.extend(ack_nodes)

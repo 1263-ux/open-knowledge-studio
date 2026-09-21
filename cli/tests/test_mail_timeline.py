@@ -348,3 +348,105 @@ def test_stage_evidence_leads_with_the_event_that_stamped_it(kb):
     assert extract["evidence"][0]["at"] == extract["at"]
     assert extract["evidence"][0]["message_id"] == stamp["message_id"]
 
+
+def _raw_event(message_id, timestamp, **meta):
+    """One row shaped like `enriched` expects, so the ladder can be driven
+    directly with edge-case timestamps that the real writer never emits."""
+    base = {
+        "message_id": message_id,
+        "timestamp": timestamp,
+        "sender_kind": "human",
+        "record_kind": "message",
+        "delivery_reason": "direct",
+        "thread_id": "th-raw",
+        "to": ["@codex"],
+    }
+    base.update(meta)
+    return {"meta": base, "title": message_id}
+
+
+def test_done_stage_never_borrows_an_empty_timestamp(kb):
+    """An untimed event must not stamp a finished stage, nor freeze the cursor.
+
+    Regression guard: `min()` over every matching event let "" win, because the
+    empty string sorts before any real timestamp. A stage that really finished at
+    T read as "done, no time", and since the forward-only cursor advances on a
+    real time only, it stayed put — so the next stage was free to pick an event
+    *older* than T and the ladder ran backwards.
+    """
+    early = "2026-09-21T09:00:00+08:00"
+    stamped = "2026-09-21T10:00:00+08:00"
+    later = "2026-09-21T11:00:00+08:00"
+
+    ladder = mail_timeline._build_stage_ladder(
+        [
+            _raw_event("m-untimed", ""),
+            _raw_event("m-req", stamped),
+            _raw_event("m-h-early", early, sender_kind="agent",
+                       record_kind="handoff", delivery_reason="handoff"),
+            _raw_event("m-h-late", later, sender_kind="agent",
+                       record_kind="handoff", delivery_reason="handoff"),
+        ],
+        {},
+    )
+    stages = {stage["key"]: stage for stage in ladder}
+
+    # ① is stamped by the real event, not by the untimed one that sorted first.
+    assert stages["extract"]["status"] == "done"
+    assert stages["extract"]["at"] == stamped
+    # ...and because the cursor really moved, ② cannot reach back to the older
+    # handoff: only the later one survives the forward-only walk.
+    assert stages["extract_done"]["at"] == later
+    assert stages["extract_done"]["at"] > stages["extract"]["at"]
+
+
+def test_same_instant_steps_follow_lifecycle_order(kb):
+    """Steps sharing an instant read in lifecycle order, not alphabetical order.
+
+    Regression guard: the sort key was ``(at, step)``, so ``acknowledged`` fell
+    before ``presented`` and the confirmation rendered above the delivery it
+    confirms — the reader sees the receipt as the cause.
+    """
+    stamp = "2026-09-21T10:00:00+08:00"
+    rows = [{"meta": {"message_id": "m-1", "timestamp": stamp, "to": ["@codex"]},
+             "title": "需求"}]
+    deliveries = {
+        "m-1": [{
+            "agent_id": "@codex",
+            "sessions": [{
+                "session_id": "s-1",
+                "machine_id": "mach-1",
+                "injected_at": "",
+                "delivered_at": stamp,
+                "acknowledged_at": stamp,
+            }],
+        }],
+    }
+
+    steps = mail_timeline._delivery_evidence(kb, rows, deliveries)["m-1"][0]["steps"]
+    assert [step["step"] for step in steps] == ["presented", "acknowledged"]
+
+
+def test_ack_node_lists_each_session_once(kb):
+    """The ack node's roster is a set, not a tally of steps.
+
+    Regression guard: one Session contributes several steps (delivered, then
+    acknowledged), so listing a session per step repeated the same id. The rest
+    of this module already treats the roster as a set; the ack node did not.
+    """
+    send(kb, recipients=["@human", "@research-agent"], title="初稿", body="完成",
+         sender="@codex", sender_kind="agent", record_kind="result")
+    message = next(item for item in mail.iter_messages(kb, "@research-agent")
+                   if item["meta"].get("record_kind") == "result")
+    mail.register_session(kb, "sess-dup", "research-agent", machine_id="mach-dup")
+    mail.record_delivery(kb, "sess-dup", message, agent_id="@research-agent")
+    mail.acknowledge_delivery(kb, "sess-dup", message["meta"]["message_id"],
+                              agent_id="@research-agent")
+
+    ack = next(node for node in mail_timeline.timeline_data(kb)["nodes"]
+               if node["action_key"] == "ack")
+    assert ack["sessions"] == ["sess-dup"]
+    # The Session is stamped with the machine from the fixture environment, and
+    # it must appear once even though two steps (delivered + acknowledged) carry it.
+    assert ack["machines"] == ["timeline-test-machine"]
+
