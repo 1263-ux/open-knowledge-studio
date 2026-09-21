@@ -291,3 +291,70 @@ def test_projection_reports_pluggable_state_and_toggle_metadata(kb):
     after = mail_knowledge.knowledge_map(kb)
     assert after["counts"]["enabled"] == 0
     assert after["counts"]["disabled"] == 2
+
+
+def test_unmapped_machine_keys_never_become_group_titles(kb):
+    """分组名与标签行同源：翻不出来的英文机器键不能当标题漏给读者。
+
+    Regression guard: 域名与簇名各自用 `.get(key, key)` 回退，于是表外的英文键
+    直接成了左栏 / 面包屑的标题，而同一条数据在 `tag_labels` 里已经被
+    `tag_label` 挡掉了 —— 同一个词在两处受到两种待遇。
+    """
+    write(kb, "wiki/a.md",
+          'title: "A"\narea: ghost-area\ntags: "ghost-area, ghost-cluster"\nstatus: active\n')
+
+    projection = mail_knowledge.knowledge_map(kb)
+    domain = projection["domains"][0]
+    cluster = domain["clusters"][0]
+
+    # 机器键留在 key 里（分组仍然稳定），给人看的一律是人话。
+    assert domain["key"] == "ghost-area"
+    assert cluster["key"] == "ghost-cluster"
+    assert domain["label"] == "未分类"
+    assert cluster["label"] == "未分组"
+    # Same data, same treatment: the label row already dropped these keys.
+    assert point(projection, "wiki/a.md")["tag_labels"] == []
+
+
+def test_relation_count_matches_the_legend_it_sits_next_to(kb):
+    """总数与图例同源：两者都只统计真正送出去的条目。
+
+    Regression guard: the count was accumulated over every scanned entry while
+    the legend walked only the kept ones, so any `limit` truncation made the two
+    disagree — the header said 3 edges above a legend that added up to 2.
+    """
+    for index in range(3):
+        write(
+            kb,
+            f"wiki/s{index}.md",
+            f'title: "来源{index}"\narea: knowledge\ntags: "knowledge, recall"\nstatus: active\n'
+            "relations:\n  - type: depends_on\n    target: 目标知识\n",
+        )
+    write(kb, "wiki/target.md", 'title: "目标知识"\narea: knowledge\ntags: "knowledge, recall"\nstatus: active\n')
+
+    projection = mail_knowledge.knowledge_map(kb, limit=2)
+
+    assert projection["counts"]["points"] == 2  # 确实被截断了，口径才有分歧的余地
+    assert projection["counts"]["relations"] == sum(
+        item["count"] for item in projection["relation_legend"]
+    )
+
+
+def test_toggle_ignores_fields_that_merely_start_with_enabled(kb):
+    """`enabled_by:` 是别的字段，不是治理位。
+
+    Regression guard: the ownership check used ``startswith("enabled")``, so
+    ``enabled_by: reviewer`` was read as the governance bit and
+    ``previous_enabled`` took its value — turning `changed` into a lie.
+    """
+    path = write(kb, "wiki/a.md",
+                 'title: "A"\nenabled_by: reviewer\narea: engineering\ntags: "engineering, ui"\nstatus: active\n')
+
+    result = mail_knowledge.set_enabled(kb, "wiki/a.md", False)
+
+    # 没有治理位就是默认开启；`enabled_by` 的值不代表开关状态。
+    assert result["previous_enabled"] is True
+    assert result["changed"] is True
+    text = path.read_text(encoding="utf-8")
+    assert "enabled_by: reviewer" in text  # 原样保留
+    assert "enabled: false" in text

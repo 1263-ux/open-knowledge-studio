@@ -403,7 +403,6 @@ def knowledge_map(root: Path, limit: int = 400) -> dict:
                 continue
             tag_index.setdefault(tag, []).append(point["id"])
 
-    relation_count = 0
     for point in points:
         edges = []
         seen = set()
@@ -453,7 +452,6 @@ def knowledge_map(root: Path, limit: int = 400) -> dict:
         truncated_edges = len(edges) > 12
         point["relations"] = edges[:12]
         point["relations_truncated"] = truncated_edges
-        relation_count += len(point["relations"])
 
     truncated = len(points) > limit
     kept = points[:limit]
@@ -464,7 +462,8 @@ def knowledge_map(root: Path, limit: int = 400) -> dict:
         domain = domains.setdefault(point["area"], {
             "id": point["area"],
             "key": point["area"],
-            "label": DOMAIN_LABELS.get(point["area"], point["area"]),
+            # 与 tag_label 同源：翻不出来的英文机器键不能当分组名漏给读者。
+            "label": tag_label(point["area"]) or "未分类",
             "count": 0,
             "clusters": {},
         })
@@ -472,7 +471,7 @@ def knowledge_map(root: Path, limit: int = 400) -> dict:
         cluster = domain["clusters"].setdefault(point["cluster"], {
             "id": point["cluster"],
             "key": point["cluster"],
-            "label": CLUSTER_LABELS.get(point["cluster"], point["cluster"]),
+            "label": tag_label(point["cluster"]) or "未分组",
             "count": 0,
             "points": [],
         })
@@ -546,7 +545,9 @@ def knowledge_map(root: Path, limit: int = 400) -> dict:
             "domains": len(domain_list),
             "clusters": sum(len(domain["clusters"]) for domain in domain_list),
             "points": len(kept),
-            "relations": relation_count,
+            # 与 relation_legend 同源：两边都只统计真正送出去的 kept 条目。
+            # 否则 `limit` 截断时总数会把被截掉的关系算进去，与图例各说一套。
+            "relations": sum(len(point["relations"]) for point in kept),
             "reviewed": sum(1 for point in kept if point["kind"] == "wiki"),
             "candidates": sum(1 for point in kept if point["kind"] == "candidate"),
             "skill_candidates": sum(1 for point in kept if point["skill"]["state"] == "candidate"),
@@ -670,8 +671,11 @@ def set_enabled(root: Path, relative: str, enabled: bool) -> dict:
     previous = None
     for line in front.splitlines():
         stripped = line.strip()
-        if stripped.lower().startswith(f"{TOGGLE_FIELD}"):
-            previous = stripped.partition(":")[2].strip().strip('"').strip("'")
+        key, separator, value = stripped.partition(":")
+        # 字段名必须精确相等：`startswith("enabled")` 会把 `enabled_by:` 也认成
+        # 治理位，于是 previous_enabled 读的是别的字段的值，changed 跟着错。
+        if separator and key.strip().lower() == TOGGLE_FIELD:
+            previous = value.strip().strip('"').strip("'")
             break
     previous_enabled = True if previous is None else previous.strip().lower() in {"1", "true", "yes", "on"}
 
