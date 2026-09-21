@@ -2611,10 +2611,25 @@ def _instance_root(path: str | None) -> Path:
     return get_kb_root()
 
 
-def _mail_agent_id() -> str:
-    explicit = os.environ.get("OKS_AGENT_ID", "").strip()
-    if explicit:
-        return explicit
+def _mail_agent_id(explicit: str = "") -> str:
+    """Resolve the sender identity without ever claiming to be the human.
+
+    Order: ``--from`` > ``OKS_AGENT_ID`` > the host session signal. An
+    environment that resolves to nothing returns ``"unknown"`` (which
+    normalises to ``sender_kind="agent"``): ``human`` is the review gate in
+    the OKS pipeline, so an unset environment must not silently sign mail as
+    the highest-trust identity.
+    """
+    for candidate in (explicit, os.environ.get("OKS_AGENT_ID", "")):
+        agent_id = candidate.strip()
+        if not agent_id:
+            continue
+        # The id is interpolated into mail/sent/{id}/ and into the inbox slug,
+        # so it must be one safe path component.
+        if agent_id in {".", ".."} or any(c in agent_id for c in '/\\:\0\n\r'):
+            console.print(f"[red]Invalid agent id:[/red] {agent_id!r}")
+            raise typer.Exit(1)
+        return agent_id
     # Native Claude launches child shell commands without the OKS-specific
     # identity override. Reuse the host signal already consumed by the
     # UserPromptSubmit hook so ack/reply commands keep the same Agent scope.
@@ -2622,7 +2637,7 @@ def _mail_agent_id() -> str:
         return "claude"
     if os.environ.get("CODEX_SESSION_ID", "").strip() or os.environ.get("CODEX_CLI", "").strip():
         return "codex"
-    return "human"
+    return "unknown"
 
 
 def _mail_session_id(value: str = "") -> str:
@@ -2681,6 +2696,7 @@ def _emit_mail_action(result: dict[str, Any], *, sender_kind: str, notify: bool,
 def mail_send(
     body: str = typer.Option(..., "--body", "-b", help="Mail body text"),
     to: str = typer.Option("@all", "--to", help="Recipient (@all or @agent-id)"),
+    from_agent: str = typer.Option("", "--from", help="Sender identity (default: resolve from the environment)"),
     type: str = typer.Option("message", "--type", help="message | conflict | handoff"),
     title: str = typer.Option("", "--title", "-t", help="Mail title"),
     priority: str = typer.Option("normal", "--priority", help="normal | urgent"),
@@ -2696,7 +2712,7 @@ def mail_send(
 ) -> None:
     """Write one canonical message and recipient projections."""
     root = _instance_root(path)
-    sender = _mail_agent_id()
+    sender = _mail_agent_id(from_agent)
     try:
         resolved_sender_kind = mail_domain.normalise_sender_kind(sender_kind, sender)
     except ValueError as exc:
