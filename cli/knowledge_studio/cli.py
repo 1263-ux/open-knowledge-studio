@@ -2611,10 +2611,50 @@ def _instance_root(path: str | None) -> Path:
     return get_kb_root()
 
 
-def _mail_agent_id() -> str:
-    explicit = os.environ.get("OKS_AGENT_ID", "").strip()
-    if explicit:
-        return explicit
+# Characters that cannot appear in a single portable path component: the POSIX
+# separator, the Windows separator, and the characters Windows forbids in a
+# filename. The id becomes a directory name under ``mail/sent/`` and part of
+# the inbox slug, so a value containing any of them would write outside the
+# intended tree — or fail to be created at all.
+_UNSAFE_AGENT_ID_CHARS = '/\\:*?"<>|\0\n\r'
+# Windows rejects these device names in any directory, with or without an
+# extension: ``CON`` and ``CON.txt`` both resolve to the CON device.
+_WINDOWS_RESERVED_NAMES = frozenset(
+    {"con", "prn", "aux", "nul"}
+    | {f"com{index}" for index in range(1, 10)}
+    | {f"lpt{index}" for index in range(1, 10)}
+)
+
+
+def _is_safe_agent_id(agent_id: str) -> bool:
+    """Whether *agent_id* can serve as one portable path component."""
+    if agent_id in {".", ".."} or not agent_id.strip():
+        return False
+    if any(char in _UNSAFE_AGENT_ID_CHARS for char in agent_id):
+        return False
+    # ``CON`` is reserved and so is ``CON.txt``: compare the stem.
+    return agent_id.split(".")[0].lower() not in _WINDOWS_RESERVED_NAMES
+
+
+def _mail_agent_id(explicit: str = "") -> str:
+    """Resolve the sender identity without ever claiming to be the human.
+
+    Order: ``--from`` > ``OKS_AGENT_ID`` > the host session signal. An
+    environment that resolves to nothing returns ``"unknown"`` (which
+    normalises to ``sender_kind="agent"``): ``human`` is the review gate in
+    the OKS pipeline, so an unset environment must not silently sign mail as
+    the highest-trust identity.
+    """
+    for candidate in (explicit, os.environ.get("OKS_AGENT_ID", "")):
+        agent_id = candidate.strip()
+        if not agent_id:
+            continue
+        # The id is interpolated into mail/sent/{id}/ and into the inbox slug,
+        # so it must be one portable path component.
+        if not _is_safe_agent_id(agent_id):
+            console.print(f"[red]Invalid agent id:[/red] {agent_id!r}")
+            raise typer.Exit(1)
+        return agent_id
     # Native Claude launches child shell commands without the OKS-specific
     # identity override. Reuse the host signal already consumed by the
     # UserPromptSubmit hook so ack/reply commands keep the same Agent scope.
@@ -2622,7 +2662,7 @@ def _mail_agent_id() -> str:
         return "claude"
     if os.environ.get("CODEX_SESSION_ID", "").strip() or os.environ.get("CODEX_CLI", "").strip():
         return "codex"
-    return "human"
+    return "unknown"
 
 
 def _mail_session_id(value: str = "") -> str:
@@ -2681,6 +2721,7 @@ def _emit_mail_action(result: dict[str, Any], *, sender_kind: str, notify: bool,
 def mail_send(
     body: str = typer.Option(..., "--body", "-b", help="Mail body text"),
     to: str = typer.Option("@all", "--to", help="Recipient (@all or @agent-id)"),
+    from_agent: str = typer.Option("", "--from", help="Sender identity (default: resolve from the environment)"),
     type: str = typer.Option("message", "--type", help="message | conflict | handoff"),
     title: str = typer.Option("", "--title", "-t", help="Mail title"),
     priority: str = typer.Option("normal", "--priority", help="normal | urgent"),
@@ -2696,7 +2737,7 @@ def mail_send(
 ) -> None:
     """Write one canonical message and recipient projections."""
     root = _instance_root(path)
-    sender = _mail_agent_id()
+    sender = _mail_agent_id(from_agent)
     try:
         resolved_sender_kind = mail_domain.normalise_sender_kind(sender_kind, sender)
     except ValueError as exc:
@@ -2964,11 +3005,11 @@ def mail_read(
     if not found:
         console.print(f"[red]Mail not found:[/red] {id}")
         raise typer.Exit(1)
-    if found["path"].parent == mail_domain.messages_dir(root):
-        mail_domain.update_recipient_state(root, agent, str(found["meta"].get("message_id")), read_at=mail_domain.iso_now())
-    else:
-        content = found["path"].read_text(encoding="utf-8").replace("read: false", "read: true", 1)
-        store._atomic_write(found["path"], content)
+    # Read state is per-recipient: even for a legacy shared Markdown file that
+    # still carries an old `read:` marker, never rewrite the shared file.
+    mail_domain.update_recipient_state(
+        root, agent, str(found["meta"].get("message_id")), read_at=mail_domain.iso_now()
+    )
     console.print(f"[green]Marked read for @{agent.lstrip('@')}:[/green] {id}")
 
 
@@ -3049,17 +3090,20 @@ def mail_archive(
         raise typer.Exit(1)
     archived_at = mail_domain.iso_now()
     for message in selected:
-        if message["path"].parent == mail_domain.messages_dir(root):
-            mail_domain.update_recipient_state(
-                root,
-                agent,
-                str(message["meta"].get("message_id")),
-                archived_at=archived_at,
-                thread_state="closed",
-            )
-        else:
-            content = message["path"].read_text(encoding="utf-8").replace("read: false", "read: true", 1)
-            store._atomic_write(message["path"], content)
+        message_id = str(message["meta"].get("message_id"))
+        changes = {"archived_at": archived_at, "thread_state": "closed"}
+        if message["path"].parent != mail_domain.messages_dir(root):
+            # A legacy Markdown file is shared by every recipient: seed this
+            # Agent's projection from the old read marker, but never rewrite
+            # the shared file — archiving is recipient-scoped.
+            state_path = mail_domain.recipient_state_path(root, agent, message_id)
+            if not state_path.is_file() and str(message["meta"].get("read", "false")).lower() == "true":
+                changes["read_at"] = (
+                    message["meta"].get("read_at")
+                    or message["meta"].get("timestamp")
+                    or mail_domain.iso_now()
+                )
+        mail_domain.update_recipient_state(root, agent, message_id, **changes)
     console.print(f"[green]Archived for @{agent.lstrip('@')}:[/green] {id}")
 
 
@@ -3292,15 +3336,15 @@ def _ensure_recall_scripts(root: Path, hooks_dir: Path | None = None) -> list[st
     The .sh wrapper gets the current interpreter baked into its OKS_PYTHON
     fallback. If an existing .sh lacks the current bake (fresh copy still on
     `python3`, or baked against a stale interpreter), it is re-copied from
-    the asset source and re-baked. Explicit hook installation refreshes
-    existing Python engines; the init compatibility path preserves custom
-    engines and only adds missing support files.
+    the asset source and re-baked. Existing hook engines are refreshed when
+    their bundled source has changed, so protocol updates reach installed
+    instances too: hook engines are baked runtime, not a customization
+    surface.
     """
     import shutil
     import stat
     import sys
 
-    refresh_existing_engines = hooks_dir is not None
     hooks_dir = hooks_dir or (root / ".claude" / "hooks")
     hooks_dir.mkdir(parents=True, exist_ok=True)
 
@@ -3329,8 +3373,6 @@ def _ensure_recall_scripts(root: Path, hooks_dir: Path | None = None) -> list[st
     for name in _RECALL_HOOK_SCRIPTS:
         dest = hooks_dir / name
         if dest.exists():
-            if not refresh_existing_engines and name.endswith(".py"):
-                continue
             try:
                 dest_text = dest.read_text(encoding="utf-8")
                 if src_dir is not None and (src_dir / name).is_file():
@@ -3491,8 +3533,8 @@ _HOOK_RECALL_STATUSES = {
 }
 
 
-def _hook_recall_error(reason: str) -> dict:
-    return {
+def _hook_recall_error(reason: str, diagnostic: str = "") -> dict:
+    result = {
         "schema": _HOOK_RECALL_SCHEMA,
         "status": "error",
         "context": "",
@@ -3504,6 +3546,11 @@ def _hook_recall_error(reason: str) -> dict:
         },
         "reason": reason,
     }
+    # Diagnostics are opt-in: the failure detail can carry host paths and
+    # stderr from the child, so it stays out of the default envelope.
+    if diagnostic and os.environ.get("OKS_HOOK_DIAGNOSTICS", "").lower() in {"1", "true", "yes"}:
+        result["diagnostic"] = diagnostic[-1000:]
+    return result
 
 
 def _valid_hook_number(value: object, *, allow_none: bool = False) -> bool:
@@ -3566,6 +3613,11 @@ def _run_hook_recall(
     env = os.environ.copy()
     env["OKS_ROOT"] = str(root)
     env["OKS_HOOK_OUTPUT"] = "json"
+    # The Hook Bridge exchanges JSON with a Python child process. Force UTF-8
+    # instead of inheriting a Windows console code page that cannot round-trip
+    # Chinese prompts or recall context.
+    env["PYTHONIOENCODING"] = "utf-8"
+    env["PYTHONUTF8"] = "1"
     package_root = str(Path(__file__).resolve().parents[1])
     inherited_pythonpath = env.get("PYTHONPATH", "")
     env["PYTHONPATH"] = os.pathsep.join([package_root, inherited_pythonpath]).rstrip(os.pathsep)
@@ -3584,13 +3636,20 @@ def _run_hook_recall(
             check=False,
         )
         if completed.returncode != 0:
-            raise RuntimeError(f"hook exited {completed.returncode}")
+            detail = f"hook exited {completed.returncode}"
+            stderr = str(getattr(completed, "stderr", "") or "").strip()
+            if stderr:
+                detail += f": {stderr[-1000:]}"
+            raise RuntimeError(detail)
         data = _validate_hook_recall_response(json.loads(completed.stdout))
         if data is None:
             raise ValueError("invalid hook response")
         return data
-    except Exception:
-        return _hook_recall_error("hook_bridge_failed")
+    except Exception as exc:
+        return _hook_recall_error(
+            "hook_bridge_failed",
+            diagnostic=f"{type(exc).__name__}: {exc}",
+        )
 
 
 def _read_hook_history(root: Path, limit: int, session_id: str, cwd: str) -> dict:
