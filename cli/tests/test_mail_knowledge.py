@@ -159,7 +159,9 @@ def test_projection_declares_where_each_level_comes_from(kb):
 
     projection = mail_knowledge.knowledge_map(kb)
     assert projection["scope"]["level_sources"] == [
-        "条目自己声明的所属领域", "条目的首个标签", "一份已审核的 Wiki 或候选条目",
+        "条目自己声明的所属领域",
+        "条目自己声明的关系，或与另一条知识共享的标签",
+        "一份已审核的 Wiki 或候选条目",
     ]
     # 口径可以改写，但「图是只读的、来源可追溯」这两条不能丢。
     why = projection["scope"]["why"]
@@ -299,3 +301,61 @@ def test_projection_reports_pluggable_state_without_a_write_path(kb):
     after = mail_knowledge.knowledge_map(kb)
     assert after["counts"]["enabled"] == 0
     assert after["counts"]["disabled"] == 2
+
+
+# ── 主视图的关系网（2026-09-22）────────────────────────────────────────
+#
+# 图例列的是**关系类型**，而主视图原来画的是**目录从属**，两者对不上。
+# 图例计数还有个更硬的问题：它按逐条清单累加，同一条无向关系被两端各算一次 ——
+# 真实库上 14 条可画的关系被报成了 29 条。所以边表与图例现在同源。
+
+def test_one_relation_between_two_entries_is_drawn_once(kb):
+    """同一条无向关系被两端各声明一次，主视图只该画一条、图例只该算一次。"""
+    write(kb, "wiki/a.md", 'title: "A"\narea: engineering\ntags: "engineering, ui"\nstatus: active\nrelations: "supports: wiki/b.md"\n')
+    write(kb, "wiki/b.md", 'title: "B"\narea: engineering\ntags: "engineering, ui"\nstatus: active\nrelations: "supports: wiki/a.md"\n')
+
+    projection = mail_knowledge.knowledge_map(kb)
+    supports = [edge for edge in projection["edges"] if edge["type"] == "supports"]
+    assert len(supports) == 1
+    # 合并不能丢归属：两端的声明都记在这一条边上。
+    assert sorted(supports[0]["declared_by"]) == ["wiki/a.md", "wiki/b.md"]
+    # 端点排序固定，两个方向不可能各画一条。
+    assert supports[0]["a"] <= supports[0]["b"]
+
+    assert projection["counts"]["edges"] == len(projection["edges"])
+    # 图例合计 == 画得出来的边数。这条断言就是防「图例比图多报一倍」回归。
+    assert sum(item["count"] for item in projection["relation_legend"]) == len(projection["edges"])
+    assert projection["counts"]["edges_cross_domain"] == 0
+
+
+def test_edges_only_include_entries_that_are_in_the_graph(kb):
+    """指向未收录条目的关系画不出来，就不该出现在边表与图例里。"""
+    write(kb, "wiki/a.md", 'title: "A"\narea: engineering\ntags: "engineering, ui"\nstatus: active\nrelations: "depends_on: 还没建的条目"\n')
+
+    projection = mail_knowledge.knowledge_map(kb)
+    assert projection["edges"] == []
+    assert sum(item["count"] for item in projection["relation_legend"]) == 0
+    # 但逐条清单里不能丢：下钻时要能标出「这条指向的条目尚未收录」。
+    assert point(projection, "wiki/a.md")["relations"][0]["resolved"] is False
+    assert projection["counts"]["points_without_relations"] == 1
+
+
+def test_two_different_relations_between_the_same_pair_are_both_kept(kb):
+    """同一对节点上的两个不同说法都要留 —— 那是两条关系，不是重复。"""
+    write(kb, "wiki/a.md", 'title: "A"\narea: engineering\ntags: "engineering, release, ui"\nstatus: active\nrelations: "contrast: wiki/b.md"\n')
+    write(kb, "wiki/b.md", 'title: "B"\narea: engineering\ntags: "engineering, ui, release"\nstatus: active\n')
+
+    projection = mail_knowledge.knowledge_map(kb)
+    assert sorted(edge["type"] for edge in projection["edges"]) == ["contrast", "related"]
+    # 两条边落在同一对节点上；前端要按序号把曲线错开，否则只看得见一条。
+    assert len({(edge["a"], edge["b"]) for edge in projection["edges"]}) == 1
+
+
+def test_cross_domain_edges_are_counted_from_the_drawable_table(kb):
+    write(kb, "wiki/a.md", 'title: "A"\narea: engineering\ntags: "engineering, ui"\nstatus: active\nrelations: "applies_to: wiki/b.md"\n')
+    write(kb, "wiki/b.md", 'title: "B"\narea: knowledge\ntags: "knowledge, recall"\nstatus: active\n')
+
+    projection = mail_knowledge.knowledge_map(kb)
+    assert projection["counts"]["edges"] == 1
+    assert projection["counts"]["edges_cross_domain"] == 1
+    assert projection["counts"]["points_without_relations"] == 0
