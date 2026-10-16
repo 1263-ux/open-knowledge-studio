@@ -21,6 +21,7 @@ import hashlib
 import os
 import re
 import sqlite3
+from pathlib import Path
 from typing import Any
 
 from . import SearchHit
@@ -153,7 +154,7 @@ def _split_md_nodes(title: str, body: str) -> list[tuple[int, str]]:
 class FTS5Backend:
     """SQLite FTS5 全文检索 backend（CV from TreeSearch FTS5Index, 平铺版）。
 
-    每页 1 行（slug, title, body, tags, code_blocks）。
+    每页元数据 1 行；FTS 按 Markdown node 建行。
     - BM25 + column weights（title 5x > tags 3x > body 1x > code 0.5x）
     - 增量 diff（content_hash），未变页跳过
     - 持久化（db_path）或 in-memory（None）
@@ -184,45 +185,70 @@ class FTS5Backend:
         self._indexed = False
 
     def _init_db(self) -> None:
-        # v0.6.0: schema version 检测——node-level schema 不匹配则强制重建
-        self._conn.execute(
-            "CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT)"
-        )
-        cur = self._conn.execute(
-            "SELECT value FROM meta WHERE key='schema_version'"
-        ).fetchone()
-        if cur and cur[0] != "node-v2":
-            # 旧 schema（flat page-level），DROP 重建
-            self._conn.execute("DROP TABLE IF EXISTS wiki_fts")
-            self._conn.execute("DROP TABLE IF EXISTS pages")
-            self._conn.execute("DELETE FROM meta WHERE key='schema_version'")
-        self._conn.execute(
-            "INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', 'node-v2')"
-        )
-        # pages 表存 content_hash 做 diff（不存全文，全文在 fts 表）
-        self._conn.execute(
-            "CREATE TABLE IF NOT EXISTS pages (slug TEXT PRIMARY KEY, content_hash TEXT, abstract TEXT)"
-        )
-        self._conn.execute(
-            "CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT)"
-        )
-        if self._use_fts5:
+        # Serialize schema inspection and ALTERs across simultaneous Hook starts.
+        # DDL must share the transaction so a failed upgrade rolls back cleanly.
+        with self._conn:
+            self._conn.execute("BEGIN IMMEDIATE")
+            # node-v2 text rows are compatible; add only metadata columns in place.
             self._conn.execute(
-                "CREATE VIRTUAL TABLE IF NOT EXISTS wiki_fts USING fts5("
-                "slug UNINDEXED, node_idx UNINDEXED, title, body, tags, code_blocks)"
+                "CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT)"
             )
-        self._conn.commit()
+            cur = self._conn.execute(
+                "SELECT value FROM meta WHERE key='schema_version'"
+            ).fetchone()
+            if cur and cur[0] not in {"node-v2", "node-v3"}:
+                # 旧 schema（flat page-level），DROP 重建
+                self._conn.execute("DROP TABLE IF EXISTS wiki_fts")
+                self._conn.execute("DROP TABLE IF EXISTS pages")
+                self._conn.execute("DELETE FROM meta WHERE key='schema_version'")
+            # pages 表存 content_hash 做 diff（不存全文，全文在 fts 表）
+            self._conn.execute(
+                "CREATE TABLE IF NOT EXISTS pages ("
+                "slug TEXT PRIMARY KEY, content_hash TEXT, abstract TEXT, "
+                "status TEXT NOT NULL DEFAULT 'active', "
+                "archived INTEGER NOT NULL DEFAULT 0, area TEXT NOT NULL DEFAULT '', "
+                "wiki_type TEXT NOT NULL DEFAULT 'concept')"
+            )
+            columns = {row[1] for row in self._conn.execute("PRAGMA table_info(pages)")}
+            for name, definition in (
+                ("status", "TEXT NOT NULL DEFAULT 'active'"),
+                ("archived", "INTEGER NOT NULL DEFAULT 0"),
+                ("area", "TEXT NOT NULL DEFAULT ''"),
+                ("wiki_type", "TEXT NOT NULL DEFAULT 'concept'"),
+            ):
+                if name not in columns:
+                    self._conn.execute(f"ALTER TABLE pages ADD COLUMN {name} {definition}")
+            self._conn.execute(
+                "INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', 'node-v3')"
+            )
+            self._conn.execute(
+                "CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT)"
+            )
+            if self._use_fts5:
+                self._conn.execute(
+                    "CREATE VIRTUAL TABLE IF NOT EXISTS wiki_fts USING fts5("
+                    "slug UNINDEXED, node_idx UNINDEXED, title, body, tags, code_blocks)"
+                )
 
-    def index(self, pages: list[dict[str, Any]]) -> None:
-        """增量索引（CV from TreeSearch index_document diff 逻辑）。
+    def index(self, pages: list[dict[str, Any]], *, complete: bool = False) -> None:
+        """Incrementally index pages, optionally reconciling a complete Wiki snapshot.
 
-        逐页算 content_hash，未变跳过；变的先删旧行再插新。
+        Content changes replace FTS rows. State/classification changes update
+        only the metadata row. Complete snapshots remove absent pages.
         """
+        from ..recall import is_wiki_page_archived
+
+        seen_slugs: set[str] = set()
         for page in pages:
             slug = page.get("slug") or page.get("path", "").replace(".md", "")
             if not slug:
                 continue
+            seen_slugs.add(slug)
             title = str(page.get("title", ""))
+            status = str(page.get("status", "active") or "active").strip().lower()
+            archived = int(is_wiki_page_archived(page))
+            area = str(page.get("area", "")).strip().lower()
+            wiki_type = str(page.get("type", page.get("category", "concept"))).strip().lower()
             body = str(page.get("body", ""))
             tags = page.get("tags", "")
             if isinstance(tags, list):
@@ -234,9 +260,17 @@ class FTS5Backend:
             content_hash = hashlib.md5(content.encode()).hexdigest()[:16]
 
             row = self._conn.execute(
-                "SELECT content_hash FROM pages WHERE slug=?", (slug,)
+                "SELECT content_hash, status, archived, area, wiki_type "
+                "FROM pages WHERE slug=?", (slug,)
             ).fetchone()
             if row and row[0] == content_hash:
+                metadata = (status, archived, area, wiki_type)
+                if tuple(row[1:]) != metadata:
+                    self._conn.execute(
+                        "UPDATE pages SET status=?, archived=?, area=?, wiki_type=? "
+                        "WHERE slug=?",
+                        (*metadata, slug),
+                    )
                 continue  # 未变，跳过（增量 diff 核心）
 
             if row:
@@ -245,8 +279,10 @@ class FTS5Backend:
                     self._conn.execute("DELETE FROM wiki_fts WHERE slug=?", (slug,))
 
             self._conn.execute(
-                "INSERT OR REPLACE INTO pages (slug, content_hash, abstract) VALUES (?, ?, ?)",
-                (slug, content_hash, abstract),
+                "INSERT OR REPLACE INTO pages "
+                "(slug, content_hash, abstract, status, archived, area, wiki_type) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (slug, content_hash, abstract, status, archived, area, wiki_type),
             )
             if self._use_fts5:
                 # v0.6.0: node-level 索引——吸收 TreeSearch tree parser，
@@ -266,6 +302,16 @@ class FTS5Backend:
                             tok_tags, tok_code,
                         ),
                     )
+        if complete:
+            stale_slugs = [
+                row[0]
+                for row in self._conn.execute("SELECT slug FROM pages")
+                if row[0] not in seen_slugs
+            ]
+            for stale_slug in stale_slugs:
+                self._conn.execute("DELETE FROM pages WHERE slug=?", (stale_slug,))
+                if self._use_fts5:
+                    self._conn.execute("DELETE FROM wiki_fts WHERE slug=?", (stale_slug,))
         self._conn.commit()
         self._indexed = True
 
@@ -284,7 +330,7 @@ class FTS5Backend:
             root = repo_root()
         wiki_dir = os.path.join(root or ".", "wiki")
         if not os.path.isdir(wiki_dir):
-            return ""
+            return hashlib.md5().hexdigest()
         h = hashlib.md5()
         for dirpath, _, filenames in os.walk(wiki_dir):
             for fn in sorted(filenames):
@@ -304,6 +350,17 @@ class FTS5Backend:
         无后台守护进程，recall 时自动保证索引新鲜。index() 已有 content_hash
         逐页 diff，未变页跳过，所以"重索引"只处理变页，快（61 页 < 50ms）。
         """
+        root = self._root
+        if not root:
+            from ..store import repo_root
+
+            root = repo_root()
+        if not os.path.isdir(os.path.join(root or ".", "wiki")) and not self._conn.execute(
+            "SELECT 1 FROM meta WHERE key='wiki_fingerprint'"
+        ).fetchone():
+            # A backend with an explicitly supplied root is also useful for
+            # indexing caller-provided pages without a Wiki directory.
+            return
         current = self._wiki_fingerprint()
         if not current:
             return
@@ -313,9 +370,13 @@ class FTS5Backend:
         stored = row[0] if row else ""
         if current == stored and self._indexed:
             return  # 新鲜，跳过
-        from ..recall import list_wiki_pages
+        from ..store import parse_wiki_file
 
-        self.index(list_wiki_pages())
+        pages = [
+            page for path in (Path(root) / "wiki").rglob("*.md")
+            if path.name != "INDEX.md" and (page := parse_wiki_file(path))
+        ]
+        self.index(pages, complete=True)
         self._conn.execute(
             "INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)",
             ("wiki_fingerprint", current),
@@ -341,6 +402,8 @@ class FTS5Backend:
         self, query: str, *, limit: int = 10, scope: str | None = None, **kwargs: Any
     ) -> list[SearchHit]:
         self._maybe_reindex()  # lazy watch：stale 就增量重索引
+        if limit <= 0:
+            return []
         if not self._use_fts5:
             return self._search_like(query, limit=limit)
 
@@ -348,43 +411,52 @@ class FTS5Backend:
         if match_expr is None:
             return []
 
-        w = self._weights
-        # v0.6.0: bm25 列序对应建表 (slug, node_idx, title, body, tags, code_blocks)
-        # slug/node_idx UNINDEXED 权重 0。按 slug 聚合取最高分 node（node-level）。
-        sql = (
-            f"SELECT f.slug, f.title, p.abstract, "
-            f"bm25(wiki_fts, 0, 0, {w['title']}, {w['body']}, {w['tags']}, {w['code_blocks']}) AS rank "
-            f"FROM wiki_fts f JOIN pages p ON f.slug = p.slug "
-            f"WHERE wiki_fts MATCH ? ORDER BY rank LIMIT ?"
-        )
-        rows = self._conn.execute(sql, (match_expr, limit * 4)).fetchall()
-        # node-level：同 slug 可能多 row（每个 heading 段一 row），取最高分那个去重
-        best: dict[str, tuple[str, str, float]] = {}
-        order: list[str] = []
-        for slug, title, abstract, rank in rows:
-            score = float(-rank)
-            if slug not in best or score > best[slug][2]:
-                best[slug] = (title or slug, abstract or "", score)
-                if slug not in order:
-                    order.append(slug)
-        hits = [
-            SearchHit(
-                slug=slug, title=best[slug][0], score=best[slug][2],
-                abstract=best[slug][1] or None, backend="fts5",
-            )
-            for slug in order
-        ]
-        # scope 硬过滤（FTS5 不存 area，需后过滤——若要 FTS5 内过滤，扩展 schema 加 area 列）
-        if scope:
-            scope_set = {s.strip().lower() for s in scope.split(",") if s.strip()}
-            from ..recall import list_wiki_pages
+        from ..recall import _INACTIVE_WIKI_STATUSES
 
-            area_map = {
-                p.get("slug"): str(p.get("area", "")).lower().strip()
-                for p in list_wiki_pages()
-            }
-            hits = [h for h in hits if area_map.get(h.slug, "") in scope_set]
-        return hits[:limit]
+        w = self._weights
+        # FTS5 rank is mapped to the same weighted BM25 expression. Ordering
+        # through the virtual table avoids a temporary sort for broad terms.
+        # Columns: slug, node_idx, title, body, tags, code_blocks.
+        rank_spec = (
+            f"bm25(0, 0, {w['title']}, {w['body']}, {w['tags']}, {w['code_blocks']})"
+        )
+        sql = (
+            "SELECT f.slug, f.title, p.abstract, f.rank "
+            f"FROM wiki_fts f JOIN pages p ON f.slug = p.slug "
+            f"WHERE wiki_fts MATCH ? AND f.rank MATCH ? "
+            f"AND COALESCE(LOWER(TRIM(p.status)), 'active') NOT IN "
+            f"({', '.join('?' for _ in _INACTIVE_WIKI_STATUSES)}) "
+            f"AND COALESCE(p.archived, 0) = 0"
+        )
+        params: list[Any] = [match_expr, rank_spec, *_INACTIVE_WIKI_STATUSES]
+        scope_set = [s.strip().lower() for s in (scope or "").split(",") if s.strip()]
+        if scope_set:
+            sql += f" AND LOWER(TRIM(COALESCE(p.area, ''))) IN ({', '.join('?' for _ in scope_set)})"
+            params.extend(scope_set)
+        type_filter = str(kwargs.get("type_filter", "") or "").strip().lower()
+        if type_filter:
+            sql += " AND LOWER(TRIM(COALESCE(p.wiki_type, 'concept'))) = ?"
+            params.append(type_filter)
+        sql += " ORDER BY f.rank"
+        # Each page's first ranked node is its best one. Stream until enough
+        # distinct pages are found instead of repeatedly sorting wider prefixes.
+        hits: list[SearchHit] = []
+        seen: set[str] = set()
+        cursor = self._conn.execute(sql, params)
+        try:
+            for slug, title, abstract, rank in cursor:
+                if slug in seen:
+                    continue
+                seen.add(slug)
+                hits.append(SearchHit(
+                    slug=slug, title=title or slug, score=float(-rank),
+                    abstract=abstract or None, backend="fts5",
+                ))
+                if len(hits) >= limit:
+                    break
+        finally:
+            cursor.close()
+        return hits
 
     def _search_like(self, query: str, limit: int = 10) -> list[SearchHit]:
         """FTS5 不可用时的 LIKE fallback（保证可用性，不崩）。"""
