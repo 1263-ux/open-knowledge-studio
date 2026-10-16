@@ -46,6 +46,24 @@ _logger = logging.getLogger(__name__)
 DEFAULT_RECALL_LIMIT = 5
 MAX_BODY_PREVIEW = 200  # fallback; v0.6.0 实际用 inject_per_page_chars
 
+# Keep normal recall policy shared by the retrieval backends and the prompt
+# hook. Keep the existing Native policy, including provisional and stale pages.
+_INACTIVE_WIKI_STATUSES = ("dropped", "superseded")
+
+
+def is_wiki_page_archived(page: dict[str, Any]) -> bool:
+    """Normalize YAML bool-like values used by Wiki frontmatter."""
+    archived = page.get("archived", False)
+    if isinstance(archived, str):
+        return archived.strip().lower() in {"1", "true", "yes", "on"}
+    return bool(archived)
+
+
+def is_recallable_wiki_page(page: dict[str, Any]) -> bool:
+    """Whether a Wiki page may enter ordinary recall and prompt injection."""
+    status = str(page.get("status", "active") or "active").strip().lower()
+    return status not in _INACTIVE_WIKI_STATUSES and not is_wiki_page_archived(page)
+
 
 def _apply_budget(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Tier degradation: total body_preview > budget 时降级 L2→L1→L0→截断.
@@ -679,7 +697,54 @@ def _recall_knowledge_via_backend(
     requested = goal_context.get("requested", "none")
     if goal_context.get("mode") != "none" and requested not in ("active", "none"):
         backend_kwargs["goal"] = requested
-    hits = backend.search(query, limit=limit, scope=scope, **backend_kwargs)
+    if type_filter:
+        backend_kwargs["type_filter"] = type_filter
+    pages = {p.get("slug"): p for p in list_wiki_pages()}
+    warned_missing: set[str] = set()
+    scope_areas = {s.strip().lower() for s in (scope or "").split(",") if s.strip()}
+    type_lower = type_filter.strip().lower() if type_filter else ""
+
+    def _eligible_hit(hit: Any) -> bool:
+        page = pages.get(hit.slug)
+        if not page:
+            if hit.slug not in warned_missing:
+                _logger.warning(
+                    "recall backend skipped hit without a current wiki page: "
+                    "slug=%r backend=%r",
+                    hit.slug,
+                    hit.backend,
+                )
+                warned_missing.add(hit.slug)
+            return False
+        if not is_recallable_wiki_page(page):
+            return False
+        if scope_areas and str(page.get("area", "")).strip().lower() not in scope_areas:
+            return False
+        page_type = str(page.get("type", page.get("category", "concept"))).strip().lower()
+        if type_lower and page_type != type_lower:
+            return False
+        return True
+
+    def _search_admitted(selected_backend: Any) -> list[Any]:
+        # Backends may ignore filters: widen their result prefix when needed,
+        # bounded by the current Wiki size.
+        if limit <= 0:
+            return []
+        fetch_limit = limit
+        maximum = max(limit, len(pages))
+        while True:
+            candidates = selected_backend.search(
+                query, limit=fetch_limit, scope=scope, **backend_kwargs
+            )
+            admitted = {}
+            for hit in candidates:
+                if hit.slug not in admitted and _eligible_hit(hit):
+                    admitted[hit.slug] = hit
+            if len(admitted) >= limit or len(candidates) < fetch_limit or fetch_limit >= maximum:
+                return list(admitted.values())[:limit]
+            fetch_limit = min(fetch_limit * 2, maximum)
+
+    hits = _search_admitted(backend)
 
     # v0.6.3: embedding fallback — fts5/native 召回空或明显不足时，
     # 且 embedding_fallback 开启 + embedding connector 可用，切语义召回补充。
@@ -692,7 +757,7 @@ def _recall_knowledge_via_backend(
     ):
         try:
             emb_backend = get_backend("embedding", root=repo_root())
-            emb_hits = emb_backend.search(query, limit=limit, scope=scope, **backend_kwargs)
+            emb_hits = _search_admitted(emb_backend)
             hits = emb_hits or hits  # embedding 补充；空则保留原 fts5 结果
         except Exception:
             # embedding connector 未装或失败 → 静默回退原 fts5 结果（不阻断召回）
@@ -709,9 +774,8 @@ def _recall_knowledge_via_backend(
 
     # 补全 recall-hit/v1 字段：backend 返回 SearchHit（slug/title/score），
     # 其余字段从 wiki 页详情查补，保证 /query skill 和 eval 不受影响。
-    pages = {p.get("slug"): p for p in list_wiki_pages()}
     results: list[dict[str, Any]] = []
-    for h in hits[:limit]:
+    for h in hits:
         p = pages.get(h.slug)
         if not p or not p.get("file_path"):
             _logger.warning(
@@ -743,6 +807,7 @@ def _recall_knowledge_via_backend(
             "type": p.get("type", p.get("category", "concept")),
             "area": p.get("area", ""),
             "status": p.get("status", "active"),
+            "archived": is_wiki_page_archived(p),
             "score": round(float(p.get("score", 0) or 0), 3),
             "relevance": round(h.score, 3),
             "confidence": p.get("confidence", 0.8),
@@ -802,7 +867,7 @@ def _recall_knowledge_with_context(
         [f"{p.get('title', '')} {p.get('body', '')}" for p in all_pages],
     )
     for item in all_pages:
-        if item.get("status") in ("dropped", "superseded") or item.get("archived"):
+        if not is_recallable_wiki_page(item):
             continue
 
         if scope_areas and str(item.get("area", "")).lower().strip() not in scope_areas:
@@ -839,6 +904,7 @@ def _recall_knowledge_with_context(
             "type": item.get("type", item.get("category", "concept")),
             "area": item.get("area", ""),
             "status": item.get("status", "active"),
+            "archived": is_wiki_page_archived(item),
             "score": round(item.get("score", 0), 3),
             "relevance": round(relevance, 3),
             "confidence": item.get("confidence", 0.8),

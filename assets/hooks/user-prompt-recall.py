@@ -518,9 +518,10 @@ def main() -> int:
     goals_all = _load_active_goals(kb_root)
     # ── Knowledge section (6+1 recall + cooldown) ──
     try:
-        from knowledge_studio.recall import recall
+        from knowledge_studio.recall import recall, is_recallable_wiki_page
     except Exception:
         recall = None
+        is_recallable_wiki_page = None
 
     picked: list = []
     candidates: list = []
@@ -544,7 +545,12 @@ def main() -> int:
         except Exception:
             hits = []
             recall_failed = True
-        candidates = [h for h in hits if float(h.get("relevance", 0)) >= floor]
+        candidates = [
+            h for h in hits
+            if is_recallable_wiki_page is not None
+            and is_recallable_wiki_page(h)
+            and float(h.get("relevance", 0)) >= floor
+        ]
 
         for h in candidates:
             slug = str(h.get("slug", "")).strip()

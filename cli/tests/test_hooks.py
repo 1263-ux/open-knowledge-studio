@@ -99,6 +99,76 @@ def _run_hook(script, payload, cwd, env_overrides=None):
     )
 
 
+@pytest.mark.parametrize("backend", ["native", "fts5"])
+def test_prompt_hook_inactive_pages_never_enter_context_or_trace(tmp_path, backend):
+    target = _init_instance(tmp_path)
+    wiki = target / "wiki" / "computing" / "concepts"
+    wiki.mkdir(parents=True, exist_ok=True)
+    states = [
+        ("dropped", "status: dropped\n"),
+        ("superseded", "status: superseded\n"),
+        ("archived", "status: active\narchived: true\n"),
+        ("active", "status: active\n"),
+        ("provisional", "status: provisional\n"),
+        ("legacy", ""),
+    ]
+    for slug, state in states:
+        (wiki / f"{slug}.md").write_text(
+            f"---\ntitle: Quasar ledger {slug}\narea: computing\ntype: concept\n{state}---\nquasar ledger policy\n",
+            encoding="utf-8",
+        )
+    # BM25 and Native do not share a score range. A low floor isolates admission
+    # policy from that separate product boundary.
+    (target / "settings" / "recall.yaml").write_text(
+        f"search_backend: {backend}\nrecall:\n  floor: 0\n  topn: 3\n", encoding="utf-8",
+    )
+    result = _run_hook(
+        target / ".codex/hooks/user-prompt-recall.py",
+        {"prompt": "quasar ledger policy", "session_id": "state-policy", "cwd": str(target)},
+        target, {"OKS_HOOK_OUTPUT": "json", "OKS_SEARCH_BACKEND": backend,
+                 "OKS_RECALL_FLOOR": "0", "PYTHONIOENCODING": "utf-8"},
+    )
+    assert result.returncode == 0, result.stderr
+    envelope = json.loads(result.stdout)
+    assert set(envelope["trace"]["matches"]) == {"active", "provisional", "legacy"}
+    for slug in ("dropped", "superseded", "archived"):
+        assert f"({slug})" not in envelope["context"]
+    records = [json.loads(line) for line in (target / "records/inject.jsonl").read_text(encoding="utf-8").splitlines()]
+    assert set(records[-1]["slugs"]) == {"active", "provisional", "legacy"}
+
+
+def test_prompt_hook_rejects_inactive_hits_from_a_faulty_recall_result(tmp_path):
+    target = _init_instance(tmp_path)
+    hook = target / ".codex/hooks/user-prompt-recall.py"
+    wrapper = tmp_path / "fake-recall-hook.py"
+    wrapper.write_text(
+        "import runpy, sys\n"
+        f"sys.path.insert(0, {str(hook.parent)!r})\n"
+        "import knowledge_studio.recall as module\n"
+        "def fake_recall(**kwargs):\n"
+        "    return {'knowledge': [\n"
+        "        {'slug': 'dropped', 'title': 'Dropped', 'status': 'dropped', 'relevance': 9},\n"
+        "        {'slug': 'archived', 'title': 'Archived', 'status': 'active', 'archived': True, 'relevance': 8},\n"
+        "        {'slug': 'active', 'title': 'Active', 'status': 'active', 'archived': False, 'relevance': 7},\n"
+        "    ]}\n"
+        "module.recall = fake_recall\n"
+        f"runpy.run_path({str(hook)!r}, run_name='__main__')\n",
+        encoding="utf-8",
+    )
+    result = _run_hook(
+        wrapper,
+        {"prompt": "quasar ledger policy", "session_id": "faulty-recall", "cwd": str(target)},
+        target, {"OKS_HOOK_OUTPUT": "json", "PYTHONIOENCODING": "utf-8"},
+    )
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["trace"]["matches"] == ["active"]
+    assert "(dropped)" not in payload["context"]
+    assert "(archived)" not in payload["context"]
+    injected = [json.loads(line) for line in (target / "records/inject.jsonl").read_text(encoding="utf-8").splitlines()]
+    assert injected[-1]["slugs"] == ["active"]
+
+
 def test_hook_install_wires_codex_prompt_recall(tmp_path):
     target = _init_instance(tmp_path)
 
