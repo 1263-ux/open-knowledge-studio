@@ -118,8 +118,8 @@ def package_public_web(
     *,
     root: Path,
 ) -> dict[str, Any]:
-    """Package a public web page into a Raw bundle via the production extractors.web module."""
-    from extractors.web import package_web
+    """Package a public web page via the separately installed OKS Connector."""
+    from oks_connector.extractors.web import package_web
 
     try:
         package_web(url, output, human_context=human_context or "omitted")

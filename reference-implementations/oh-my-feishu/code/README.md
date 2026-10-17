@@ -20,6 +20,9 @@
 # 前置：lark-cli 已安装并认证（OKS 不代管你的飞书凭据）
 lark-cli auth
 
+# Public-page extraction uses the separately packaged Connector and its web dependencies.
+python -m pip install oks-connector requests trafilatura
+
 # 一次性配置：创建 Base + 采集表 + 表单
 python code/feishu_setup.py --base-name "Open Knowledge Studio" --table-name "每日知识采集"
 
