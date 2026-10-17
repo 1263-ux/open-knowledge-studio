@@ -783,8 +783,9 @@ def _recall_knowledge_with_context(
     goal_context: dict[str, Any],
     explain: bool,
     type_filter: str | None = None,
+    candidate_pages: list[dict] | None = None,
 ) -> list[dict[str, Any]]:
-    all_pages = list_wiki_pages()
+    all_pages = list_wiki_pages() if candidate_pages is None else candidate_pages
     if not all_pages:
         return []
 

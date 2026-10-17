@@ -43,6 +43,21 @@ Relationship invariants:
 - `status: superseded` requires `superseded_by`.
 - `traces` is a list of objects. Trace payloads must never contain credentials.
 
+## Skill knowledge
+
+Skills have an independent top-level area. Pages live under
+`wiki/skills/strategies/<category>/`, `wiki/skills/anti-patterns/<category>/`,
+or `wiki/skills/concepts/<category>/`. Ordinary knowledge domains are unchanged.
+Fine categories can be nested, e.g. `development/java` or `knowledge/retrieval`.
+
+Skill pages carry `artifact_kind: skill`, `skill_id`, `skill_version` (SHA256),
+`skill_category`, `skill_package`, `skill_package_sha256`, `skill_manifest`,
+and `skill_manifest_sha256`. Package and manifest paths are instance-relative
+and must stay under `raw/`. Optional `skill_description`, `skill_dependencies`
+and `raw_bundle` preserve original metadata/provenance. `oks skills import`
+creates a draft; ordinary `oks drafts promote` validates its captured assets
+and retains these fields. Each new version requires a new human review.
+
 ## Draft
 
 ```yaml
