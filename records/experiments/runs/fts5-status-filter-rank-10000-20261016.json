@@ -1,0 +1,773 @@
+{
+  "baseline_commit": "f5d0cc26815bede4eea4de340eff97d59ab3406f",
+  "candidate_sha256": {
+    "cli/knowledge_studio/search/fts5.py": "025a4eefab8ab1e5ac21047c92c76ded7a1793bbe07847d0f0f6dbdde7397dcc",
+    "cli/knowledge_studio/recall.py": "03a26d0a51d4bccc518f7830d0e411ecad50adb217b2a6b55e421ca5d0cc353f",
+    "assets/hooks/user-prompt-recall.py": "fcfd316271a5a6438ed59a155dc4e439001cd466b4dfb29b0be13927f8edfb76"
+  },
+  "corpus": "synthetic; 20 queries: 10 mixed-state, 5 many-node, 5 control",
+  "pages": 10000,
+  "nodes": 10450,
+  "corpus_sha256": "080e500d85f5b80d28280847f535bf01963cafbb1538604b5a5ee577775e8d4d",
+  "python": "3.14.0",
+  "platform": "Windows-11-10.0.26200-SP0",
+  "sqlite": "3.50.4",
+  "samples_per_latency": 200,
+  "cache": "warm; excludes index construction",
+  "bm25_max_absolute_error": 0.0,
+  "all_eligible_order_matches": true,
+  "baseline": {
+    "recall_at_3": 0.3333333333333333,
+    "mrr": 0.5,
+    "mean_valid_count": 1,
+    "inactive_return_rate": 0.3333333333333333,
+    "selective_latency": {
+      "p50_ms": 0.125,
+      "p95_ms": 0.3182
+    },
+    "broad_latency": {
+      "p50_ms": 22.9328,
+      "p95_ms": 31.0716
+    },
+    "cases": [
+      {
+        "query": "orbital00",
+        "scenario": "mixed_state",
+        "relevant": [
+          "orbital00-current-0",
+          "orbital00-current-1",
+          "orbital00-current-2"
+        ],
+        "slugs": [
+          "orbital00-leader"
+        ],
+        "valid_count": 0,
+        "recall_at_3": 0.0,
+        "mrr": 0,
+        "inactive_count": 1
+      },
+      {
+        "query": "orbital01",
+        "scenario": "mixed_state",
+        "relevant": [
+          "orbital01-current-0",
+          "orbital01-current-1",
+          "orbital01-current-2"
+        ],
+        "slugs": [
+          "orbital01-leader"
+        ],
+        "valid_count": 0,
+        "recall_at_3": 0.0,
+        "mrr": 0,
+        "inactive_count": 1
+      },
+      {
+        "query": "orbital02",
+        "scenario": "mixed_state",
+        "relevant": [
+          "orbital02-current-0",
+          "orbital02-current-1",
+          "orbital02-current-2"
+        ],
+        "slugs": [
+          "orbital02-leader"
+        ],
+        "valid_count": 0,
+        "recall_at_3": 0.0,
+        "mrr": 0,
+        "inactive_count": 1
+      },
+      {
+        "query": "orbital03",
+        "scenario": "mixed_state",
+        "relevant": [
+          "orbital03-current-0",
+          "orbital03-current-1",
+          "orbital03-current-2"
+        ],
+        "slugs": [
+          "orbital03-leader"
+        ],
+        "valid_count": 0,
+        "recall_at_3": 0.0,
+        "mrr": 0,
+        "inactive_count": 1
+      },
+      {
+        "query": "orbital04",
+        "scenario": "mixed_state",
+        "relevant": [
+          "orbital04-current-0",
+          "orbital04-current-1",
+          "orbital04-current-2"
+        ],
+        "slugs": [
+          "orbital04-leader"
+        ],
+        "valid_count": 0,
+        "recall_at_3": 0.0,
+        "mrr": 0,
+        "inactive_count": 1
+      },
+      {
+        "query": "orbital05",
+        "scenario": "mixed_state",
+        "relevant": [
+          "orbital05-current-0",
+          "orbital05-current-1",
+          "orbital05-current-2"
+        ],
+        "slugs": [
+          "orbital05-leader"
+        ],
+        "valid_count": 0,
+        "recall_at_3": 0.0,
+        "mrr": 0,
+        "inactive_count": 1
+      },
+      {
+        "query": "orbital06",
+        "scenario": "mixed_state",
+        "relevant": [
+          "orbital06-current-0",
+          "orbital06-current-1",
+          "orbital06-current-2"
+        ],
+        "slugs": [
+          "orbital06-leader"
+        ],
+        "valid_count": 0,
+        "recall_at_3": 0.0,
+        "mrr": 0,
+        "inactive_count": 1
+      },
+      {
+        "query": "orbital07",
+        "scenario": "mixed_state",
+        "relevant": [
+          "orbital07-current-0",
+          "orbital07-current-1",
+          "orbital07-current-2"
+        ],
+        "slugs": [
+          "orbital07-leader"
+        ],
+        "valid_count": 0,
+        "recall_at_3": 0.0,
+        "mrr": 0,
+        "inactive_count": 1
+      },
+      {
+        "query": "orbital08",
+        "scenario": "mixed_state",
+        "relevant": [
+          "orbital08-current-0",
+          "orbital08-current-1",
+          "orbital08-current-2"
+        ],
+        "slugs": [
+          "orbital08-leader"
+        ],
+        "valid_count": 0,
+        "recall_at_3": 0.0,
+        "mrr": 0,
+        "inactive_count": 1
+      },
+      {
+        "query": "orbital09",
+        "scenario": "mixed_state",
+        "relevant": [
+          "orbital09-current-0",
+          "orbital09-current-1",
+          "orbital09-current-2"
+        ],
+        "slugs": [
+          "orbital09-leader"
+        ],
+        "valid_count": 0,
+        "recall_at_3": 0.0,
+        "mrr": 0,
+        "inactive_count": 1
+      },
+      {
+        "query": "orbital10",
+        "scenario": "many_nodes",
+        "relevant": [
+          "orbital10-leader",
+          "orbital10-current-0",
+          "orbital10-current-1"
+        ],
+        "slugs": [
+          "orbital10-leader"
+        ],
+        "valid_count": 1,
+        "recall_at_3": 0.3333333333333333,
+        "mrr": 1.0,
+        "inactive_count": 0
+      },
+      {
+        "query": "orbital11",
+        "scenario": "many_nodes",
+        "relevant": [
+          "orbital11-leader",
+          "orbital11-current-0",
+          "orbital11-current-1"
+        ],
+        "slugs": [
+          "orbital11-leader"
+        ],
+        "valid_count": 1,
+        "recall_at_3": 0.3333333333333333,
+        "mrr": 1.0,
+        "inactive_count": 0
+      },
+      {
+        "query": "orbital12",
+        "scenario": "many_nodes",
+        "relevant": [
+          "orbital12-leader",
+          "orbital12-current-0",
+          "orbital12-current-1"
+        ],
+        "slugs": [
+          "orbital12-leader"
+        ],
+        "valid_count": 1,
+        "recall_at_3": 0.3333333333333333,
+        "mrr": 1.0,
+        "inactive_count": 0
+      },
+      {
+        "query": "orbital13",
+        "scenario": "many_nodes",
+        "relevant": [
+          "orbital13-leader",
+          "orbital13-current-0",
+          "orbital13-current-1"
+        ],
+        "slugs": [
+          "orbital13-leader"
+        ],
+        "valid_count": 1,
+        "recall_at_3": 0.3333333333333333,
+        "mrr": 1.0,
+        "inactive_count": 0
+      },
+      {
+        "query": "orbital14",
+        "scenario": "many_nodes",
+        "relevant": [
+          "orbital14-leader",
+          "orbital14-current-0",
+          "orbital14-current-1"
+        ],
+        "slugs": [
+          "orbital14-leader"
+        ],
+        "valid_count": 1,
+        "recall_at_3": 0.3333333333333333,
+        "mrr": 1.0,
+        "inactive_count": 0
+      },
+      {
+        "query": "orbital15",
+        "scenario": "control",
+        "relevant": [
+          "orbital15-current-0",
+          "orbital15-current-1",
+          "orbital15-current-2"
+        ],
+        "slugs": [
+          "orbital15-current-0",
+          "orbital15-current-1",
+          "orbital15-current-2"
+        ],
+        "valid_count": 3,
+        "recall_at_3": 1.0,
+        "mrr": 1.0,
+        "inactive_count": 0
+      },
+      {
+        "query": "orbital16",
+        "scenario": "control",
+        "relevant": [
+          "orbital16-current-0",
+          "orbital16-current-1",
+          "orbital16-current-2"
+        ],
+        "slugs": [
+          "orbital16-current-0",
+          "orbital16-current-1",
+          "orbital16-current-2"
+        ],
+        "valid_count": 3,
+        "recall_at_3": 1.0,
+        "mrr": 1.0,
+        "inactive_count": 0
+      },
+      {
+        "query": "orbital17",
+        "scenario": "control",
+        "relevant": [
+          "orbital17-current-0",
+          "orbital17-current-1",
+          "orbital17-current-2"
+        ],
+        "slugs": [
+          "orbital17-current-0",
+          "orbital17-current-1",
+          "orbital17-current-2"
+        ],
+        "valid_count": 3,
+        "recall_at_3": 1.0,
+        "mrr": 1.0,
+        "inactive_count": 0
+      },
+      {
+        "query": "orbital18",
+        "scenario": "control",
+        "relevant": [
+          "orbital18-current-0",
+          "orbital18-current-1",
+          "orbital18-current-2"
+        ],
+        "slugs": [
+          "orbital18-current-0",
+          "orbital18-current-1",
+          "orbital18-current-2"
+        ],
+        "valid_count": 3,
+        "recall_at_3": 1.0,
+        "mrr": 1.0,
+        "inactive_count": 0
+      },
+      {
+        "query": "orbital19",
+        "scenario": "control",
+        "relevant": [
+          "orbital19-current-0",
+          "orbital19-current-1",
+          "orbital19-current-2"
+        ],
+        "slugs": [
+          "orbital19-current-0",
+          "orbital19-current-1",
+          "orbital19-current-2"
+        ],
+        "valid_count": 3,
+        "recall_at_3": 1.0,
+        "mrr": 1.0,
+        "inactive_count": 0
+      }
+    ]
+  },
+  "candidate": {
+    "recall_at_3": 1.0,
+    "mrr": 1.0,
+    "mean_valid_count": 3,
+    "inactive_return_rate": 0.0,
+    "selective_latency": {
+      "p50_ms": 0.3821,
+      "p95_ms": 1.0809
+    },
+    "broad_latency": {
+      "p50_ms": 18.7693,
+      "p95_ms": 26.105
+    },
+    "cases": [
+      {
+        "query": "orbital00",
+        "scenario": "mixed_state",
+        "relevant": [
+          "orbital00-current-0",
+          "orbital00-current-1",
+          "orbital00-current-2"
+        ],
+        "slugs": [
+          "orbital00-current-0",
+          "orbital00-current-1",
+          "orbital00-current-2"
+        ],
+        "valid_count": 3,
+        "recall_at_3": 1.0,
+        "mrr": 1.0,
+        "inactive_count": 0
+      },
+      {
+        "query": "orbital01",
+        "scenario": "mixed_state",
+        "relevant": [
+          "orbital01-current-0",
+          "orbital01-current-1",
+          "orbital01-current-2"
+        ],
+        "slugs": [
+          "orbital01-current-0",
+          "orbital01-current-1",
+          "orbital01-current-2"
+        ],
+        "valid_count": 3,
+        "recall_at_3": 1.0,
+        "mrr": 1.0,
+        "inactive_count": 0
+      },
+      {
+        "query": "orbital02",
+        "scenario": "mixed_state",
+        "relevant": [
+          "orbital02-current-0",
+          "orbital02-current-1",
+          "orbital02-current-2"
+        ],
+        "slugs": [
+          "orbital02-current-0",
+          "orbital02-current-1",
+          "orbital02-current-2"
+        ],
+        "valid_count": 3,
+        "recall_at_3": 1.0,
+        "mrr": 1.0,
+        "inactive_count": 0
+      },
+      {
+        "query": "orbital03",
+        "scenario": "mixed_state",
+        "relevant": [
+          "orbital03-current-0",
+          "orbital03-current-1",
+          "orbital03-current-2"
+        ],
+        "slugs": [
+          "orbital03-current-0",
+          "orbital03-current-1",
+          "orbital03-current-2"
+        ],
+        "valid_count": 3,
+        "recall_at_3": 1.0,
+        "mrr": 1.0,
+        "inactive_count": 0
+      },
+      {
+        "query": "orbital04",
+        "scenario": "mixed_state",
+        "relevant": [
+          "orbital04-current-0",
+          "orbital04-current-1",
+          "orbital04-current-2"
+        ],
+        "slugs": [
+          "orbital04-current-0",
+          "orbital04-current-1",
+          "orbital04-current-2"
+        ],
+        "valid_count": 3,
+        "recall_at_3": 1.0,
+        "mrr": 1.0,
+        "inactive_count": 0
+      },
+      {
+        "query": "orbital05",
+        "scenario": "mixed_state",
+        "relevant": [
+          "orbital05-current-0",
+          "orbital05-current-1",
+          "orbital05-current-2"
+        ],
+        "slugs": [
+          "orbital05-current-0",
+          "orbital05-current-1",
+          "orbital05-current-2"
+        ],
+        "valid_count": 3,
+        "recall_at_3": 1.0,
+        "mrr": 1.0,
+        "inactive_count": 0
+      },
+      {
+        "query": "orbital06",
+        "scenario": "mixed_state",
+        "relevant": [
+          "orbital06-current-0",
+          "orbital06-current-1",
+          "orbital06-current-2"
+        ],
+        "slugs": [
+          "orbital06-current-0",
+          "orbital06-current-1",
+          "orbital06-current-2"
+        ],
+        "valid_count": 3,
+        "recall_at_3": 1.0,
+        "mrr": 1.0,
+        "inactive_count": 0
+      },
+      {
+        "query": "orbital07",
+        "scenario": "mixed_state",
+        "relevant": [
+          "orbital07-current-0",
+          "orbital07-current-1",
+          "orbital07-current-2"
+        ],
+        "slugs": [
+          "orbital07-current-0",
+          "orbital07-current-1",
+          "orbital07-current-2"
+        ],
+        "valid_count": 3,
+        "recall_at_3": 1.0,
+        "mrr": 1.0,
+        "inactive_count": 0
+      },
+      {
+        "query": "orbital08",
+        "scenario": "mixed_state",
+        "relevant": [
+          "orbital08-current-0",
+          "orbital08-current-1",
+          "orbital08-current-2"
+        ],
+        "slugs": [
+          "orbital08-current-0",
+          "orbital08-current-1",
+          "orbital08-current-2"
+        ],
+        "valid_count": 3,
+        "recall_at_3": 1.0,
+        "mrr": 1.0,
+        "inactive_count": 0
+      },
+      {
+        "query": "orbital09",
+        "scenario": "mixed_state",
+        "relevant": [
+          "orbital09-current-0",
+          "orbital09-current-1",
+          "orbital09-current-2"
+        ],
+        "slugs": [
+          "orbital09-current-0",
+          "orbital09-current-1",
+          "orbital09-current-2"
+        ],
+        "valid_count": 3,
+        "recall_at_3": 1.0,
+        "mrr": 1.0,
+        "inactive_count": 0
+      },
+      {
+        "query": "orbital10",
+        "scenario": "many_nodes",
+        "relevant": [
+          "orbital10-leader",
+          "orbital10-current-0",
+          "orbital10-current-1"
+        ],
+        "slugs": [
+          "orbital10-leader",
+          "orbital10-current-0",
+          "orbital10-current-1"
+        ],
+        "valid_count": 3,
+        "recall_at_3": 1.0,
+        "mrr": 1.0,
+        "inactive_count": 0
+      },
+      {
+        "query": "orbital11",
+        "scenario": "many_nodes",
+        "relevant": [
+          "orbital11-leader",
+          "orbital11-current-0",
+          "orbital11-current-1"
+        ],
+        "slugs": [
+          "orbital11-leader",
+          "orbital11-current-0",
+          "orbital11-current-1"
+        ],
+        "valid_count": 3,
+        "recall_at_3": 1.0,
+        "mrr": 1.0,
+        "inactive_count": 0
+      },
+      {
+        "query": "orbital12",
+        "scenario": "many_nodes",
+        "relevant": [
+          "orbital12-leader",
+          "orbital12-current-0",
+          "orbital12-current-1"
+        ],
+        "slugs": [
+          "orbital12-leader",
+          "orbital12-current-0",
+          "orbital12-current-1"
+        ],
+        "valid_count": 3,
+        "recall_at_3": 1.0,
+        "mrr": 1.0,
+        "inactive_count": 0
+      },
+      {
+        "query": "orbital13",
+        "scenario": "many_nodes",
+        "relevant": [
+          "orbital13-leader",
+          "orbital13-current-0",
+          "orbital13-current-1"
+        ],
+        "slugs": [
+          "orbital13-leader",
+          "orbital13-current-0",
+          "orbital13-current-1"
+        ],
+        "valid_count": 3,
+        "recall_at_3": 1.0,
+        "mrr": 1.0,
+        "inactive_count": 0
+      },
+      {
+        "query": "orbital14",
+        "scenario": "many_nodes",
+        "relevant": [
+          "orbital14-leader",
+          "orbital14-current-0",
+          "orbital14-current-1"
+        ],
+        "slugs": [
+          "orbital14-leader",
+          "orbital14-current-0",
+          "orbital14-current-1"
+        ],
+        "valid_count": 3,
+        "recall_at_3": 1.0,
+        "mrr": 1.0,
+        "inactive_count": 0
+      },
+      {
+        "query": "orbital15",
+        "scenario": "control",
+        "relevant": [
+          "orbital15-current-0",
+          "orbital15-current-1",
+          "orbital15-current-2"
+        ],
+        "slugs": [
+          "orbital15-current-0",
+          "orbital15-current-1",
+          "orbital15-current-2"
+        ],
+        "valid_count": 3,
+        "recall_at_3": 1.0,
+        "mrr": 1.0,
+        "inactive_count": 0
+      },
+      {
+        "query": "orbital16",
+        "scenario": "control",
+        "relevant": [
+          "orbital16-current-0",
+          "orbital16-current-1",
+          "orbital16-current-2"
+        ],
+        "slugs": [
+          "orbital16-current-0",
+          "orbital16-current-1",
+          "orbital16-current-2"
+        ],
+        "valid_count": 3,
+        "recall_at_3": 1.0,
+        "mrr": 1.0,
+        "inactive_count": 0
+      },
+      {
+        "query": "orbital17",
+        "scenario": "control",
+        "relevant": [
+          "orbital17-current-0",
+          "orbital17-current-1",
+          "orbital17-current-2"
+        ],
+        "slugs": [
+          "orbital17-current-0",
+          "orbital17-current-1",
+          "orbital17-current-2"
+        ],
+        "valid_count": 3,
+        "recall_at_3": 1.0,
+        "mrr": 1.0,
+        "inactive_count": 0
+      },
+      {
+        "query": "orbital18",
+        "scenario": "control",
+        "relevant": [
+          "orbital18-current-0",
+          "orbital18-current-1",
+          "orbital18-current-2"
+        ],
+        "slugs": [
+          "orbital18-current-0",
+          "orbital18-current-1",
+          "orbital18-current-2"
+        ],
+        "valid_count": 3,
+        "recall_at_3": 1.0,
+        "mrr": 1.0,
+        "inactive_count": 0
+      },
+      {
+        "query": "orbital19",
+        "scenario": "control",
+        "relevant": [
+          "orbital19-current-0",
+          "orbital19-current-1",
+          "orbital19-current-2"
+        ],
+        "slugs": [
+          "orbital19-current-0",
+          "orbital19-current-1",
+          "orbital19-current-2"
+        ],
+        "valid_count": 3,
+        "recall_at_3": 1.0,
+        "mrr": 1.0,
+        "inactive_count": 0
+      }
+    ]
+  },
+  "hook_default_floor": {
+    "baseline": {
+      "status": "injected",
+      "matches": [
+        "orbital00-leader",
+        "orbital00-current-0",
+        "orbital00-current-1"
+      ],
+      "inactive_count": 1,
+      "trace_slugs": [
+        "orbital00-leader",
+        "orbital00-current-0",
+        "orbital00-current-1"
+      ],
+      "context_contains_inactive": true
+    },
+    "candidate": {
+      "status": "injected",
+      "matches": [
+        "orbital00-current-0",
+        "orbital00-current-1",
+        "orbital00-current-2"
+      ],
+      "inactive_count": 0,
+      "trace_slugs": [
+        "orbital00-current-0",
+        "orbital00-current-1",
+        "orbital00-current-2"
+      ],
+      "context_contains_inactive": false
+    }
+  }
+}

@@ -1,0 +1,89 @@
+{
+  "method": "warm, same in-memory index; alternate call order; exclude index construction",
+  "previous": "replay of filtered ORDER BY bm25 and growing node prefixes; no scope/type filter",
+  "python": "3.14.0",
+  "sqlite": "3.50.4",
+  "platform": "Windows-11-10.0.26200-SP0",
+  "candidate_sha256": {
+    "cli/knowledge_studio/search/fts5.py": "025a4eefab8ab1e5ac21047c92c76ded7a1793bbe07847d0f0f6dbdde7397dcc",
+    "cli/knowledge_studio/recall.py": "03a26d0a51d4bccc518f7830d0e411ecad50adb217b2a6b55e421ca5d0cc353f",
+    "assets/hooks/user-prompt-recall.py": "fcfd316271a5a6438ed59a155dc4e439001cd466b4dfb29b0be13927f8edfb76"
+  },
+  "script_sha256": "d40e167fa7287e0e24b9ea83ba67969052a3f9c7cb1811caf9a54a79548d4a23",
+  "runs": [
+    {
+      "pages": 2000,
+      "order_matches": true,
+      "bm25_max_absolute_error": 0.0,
+      "plans": {
+        "previous": [
+          "SCAN f VIRTUAL TABLE INDEX 0:M6",
+          "SEARCH p USING INDEX sqlite_autoindex_pages_1 (slug=?)",
+          "USE TEMP B-TREE FOR ORDER BY"
+        ],
+        "optimized": [
+          "SCAN f VIRTUAL TABLE INDEX 32:rM6",
+          "SEARCH p USING INDEX sqlite_autoindex_pages_1 (slug=?)"
+        ]
+      },
+      "samples_per_group": 200,
+      "broad": {
+        "previous": {
+          "p50_ms": 8.0435,
+          "p95_ms": 14.1924
+        },
+        "optimized": {
+          "p50_ms": 3.9796,
+          "p95_ms": 6.7932
+        }
+      },
+      "selective": {
+        "previous": {
+          "p50_ms": 0.2206,
+          "p95_ms": 0.542
+        },
+        "optimized": {
+          "p50_ms": 0.2651,
+          "p95_ms": 0.6909
+        }
+      }
+    },
+    {
+      "pages": 10000,
+      "order_matches": true,
+      "bm25_max_absolute_error": 0.0,
+      "plans": {
+        "previous": [
+          "SCAN f VIRTUAL TABLE INDEX 0:M6",
+          "SEARCH p USING INDEX sqlite_autoindex_pages_1 (slug=?)",
+          "USE TEMP B-TREE FOR ORDER BY"
+        ],
+        "optimized": [
+          "SCAN f VIRTUAL TABLE INDEX 32:rM6",
+          "SEARCH p USING INDEX sqlite_autoindex_pages_1 (slug=?)"
+        ]
+      },
+      "samples_per_group": 200,
+      "broad": {
+        "previous": {
+          "p50_ms": 46.9687,
+          "p95_ms": 62.3509
+        },
+        "optimized": {
+          "p50_ms": 18.1463,
+          "p95_ms": 25.8872
+        }
+      },
+      "selective": {
+        "previous": {
+          "p50_ms": 0.2203,
+          "p95_ms": 0.5849
+        },
+        "optimized": {
+          "p50_ms": 0.262,
+          "p95_ms": 0.5132
+        }
+      }
+    }
+  ]
+}
