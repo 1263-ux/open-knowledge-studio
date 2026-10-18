@@ -556,13 +556,18 @@ def _apply_relationship(relates_to: str, relationship: str, new_slug: str) -> No
         _update_frontmatter_field(old_file, "challenged_by", new_slug)
 
 
+def _validate_score(field: str, value: object) -> None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not 0 <= value <= 1:
+        raise ValueError(f"{field} must be a number between 0 and 1, got {value!r}")
+
+
 def write_wiki_page(
     title: str,
     content: str,
     wiki_type: str = "concepts",
     area: str = "computing",
     source_type: str = "auto",
-    importance: float = 0.5,
+    importance: float | None = None,
     tags: list[str] | None = None,
     options: list[dict] | None = None,
     traces: list[dict] | None = None,
@@ -573,7 +578,13 @@ def write_wiki_page(
     human_note: str | None = None,
     slug_hint: str | None = None,
     human_reviewed: bool = False,
+    confidence: float | None = None,
+    default_importance: float = 0.5,
 ) -> Path:
+    for field, value in (("importance", importance), ("confidence", confidence)):
+        if value is not None:
+            _validate_score(field, value)
+    _validate_score("default_importance", default_importance)
     if not re.fullmatch(r"[a-z][a-z0-9-]*", area):
         raise ValueError(
             f"Invalid area name: {area!r}. "
@@ -589,8 +600,15 @@ def write_wiki_page(
             # approving a draft whose body matches an existing page used to lose
             # the review, the active status and the declared A4 relationship —
             # and promote_draft then deleted the draft, so it was unrecoverable.
-            _reinforce_on_reconfirmation(existing_slug)
+            # An explicit assessment takes precedence over reconfirmation.
+            # Repeating a low-confidence draft must not inflate its confidence.
+            if confidence is None:
+                _reinforce_on_reconfirmation(existing_slug)
+            else:
+                _update_frontmatter_field(existing, "confidence", confidence)
             if human_reviewed:
+                if importance is not None:
+                    _update_frontmatter_field(existing, "importance", importance)
                 _update_frontmatter_field(
                     existing, "human_reviewed_at", datetime.now(UTC).isoformat()
                 )
@@ -627,8 +645,8 @@ def write_wiki_page(
         "area": area,
         "status": "active" if human_reviewed else "provisional",
         "source_type": source_type,
-        "importance": importance,
-        "confidence": 0.8,
+        "importance": default_importance if importance is None else importance,
+        "confidence": 0.8 if confidence is None else confidence,
         "created": now.isoformat(),
         "pinned": False,
         "archived": False,
@@ -814,6 +832,9 @@ def promote_draft(
     if final_type is None:
         raise ValueError(f"Unsupported Wiki type: {requested_type}")
     final_area = area or meta.get("draft_area", "computing")
+    for field in ("importance", "confidence"):
+        if field in meta:
+            _validate_score(field, meta[field])
     human_note = meta.get("source_note") or None
 
     draft_tags = meta.get("tags", [])
@@ -828,7 +849,9 @@ def promote_draft(
         wiki_type=final_type,
         area=final_area,
         source_type=meta.get("source_type", "auto"),
-        importance=0.7,
+        importance=meta.get("importance"),
+        confidence=meta.get("confidence"),
+        default_importance=0.7,
         tags=tags if tags is not None else draft_tags,
         traces=meta.get("traces") if isinstance(meta.get("traces"), list) else None,
         review=meta.get("review") if isinstance(meta.get("review"), dict) else None,
