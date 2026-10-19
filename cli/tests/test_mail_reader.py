@@ -238,3 +238,24 @@ def test_memory_cannot_escape_through_symlink(kb, tmp_path):
         with pytest.raises(HTTPError) as error:
             get_json(base, "/api/mail/memory/item?path=wiki/external/secret.md")
         assert error.value.code == 404
+
+
+def test_worker_source_refresh_is_read_only_and_ordinary_types_have_no_skill_badge(kb):
+    (kb/'wiki/evidence.md').write_text('---\ntitle: Evidence\narea: computing\ntype: strategy\n---\nBody',encoding='utf-8')
+    before=filesystem_snapshot(kb)
+    calls=[]
+    class Source:
+        def snapshot(self,force=False):
+            calls.append(force)
+            return {'state':'live','source':{'base_token_hash':'abc','table_id':'tbl1'},
+                    'observed_at':'2026-10-19T00:00:00Z','records':[{'record_id':'r1','fields':{
+                        'Wiki路径':'wiki/evidence.md','知识域':'science','质量状态':'partial'}}]}
+    with serving(kb,knowledge_source=Source()) as (base,server):
+        data=get_json(base,'/api/mail/knowledge-map?refresh=1')
+        assert data['worker_source']['linked_records']==1
+        assert calls==[True]
+        with urlopen(base+'/wiki-page?path=wiki/evidence.md',timeout=5) as response:
+            html=response.read().decode('utf-8')
+        assert '治理类型' not in html
+        assert 'Skill 候选' not in html
+    assert filesystem_snapshot(kb)==before

@@ -923,6 +923,22 @@ def main() -> int:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     args = parse_args()
     config = load_config(args)
+    if args.command == "knowledge-panel":
+        from feishu_worker.review_events import _load_studio_store
+        _load_studio_store()
+        from knowledge_studio.mail_web import create_server
+        from feishu_worker.knowledge_reader import KnowledgeReader
+        knowledge_root = configured_knowledge_root(config)
+        reader = KnowledgeReader(config, ROOT)
+        server = create_server(knowledge_root, args.port, mode="reader", knowledge_source=reader)
+        print(f"Read-only knowledge panel: http://127.0.0.1:{server.server_port}/#wiki-overview", flush=True)
+        try:
+            server.serve_forever()
+        except KeyboardInterrupt:
+            pass
+        finally:
+            server.server_close()
+        return 0
     if args.command == "pending":
         records = list_records(config, args.limit)
         result = {

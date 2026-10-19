@@ -5,12 +5,12 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-sys.path.insert(0, str(Path(__file__).resolve().parents[4] / "cli"))
 
 from feishu_worker.config import WorkerConfig
 from feishu_worker.knowledge_reader import KnowledgeReader, DISPLAY_FIELDS, snapshot_record
 from feishu_worker.knowledge_reader import _read_only_json, merge_observation
-from knowledge_studio import worker_records
+from feishu_worker.states import KNOWLEDGE_DOMAIN_OPTIONS
+from knowledge_studio import worker_knowledge
 
 
 def config(tmp_path):
@@ -18,7 +18,8 @@ def config(tmp_path):
 
 
 def test_optional_transport_vocabulary_matches_packaged_core():
-    assert DISPLAY_FIELDS == worker_records.DISPLAY_FIELDS
+    assert set(KNOWLEDGE_DOMAIN_OPTIONS)==set(worker_knowledge.DOMAIN_LABELS)
+    assert DISPLAY_FIELDS==worker_knowledge.DISPLAY_FIELDS
 
 
 def test_paginated_reader_calls_only_read_operations_and_preserves_partial(tmp_path):

@@ -924,7 +924,10 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(200, mail_timeline.timeline_data(self.server.kb_root, UI_AGENT, limit))
             return
         if route == "/api/mail/knowledge-map":
-            self.send_json(200, mail_knowledge.knowledge_map(self.server.kb_root))
+            source = self.server.knowledge_source
+            query = parse_qs(urlsplit(self.path).query)
+            snapshot = source.snapshot(force=query.get("refresh", [""])[0] == "1") if source is not None else None
+            self.send_json(200, mail_knowledge.knowledge_map(self.server.kb_root, worker_snapshot=snapshot))
             return
         if route in {"/api/mail/wiki-page", "/wiki-page"}:
             query = parse_qs(urlsplit(self.path).query)
@@ -1202,13 +1205,14 @@ class Handler(BaseHTTPRequestHandler):
         except (ValueError, json.JSONDecodeError) as exc:
             self.send_json(400, {"error": str(exc)})
 
-def create_server(root: Path, port: int = 3182, *, mode: str = "reader") -> ThreadingHTTPServer:
+def create_server(root: Path, port: int = 3182, *, mode: str = "reader", knowledge_source=None) -> ThreadingHTTPServer:
     if mode not in {"reader", "collaboration"}:
         raise ValueError("Mail mode must be reader or collaboration")
     root = validate_root(root)
     server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
     server.kb_root = root
     server.mode = mode
+    server.knowledge_source = knowledge_source
     server.session_id = None
     if mode == "reader":
         return server
