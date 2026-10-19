@@ -580,11 +580,15 @@ def write_wiki_page(
     human_reviewed: bool = False,
     confidence: float | None = None,
     default_importance: float = 0.5,
+    enforce_classification: bool = False,
 ) -> Path:
     for field, value in (("importance", importance), ("confidence", confidence)):
         if value is not None:
             _validate_score(field, value)
     _validate_score("default_importance", default_importance)
+    if enforce_classification:
+        from knowledge_studio.knowledge_policy import validate_classification
+        area, wiki_type = validate_classification(area, wiki_type)
     if not re.fullmatch(r"[a-z][a-z0-9-]*", area):
         raise ValueError(
             f"Invalid area name: {area!r}. "
@@ -596,6 +600,12 @@ def write_wiki_page(
     if existing_slug:
         existing = _find_file_by_slug(existing_slug)
         if existing:
+            if enforce_classification:
+                from knowledge_studio.knowledge_policy import is_source_material, TYPE_DIRS
+                previous = parse_wiki_file(existing) or {}
+                if (is_source_material(previous) or previous.get("area") != area
+                        or TYPE_DIRS.get(previous.get("type")) != wiki_type):
+                    raise ValueError("Matching content has a different classification or is source material; candidate retained. Review the existing page explicitly.")
             # Dedup must not swallow what the caller newly established. A human
             # approving a draft whose body matches an existing page used to lose
             # the review, the active status and the declared A4 relationship —
@@ -758,8 +768,8 @@ def list_drafts() -> list[dict]:
         drafts.append({
             "slug": meta["slug"],
             "title": meta.get("title", meta["slug"]),
-            "draft_type": meta.get("draft_type", "concept"),
-            "draft_area": meta.get("draft_area", "computing"),
+            "draft_type": meta.get("draft_type") or "待确认",
+            "draft_area": meta.get("draft_area") or "待确认",
             "source_pages": meta.get("source_pages", []),
             "drafted_at": meta.get("drafted_at", ""),
             "status": meta.get("status", "draft"),
@@ -822,16 +832,13 @@ def promote_draft(
         )
 
     final_title = title or meta.get("title", slug)
-    requested_type = wiki_type or meta.get("draft_type", "concept")
-    _type_dirs = {
-        "concept": "concepts", "concepts": "concepts",
-        "strategy": "strategies", "strategies": "strategies",
-        "anti-pattern": "anti-patterns", "anti-patterns": "anti-patterns",
-    }
-    final_type = _type_dirs.get(requested_type)
-    if final_type is None:
-        raise ValueError(f"Unsupported Wiki type: {requested_type}")
-    final_area = area or meta.get("draft_area", "computing")
+    from knowledge_studio.knowledge_policy import is_source_material, validate_classification
+    if is_source_material(meta):
+        raise ValueError("Source material cannot be promoted directly. Distill a separate Candidate with source references, then review it; candidate retained.")
+    final_area, final_type = validate_classification(
+        area if area is not None else meta.get("draft_area"),
+        wiki_type if wiki_type is not None else meta.get("draft_type"),
+    )
     for field in ("importance", "confidence"):
         if field in meta:
             _validate_score(field, meta[field])
@@ -860,6 +867,7 @@ def promote_draft(
         # A3: reaching here means a human approved the draft. Recording it is
         # what lets recall label the page [verified] honestly.
         human_reviewed=True,
+        enforce_classification=True,
         # A4: carry the declared relationship through, otherwise the superseded
         # page stays active and both versions get recalled side by side.
         supersedes=meta.get("supersedes"),

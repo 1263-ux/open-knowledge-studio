@@ -261,7 +261,7 @@ Reviewed body.
             "--type",
             "strategy",
             "--area",
-            "ai-models",
+            "computing",
             "--slug-hint",
             "candidate-one-reviewed",
             "--tag",
@@ -278,7 +278,7 @@ Reviewed body.
     assert page is not None
     assert page["title"] == "Candidate one"
     assert page["type"] == "strategy"
-    assert page["area"] == "ai-models"
+    assert page["area"] == "computing"
     assert page["tags"] == "kimi, reviewed"
     assert page["human_reviewed_at"]
 

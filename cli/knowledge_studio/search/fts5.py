@@ -243,6 +243,12 @@ class FTS5Backend:
             slug = page.get("slug") or page.get("path", "").replace(".md", "")
             if not slug:
                 continue
+            from knowledge_studio.knowledge_policy import is_source_material
+            if is_source_material(page):
+                self._conn.execute("DELETE FROM pages WHERE slug=?", (slug,))
+                if self._use_fts5:
+                    self._conn.execute("DELETE FROM wiki_fts WHERE slug=?", (slug,))
+                continue
             seen_slugs.add(slug)
             title = str(page.get("title", ""))
             status = str(page.get("status", "active") or "active").strip().lower()

@@ -62,6 +62,9 @@ def is_wiki_page_archived(page: dict[str, Any]) -> bool:
 def is_recallable_wiki_page(page: dict[str, Any]) -> bool:
     """Whether a Wiki page may enter ordinary recall and prompt injection."""
     status = str(page.get("status", "active") or "active").strip().lower()
+    from knowledge_studio.knowledge_policy import is_source_material
+    if is_source_material(page):
+        return False
     return status not in _INACTIVE_WIKI_STATUSES and not is_wiki_page_archived(page)
 
 

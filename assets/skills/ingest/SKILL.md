@@ -438,9 +438,17 @@ On success: bundle_id returned.  On rejection: read error_code, do NOT retry bli
    ```
 
    **The field names must be `draft_type` and `draft_area`.** `oks drafts
-   promote` reads only those; writing `type:` / `area:` falls back to
-   `concept` / `computing`, so a strategy about science lands silently in
-   `wiki/computing/concepts/` with no error.
+   promote` requires both fields (or explicit review overrides `--type` and
+   `--area`). Missing or unknown classification stops promotion and preserves
+   the Candidate. Select a canonical domain ID from `oks wiki domains`; do not
+   guess a default when the subject is uncertain.
+
+   OCR is extraction evidence: retain original images, transcripts, source
+   hashes and locators in the Raw Bundle. Do not create OCR compilations in
+   `wiki/`. Distill a separate Candidate citing that evidence, then request
+   human review. Re-extraction should retain evidence already cited by Wiki.
+   `raw-commit --overwrite` explicitly replaces a bundle and does not provide
+   permanent version history; it never replaces a reviewed Wiki body.
 
    Set `importance` and `confidence` as YAML numbers in `[0, 1]` based on the
    Candidate's value and evidence. Promotion preserves explicit scores,

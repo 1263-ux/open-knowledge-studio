@@ -1095,11 +1095,19 @@ def wiki_get(
     ))
 
 
+@wiki_app.command("domains")
+def wiki_domains():
+    """List canonical knowledge domain IDs and display labels."""
+    from knowledge_studio.knowledge_policy import DOMAIN_LABELS
+    for key, label in DOMAIN_LABELS.items():
+        typer.echo(f"{key}\t{label}")
+
+
 @wiki_app.command("create")
 def wiki_create(
     title: str = typer.Option(..., "--title", help="Page title"),
     page_type: str = typer.Option("concept", "--type", help="concept/strategy/anti-pattern"),
-    area: str = typer.Option("computing", "--area", help="Knowledge domain"),
+    area: str = typer.Option(..., "--area", help="Canonical domain ID; see oks wiki domains"),
     importance: float = typer.Option(0.5, "--importance", help="0.0-1.0"),
     content: str = typer.Option("", "--content", help="Page body (or pipe via stdin)"),
 ):
@@ -1108,26 +1116,16 @@ def wiki_create(
     if not content and not sys.stdin.isatty():
         content = sys.stdin.read()
 
-    type_map = {
-        "concept": "concepts", "concepts": "concepts",
-        "strategy": "strategies", "strategies": "strategies",
-        "anti-pattern": "anti-patterns", "anti-patterns": "anti-patterns",
-    }
-    wiki_type = type_map.get(page_type)
-    if wiki_type is None:
-        console.print(
-            f"[yellow]Unknown --type '{page_type}' — using 'concept'. "
-            f"Valid: concept, strategy, anti-pattern.[/yellow]"
-        )
-        wiki_type = "concepts"
-
+    from knowledge_studio.knowledge_policy import validate_classification
     try:
+        area, wiki_type = validate_classification(area, page_type)
         path = store.write_wiki_page(
             title=title,
             content=content,
             wiki_type=wiki_type,
             area=area,
             importance=importance,
+            enforce_classification=True,
         )
     except ValueError as e:
         console.print(f"[red]{e}[/red]")
