@@ -37,6 +37,7 @@ from knowledge_studio.recall import (
 )
 from knowledge_studio.vfs import FS_RESPONSE_SCHEMA, VfsError, VfsService
 from knowledge_studio.workbuddy import inspect_workbuddy_adapter
+from knowledge_studio.skills_cli import app as skills_app
 
 # ── ingest: connector is a regular PyPI dependency (oks-connector>=0.2.0) ──
 from oks_connector.raw_bundle_adapter import (
@@ -224,6 +225,7 @@ ingest_app = typer.Typer(
     cls=_LegacyIngestGroup,
 )
 app.add_typer(wiki_app, name="wiki")
+app.add_typer(skills_app, name="skills")
 app.add_typer(drafts_app, name="drafts")
 app.add_typer(config_app, name="config")
 app.add_typer(hook_app, name="hook")
@@ -2054,6 +2056,10 @@ def _materialize_assets(root: Path, base: Path, overwrite: bool) -> list[str]:
         """
         wrote = False
         for item in sorted(src.rglob("*")):
+            # pip compiles Python files inside packaged assets on installation.
+            # Those caches are runtime noise, not part of a reusable Skill.
+            if "__pycache__" in item.relative_to(src).parts or item.suffix in {".pyc", ".pyo"}:
+                continue
             target = dest / item.relative_to(src)
             if item.is_dir():
                 target.mkdir(parents=True, exist_ok=True)
@@ -2581,6 +2587,8 @@ def skills_install(
         src = base / "skills"
         if src.is_dir():
             for item in sorted(src.rglob("*")):
+                if "__pycache__" in item.relative_to(src).parts or item.suffix in {".pyc", ".pyo"}:
+                    continue
                 if skill_names and item.relative_to(src).parts[0] not in skill_names:
                     continue
                 target = dest / item.relative_to(src)
