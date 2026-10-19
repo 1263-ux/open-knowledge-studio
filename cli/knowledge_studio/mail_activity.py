@@ -61,10 +61,13 @@ def activity_data(root, viewer="human", limit=200):
     # Bound the returned feed while retaining the roster from visible history.
     rows.sort(key=lambda row: (str(row["meta"].get("timestamp", "")), str(row["meta"].get("message_id", ""))))
     members = {}
+    visible_sessions = set()
+    deliveries = delivery_records(root, rows)
     for row in rows:
         meta = row["meta"]
         sender = mail._normalise_agent(str(meta.get("from", "")))
-        for participant in {sender, *meta.get("to", [])} - {"", "@all"}:
+        recipients = deliveries[str(meta["message_id"])]
+        for participant in {sender, *meta.get("to", []), *(item["agent_id"] for item in recipients)} - {"", "@all"}:
             member = members.setdefault(participant, {
                 "id": participant, "kind": "human" if participant == "@human" else "unknown",
                 "last_message_at": "", "session_count": 0, "machine_ids": [], "last_seen_at": "",
@@ -72,6 +75,34 @@ def activity_data(root, viewer="human", limit=200):
             if participant == sender and meta.get("sender_kind") in {"human", "agent", "system"}:
                 member["kind"] = meta["sender_kind"]
             member["last_message_at"] = max(member["last_message_at"], str(meta.get("timestamp", "")))
+        # Session registry is provenance only for identities observed in visible
+        # messages/receipts. Its heartbeat may describe unrelated private work.
+        origin_session = str(meta.get("origin_session_id") or "")
+        if origin_session and sender in members:
+            visible_sessions.add((sender, origin_session))
+        origin_machine = str(meta.get("origin_machine_id") or "")
+        if origin_machine and origin_machine != "unknown" and sender in members:
+            if origin_machine not in members[sender]["machine_ids"]:
+                members[sender]["machine_ids"].append(origin_machine)
+        if sender in members:
+            members[sender]["last_seen_at"] = max(
+                members[sender]["last_seen_at"], str(meta.get("timestamp") or ""),
+            )
+        for recipient in recipients:
+            participant = recipient["agent_id"]
+            member = members[participant]
+            member["last_seen_at"] = max(member["last_seen_at"], str(recipient.get("read_at") or ""))
+            for session in recipient["sessions"]:
+                session_id = str(session.get("session_id") or "")
+                if session_id:
+                    visible_sessions.add((participant, session_id))
+                receipt_machine = str(session.get("machine_id") or "")
+                if receipt_machine and receipt_machine != "unknown" and receipt_machine not in member["machine_ids"]:
+                    member["machine_ids"].append(receipt_machine)
+                member["last_seen_at"] = max(
+                    member["last_seen_at"],
+                    *(str(session.get(key) or "") for key in ("injected_at", "delivered_at", "acknowledged_at")),
+                )
     for path in mail.sessions_dir(root).glob("*.json"):
         try:
             session = json.loads(path.read_text(encoding="utf-8"))
@@ -80,19 +111,14 @@ def activity_data(root, viewer="human", limit=200):
         if not isinstance(session, dict) or not session.get("agent_id"):
             continue
         participant = mail._normalise_agent(str(session["agent_id"]))
-        member = members.setdefault(participant, {
-            "id": participant, "kind": "unknown", "last_message_at": "",
-            "session_count": 0, "machine_ids": [], "last_seen_at": "",
-        })
+        session_id = str(session.get("session_id") or path.stem)
+        if (participant, session_id) not in visible_sessions:
+            continue
+        member = members[participant]
         if member["kind"] == "unknown":
             member["kind"] = "human" if participant == "@human" else "agent"
         member["session_count"] += 1
-        machine = str(session.get("machine_id") or "")
-        if machine and machine != "unknown" and machine not in member["machine_ids"]:
-            member["machine_ids"].append(machine)
-        member["last_seen_at"] = max(member["last_seen_at"], str(session.get("last_seen_at") or ""))
     recent = rows[-limit:]
-    deliveries = delivery_records(root, recent)
     events = []
     for row in recent:
         meta = row["meta"]
@@ -118,4 +144,5 @@ def activity_data(root, viewer="human", limit=200):
                                        "session_id": session["session_id"], "machine_id": session["machine_id"]})
     events.sort(key=lambda event: (str(event.get("timestamp") or ""), event["id"]), reverse=True)
     return {"events": events[:limit], "members": sorted(members.values(), key=lambda member: member["id"]),
-            "truncated": len(rows) > limit or len(events) > limit, "scope": "current-knowledge-base"}
+            "truncated": len(rows) > limit or len(events) > limit,
+            "scope": f"{mail._normalise_agent(viewer).lstrip('@')}-visible-history"}

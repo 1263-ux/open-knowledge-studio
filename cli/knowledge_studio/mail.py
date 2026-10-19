@@ -26,7 +26,7 @@ RECEIPT_EVENT_VERSION = "mail.delivery-receipt-event.v1"
 SESSION_VERSION = "mail.session.v1"
 DEFAULT_REASON = "direct"
 REASONS = {"direct", "mention", "conflict", "review_request", "thread_reply", "system", "handoff"}
-RECORD_KINDS = {"message", "handoff", "result", "blocked", "note", "knowledge_ref"}
+RECORD_KINDS = {"message", "goal", "handoff", "result", "blocked", "note", "knowledge_ref", "review_request", "acknowledgement"}
 SENDER_KINDS = {"human", "agent", "unknown"}
 EVIDENCE_REF_TYPES = {"trace", "run", "capability", "bundle", "candidate", "wiki", "commit"}
 
@@ -80,7 +80,7 @@ def normalise_record_kind(value: str) -> str:
     """Return a small fact classification, independent of delivery reason."""
     candidate = str(value or "").strip().lower() or "message"
     if candidate not in RECORD_KINDS:
-        raise ValueError("record_kind must be one of: message, handoff, result, blocked, note, knowledge_ref")
+        raise ValueError("record_kind must be one of: " + ", ".join(sorted(RECORD_KINDS)))
     return candidate
 
 
@@ -735,11 +735,39 @@ def _message_sort_key(message: dict[str, Any]) -> tuple[str, str]:
     return (str(meta.get("timestamp", "")), str(meta.get("message_id", "")))
 
 
+def visible_reply_parent(message: dict[str, Any], by_id: dict[str, Any]) -> dict[str, Any] | None:
+    """Resolve a direct response within the caller's already filtered view.
+
+    A bare reply_to is only a claim. Lifecycle evidence also needs the same
+    Thread, an addressed respondent, and a reply addressed to the parent author.
+    This checks file provenance, not authentication, acceptance, or completion.
+    """
+    meta = message["meta"]
+    parent = by_id.get(str(meta.get("reply_to") or ""))
+    if not parent:
+        return None
+    source = parent["meta"]
+    if source["message_id"] == meta["message_id"]:
+        return None
+    if (source.get("thread_id") or source["message_id"]) != (meta.get("thread_id") or meta["message_id"]):
+        return None
+    author = _normalise_agent(str(source.get("from") or ""))
+    respondent = _normalise_agent(str(meta.get("from") or ""))
+    recipients = {_normalise_agent(str(value)) for value in source.get("to", [])}
+    destinations = {_normalise_agent(str(value)) for value in meta.get("to", [])}
+    if respondent in {author, "@unknown", "@all"} or (respondent not in recipients and "@all" not in recipients):
+        return None
+    if author not in destinations and "@all" not in destinations:
+        return None
+    return parent
+
+
 def thread_messages(root: Path, thread_id: str, agent_id: str = "") -> list[dict[str, Any]]:
     """Return the visible canonical/legacy conversation for one Thread."""
+    wanted = str(thread_id or "")
     messages = [
         message for message in iter_messages(root, agent_id)
-        if str(message["meta"].get("thread_id", "")) == thread_id
+        if str(message["meta"].get("thread_id") or message["meta"].get("message_id")) == wanted
     ]
     return sorted(messages, key=_message_sort_key)
 
@@ -764,7 +792,7 @@ def snapshot_data(root: Path, agent_id: str, *, max_threads: int = 100, max_mess
     grouped = group_threads(messages)
     ordered = sorted(
         grouped.items(),
-        key=lambda item: _message_sort_key(item[1][-1]),
+        key=lambda item: max(_message_sort_key(message) for message in item[1]),
         reverse=True,
     )
     truncated = len(ordered) > max_threads
@@ -780,7 +808,7 @@ def snapshot_data(root: Path, agent_id: str, *, max_threads: int = 100, max_mess
             state = message.get("state") or {}
             serialised.append({
                 "message_id": str(meta.get("message_id", "")),
-                "thread_id": str(meta.get("thread_id", thread_id)),
+                "thread_id": str(meta.get("thread_id") or thread_id),
                 "reply_to": str(meta.get("reply_to", "") or ""),
                 "from": str(meta.get("from", "unknown")),
                 "sender_kind": str(meta.get("sender_kind", "unknown")),
@@ -801,8 +829,13 @@ def snapshot_data(root: Path, agent_id: str, *, max_threads: int = 100, max_mess
         unread_count = sum(1 for message in items if _message_unread(message))
         archived = all((message.get("state") or {}).get("archived_at") for message in items)
         participants = sorted({
-            str(message["meta"].get("from", "unknown")),
-            *(str(value) for value in message["meta"].get("to", [])),
+            participant
+            for message in items
+            for participant in (
+                [_normalise_agent(str(message["meta"].get("from", "unknown")))]
+                + [_normalise_agent(str(value)) for value in message["meta"].get("to", [])]
+            )
+            if participant
         })
         threads.append({
             "thread_id": thread_id,
