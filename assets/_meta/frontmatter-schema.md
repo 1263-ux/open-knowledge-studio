@@ -37,6 +37,17 @@ Required identity fields are `title`, `type`, and `area`. The CLI supplies defau
 for lifecycle fields when it creates a page. `access_count`, memory score, tier, and
 quality score are computed at read time and must not be copied into frontmatter.
 
+New CLI creation requires a canonical domain from `oks wiki domains`. Draft
+promotion requires explicit `draft_area` and `draft_type` or review overrides;
+missing/unknown classification leaves the Candidate intact. Historical areas
+remain readable.
+
+`content_role: source_material` explicitly marks extraction evidence, as does
+legacy `source_type: local-ocr-import`. These files remain readable but do not
+enter ordinary knowledge recall, graph or distillation. New OCR belongs in Raw
+Bundles, not Wiki. Distill and review a separate Candidate before promotion.
+Titles and provisional status alone never imply source-material identity.
+
 Relationship invariants:
 
 - `relationship` and `relates_to` must appear together.

@@ -709,7 +709,8 @@ def _recall_knowledge_via_backend(
 
     # 补全 recall-hit/v1 字段：backend 返回 SearchHit（slug/title/score），
     # 其余字段从 wiki 页详情查补，保证 /query skill 和 eval 不受影响。
-    pages = {p.get("slug"): p for p in list_wiki_pages()}
+    from knowledge_studio.knowledge_policy import is_source_material
+    pages = {p.get("slug"): p for p in list_wiki_pages() if not is_source_material(p)}
     results: list[dict[str, Any]] = []
     for h in hits[:limit]:
         p = pages.get(h.slug)
@@ -802,6 +803,9 @@ def _recall_knowledge_with_context(
         [f"{p.get('title', '')} {p.get('body', '')}" for p in all_pages],
     )
     for item in all_pages:
+        from knowledge_studio.knowledge_policy import is_source_material
+        if is_source_material(item):
+            continue
         if item.get("status") in ("dropped", "superseded") or item.get("archived"):
             continue
 

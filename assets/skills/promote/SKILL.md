@@ -19,6 +19,15 @@ List drafts in `drafts/`, let user review, promote accepted ones to `wiki/` or r
 
 ## Rules
 
+- Require explicit `draft_type` and `draft_area`, or review overrides `--type`
+  and `--area`. Use canonical domains from `oks wiki domains`. Missing or
+  unknown classification stops promotion and leaves the Candidate intact.
+- A matching body with a different domain or type is a classification conflict.
+  Review the existing page explicitly; the Candidate is not consumed.
+- Source material (`content_role: source_material`, including legacy
+  `source_type: local-ocr-import`) cannot promote directly. Keep OCR in Raw;
+  distill a separate Candidate with evidence references for human review.
+
 - Promoted pages get `status: active`, `human_reviewed_at`, and `importance: 0.7`
 - If a draft carries a `source_note` (human intake comment), promote copies it
   verbatim onto the wiki page as `human_note` — the human's judgement survives.

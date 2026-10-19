@@ -349,7 +349,8 @@ def knowledge_map(root: Path, limit: int = 400) -> dict:
     for path, kind in paths:
         parsed = store.parse_wiki_file(path) or {}
         body = str(parsed.pop("body", "") or "")
-        if not _is_visible(parsed):
+        from knowledge_studio.knowledge_policy import is_source_material
+        if not _is_visible(parsed) or is_source_material(parsed):
             hidden += 1
             continue
         updated_at, timestamp_source = _event_time(parsed, path)

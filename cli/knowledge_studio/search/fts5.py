@@ -222,6 +222,12 @@ class FTS5Backend:
             slug = page.get("slug") or page.get("path", "").replace(".md", "")
             if not slug:
                 continue
+            from knowledge_studio.knowledge_policy import is_source_material
+            if is_source_material(page):
+                self._conn.execute("DELETE FROM pages WHERE slug=?", (slug,))
+                if self._use_fts5:
+                    self._conn.execute("DELETE FROM wiki_fts WHERE slug=?", (slug,))
+                continue
             title = str(page.get("title", ""))
             body = str(page.get("body", ""))
             tags = page.get("tags", "")

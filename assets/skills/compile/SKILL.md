@@ -21,3 +21,8 @@ Re-read a wiki page's sources and traces, use AI to regenerate an improved versi
 
 - Never overwrite wiki page directly — always through drafts/.
 - Preserve original frontmatter (tags, traces, review).
+- Set explicit `draft_type` and a canonical `draft_area` from `oks wiki domains`.
+  Legacy unknown domains require review instead of a guessed default.
+- Keep OCR and original images in Raw; cite that evidence in the Candidate.
+  Do not overwrite reviewed knowledge with extraction output, or treat an
+  uncorrected transcript as a verified summary. Preserve partial/failed states.
