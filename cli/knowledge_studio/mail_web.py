@@ -8,7 +8,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
-from knowledge_studio import identity, mail, store
+from knowledge_studio import identity, mail, mail_media, store
 from knowledge_studio import mail_knowledge, mail_timeline, mail_observation, team_sync
 from knowledge_studio.mail_activity import activity_data, delivery_records
 from knowledge_studio.mail_setup import asset_root, validate_root, agent_id
@@ -468,6 +468,7 @@ def _memory_item(root: Path, relative: str) -> dict:
     summary["path"] = candidate.relative_to(root).as_posix()
     summary["body"] = body[:12000]
     summary["truncated"] = len(body) > 12000
+    summary["body_html"] = mail_media.render_body(root, summary["path"], meta, summary["body"], md_to_html)
     summary["metadata"] = {
         key: _json_safe(value)
         for key, value in meta.items()
@@ -573,9 +574,18 @@ def _md_inline(escaped: str) -> str:
     return escaped
 
 
-def md_to_html(body: str) -> str:
+def md_to_html(body: str, *, image_renderer=None) -> str:
     """Render a deliberately small Markdown subset of an already-trusted file."""
-    lines = str(body or "").replace("\r\n", "\n").split("\n")
+    body = str(body or "").replace("\r\n", "\n")
+    images: list[str] = []
+    if image_renderer is not None:
+        # Use the same prose boundary as the image endpoint. Extract before
+        # block parsing so multiline comments/code cannot become resources.
+        matches = list(mail_media.IMAGE.finditer(mail_media.prose_only(body)))
+        for match in reversed(matches):
+            images.append(image_renderer(html.unescape(match.group(2)), html.unescape(match.group(1))))
+            body = body[:match.start()] + f"\x02image{len(images) - 1}\x03" + body[match.end():]
+    lines = body.split("\n")
     out: list[str] = []
     paragraph: list[str] = []
     quote: list[str] = []
@@ -672,7 +682,10 @@ def md_to_html(body: str) -> str:
         index += 1
 
     close_paragraph(); close_quote(); close_list()
-    return "\n".join(out)
+    rendered = "\n".join(out)
+    for index, image in enumerate(images):
+        rendered = rendered.replace(f"\x02image{index}\x03", image)
+    return rendered
 
 
 def _human_time(value) -> str:
@@ -727,7 +740,7 @@ def render_wiki_page(item: dict, embed: bool = False) -> str:
 
     title = html.escape(str(item.get("title") or "未命名知识"))
     summary = html.escape(str(item.get("summary") or ""))
-    body_html = md_to_html(item.get("body") or "")
+    body_html = item.get("body_html") if isinstance(item.get("body_html"), str) else md_to_html(item.get("body") or "")
     truncated = (
         '<p class="wiki-cut">正文在本页中被截断，完整内容以知识库文件为准。</p>'
         if item.get("truncated") else ""
@@ -803,6 +816,26 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(400, {"error": str(exc)})
                 return
             self.send_json(200, result)
+            return
+        if route == "/api/mail/knowledge-image":
+            query = parse_qs(urlsplit(self.path).query)
+            try:
+                data, mime = mail_media.read_image(
+                    self.server.kb_root,
+                    query.get("path", [""])[0],
+                    query.get("asset", [""])[0],
+                )
+            except (OSError, ValueError, IndexError):
+                self.send_json(404, {"error": "Referenced knowledge image unavailable"})
+                return
+            self.send_response(200)
+            self.send_header("Content-Type", mime)
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("Content-Security-Policy", "default-src 'none'; sandbox")
+            self.end_headers()
+            self.wfile.write(data)
             return
         if route == "/api/mail/activity":
             self.send_json(200, activity_data(self.server.kb_root, UI_AGENT))
