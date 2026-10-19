@@ -561,6 +561,23 @@ def _validate_score(field: str, value: object) -> None:
         raise ValueError(f"{field} must be a number between 0 and 1, got {value!r}")
 
 
+def _merge_worker_records(file_path: Path, incoming: list[dict]) -> None:
+    from knowledge_studio.worker_records import merge_records
+
+    def update(text: str) -> str:
+        parts = text.split("---", 2)
+        if len(parts) != 3:
+            raise ValueError("Cannot preserve Worker sources without valid frontmatter")
+        meta = yaml.safe_load(parts[1].strip()) or {}
+        if not isinstance(meta, dict):
+            raise ValueError("Cannot preserve Worker sources in invalid frontmatter")
+        meta["worker_records"] = merge_records(meta.get("worker_records"), incoming)
+        front = yaml.safe_dump(meta, default_flow_style=False, allow_unicode=True, sort_keys=False)
+        return f"---\n{front}---{parts[2]}"
+
+    _locked_atomic_update(file_path, update)
+
+
 def write_wiki_page(
     title: str,
     content: str,
@@ -583,6 +600,7 @@ def write_wiki_page(
     enforce_classification: bool = False,
     subdirectory: str | None = None,
     skill_metadata: dict | None = None,
+    worker_records: list[dict] | None = None,
 ) -> Path:
     for field, value in (("importance", importance), ("confidence", confidence)):
         if value is not None:
@@ -591,6 +609,8 @@ def write_wiki_page(
     if enforce_classification:
         from knowledge_studio.knowledge_policy import validate_classification
         area, wiki_type = validate_classification(area, wiki_type)
+    from knowledge_studio.worker_records import clean_records
+    worker_records = clean_records(worker_records)
     if not re.fullmatch(r"[a-z][a-z0-9-]*", area):
         raise ValueError(
             f"Invalid area name: {area!r}. "
@@ -640,6 +660,8 @@ def write_wiki_page(
             if supersedes and not relates_to:
                 relates_to, relationship = supersedes, "supersedes"
             _apply_relationship(relates_to or "", relationship or "", existing_slug)
+            if worker_records:
+                _merge_worker_records(existing, worker_records)
             return existing
 
     wd = wiki_dir()
@@ -700,6 +722,8 @@ def write_wiki_page(
         frontmatter["traces"] = traces
     if review:
         frontmatter["review"] = review
+    if worker_records:
+        frontmatter["worker_records"] = worker_records
     if human_note:
         frontmatter["human_note"] = human_note
     if relates_to and relationship:
@@ -949,6 +973,7 @@ def _promote_draft(
         relationship=meta.get("relationship"),
         subdirectory=meta.get("skill_category") if meta.get("artifact_kind") == "skill" else None,
         skill_metadata=meta if meta.get("artifact_kind") == "skill" else None,
+        worker_records=meta.get("worker_records"),
     )
 
     draft_path.unlink()
