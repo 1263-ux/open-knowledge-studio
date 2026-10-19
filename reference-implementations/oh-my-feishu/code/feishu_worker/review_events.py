@@ -386,6 +386,12 @@ def review_candidate(
         reviewed_body = str(fields.get("候选内容") or "").strip()
         if len(reviewed_body) < 50:
             raise RuntimeError("Accepted Candidate content is empty or too short")
+        from feishu_worker.knowledge_reader import snapshot_record, merge_observation
+        metadata, existing_body = parse_candidate_document(candidate_path.read_text(encoding="utf-8"))
+        metadata["worker_records"] = merge_observation(
+            metadata.get("worker_records"), snapshot_record(config, record_id, fields)
+        )
+        atomic_write_text(candidate_path, render_candidate_document(metadata, existing_body))
         wiki_path = _promote(
             candidate_path,
             reviewed_body,

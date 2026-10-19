@@ -139,7 +139,8 @@ def publish_candidate(
     _lark = _lark_fn if _lark_fn is not None else functools.partial(_base_lark_json, root=root)
     _send_notification = _send_notification_fn if _send_notification_fn is not None else send_candidate_review_notification
 
-    record = _get(config, record_id, [*CANDIDATE_FIELDS, "内容", "思考"])
+    from feishu_worker.knowledge_reader import DISPLAY_FIELDS, snapshot_record, merge_observation
+    record = _get(config, record_id, list(dict.fromkeys([*CANDIDATE_FIELDS, *DISPLAY_FIELDS])))
     fields = record["fields"]
     status = scalar_cell(fields.get("运行状态"))
     if status not in {"Raw就绪", "候选待审", "需人工"}:
@@ -159,6 +160,7 @@ def publish_candidate(
     knowledge_root = configured_knowledge_root(config, root=root)
     target = knowledge_root / "drafts" / f"{candidate_id}.md"
     metadata["status"] = "draft"
+    metadata["worker_records"] = merge_observation(metadata.get("worker_records"), snapshot_record(config, record_id, fields))
     source_pages = metadata.get("source_pages", [])
     if not isinstance(source_pages, list):
         source_pages = [str(source_pages)] if source_pages else []
