@@ -148,7 +148,6 @@ oks skills-install                # 打包 skills + agent-config 到 .claude/.qo
 
 接下来：
 
-- Skills 独立分类、导入审核与按需调用：[Skills 管理](docs/usage/skills.md)
 - CLI 参考、hook 配置、评估：[CLI 文档](https://open-agent-power.github.io/open-knowledge-studio/reference/cli/)
 - 备份、导出、会话：[备份与导出](https://open-agent-power.github.io/open-knowledge-studio/connect/backup-export/)
 

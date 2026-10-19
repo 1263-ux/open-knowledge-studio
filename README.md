@@ -30,11 +30,6 @@ your source → Candidate → human review → Wiki → Recall → injected into
 
 Mail preserves only durable collaboration facts that must cross a Session, Agent, Host, or machine: handoffs, results, blockers, notes, and references to existing Wiki/Candidate/Trace artifacts. It is not a second knowledge base, task engine, chat replacement, or wake-up service. A message can be written and later read or replied to by an Agent's Skill; without a separate Host Adapter, that does not start a process, create a Session, or claim execution. Threads are durable context for the records, not workflow state. See the [product boundary](https://open-agent-power.github.io/open-knowledge-studio/concepts/product-boundary/) and [Mail protocol](https://open-agent-power.github.io/open-knowledge-studio/reference/mail-protocol/).
 
-Skills can be managed in their own Wiki area, with strategy, anti-pattern and
-concept cards grouped into fine categories. Import complete assets for review,
-then find and load one Skill through a small `oks` entry. See
-[Skills in Wiki](docs/usage/skills.md) for the lifecycle and migration commands.
-
 ## Why Open Knowledge Studio
 
 - **One filesystem for all memory.** Profiles, raw materials, curated wiki, drafts, and agent mail each get a directory with a different trust boundary. An Agent locates and manipulates context deterministically, like a developer working with files. → [Architecture](https://open-agent-power.github.io/open-knowledge-studio/concepts/architecture/) · [Constitution](https://open-agent-power.github.io/open-knowledge-studio/concepts/constitution/)
