@@ -51,3 +51,10 @@ files through the team's ordinary Git workflow when authorized. Do not sync
 Saved, Git-synced, read and replied are distinct states. A Skill does not start a
 background receiver, remote wake service or Git daemon. Check Mail when invoked
 or at a checkpoint requested by the user.
+
+Use `--record-kind goal|handoff|blocked|result|review_request|acknowledgement`
+on native send/reply commands when that explicit durable fact exists. A
+confirmation message is not a delivery receipt, task acceptance, or completion;
+a review request is not human approval. Reply in the original Thread and retain
+the precise parent message. Execution state belongs to Trace and knowledge
+review belongs to Candidate/Wiki; reference them with `--evidence-ref`.

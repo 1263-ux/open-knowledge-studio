@@ -21,7 +21,7 @@ def kb(tmp_path, monkeypatch):
 
 
 def test_web_reads_real_threads_and_rejects_unsafe_requests(kb):
-    server = create_server(kb, 0)
+    server = create_server(kb, 0, mode="collaboration")
     worker = threading.Thread(target=server.serve_forever, daemon=True)
     worker.start()
     base = f"http://127.0.0.1:{server.server_port}"
@@ -146,7 +146,7 @@ def test_panel_serves_no_post_capable_control(kb):
     2026-09-22 那次「零写操作」结论就是这么假绿的：口径是「form 数为 0」，
     而真正的写路径是一个 `input.type='checkbox'` + change 即 POST。
     """
-    server = create_server(kb, 0)
+    server = create_server(kb, 0, mode="collaboration")
     worker = threading.Thread(target=server.serve_forever, daemon=True)
     worker.start()
     try:
@@ -168,7 +168,7 @@ def test_removed_knowledge_toggle_route_fails_closed(kb):
     target.write_text("---\ntitle: A\n---\n\nbody\n", encoding="utf-8")
     before = target.read_bytes()
 
-    server = create_server(kb, 0)
+    server = create_server(kb, 0, mode="collaboration")
     worker = threading.Thread(target=server.serve_forever, daemon=True)
     worker.start()
     base = f"http://127.0.0.1:{server.server_port}"
@@ -200,7 +200,7 @@ def test_removed_knowledge_toggle_route_fails_closed(kb):
 
 def test_global_view_draws_the_relation_network(kb):
     """主视图必须真的按后端边表画关系，而不是只画层级。"""
-    server = create_server(kb, 0)
+    server = create_server(kb, 0, mode="collaboration")
     worker = threading.Thread(target=server.serve_forever, daemon=True)
     worker.start()
     try:
@@ -221,7 +221,7 @@ def test_hierarchical_lines_do_not_borrow_a_relation_key(kb):
     借用关系色键的后果：图例里点掉「相关」，中心到知识点的从属线一起消失 ——
     读者会以为那条从属线也是「相关」关系。
     """
-    server = create_server(kb, 0)
+    server = create_server(kb, 0, mode="collaboration")
     worker = threading.Thread(target=server.serve_forever, daemon=True)
     worker.start()
     try:

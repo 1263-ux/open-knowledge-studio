@@ -3139,12 +3139,13 @@ def mail_setup(
 def mail_serve(
     path: Optional[str] = typer.Option(None, "--path", help="Knowledge base root"),
     port: int = typer.Option(3182, "--port", min=1, max=65535),
+    mode: str = typer.Option("reader", "--mode", help="reader (read-only) or collaboration (legacy write API)"),
 ) -> None:
     """Serve the real local Mail workspace for a human browser."""
     from knowledge_studio.mail_web import create_server
 
     try:
-        server = create_server(_instance_root(path), port)
+        server = create_server(_instance_root(path), port, mode=mode)
     except (ValueError, OSError) as exc:
         console.print(f"[red]{exc}[/red]")
         raise typer.Exit(2)

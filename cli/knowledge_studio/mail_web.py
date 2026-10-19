@@ -414,7 +414,7 @@ def _memory_summary(meta: dict, body: str, path: Path) -> dict:
     if not summary:
         summary = "这份知识还没有可显示的摘要，打开详情查看原文。"
     kind = "wiki" if "wiki" in path.parts else "candidate"
-    area = str(meta.get("area") or meta.get("domain") or "未分类").strip() or "未分类"
+    area = str(meta.get("area") or meta.get("domain") or meta.get("draft_area") or "未分类").strip() or "未分类"
     memory_type = str(meta.get("type") or ("wiki" if kind == "wiki" else "candidate")).strip() or ("wiki" if kind == "wiki" else "candidate")
     tags = meta.get("tags", [])
     if isinstance(tags, str):
@@ -424,7 +424,7 @@ def _memory_summary(meta: dict, body: str, path: Path) -> dict:
     event_time, event_source = _memory_event_time(meta, path)
     status = str(meta.get("status", "active" if kind == "wiki" else "pending")).strip() or ("active" if kind == "wiki" else "pending")
     status_label = {
-        "active": "可复用",
+        "active": "当前条目",
         "pending": "待审核",
         "provisional": "待确认",
         "stale": "需要更新",
@@ -436,7 +436,8 @@ def _memory_summary(meta: dict, body: str, path: Path) -> dict:
     return {
         "path": str(path),
         "kind": kind,
-        "kind_label": "已审核 Wiki" if kind == "wiki" else "Candidate 候选",
+        "kind_label": mail_knowledge.review_summary(meta, kind)["kind_label"],
+        "review": mail_knowledge.review_summary(meta, kind),
         "title": _memory_title(meta, body, path),
         "summary": summary,
         "area": area,
@@ -455,20 +456,29 @@ def _memory_summary(meta: dict, body: str, path: Path) -> dict:
     }
 
 
-def _memory_item(root: Path, relative: str) -> dict:
+def _memory_item(root: Path, relative: str, *, full: bool = False) -> dict:
     """Read one Markdown knowledge item, refusing paths outside wiki/drafts."""
     if not relative or Path(relative).is_absolute():
         raise ValueError("memory path must be a relative wiki/ or drafts/ path")
     candidate = (root / relative).resolve()
     allowed = [(root / "wiki").resolve(), (root / "drafts").resolve()]
-    if candidate.suffix.lower() != ".md" or not candidate.is_file() or not any(candidate.is_relative_to(base) for base in allowed):
+    if (not candidate.is_relative_to(root.resolve()) or candidate.suffix.lower() != ".md"
+            or not candidate.is_file() or not any(candidate.is_relative_to(base) for base in allowed)):
         raise FileNotFoundError("memory item not found")
     meta, body = _memory_meta(candidate)
     summary = _memory_summary(meta, body, candidate)
     summary["path"] = candidate.relative_to(root).as_posix()
-    summary["body"] = body[:12000]
-    summary["truncated"] = len(body) > 12000
+    from knowledge_studio.knowledge_policy import is_source_material
+    summary["content_role"] = "source_material" if is_source_material(meta) else "knowledge"
+    if is_source_material(meta):
+        summary["kind_label"] = "来源资料 · 机器提取"
+    body_limit = 1_000_000 if full else 12000
+    summary["body"] = body[:body_limit]
     summary["body_html"] = mail_media.render_body(root, summary["path"], meta, summary["body"], md_to_html)
+    original = candidate.read_text(encoding="utf-8")
+    summary["markdown"] = original[:body_limit]
+    summary["markdown_truncated"] = len(original) > body_limit
+    summary["truncated"] = len(body) > body_limit
     summary["metadata"] = {
         key: _json_safe(value)
         for key, value in meta.items()
@@ -699,7 +709,7 @@ def _human_time(value) -> str:
         return text
 
 
-def render_wiki_page(item: dict, embed: bool = False) -> str:
+def render_wiki_page(item: dict, embed: bool = False, return_to: str = "/#view=knowledge") -> str:
     """Build the standalone page for one knowledge entry (no scripts)."""
     relations = mail_knowledge._relations(item.get("metadata") or {})
     badges = [item.get("kind_label") or "", item.get("status_label") or ""]
@@ -720,7 +730,10 @@ def render_wiki_page(item: dict, embed: bool = False) -> str:
     if item.get("type_label"):
         rows.append(("治理类型", str(item["type_label"])))
     rows += [
-        ("审核状态", item.get("status_label") or "—"),
+        ("条目状态", item.get("status_label") or "—"),
+        ("资料校对" if item.get("content_role") == "source_material" else "人审证据",
+         ("未经校对" if (item.get("metadata") or {}).get("ocr_review_status") == "unreviewed" else "以原文记录为准")
+         if item.get("content_role") == "source_material" else (item.get("review") or {}).get("label") or "审核记录未知"),
         ("最近更新", _human_time(item.get("updated_at"))),
         ("标签", "、".join(tag_names) or "—"),
     ]
@@ -741,15 +754,20 @@ def render_wiki_page(item: dict, embed: bool = False) -> str:
     title = html.escape(str(item.get("title") or "未命名知识"))
     summary = html.escape(str(item.get("summary") or ""))
     body_html = item.get("body_html") if isinstance(item.get("body_html"), str) else md_to_html(item.get("body") or "")
+    first_heading = re.match(r"^<h[2-6]>(.*?)</h[2-6]>\s*", body_html, re.S)
+    if first_heading and re.sub(r"<[^>]+>", "", first_heading.group(1)) == title:
+        body_html = body_html[first_heading.end():]
     truncated = (
         '<p class="wiki-cut">正文在本页中被截断，完整内容以知识库文件为准。</p>'
         if item.get("truncated") else ""
     )
+    if return_to != "/" and not return_to.startswith("/#"):
+        return_to = "/#view=knowledge"
     chrome = "" if embed else (
         '<nav class="wiki-crumbs">'
-        '<a class="wiki-back" href="/">← 返回面板</a>'
+        f'<a class="wiki-back" href="{html.escape(return_to, quote=True)}">← 返回面板</a>'
         '<span class="sep">|</span>'
-        '<span>OKS Wiki</span><span class="sep">›</span>'
+        '<span>知识工作区</span><span class="sep">›</span>'
         f'<span class="cur">{title}</span></nav>'
     )
     detail_bits = [f"文件：{html.escape(str(item.get('path') or '—'))}"]
@@ -802,6 +820,16 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(403, {"error": "loopback Host required"})
             return
         route = self.path.split("?", 1)[0]
+        if route == "/api/mail/capabilities":
+            self.send_json(200, {
+                "mode": self.server.mode,
+                "read_only": self.server.mode == "reader",
+                "viewer": "@human",
+                "knowledge_base": str(self.server.kb_root),
+                "knowledge_base_name": self.server.kb_root.name,
+                "wake_supported": False,
+            })
+            return
         if route == "/api/mail/overview":
             query = parse_qs(urlsplit(self.path).query)
             try:
@@ -851,7 +879,8 @@ class Handler(BaseHTTPRequestHandler):
             for row in rows:
                 meta = row["meta"]
                 state = row.get("state") or {}
-                messages.append({**meta, "body": row["body"], "read_at": state.get("read_at"),
+                messages.append({**meta, "title": row.get("title", ""), "body": row["body"],
+                                 "body_html": md_to_html(row["body"]), "read_at": state.get("read_at"),
                                  "deliveries": deliveries.get(str(meta.get("message_id")), [])})
             self.send_json(200, {"thread_id": thread_id, "messages": messages,
                                  "title": rows[0].get("title", "未命名对话"),
@@ -871,9 +900,10 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(200, memory_status(self.server.kb_root))
             return
         if route in {"/api/memory/item", "/api/mail/memory/item"}:
-            relative = parse_qs(urlsplit(self.path).query).get("path", [""])[0]
+            query = parse_qs(urlsplit(self.path).query)
+            relative = query.get("path", [""])[0]
             try:
-                self.send_json(200, _memory_item(self.server.kb_root, relative))
+                self.send_json(200, _memory_item(self.server.kb_root, relative, full=query.get("full", [""])[0] in {"1", "true"}))
             except FileNotFoundError as exc:
                 self.send_json(404, {"error": str(exc)})
             except ValueError as exc:
@@ -899,14 +929,14 @@ class Handler(BaseHTTPRequestHandler):
             relative = query.get("path", [""])[0]
             embed = query.get("embed", ["0"])[0] in {"1", "true", "yes"}
             try:
-                item = _memory_item(self.server.kb_root, relative)
+                item = _memory_item(self.server.kb_root, relative, full=not embed)
             except FileNotFoundError as exc:
                 self.send_html(404, f"<p>{html.escape(str(exc))}</p>")
                 return
             except ValueError as exc:
                 self.send_html(400, f"<p>{html.escape(str(exc))}</p>")
                 return
-            self.send_html(200, render_wiki_page(item, embed=embed))
+            self.send_html(200, render_wiki_page(item, embed=embed, return_to=query.get("return_to", ["/#view=knowledge"])[0]))
             return
         if route == "/api/connection-guide":
             self.send_json(200, {
@@ -958,17 +988,46 @@ class Handler(BaseHTTPRequestHandler):
             raise ValueError("request body must be an object")
         return value
 
+    def _reject_post(self, status, message):
+        """Consume a bounded request body before sending a JSON rejection.
+
+        Windows clients can see a connection reset when an HTTP/1.0 handler
+        closes with unread POST bytes. Rejections must leave the request stream
+        in the same state as accepted JSON requests.
+        """
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+            self.connection.settimeout(1)
+            if 0 < length <= 65536:
+                self.rfile.read(length)
+        except (ValueError, OSError):
+            pass
+        self.send_json(status, {"error": message})
+
     def do_POST(self):
         allowed_origin = f"http://127.0.0.1:{self.server.server_port}"
         if self.headers.get('Host') != f'127.0.0.1:{self.server.server_port}' or self.headers.get('Origin', allowed_origin) != allowed_origin or self.headers.get('Content-Type', '').split(';')[0] != 'application/json':
             self.send_json(403, {'error': 'same-origin JSON requests required'})
             return
         route = self.path.split("?", 1)[0]
-        # 面板是只读观察面：这里不再有「改知识库文件」的写端点。
-        # `/api/mail/knowledge/toggle` 已于 2026-09-22 移除（它写的 enabled 位当时没有任何消费方，
-        # 界面却据此声称下游生效）。下面这些写端点都只操作 mail/ 协作记录，不碰 wiki/ 与 drafts/。
+        # Reader mode rejects all writes. Legacy collaboration mode is an explicit
+        # opt-in; its team/sync endpoint can commit/rebase/push KB files and is not
+        # a Mail-only write. The removed knowledge toggle remains unsupported.
         if route not in {"/api/mail/send", "/api/mail/reply", "/api/mail/invite", "/api/mail/read", "/api/mail/archive", "/api/mail/unarchive", "/api/mail/team/sync"}:
-            self.send_error(404)
+            self._reject_post(404, "unknown POST route")
+            return
+        if self.server.mode == "reader":
+            # Drain only a bounded body before closing the HTTP/1.0 connection.
+            # Closing with unread request bytes can reset the socket on Windows
+            # before the client receives the rejection. Never parse or act on it.
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+                self.connection.settimeout(1)
+                if 0 < length <= 65536:
+                    self.rfile.read(length)
+            except (ValueError, OSError):
+                pass
+            self.send_json(403, {"error": "reader mode does not permit writes", "mode": "reader"})
             return
         try:
             payload = self.read_json()
@@ -1135,16 +1194,22 @@ class Handler(BaseHTTPRequestHandler):
                 state = mail.update_recipient_state(self.server.kb_root, UI_AGENT, message_id, read_at=mail.iso_now())
                 self.send_json(200, {"status": "read", "message_id": message_id, "state": state})
                 return
-            self.send_error(404)
+            self._reject_post(404, "unknown POST route")
         except team_sync.TeamSyncError as exc:
             self.send_json(409, {"error": str(exc)})
         except (ValueError, json.JSONDecodeError) as exc:
             self.send_json(400, {"error": str(exc)})
 
-def create_server(root: Path, port: int = 3182) -> ThreadingHTTPServer:
+def create_server(root: Path, port: int = 3182, *, mode: str = "reader") -> ThreadingHTTPServer:
+    if mode not in {"reader", "collaboration"}:
+        raise ValueError("Mail mode must be reader or collaboration")
     root = validate_root(root)
     server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
     server.kb_root = root
+    server.mode = mode
+    server.session_id = None
+    if mode == "reader":
+        return server
     machine_id = identity.normalise_machine_id()
     machine_token = hashlib.sha256(machine_id.encode("utf-8")).hexdigest()[:12]
     server.session_id = f"mail-ui-{server.server_port}-{machine_token}"

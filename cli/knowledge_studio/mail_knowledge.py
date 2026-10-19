@@ -187,6 +187,22 @@ def _event_time(meta: dict, path: Path) -> tuple[str, str]:
     return datetime.fromtimestamp(path.stat().st_mtime, timezone.utc).isoformat(), "file_mtime"
 
 
+def review_summary(meta: dict, kind: str) -> dict:
+    """Describe recorded human review without inferring it from location/status."""
+    reviewed_at = _parse_time(meta.get("human_reviewed_at")) if kind == "wiki" else None
+    reviewed = reviewed_at is not None
+    state = "reviewed" if reviewed else ("unknown" if kind == "wiki" else "pending")
+    return {
+        "state": state,
+        "label": {"reviewed": "已审核", "unknown": "审核记录未知", "pending": "待审核"}[state],
+        "reviewed": reviewed,
+        "human_reviewed_at": reviewed_at.isoformat() if reviewed_at else None,
+        "kind_label": (
+            "已审核 Wiki" if reviewed else "Wiki · 审核记录未知"
+        ) if kind == "wiki" else "Candidate 候选",
+    }
+
+
 def _is_visible(meta: dict) -> bool:
     status = str(meta.get("status") or "active").strip().lower()
     archived = meta.get("archived") is True or str(meta.get("archived") or "").strip().lower() in {"1", "true", "yes"}

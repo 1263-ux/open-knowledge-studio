@@ -74,7 +74,7 @@ def test_independent_skill_sessions_roundtrip(kb, tmp_path):
 
 
 def test_web_generic_recipient_and_origin(kb):
-    server = create_server(kb, 0)
+    server = create_server(kb, 0, mode="collaboration")
     worker = threading.Thread(target=server.serve_forever, daemon=True)
     worker.start()
     base = f"http://127.0.0.1:{server.server_port}"
@@ -202,7 +202,7 @@ def test_web_memory_projection_is_readable_and_path_safe(kb):
         "---\n\n候选补充。\n",
         encoding="utf-8",
     )
-    server = create_server(kb, 0)
+    server = create_server(kb, 0, mode="collaboration")
     worker = threading.Thread(target=server.serve_forever, daemon=True)
     worker.start()
     base = f"http://127.0.0.1:{server.server_port}"
@@ -216,7 +216,8 @@ def test_web_memory_projection_is_readable_and_path_safe(kb):
         item = next(row for row in snapshot["recent"] if row["path"] == "wiki/engineering/repro.md")
         assert item["title"] == "可复现性检查清单"
         assert item["kind"] == "wiki"
-        assert item["kind_label"] == "已审核 Wiki"
+        assert item["kind_label"] == "Wiki · 审核记录未知"
+        assert item["review"]["state"] == "unknown"
         assert item["area"] == "engineering"
         assert snapshot["facets"]["areas"]["engineering"] == 1
         assert "固定环境" in item["summary"]
@@ -271,7 +272,7 @@ def test_web_memory_projection_uses_durable_time_and_hides_inactive(kb):
         "---\n\n不应出现在可复用列表。\n",
         encoding="utf-8",
     )
-    server = create_server(kb, 0)
+    server = create_server(kb, 0, mode="collaboration")
     worker = threading.Thread(target=server.serve_forever, daemon=True)
     worker.start()
     try:
@@ -313,7 +314,7 @@ def test_web_empty_state_actions_use_presence_checks():
 
 
 def test_web_connection_status_and_mail_verification(kb):
-    server = create_server(kb, 0)
+    server = create_server(kb, 0, mode="collaboration")
     worker = threading.Thread(target=server.serve_forever, daemon=True)
     worker.start()
     base = f"http://127.0.0.1:{server.server_port}"
@@ -438,7 +439,7 @@ def test_web_archive_roundtrip_for_canonical_and_legacy(kb):
     canonical = mail.write_message(
         kb, sender="canonical-agent", recipients="human", title="新格式", body="新格式消息"
     )
-    server = create_server(kb, 0)
+    server = create_server(kb, 0, mode="collaboration")
     worker = threading.Thread(target=server.serve_forever, daemon=True)
     worker.start()
     base = f"http://127.0.0.1:{server.server_port}"
@@ -505,14 +506,14 @@ def test_web_session_id_is_stable_for_bound_port(kb):
     with socket.socket() as probe:
         probe.bind(("127.0.0.1", 0))
         port = probe.getsockname()[1]
-    first = create_server(kb, port)
+    first = create_server(kb, port, mode="collaboration")
     try:
         first_session = first.session_id
         session_path = mail.sessions_dir(kb) / f"{first_session}.json"
         first_record = json.loads(session_path.read_text(encoding="utf-8"))
     finally:
         first.server_close()
-    second = create_server(kb, port)
+    second = create_server(kb, port, mode="collaboration")
     try:
         token = hashlib.sha256("portable-test-machine".encode("utf-8")).hexdigest()[:12]
         assert second.session_id == f"mail-ui-{port}-{token}"
@@ -528,11 +529,11 @@ def test_web_session_id_separates_machines(kb, monkeypatch):
     with socket.socket() as probe:
         probe.bind(("127.0.0.1", 0))
         port = probe.getsockname()[1]
-    first = create_server(kb, port)
+    first = create_server(kb, port, mode="collaboration")
     first_id = first.session_id
     first.server_close()
     monkeypatch.setenv("OKS_MACHINE_ID", "another-portable-machine")
-    second = create_server(kb, port)
+    second = create_server(kb, port, mode="collaboration")
     try:
         assert second.session_id != first_id
         assert len(list(mail.sessions_dir(kb).glob("mail-ui-*.json"))) == 2
