@@ -452,10 +452,8 @@ from degrading to `untitled`.
   (`[^a-z0-9\u4e00-\u9fff]+ → "-"`, truncated to 60, stripped) — Chinese
   titles yield Chinese slugs, not the `untitled` fallback. English titles yield
   kebab-case.
-- **Path** = `wiki/{area}/{type}/{slug}.md`. New CLI admission and draft review
-  require an explicit canonical `area` (`oks wiki domains`); `type` ∈ {concept,
-  strategy, anti-pattern}. Historical areas remain readable without automatic
-  remapping. The low-level writer retains its legacy defaults.
+- **Path** = `wiki/{area}/{type}/{slug}.md`. `area` is a free string (default
+  `computing`); `type` ∈ {concept, strategy, anti-pattern}.
 - **Collision** = `{slug}-{counter}.md` (counter increments until free).
 - **Backlinks** reference the slug verbatim (`relates_to`, `supersedes`,
   `enriches`). Renaming a page without updating every backlink breaks recall —

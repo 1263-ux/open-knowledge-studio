@@ -106,9 +106,7 @@ wiki 页 frontmatter（完整契约在仓库 `_meta/`）：
 | `review` | `decision_correct` / `outcome` / `lesson` |
 | `relates_to` / `relationship` | A4 关系（enriches / supersedes / confirms / challenges） |
 
-draft frontmatter 必须用 `draft_type` / `draft_area`（不是 `type` / `area`）；缺失或未知分类会停止晋升并保留候选。`oks wiki domains` 列出领域标识，审核时可用 `--type` / `--area` 明确纠正。正文相同但分类不同时也保留候选。
-
-OCR 与原图属于 Raw 来源资料，不直接晋升 Wiki。历史 `source_type: local-ocr-import` 和显式 `content_role: source_material` 不参与普通知识召回、图谱与蒸馏；原文件仍可读取。`raw-commit --overwrite` 是明确替换，不提供长期版本历史，也不覆盖 Wiki 正文。
+draft frontmatter 用 `draft_type` / `draft_area`（不是 `type` / `area`），否则 promote 时 fallback 到 concept/computing。
 
 ## Trace 命令（provenance）
 
