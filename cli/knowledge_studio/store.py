@@ -659,6 +659,8 @@ def write_wiki_page(
                     existing, "human_reviewed_at", datetime.now(UTC).isoformat()
                 )
                 _update_frontmatter_field(existing, "status", "active")
+                if enforce_classification:
+                    _update_frontmatter_field(existing, "classification_version", 1)
             if supersedes and not relates_to:
                 relates_to, relationship = supersedes, "supersedes"
             _apply_relationship(relates_to or "", relationship or "", existing_slug)
@@ -720,6 +722,8 @@ def write_wiki_page(
         frontmatter["options"] = options
     if human_reviewed:
         frontmatter["human_reviewed_at"] = now.isoformat()
+        if enforce_classification:
+            frontmatter["classification_version"] = 1
     if traces:
         frontmatter["traces"] = traces
     if review:

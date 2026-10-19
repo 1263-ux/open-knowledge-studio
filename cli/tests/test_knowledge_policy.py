@@ -119,3 +119,45 @@ def test_create_conflicting_duplicate_never_mutates_existing(tmp_path, monkeypat
     assert result.exit_code != 0
     assert existing.read_bytes() == before
     assert len(list((tmp_path / "wiki").rglob("*.md"))) == 1
+
+
+from knowledge_studio import mail_knowledge
+from knowledge_studio.knowledge_policy import DOMAIN_LABELS
+from knowledge_studio.recall import recall_knowledge
+def _projection_note(root, relative, body="Reusable statement.", **meta):
+    path = root / relative
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("---\n" + yaml.safe_dump(meta, allow_unicode=True) + "---\n\n" + body, encoding="utf-8")
+    return path
+
+def test_explicit_review_corrections_survive_worker_snapshot(tmp_path, monkeypatch):
+    monkeypatch.setenv("OKS_ROOT", str(tmp_path))
+    _projection_note(tmp_path, "drafts/c.md", title="Reviewed science", type="strategy", area="ai",
+          worker_records=[{"source":{"base_token_hash":"abc", "table_id":"t", "record_id":"r"},
+                           "fields":{"知识域":"computing", "质量状态":"partial"}, "observed_at":"2026-10-01"}])
+    slug = store.promote_draft("c", area="science", wiki_type="strategy")
+    page = store.get_wiki_page(slug)
+    assert page["area"] == "science" and page["type"] == "strategy"
+    assert page["classification_version"] == 1 and page["human_reviewed_at"]
+    data = mail_knowledge.knowledge_map(tmp_path)
+    point = next(p for d in data["domains"] for c in d["clusters"] for p in c["points"])
+    assert point["knowledge_domains"] == [{"id":"science", "label":DOMAIN_LABELS["science"]}]
+    assert point["classification"]["source_disagrees"]
+    assert point["worker_records"][0]["fields"]["质量状态"] == "partial"
+
+def test_material_projection_preserves_links_without_inflating_knowledge(tmp_path, monkeypatch):
+    monkeypatch.setenv("OKS_ROOT", str(tmp_path))
+    note = _projection_note(tmp_path, "wiki/n.md", title="Git guide", area="computing", type="concept", tags="git")
+    source = _projection_note(tmp_path, "wiki/s.md", body="ocrunicorn machine transcript", title="OCR", area="tooling", type="concept",
+                   source_type="local-ocr-import", ocr_review_status="unreviewed", tags="git",
+                   relations=[{"type":"supports", "target":"wiki/n.md"}])
+    before = {p: p.read_bytes() for p in [note, source]}
+    data = mail_knowledge.knowledge_map(tmp_path)
+    assert data["counts"]["points"] == data["counts"]["wiki_count"] == 1
+    assert data["counts"]["source_materials"] == 1
+    assert data["counts"]["edges"] == 0 and not data["edges"] and not data["explicit_edges"]
+    assert data["materials"][0]["path"] == "wiki/s.md"
+    assert data["materials"][0]["relations"][0]["target_id"] == "wiki/n.md"
+    assert any({l["a"],l["b"]} == {"wiki/n.md", "wiki/s.md"} for l in data["material_edges"])
+    assert not recall_knowledge("ocrunicorn", search_backend="native")
+    assert {p:p.read_bytes() for p in before} == before

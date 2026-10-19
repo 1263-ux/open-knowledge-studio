@@ -91,6 +91,7 @@ def test_wiki_page_shows_human_labels_and_hides_maintenance_details():
         "area_label": "团队与协作",
         "type": "strategy",
         "type_label": "策略",
+        "is_skill": True,
         "status": "active",
         "status_label": "可复用",
         "updated_at": "2026-09-19T00:00:00+00:00",

@@ -56,7 +56,7 @@ def test_promotion_and_content_dedup_preserve_worker_observations(monkeypatch, t
     assert store.get_wiki_page(slug)["worker_records"][0]["fields"]["质量状态"] == "partial"
 
     (drafts / "second.md").write_text(
-        "---\ntitle: Second\ndraft_type: strategy\ndraft_area: computing\n"
+        "---\ntitle: Second\ndraft_type: concept\ndraft_area: computing\n"
         f"worker_records:\n  - source: {source}\n    observed_at: '2026-10-19T02:00:00Z'\n"
         "    fields:\n      质量状态: failed\n      审核动作: accept\n---\n\n" + body + "\n",
         encoding="utf-8",

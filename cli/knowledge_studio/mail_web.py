@@ -484,6 +484,8 @@ def _memory_item(root: Path, relative: str, *, full: bool = False) -> dict:
         for key, value in meta.items()
         if key not in {"file_path", "slug"}
     }
+    summary["id"] = summary["path"]
+    mail_knowledge.worker_knowledge.project(root, [summary], {summary["id"]: meta})
     return summary
 
 
@@ -713,7 +715,7 @@ def render_wiki_page(item: dict, embed: bool = False, return_to: str = "/#view=k
     """Build the standalone page for one knowledge entry (no scripts)."""
     relations = mail_knowledge._relations(item.get("metadata") or {})
     badges = [item.get("kind_label") or "", item.get("status_label") or ""]
-    if item.get("type_label"):
+    if item.get("is_skill") and item.get("type_label"):
         badges.append(str(item["type_label"]))
     if item.get("truncated"):
         badges.append("正文在投影中截断")
@@ -727,7 +729,7 @@ def render_wiki_page(item: dict, embed: bool = False, return_to: str = "/#view=k
     rows = [
         ("知识域", item.get("area_label") or item.get("area") or "—"),
     ]
-    if item.get("type_label"):
+    if item.get("is_skill") and item.get("type_label"):
         rows.append(("治理类型", str(item["type_label"])))
     rows += [
         ("条目状态", item.get("status_label") or "—"),

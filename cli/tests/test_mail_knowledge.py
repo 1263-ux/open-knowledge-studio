@@ -6,6 +6,7 @@ Two invariants matter more than the shape of the output:
 * Concept / Strategy / Anti-Strategy never become the Wiki's taxonomy.
 """
 import json
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -119,7 +120,8 @@ def test_governance_types_stay_attributes_not_taxonomy(kb):
     all_clusters = {cluster["key"] for domain in projection["domains"] for cluster in domain["clusters"]}
     assert all_clusters == {"ui"}
     assert {item["label"] for item in projection["governance"]["types"]} == {"概念", "策略", "反策略"}
-    assert all(item["count"] == 1 for item in projection["governance"]["types"])
+    assert all(item["count"] == 0 for item in projection["governance"]["types"])
+    assert all(not point(projection, path)["is_skill"] for path in ("wiki/s.md", "wiki/c.md", "wiki/a.md"))
 
 
 def test_skill_boundary_is_policy_and_records_what_phase_one_does_not_do(kb):
@@ -141,8 +143,58 @@ def test_candidates_use_draft_keys_and_are_labelled(kb):
     assert item["area"] == "ai"
     assert item["governance"]["type"] == "strategy"
     assert item["status_label"] == "草稿待审"
-    assert item["skill"]["state"] == "candidate"
+    assert item["skill"]["state"] == "none"
+    assert item["is_skill"] is False
     assert item["wiki_refs"] == ["drafts/c.md"]
+    assert item["review"]["state"] == "pending"
+
+
+@pytest.mark.parametrize("value", [None, "", "not-a-date", True, 1])
+@pytest.mark.parametrize("status", ["active", "provisional"])
+def test_review_summary_requires_a_valid_explicit_review_time(value, status):
+    summary = mail_knowledge.review_summary({"status": status, "human_reviewed_at": value}, "wiki")
+    assert summary == {
+        "state": "unknown", "label": "审核记录未知", "reviewed": False,
+        "human_reviewed_at": None, "kind_label": "Wiki · 审核记录未知",
+    }
+
+
+@pytest.mark.parametrize("value", [
+    "2026-10-14T08:00:00+08:00", date(2026, 10, 14),
+    datetime(2026, 10, 14, tzinfo=timezone.utc),
+])
+def test_review_summary_accepts_standard_review_timestamp_values(value):
+    summary = mail_knowledge.review_summary({"human_reviewed_at": value}, "wiki")
+    assert summary["reviewed"] is True
+    assert summary["state"] == "reviewed"
+    assert summary["kind_label"] == "已审核 Wiki"
+    assert summary["human_reviewed_at"] == "2026-10-14T00:00:00+00:00"
+
+
+def test_candidate_review_summary_remains_pending_even_with_review_field():
+    summary = mail_knowledge.review_summary({"human_reviewed_at": "2026-10-14"}, "candidate")
+    assert summary["state"] == "pending"
+    assert summary["label"] == "待审核"
+    assert summary["reviewed"] is False
+    assert summary["human_reviewed_at"] is None
+
+
+def test_review_counts_distinguish_wiki_location_from_review_evidence(kb):
+    write(kb, "wiki/reviewed.md", 'title: "审核过"\nstatus: active\nhuman_reviewed_at: 2026-10-14\n')
+    write(kb, "wiki/legacy.md", 'title: "旧记录"\nstatus: active\n')
+    write(kb, "wiki/provisional.md", 'title: "待确认"\nstatus: provisional\n')
+    write(kb, "wiki/invalid.md", 'title: "无效时间"\nstatus: active\nhuman_reviewed_at: invalid\n')
+    write(kb, "drafts/candidate.md", 'title: "候选"\nstatus: draft\nhuman_reviewed_at: 2026-10-14\n')
+
+    projection = mail_knowledge.knowledge_map(kb)
+    assert projection["counts"]["wiki_count"] == 4
+    assert projection["counts"]["reviewed"] == 1
+    assert projection["counts"]["review_unknown"] == 3
+    assert projection["counts"]["candidates"] == 1
+    assert point(projection, "wiki/reviewed.md")["kind_label"] == "已审核 Wiki"
+    assert point(projection, "wiki/legacy.md")["kind"] == "wiki"
+    assert point(projection, "wiki/legacy.md")["kind_label"] == "Wiki · 审核记录未知"
+    assert point(projection, "wiki/legacy.md")["status_label"] == "当前条目"
 
 
 def test_archived_and_dropped_entries_are_reported_as_hidden(kb):
@@ -161,7 +213,7 @@ def test_projection_declares_where_each_level_comes_from(kb):
     assert projection["scope"]["level_sources"] == [
         "条目自己声明的所属领域",
         "条目自己声明的关系，或与另一条知识共享的标签",
-        "一份已审核的 Wiki 或候选条目",
+        "一份 Wiki 或候选条目；审核记录单独展示",
     ]
     # 口径可以改写，但「图是只读的、来源可追溯」这两条不能丢。
     why = projection["scope"]["why"]
@@ -280,8 +332,8 @@ def test_toggle_refuses_frontmatter_less_file_instead_of_inventing_one(kb):
 
 
 def test_projection_reports_pluggable_state_without_a_write_path(kb):
-    write(kb, "wiki/on.md", 'title: "开"\ntype: strategy\narea: engineering\ntags: "engineering, ui"\nstatus: active\n')
-    write(kb, "wiki/off.md", 'title: "关"\ntype: concept\narea: engineering\ntags: "engineering, ui"\nstatus: active\nenabled: false\n')
+    write(kb, "wiki/on.md", 'title: "开"\nartifact_kind: skill\ntype: strategy\narea: engineering\ntags: "engineering, ui"\nstatus: active\n')
+    write(kb, "wiki/off.md", 'title: "关"\nartifact_kind: skill\ntype: concept\narea: engineering\ntags: "engineering, ui"\nstatus: active\nenabled: false\n')
 
     projection = mail_knowledge.knowledge_map(kb)
     assert projection["counts"]["enabled"] == 1

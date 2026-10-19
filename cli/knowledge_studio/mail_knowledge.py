@@ -20,12 +20,15 @@ from __future__ import annotations
 
 import json
 import os
+import posixpath
 import re
 import tempfile
+from urllib.parse import unquote, urlsplit
 from datetime import date, datetime, time, timezone
 from pathlib import Path
 
-from knowledge_studio import store
+from knowledge_studio import store, worker_knowledge
+from knowledge_studio.knowledge_policy import is_source_material, DOMAIN_LABELS as CANONICAL_DOMAINS
 
 SCHEMA = "mail.knowledge-map.v1"
 
@@ -52,6 +55,7 @@ DOMAIN_LABELS = {
     "process": "流程与规范",
     "tooling": "工具与平台",
     "research": "研究与调研",
+    **CANONICAL_DOMAINS,
 }
 
 #: Cluster labels derive from frontmatter tags; these cover the tags we ship.
@@ -303,12 +307,17 @@ def _scan(root: Path, relative: str) -> list[Path]:
 
 def _skill_state(meta: dict, kind: str, governance_type: str) -> dict:
     """Derive Skill packaging state, and say how it was derived."""
-    package = str(meta.get("skill_package") or "").strip()
+    if not worker_knowledge.is_skill(meta):
+        return {"state": "none", "label": "未声明 Skill 身份", "source": "", "target": ""}
+    package = meta.get("skill_package")
+    package = package.strip() if isinstance(package, str) else ""
+    if kind == "candidate":
+        return {"state": "candidate", "label": "Skill 候选（待 Human Review）", "source": "明确 Skill 身份的候选草稿", "target": package}
     if package:
         return {"state": "packaged", "label": "已成包", "source": "frontmatter skill_package", "target": package}
     flagged = meta.get("skill_candidate")
     flagged = flagged is True or str(flagged).strip().lower() in {"1", "true", "yes"}
-    if flagged or (kind == "candidate" and governance_type in GOVERNANCE_TYPES):
+    if flagged or (kind == "candidate" and worker_knowledge.is_skill(meta)):
         return {"state": "candidate", "label": "候选（待 Human Review）", "source": "drafts/ 中的治理类知识" if kind == "candidate" else "frontmatter skill_candidate", "target": ""}
     return {"state": "none", "label": "尚未进入治理流程", "source": "", "target": ""}
 
@@ -354,19 +363,75 @@ def _flat_edges(kept_ids: set[str], declared: list[tuple[str, dict]]) -> list[di
     return [merged[key] for key in order]
 
 
-def knowledge_map(root: Path, limit: int = 400) -> dict:
+def _internal_links(points: list[dict], bodies: dict[str, str]) -> list[dict]:
+    """Resolve written Markdown/Wiki links within the visible projection.
+
+    Tags never create these edges. Ambiguous bare names remain unresolved.
+    Fenced/inline code and comments are examples, not knowledge declarations.
+    """
+    ids = {point["id"] for point in points}
+    names: dict[str, set[str]] = {}
+    for point in points:
+        for name in (point["title"], Path(point["id"]).stem):
+            names.setdefault(name.casefold(), set()).add(point["id"])
+    links = []
+    seen = set()
+    for point in points:
+        source = point["id"]
+        body = re.sub(r"<!--.*?-->", "", bodies.get(source, ""), flags=re.S)
+        prose = []
+        fence = ""
+        for line in body.splitlines():
+            marker = re.match(r"^ {0,3}(`{3,}|~{3,})", line)
+            if fence:
+                if re.fullmatch(r" {0,3}" + re.escape(fence[0]) + "{" + str(len(fence)) + r",}\s*", line):
+                    fence = ""
+                continue
+            if marker:
+                fence = marker.group(1)
+            elif not line.startswith(("    ", "\t")):
+                prose.append(line)
+        body = re.sub(r"(`+)[\s\S]*?\1", "", "\n".join(prose))
+        targets = [(match, True) for match in re.findall(r"(?<!!)\[\[([^\]\n]+)\]\]", body)]
+        targets += [(match, False) for match in re.findall(r"(?<!!)\[[^\]\n]*\]\(<?([^\s)>]+)>?(?:\s+[^)]*)?\)", body)]
+        for target, wiki in targets:
+            raw = unquote(target.split("|", 1)[0].split("#", 1)[0]).strip().replace("\\", "/")
+            try:
+                external = bool(urlsplit(raw).scheme)
+            except ValueError:
+                continue
+            if not raw or raw.startswith("/") or external:
+                continue
+            candidates = []
+            for base in (raw, posixpath.normpath(posixpath.join(posixpath.dirname(source), raw))):
+                candidates.extend([base, base + ".md"] if not base.endswith(".md") else [base])
+            resolved = next((value for value in candidates if value in ids), None)
+            if resolved is None and wiki and "/" not in raw:
+                matches = names.get(raw.removesuffix(".md").casefold(), set())
+                if len(matches) == 1:
+                    resolved = next(iter(matches))
+            if not resolved or resolved == source or (source, resolved) in seen:
+                continue
+            seen.add((source, resolved))
+            links.append({"a": source, "b": resolved, "type": "internal_link", "type_label": "内部链接",
+                          "declared_by": [source], "sources": [f"{source} 正文中的内部链接"]})
+    return links
+
+
+def knowledge_map(root: Path, limit: int = 400, *, worker_snapshot: dict | None = None) -> dict:
     """Project wiki/drafts into domain → cluster → point with sourced edges."""
     limit = max(1, min(int(limit or 400), 2000))
     paths: list[tuple[Path, str]] = [(path, "wiki") for path in _scan(root, "wiki")]
     paths += [(path, "candidate") for path in _scan(root, "drafts")]
 
     points: list[dict] = []
+    bodies: dict[str, str] = {}
+    original_metadata: dict[str, dict] = {}
     hidden = 0
     for path, kind in paths:
         parsed = store.parse_wiki_file(path) or {}
         body = str(parsed.pop("body", "") or "")
-        from knowledge_studio.knowledge_policy import is_source_material
-        if not _is_visible(parsed) or is_source_material(parsed):
+        if not _is_visible(parsed):
             hidden += 1
             continue
         updated_at, timestamp_source = _event_time(parsed, path)
@@ -389,11 +454,16 @@ def knowledge_map(root: Path, limit: int = 400) -> dict:
             cluster, cluster_source = "本域通用", "标签与知识域同名，无法细分"
         else:
             cluster, cluster_source = "未分组", "这条知识没有标签"
+        review = review_summary(parsed, kind)
+        original_metadata[path.relative_to(root).as_posix()] = parsed
+        bodies[path.relative_to(root).as_posix()] = body
         points.append({
             "id": path.relative_to(root).as_posix(),
             "path": path.relative_to(root).as_posix(),
             "kind": "wiki" if kind == "wiki" else "candidate",
-            "kind_label": "已审核 Wiki" if kind == "wiki" else "Candidate 候选",
+            "kind_label": "来源资料 · 机器提取" if is_source_material(parsed) else review["kind_label"],
+            "content_role": "source_material" if is_source_material(parsed) else "knowledge",
+            "review": review,
             "title": _title(parsed, body, path),
             "summary": _summary(parsed, body),
             "body": body[:12000],
@@ -402,12 +472,13 @@ def knowledge_map(root: Path, limit: int = 400) -> dict:
             "cluster": cluster,
             "cluster_source": cluster_source,
             "tags": tags[:12],
+            "all_tags": tags,
             # 给读者看的标签沿用同一套人话口径；翻不出来的英文机器键在这里就挡掉，
             # 页面拿到的是可以直接显示的清单。与独立 Wiki 页同源，两处不再各翻一套。
             "tag_labels": [label for label in (tag_label(tag) for tag in tags[:12]) if label],
             "status": str(parsed.get("status") or "active"),
             "status_label": {
-                "active": "可复用",
+                "active": "当前条目",
                 "pending": "待审核",
                 "provisional": "待确认",
                 "stale": "需要更新",
@@ -455,6 +526,8 @@ def knowledge_map(root: Path, limit: int = 400) -> dict:
     # every entry in a domain to every other one.
     tag_index: dict[str, list[str]] = {}
     for point in points:
+        if point["content_role"] == "source_material":
+            continue
         for tag in point["tags"]:
             if tag.lower() == point["area"].lower():
                 continue
@@ -486,7 +559,7 @@ def knowledge_map(root: Path, limit: int = 400) -> dict:
                 continue
             seen.add(key)
             edges.append(relation)
-        for tag in point["tags"]:
+        for tag in ([] if point["content_role"] == "source_material" else point["tags"]):
             if tag == point["cluster"]:
                 # Entries already sit together in this cluster; an edge would
                 # only restate the grouping.
@@ -520,13 +593,22 @@ def knowledge_map(root: Path, limit: int = 400) -> dict:
 
     truncated = len(points) > limit
     kept = points[:limit]
+    worker_source = worker_knowledge.project(root, kept, original_metadata, worker_snapshot)
+    for point in kept:
+        point["governance"]["applicable"] = point["is_skill"]
     kept_ids = {point["id"] for point in kept}
-    relation_edges = _flat_edges(kept_ids, declared)
+    material_ids = {point["id"] for point in kept if point["content_role"] == "source_material"}
+    knowledge_ids = kept_ids - material_ids
+    relation_edges = _flat_edges(knowledge_ids, declared)
+    material_edges = [edge for edge in _flat_edges(kept_ids, declared)
+                      if edge["a"] in material_ids or edge["b"] in material_ids]
     area_of = {point["id"]: point["area"] for point in kept}
     connected = {end for edge in relation_edges for end in (edge["a"], edge["b"])}
 
     domains: dict[str, dict] = {}
     for point in kept:
+        if point["content_role"] == "source_material":
+            continue
         domain = domains.setdefault(point["area"], {
             "id": point["area"],
             "key": point["area"],
@@ -570,7 +652,7 @@ def knowledge_map(root: Path, limit: int = 400) -> dict:
 
     governance = []
     for type_id, (label, question) in GOVERNANCE_TYPES.items():
-        rows = [point for point in kept if point["governance"]["type"] == type_id]
+        rows = [point for point in kept if point["is_skill"] and point["governance"]["type"] == type_id]
         governance.append({
             "id": type_id,
             "label": label,
@@ -581,14 +663,19 @@ def knowledge_map(root: Path, limit: int = 400) -> dict:
             "members": [governance_member(point) for point in rows],
             "paths": [point["path"] for point in rows],
         })
-    unclassified = [point["path"] for point in kept if point["governance"]["type"] == "unclassified"]
+    unclassified = [point["path"] for point in kept if point["is_skill"] and point["governance"]["type"] == "unclassified"]
     pluggable = [
         governance_member(point) for point in kept
-        if point["governance"]["type"] in GOVERNANCE_TYPES
+        if point["is_skill"] and point["governance"]["type"] in GOVERNANCE_TYPES
     ]
 
+    knowledge_points = [point for point in kept if point["content_role"] != "source_material"]
+    materials = [point for point in kept if point["content_role"] == "source_material"]
     return {
         "schema": SCHEMA,
+        "materials": materials,
+        "material_edges": material_edges,
+        "worker_source": worker_source,
         "scope": {
             "knowledge_base": str(root),
             "points_total": len(points),
@@ -610,14 +697,15 @@ def knowledge_map(root: Path, limit: int = 400) -> dict:
             "level_sources": [
                 "条目自己声明的所属领域",
                 "条目自己声明的关系，或与另一条知识共享的标签",
-                "一份已审核的 Wiki 或候选条目",
+                "一份 Wiki 或候选条目；审核记录单独展示",
             ],
         },
         "counts": {
             "domains": len(domain_list),
             "clusters": sum(len(domain["clusters"]) for domain in domain_list),
-            "points": len(kept),
-            "relations": relation_count,
+            "points": len(knowledge_points),
+            "source_materials": len(materials),
+            "relations": sum(len(point["relations"]) for point in knowledge_points),
             # What the main view can actually draw: one entry per unordered
             # pair, both ends inside the projection.  The legend reports this,
             # not the per-entry tally -- that tally counted a single undirected
@@ -627,18 +715,25 @@ def knowledge_map(root: Path, limit: int = 400) -> dict:
                 1 for edge in relation_edges
                 if area_of.get(edge["a"]) != area_of.get(edge["b"])
             ),
-            "points_without_relations": len(kept) - len(connected),
-            "reviewed": sum(1 for point in kept if point["kind"] == "wiki"),
-            "candidates": sum(1 for point in kept if point["kind"] == "candidate"),
-            "skill_candidates": sum(1 for point in kept if point["skill"]["state"] == "candidate"),
-            "skill_packaged": sum(1 for point in kept if point["skill"]["state"] == "packaged"),
-            "enabled": sum(1 for point in kept if point["governance"]["enabled"]),
-            "disabled": sum(1 for point in kept if not point["governance"]["enabled"]),
-            "governance_typed": sum(1 for point in kept if point["governance"]["type"] != "unclassified"),
+            "points_without_relations": sum(point["id"] not in connected for point in knowledge_points),
+            "wiki_count": sum(1 for point in knowledge_points if point["kind"] == "wiki"),
+            "reviewed": sum(1 for point in knowledge_points if point["review"]["reviewed"]),
+            "review_unknown": sum(1 for point in knowledge_points if point["review"]["state"] == "unknown"),
+            "candidates": sum(1 for point in knowledge_points if point["kind"] == "candidate"),
+            "skill_candidates": sum(1 for point in knowledge_points if point["skill"]["state"] == "candidate"),
+            "skill_packaged": sum(1 for point in knowledge_points if point["skill"]["state"] == "packaged"),
+            "enabled": sum(1 for point in knowledge_points if point["governance"]["enabled"]),
+            "disabled": sum(1 for point in knowledge_points if not point["governance"]["enabled"]),
+            "governance_typed": sum(1 for point in knowledge_points if point["governance"]["type"] != "unclassified"),
         },
         "domains": domain_list,
         # The main view draws exactly these; the legend counts exactly these.
         "edges": relation_edges,
+        "explicit_edges": _flat_edges(knowledge_ids, [
+            (source, relation) for source, relation in declared
+            if relation.get("source") == "frontmatter relations"
+        ]),
+        "internal_links": _internal_links([p for p in kept if p["id"] in knowledge_ids], bodies),
         # Counting the per-entry lists instead double-counted every undirected
         # relation (once from each end) and reported 29 edges for 14 drawable
         # ones.  A legend has to describe the picture next to it.
