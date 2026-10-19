@@ -4,15 +4,16 @@
 *{box-sizing:border-box}
 :root{
   color-scheme:light;
-  --bg:#f4f6f8; --card:#fff; --soft:#f8fafb; --line:#e4e8ec; --line-soft:#eef1f4;
-  --text:#1f2933; --muted:#6b7a88; --dim:#93a1ad;
-  --brand:#1d4ed8; --brand-soft:#eaf0ff;
-  --ok:#0f9d63; --okbg:#e6f7ef;
-  --warn:#b06a12; --warnbg:#fdf3e2;
+  --bg:#f5f4f0; --card:#fff; --soft:#faf9f6; --line:rgba(20,34,46,.12); --line-soft:rgba(20,34,46,.07);
+  --text:#14222e; --muted:#526370; --dim:#697884;
+  --brand:#1e5678; --brand-soft:rgba(30,86,120,.09);
+  --ok:#1b6e44; --okbg:#e8f5ee;
+  --warn:#9a5b13; --warnbg:#fef4e6;
 }
 body{
   margin:0;background:var(--bg);color:var(--text);
-  font:14.5px/1.72 -apple-system,BlinkMacSystemFont,'Segoe UI','Microsoft YaHei',sans-serif;
+  font:15px/1.8 Inter,-apple-system,BlinkMacSystemFont,'Segoe UI','Microsoft YaHei UI',sans-serif;
+  font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;
 }
 body.embed{background:#fff}
 .wiki{max-width:760px;margin:0 auto;padding:26px 24px 56px;background:#fff;min-height:100dvh}
@@ -38,7 +39,7 @@ body.embed .wiki{max-width:none;padding:14px 14px 28px;min-height:0}
   font-size:11px;font-weight:600;padding:3px 10px;border-radius:20px;
   background:var(--brand-soft);color:var(--brand);
 }
-.wiki-badges .chip:nth-child(2){background:var(--okbg);color:var(--ok)}
+.wiki-badges .chip:nth-child(2){background:#eae8e1;color:var(--muted)}
 
 .wiki-summary{
   margin:0 0 18px;padding:12px 14px;border-left:3px solid var(--brand);
@@ -56,7 +57,7 @@ body.embed .wiki{max-width:none;padding:14px 14px 28px;min-height:0}
   .wiki-meta dd{margin-bottom:8px}
 }
 
-.wiki-body{border-top:1px solid var(--line-soft);padding-top:6px}
+.wiki-body{border-top:1px solid var(--line-soft);padding-top:6px;overflow-wrap:anywhere}
 .wiki-body p{margin:0 0 12px}
 .wiki-body ul,.wiki-body ol{margin:0 0 12px;padding-left:22px}
 .wiki-body li{margin:3px 0}
@@ -66,7 +67,7 @@ body.embed .wiki{max-width:none;padding:14px 14px 28px;min-height:0}
 }
 .wiki-body pre{
   margin:0 0 14px;padding:12px 14px;overflow-x:auto;border-radius:9px;
-  background:#f6f8fa;border:1px solid var(--line);
+  background:var(--soft);border:1px solid var(--line);
 }
 .wiki-body code{
   font-family:ui-monospace,SFMono-Regular,Consolas,'Courier New',monospace;font-size:12.5px;
@@ -76,21 +77,9 @@ body.embed .wiki{max-width:none;padding:14px 14px 28px;min-height:0}
 .wiki-body hr{border:none;border-top:1px solid var(--line);margin:22px 0}
 .wiki-body a{color:var(--brand)}
 .wiki-body .md-ref{border-bottom:1px dashed var(--line);cursor:help}
-.wiki-body table{width:100%;border-collapse:collapse;margin:0 0 14px;font-size:12.5px}
+.wiki-body table{display:block;max-width:100%;overflow-x:auto;border-collapse:collapse;margin:0 0 14px;font-size:12.5px}
 .wiki-body th,.wiki-body td{border:1px solid var(--line);padding:6px 10px;text-align:left;vertical-align:top}
 .wiki-body th{background:var(--soft);font-weight:600}
-.knowledge-image{display:block;margin:18px 0 24px;max-width:100%;min-width:0}
-.knowledge-image>a{display:block;border:1px solid var(--line);border-radius:6px;background:var(--soft);padding:10px;cursor:zoom-in}
-.knowledge-image img{display:block;width:100%;height:auto;min-height:80px;max-width:100%;max-height:540px;object-fit:contain;margin:auto}
-.image-caption{display:block;font-size:11px;line-height:1.7;color:var(--muted);overflow-wrap:anywhere;margin-top:8px}
-.image-unavailable{display:block;padding:15px;border:1px dashed var(--line);border-radius:5px;color:var(--muted);font-size:12px;line-height:1.8;overflow-wrap:anywhere}
-.ocr-section{margin:28px 0;padding-bottom:25px;border-bottom:1px solid var(--line-soft)}
-.ocr-section>h3{font-size:14px;line-height:1.7;margin:0 0 12px}
-.ocr-transcript{margin-top:15px;color:var(--muted);font-size:12px}
-.ocr-transcript>summary{cursor:pointer;padding:8px 0;line-height:1.7}
-.ocr-transcript>p{font-size:12px;color:var(--muted)}
-.ocr-transcript>pre{font:12px/1.85 ui-monospace,SFMono-Regular,Consolas,'Courier New',monospace;white-space:pre-wrap;overflow-wrap:anywhere;word-break:normal;background:var(--soft);padding:16px;border-radius:5px}
-@media(max-width:640px){.knowledge-image>a{padding:6px}.knowledge-image img{max-height:440px}.image-caption{font-size:10px}}
 
 .wiki-rel{list-style:none;margin:0;padding:0}
 .wiki-rel li{display:flex;flex-wrap:wrap;gap:8px;align-items:baseline;padding:7px 0;border-bottom:1px solid var(--line-soft)}

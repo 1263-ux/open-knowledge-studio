@@ -90,7 +90,7 @@ def test_web_generic_recipient_and_origin(kb):
         # Phase 1 面板：收件人概念依旧通用 —— 身份一律由 API 投影提供，页面里不写死任何收件人。
         # （旧断言 `b"recipient" in page` 依赖旧版英文文案，随 Phase 1 重做作废；
         #   这里守的是同一个不变量，换成对当前实现的断言。）
-        assert "协作时间线".encode() in page
+        assert "协作主线".encode() in page
         assert b"reviewer" not in page
         assert b"custom-agent" not in page
         with request("/favicon.svg") as response:
@@ -290,7 +290,7 @@ def test_web_memory_projection_uses_durable_time_and_hides_inactive(kb):
         worker.join(timeout=5)
 
 
-def test_web_empty_state_actions_use_presence_checks():
+def test_web_empty_state_actions_use_presence_checks(kb):
     """面板不提供自己做不到的动作（原则②：移交而非代办）。
 
     旧版是在空状态里摆「发起协作 / 创建 / 刷新记忆 / 团队同步」按钮，靠 presence 检查决定显不显示。
@@ -306,9 +306,23 @@ def test_web_empty_state_actions_use_presence_checks():
         assert removed not in app, f"面板不得重新长出 {removed} 入口"
     for removed in ("newIntent", "agentChoices", "发起协作"):
         assert removed not in html, f"面板不得重新长出 {removed} 入口"
-    # 接入这件事没被删，只是改成「生成 prompt 交给宿主对话区去执行」
-    assert "复制接入说明" in html
-    assert "交给宿主对话区" in html
+    # Guidance remains a read-only handoff to the host, even with an empty KB.
+    server = create_server(kb, 0)
+    worker = threading.Thread(target=server.serve_forever, daemon=True)
+    worker.start()
+    base = f"http://127.0.0.1:{server.server_port}"
+    try:
+        with urlopen(base + "/api/connection-guide", timeout=5) as response:
+            guide = json.load(response)
+        assert guide["guide"].strip()
+        with urlopen(base + "/api/mail/capabilities", timeout=5) as response:
+            capabilities = json.load(response)
+        assert capabilities["read_only"] is True
+        assert capabilities["wake_supported"] is False
+    finally:
+        server.shutdown()
+        server.server_close()
+        worker.join(timeout=5)
     # 零写入口
     assert "<form" not in html
 

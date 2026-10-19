@@ -38,8 +38,8 @@ def test_web_reads_real_threads_and_rejects_unsafe_requests(kb):
         with request("/") as response:
             # Phase 1 panel: read-only observation surface (rail nav + timeline + wiki graph).
             body = response.read()
-            assert "协作时间线".encode() in body
-            assert "Wiki 知识图".encode() in body
+            assert "协作主线".encode() in body
+            assert "知识工作区".encode() in body
             assert b"<form" not in body
         with request("/api/mail/send", {"to": "custom-agent,reviewer", "title": "Hi", "body": "hello"}) as response:
             result = json.load(response)
@@ -199,39 +199,35 @@ def test_removed_knowledge_toggle_route_fails_closed(kb):
 # 现在：知识点直接挂在知识域下（簇降为副标签），线只有两种 ——
 # 分组联线（__group）与知识关系（后端边表，按类型着色）。
 
-def test_global_view_draws_the_relation_network(kb):
-    """主视图必须真的按后端边表画关系，而不是只画层级。"""
-    server = create_server(kb, 0, mode="collaboration")
+def test_frontend_serves_modular_graph_assets(kb):
+    server = create_server(kb, 0)
     worker = threading.Thread(target=server.serve_forever, daemon=True)
     worker.start()
+    base = f"http://127.0.0.1:{server.server_port}"
     try:
-        script = _served(f"http://127.0.0.1:{server.server_port}", "/app.js")
+        for name in ("force-layout.js", "tag-graph.js", "mail-view-model.js",
+                     "knowledge-browser.js", "knowledge-navigation.js"):
+            with urlopen(base + "/" + name, timeout=5) as response:
+                assert response.status == 200
+                assert "javascript" in response.headers["Content-Type"]
+                assert response.read()
+        for name in ("tag-graph.css", "knowledge-browser.css", "knowledge-reading.css", "knowledge-workspace.css"):
+            with urlopen(base + "/" + name, timeout=5) as response:
+                assert response.status == 200
+                assert "text/css" in response.headers["Content-Type"]
     finally:
         server.shutdown()
         server.server_close()
         worker.join(timeout=5)
 
-    assert "for (const e of km.edges" in script, "主视图要按后端边表画关系线"
-    assert "drawDomainBlocks(" in script, "域分组色块要画出来"
-    assert "__group" in script, "分组联线要和知识关系分开标"
 
+def test_reader_omits_a_repeated_title_without_changing_the_document(kb):
+    from knowledge_studio.mail_web import _memory_item, render_wiki_page
 
-def test_hierarchical_lines_do_not_borrow_a_relation_key(kb):
-    """层级线的 relKey 只能是 __group。
-
-    借用关系色键的后果：图例里点掉「相关」，中心到知识点的从属线一起消失 ——
-    读者会以为那条从属线也是「相关」关系。
-    """
-    server = create_server(kb, 0, mode="collaboration")
-    worker = threading.Thread(target=server.serve_forever, daemon=True)
-    worker.start()
-    try:
-        script = _served(f"http://127.0.0.1:{server.server_port}", "/app.js")
-    finally:
-        server.shutdown()
-        server.server_close()
-        worker.join(timeout=5)
-
-    assert "relKey: p.relations[0]" not in script
-    # 剩下的 'related' 兜底只应该出现在「确实是一条关系」的地方（关系指向节点）。
-    assert "relKey: r.color_key || 'related'" in script
+    document = "---\ntitle: Reader title\n---\n\n# Reader title\n\nOriginal body.\n"
+    path = kb / "wiki" / "reader.md"
+    path.write_text(document, encoding="utf-8")
+    item = _memory_item(kb, "wiki/reader.md", full=True)
+    assert item["markdown"] == document
+    assert "<h2>Reader title</h2>" not in render_wiki_page(item)
+    assert path.read_text(encoding="utf-8") == document

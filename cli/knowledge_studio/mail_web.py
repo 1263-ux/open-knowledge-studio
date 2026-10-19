@@ -17,6 +17,10 @@ ROOT = asset_root() / "mail-web"
 FILES = {"/": ("index.html", "text/html"), "/style.css": ("style.css", "text/css"), "/app.js": ("app.js", "text/javascript"), "/favicon.svg": ("favicon.svg", "image/svg+xml")}
 FILES["/layout.css"] = ("layout.css", "text/css")
 FILES["/wiki-page.css"] = ("wiki-page.css", "text/css")
+for _asset in ("force-layout.js", "tag-graph.js", "mail-view-model.js", "knowledge-browser.js", "knowledge-navigation.js"):
+    FILES["/" + _asset] = (_asset, "text/javascript")
+for _asset in ("tag-graph.css", "knowledge-browser.css", "knowledge-reading.css", "knowledge-workspace.css"):
+    FILES["/" + _asset] = (_asset, "text/css")
 UI_AGENT = "human"
 
 #: Self-contained page shown for "在完整 Wiki 中打开" (new tab) and embedded in
@@ -800,11 +804,12 @@ def render_wiki_page(item: dict, embed: bool = False, return_to: str = "/#view=k
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{title} · OKS Wiki</title>
 <link rel="stylesheet" href="/wiki-page.css">
+<link rel="stylesheet" href="/knowledge-reading.css?v=8">
 </head>
 <body class="{'embed' if embed else 'full'}">
 <main class="wiki">
 {chrome}
-{head}<section class="wiki-body">
+{head}<section class="wiki-body markdown-body">
 {body_html}
 </section>
 {truncated}
