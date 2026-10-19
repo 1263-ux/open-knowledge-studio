@@ -331,17 +331,13 @@ def test_web_connection_status_and_mail_verification(kb):
             status = json.load(response)
         assert status["schema"] == "mail.connection-status.v1"
         assert status["current_machine_id"] == "portable-test-machine"
-        assert any(item["agent_id"] == "@human" for item in status["sessions"])
+        assert status["sessions"] == []
 
         mail.register_session(kb, "reviewer-s1", "reviewer", machine_id="portable-test-machine")
         with request("/api/mail/status") as response:
             status = json.load(response)
-        assert status["agents"][0]["agent_id"] == "@reviewer"
-        # 三态的第一档：只登记了档案、还没跟任何消息发生过关系 → 未验证。
-        # 这一档最容易被吞掉——两态实现会把它说成「已观察到」，
-        # 等于在没有证据的情况下承认对方参与过协作。
-        assert status["agents"][0]["verification_status"] == "unverified"
-        assert "online" not in status["agents"][0]
+        assert status["agents"] == []
+        assert status["sessions"] == []
 
         message = mail.write_message(kb, sender="human", recipients="reviewer", body="verify Mail")
         with request("/api/mail/status") as response:
@@ -361,6 +357,32 @@ def test_web_connection_status_and_mail_verification(kb):
         server.shutdown()
         server.server_close()
         worker.join(timeout=5)
+
+
+@pytest.mark.parametrize("visible_source", ["message", "receipt"])
+def test_status_projects_visible_machine_after_private_session_update(kb, visible_source):
+    if visible_source == "message":
+        mail.write_message(kb, sender="writer", recipients="human", body="Visible",
+                           origin_session_id="writer-session", origin_machine_id="public-machine")
+    else:
+        sent = mail.write_message(kb, sender="human", recipients="writer", body="Visible")
+        row = next(mail.iter_messages(kb, "writer"))
+        mail.record_delivery(kb, "writer-session", row, agent_id="writer", machine_id="public-machine")
+        assert sent["message_id"] == row["meta"]["message_id"]
+    from knowledge_studio.mail_web import connection_status
+    before = connection_status(kb, "human")
+    mail.register_session(kb, "writer-session", "writer", scope="PRIVATE-PROJECT-SECRET",
+                          machine_id="private-machine")
+
+    status = connection_status(kb, "human")
+    serialized = json.dumps(status)
+    assert status["machine_count"] == before["machine_count"]
+    assert status["machines"] == before["machines"]
+    assert "private-machine" not in serialized
+    assert "PRIVATE-PROJECT-SECRET" not in serialized
+    assert status["sessions"][0]["machine_id"] == "public-machine"
+    assert status["sessions"][0]["scope"] == ""
+    assert status["agents"][0]["machine_ids"] == ["public-machine"]
 
 
 def test_mail_verification_counts_replies_and_agent_only_threads(kb):

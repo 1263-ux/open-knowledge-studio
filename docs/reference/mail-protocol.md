@@ -296,3 +296,24 @@ Count，也可以提供人工 send/reply，或在产品明确允许时把一次�
 Mail Core 状态，不需要复制另一份 Mail store。
 未来的实时唤醒必须作为可选 Host adapter 定义明确的目标 Session、权限、
 超时、重试和失败状态，不应把 daemon 或进程管理塞入核心 Mail。
+
+
+## 可见通信事实与回复依据
+
+`goal`、`review_request`、`acknowledgement` 分别记录目标、审核请求和一条确认消息，
+与 Session 的确认回执相互独立；它们都不是任务执行状态。旧消息仍默认 `message`。
+CLI send/reply 支持这些分类。
+
+只读 `GET /api/mail/overview` 支持 `filter`、`q`、`limit` 和与查询绑定的 `cursor`；
+Thread 详情的 `observation` 给出交接、逐收件人回执、直接回复和阻塞后续引用。
+所有投影先按当前 human 视角过滤，分页覆盖全部可见历史，空搜索返回空列表。
+私有消息不能通过标题、计数、搜索、Session 注册或成员心跳泄漏。
+
+直接回复需要可见父消息、相同 Thread、不同作者；回复作者须为原收件人，
+回复须发送给原作者（广播按广播范围处理）。缺失或错误的 `reply_to` 不能抬高
+通信验证状态。显式关系不依赖跨机器时钟顺序，回执和回复互不补造。
+
+注入上下文不代表已经呈现，确认收到不代表执行完成。时间线保留兼容字段，
+但 `stages` 为空、`stages_deprecated: true`；Mail 不再推断提取、审核或阶段完成。
+执行进度属于 Trace，知识审核属于 Candidate/Wiki。Git 同步文件不证明远端已呈现。
+本地验证状态不是身份认证、能力测试、在线状态或可靠远程投递保证。

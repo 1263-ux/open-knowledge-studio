@@ -2729,7 +2729,7 @@ def mail_send(
     thread: str = typer.Option("", "--thread", help="Existing Thread ID (for a reply)"),
     session_id: str = typer.Option("", "--session-id", help="Originating Agent session ID"),
     delivery_reason: str = typer.Option("direct", "--delivery-reason", help="direct | conflict | review_request | handoff | system"),
-    record_kind: str = typer.Option("message", "--record-kind", help="message | handoff | result | blocked | note | knowledge_ref"),
+    record_kind: str = typer.Option("message", "--record-kind", help="message | goal | handoff | result | blocked | note | knowledge_ref | review_request | acknowledgement"),
     notify: bool = typer.Option(False, "--notify/--no-notify", help="Request host notification; safe queued fallback when unsupported"),
     session_policy: str = typer.Option("next_prompt", "--session-policy", help="next_prompt | wait | notify"),
     sender_kind: str = typer.Option("", "--sender-kind", help="Message provenance: human | agent | unknown"),
@@ -2934,7 +2934,7 @@ def mail_reply(
     notify: bool = typer.Option(False, "--notify/--no-notify", help="Request host notification"),
     sender_kind: str = typer.Option("", "--sender-kind", help="Message provenance: human | agent | unknown"),
     evidence_ref: list[str] = typer.Option([], "--evidence-ref", help="Evidence ref JSON object; repeatable"),
-    record_kind: str = typer.Option("message", "--record-kind", help="message | handoff | result | blocked | note | knowledge_ref"),
+    record_kind: str = typer.Option("message", "--record-kind", help="message | goal | handoff | result | blocked | note | knowledge_ref | review_request | acknowledgement"),
     output_format: str = typer.Option("text", "--format", help="text | json"),
     path: Optional[str] = typer.Option(None, "--path", help="Instance root (default: active KB)"),
 ) -> None:
