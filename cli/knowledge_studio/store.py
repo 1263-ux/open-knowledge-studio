@@ -608,7 +608,9 @@ def write_wiki_page(
     _validate_score("default_importance", default_importance)
     if enforce_classification:
         from knowledge_studio.knowledge_policy import validate_classification
-        area, wiki_type = validate_classification(area, wiki_type)
+        area, wiki_type = validate_classification(
+            area, wiki_type, skill=bool(skill_metadata and skill_metadata.get("artifact_kind") == "skill")
+        )
     from knowledge_studio.worker_records import clean_records
     worker_records = clean_records(worker_records)
     if not re.fullmatch(r"[a-z][a-z0-9-]*", area):
@@ -628,18 +630,18 @@ def write_wiki_page(
     if existing_slug:
         existing = _find_file_by_slug(existing_slug)
         if existing:
-            if enforce_classification:
-                from knowledge_studio.knowledge_policy import is_source_material, TYPE_DIRS
-                previous = parse_wiki_file(existing) or {}
-                if (is_source_material(previous) or previous.get("area") != area
-                        or TYPE_DIRS.get(previous.get("type")) != wiki_type):
-                    raise ValueError("Matching content has a different classification or is source material; candidate retained. Review the existing page explicitly.")
             if skill_metadata is not None:
                 old = parse_wiki_file(existing) or {}
                 expected_dir = wiki_dir() / area / wiki_type / subdirectory
                 if existing.parent != expected_dir or any(old.get(key) != skill_metadata.get(key)
                         for key in ("artifact_kind", "skill_id", "skill_version", "skill_category")):
                     raise ValueError("Skill content matches another Wiki identity; keep classifications distinct")
+            if enforce_classification:
+                from knowledge_studio.knowledge_policy import is_source_material, TYPE_DIRS
+                previous = parse_wiki_file(existing) or {}
+                if (is_source_material(previous) or previous.get("area") != area
+                        or TYPE_DIRS.get(previous.get("type")) != wiki_type):
+                    raise ValueError("Matching content has a different classification or is source material; candidate retained. Review the existing page explicitly.")
             # Dedup must not swallow what the caller newly established. A human
             # approving a draft whose body matches an existing page used to lose
             # the review, the active status and the declared A4 relationship —
@@ -915,6 +917,7 @@ def _promote_draft(
     final_area, final_type = validate_classification(
         area if area is not None else meta.get("draft_area"),
         wiki_type if wiki_type is not None else meta.get("draft_type"),
+        skill=meta.get("artifact_kind") == "skill",
     )
     for field in ("importance", "confidence"):
         if field in meta:

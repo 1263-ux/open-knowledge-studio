@@ -20,10 +20,10 @@ def is_source_material(meta: dict) -> bool:
     return (meta.get("content_role") == "source_material"
             or meta.get("source_type") == "local-ocr-import")
 
-def validate_classification(area, wiki_type) -> tuple[str, str]:
+def validate_classification(area, wiki_type, *, skill: bool = False) -> tuple[str, str]:
     if not isinstance(area, str) or not area.strip():
         raise ValueError("Knowledge domain is required. Set draft_area or review with --area; candidate retained.")
-    if area not in DOMAIN_LABELS:
+    if area not in DOMAIN_LABELS and not (skill and area == "skills"):
         raise ValueError(f"Unknown knowledge domain: {area!r}. Use a canonical ID from oks wiki domains; candidate retained.")
     if not isinstance(wiki_type, str) or wiki_type not in TYPE_DIRS:
         raise ValueError("Wiki type is required: concept, strategy, anti-pattern. Set draft_type or review with --type; candidate retained.")
