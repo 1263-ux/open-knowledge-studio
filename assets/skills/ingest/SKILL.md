@@ -16,6 +16,39 @@ oks ingest prepare <source>  →  SourceEnvelope + Manifest skeleton
 → AgentObservation → CandidateDraft → drafts/{slug}.md → Report
 ```
 
+## Collaboration checkpoints for an end-to-end workflow
+
+When the user requests an end-to-end ingestion workflow with collaboration,
+Mail is part of the handoff, not an optional decoration after drafting. Use the
+bundled `oks-mail` Skill and the same KB for these explicit local records:
+
+1. Before acquisition, read an existing task Thread or create one Agent-authored
+   `goal` record describing the requested source, outcome and review owner.
+   Reuse this Thread throughout the run. The Agent must not impersonate the human.
+2. At a meaningful blocker, record `blocked` with its actual limitation and what
+   is needed. Keep evidence status `partial`, `failed` and `skipped` unchanged.
+3. Once outputs exist and have been checked, reply with `result`, referencing the
+   run and Raw Bundle by ID and each existing Candidate by its KB-relative path.
+4. For grade A, reply with `review_request` to the authorized review owner, linking
+   the Candidates and stating what remains unverified. This is the actual handoff
+   to human review; it is not acceptance, a receipt or Wiki promotion.
+
+Store the actual Thread and message IDs under `collaboration` in `result.json`.
+Read that Thread when resuming and reuse existing run-linked records instead of
+duplicating them. Before reporting an end-to-end workflow complete, verify the
+result and review request are visible in the owner's Mail projection. Report
+evidence completion and pending human review separately.
+
+Communication still requires user authorization. A source-only extraction or
+standalone `prepare`/`raw-commit` invocation must not silently send messages.
+When authorization is absent, prepare the result and proposed handoff first;
+leave `collaboration.status` as `not_requested` or `awaiting_authorization`.
+Local recording does not authorize Git sync, external delivery or host wake.
+
+If a completed run lacks Mail records, label any later records as retrospective
+and use their real creation time. Never backdate a goal, invent another Agent's
+work, or manufacture human approval or delivery receipts to fill the timeline.
+
 ## Pre-flight: Search before adding
 
 Before running `oks ingest prepare`, recall the topic to avoid a parallel
