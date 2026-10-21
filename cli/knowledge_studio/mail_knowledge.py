@@ -733,6 +733,10 @@ def knowledge_map(root: Path, limit: int = 400, *, worker_snapshot: dict | None 
             (source, relation) for source, relation in declared
             if relation.get("source") == "frontmatter relations"
         ]),
+        "shared_tag_edges": _flat_edges(knowledge_ids, [
+            (source, relation) for source, relation in declared
+            if relation.get("source", "").startswith("shared tag: ")
+        ]),
         "internal_links": _internal_links([p for p in kept if p["id"] in knowledge_ids], bodies),
         # Counting the per-entry lists instead double-counted every undirected
         # relation (once from each end) and reported 29 edges for 14 drawable

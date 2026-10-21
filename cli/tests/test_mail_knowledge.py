@@ -100,10 +100,15 @@ def test_shared_cluster_tag_becomes_a_sourced_relation(kb):
     write(kb, "wiki/x.md", 'title: "X"\narea: engineering\ntags: "engineering, ui, extra"\nstatus: active\n')
     write(kb, "wiki/y.md", 'title: "Y"\narea: knowledge\ntags: "knowledge, recall, extra"\nstatus: active\n')
 
-    edge = point(mail_knowledge.knowledge_map(kb), "wiki/x.md")["relations"][0]
+    projection = mail_knowledge.knowledge_map(kb)
+    edge = point(projection, "wiki/x.md")["relations"][0]
     assert edge["type"] == "related"
     assert edge["source"] == "shared tag: extra"
     assert edge["target_id"] == "wiki/y.md"
+    assert projection["explicit_edges"] == []
+    assert projection["internal_links"] == []
+    assert len(projection["shared_tag_edges"]) == 1
+    assert "extra" in projection["shared_tag_edges"][0]["sources"][0]
 
 
 def test_governance_types_stay_attributes_not_taxonomy(kb):

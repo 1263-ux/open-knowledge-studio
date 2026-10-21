@@ -39,7 +39,13 @@ const MailViewModel=(()=>{
   const explicit=map.explicit_edges||(map.edges||[]).filter(l=>(l.sources||[]).includes('知识条目自己声明的关系'));
   for(const link of [...explicit,...(map.internal_links||[]),...(map.material_edges||[])]){if(!ids.has(link.a)||!ids.has(link.b)||link.a===link.b)continue;const key=JSON.stringify([...[link.a,link.b].sort(),link.type]);const previous=merged.get(key);if(previous){previous.sources=[...new Set([...previous.sources,...(link.sources||[])])];previous.declared_by=[...new Set([...previous.declared_by,...(link.declared_by||[])])];}else merged.set(key,{...link,from:link.a,to:link.b,sources:[...(link.sources||[])],declared_by:[...(link.declared_by||[])]});}
   const links=[...merged.values()];
-  return {items,links,truncated:!!map.scope?.truncated,total:map.scope?.points_total||items.length};
+  const pair=(a,b)=>JSON.stringify([a,b].sort());
+  const cited=new Set(links.map(l=>pair(l.from,l.to))),tagPairs=new Set();
+  const tagLinks=(map.shared_tag_edges||[]).filter(l=>{
+   const key=pair(l.a,l.b);if(!ids.has(l.a)||!ids.has(l.b)||l.a===l.b||cited.has(key)||tagPairs.has(key))return false;
+   tagPairs.add(key);return true;
+  }).map(l=>({...l,from:l.a,to:l.b,type:'shared_tag',type_label:'同标签关联',declared_by:[]}));
+  return {items,links,tagLinks,truncated:!!map.scope?.truncated,total:map.scope?.points_total||items.length};
  }
  function resolveWikiLink(target,source,items){let raw=String(target||'').split('|')[0].split('#')[0].trim().replace(/\\/g,'/');try{raw=decodeURIComponent(raw);}catch{return null;}if(!raw||raw.startsWith('/')||/^[a-z][\w+.-]*:/i.test(raw))return null;const normalize=path=>{const parts=[];for(const p of path.split('/')){if(p==='..')parts.pop();else if(p&&p!=='.')parts.push(p);}return parts.join('/');};const candidates=[raw,normalize((source||'').split('/').slice(0,-1).join('/')+'/'+raw)].flatMap(p=>p.endsWith('.md')?[p]:[p,p+'.md']);const exact=items.find(p=>candidates.includes(p.path));if(exact)return exact;const name=raw.replace(/\.md$/,'').toLocaleLowerCase();const matches=items.filter(p=>p.title.toLocaleLowerCase()===name||p.path.split('/').at(-1).replace(/\.md$/,'').toLocaleLowerCase()===name);return !raw.includes('/')&&matches.length===1?matches[0]:null;}
  function matchesFields(item,filters={}){const active=Object.entries(filters).filter(([,v])=>v);if(!active.length)return true;const rows=item.workerRecords||[];if(!rows.length)return active.every(([,v])=>v==='__missing');return rows.some(r=>active.every(([key,value])=>value==='__missing'?!r.fields[key]:r.fields[key]===value));}

@@ -16,6 +16,11 @@ function selectTagGraph(items,links,tag,context=false,tagsOf=item=>item.tags||[]
  return {nodes,links:links.filter(l=>ids.has(l.from)&&ids.has(l.to)),directCount:direct.size};
 }
 function getWikiTags(item){return item.tags||[];}
+function graphLabelConnector(node,position){
+ const half=node.width/2,x2=Math.max(position.x-half,Math.min(position.x+half,node.x)),y2=Math.max(position.y-14,Math.min(position.y+5,node.y));
+ const dx=x2-node.x,dy=y2-node.y,d=Math.max(1,Math.hypot(dx,dy)),r=node.radius+2;
+ return {x1:node.x+dx/d*r,y1:node.y+dy/d*r,x2,y2};
+}
 function graphLabel(title,limit=32){let width=0;let text='';for(const char of title){width+=char.charCodeAt(0)>255?2:1;if(width>limit)return text+'…';text+=char;}return text;}
 function graphLabelPositions(labels,width,height,obstacles=[]){
  const overlaps=(a,b)=>a.left<b.right&&a.right>b.left&&a.top<b.bottom&&a.bottom>b.top;
@@ -44,22 +49,23 @@ function tagMiniArt(items,color){
 }
 function renderTagOverview(scroll){renderKnowledgeOverview(scroll);}
 function renderTagGraph(host,tag){
+ const graphLinks=[...wikiLinks,...wikiTagLinks];
  const all=tag==='全部知识'||tag==='全部Skills'||tag==='skills:all';
  const domain=tag.startsWith('domain:'),skill=tag.startsWith('skills:');const domainKey=tag.slice(7);
  const pool=wikiItems.filter(p=>!p.isMaterial).filter(p=>VM.matchesFields(p,state.fieldFilters||{}));
  let data,titleText=tag;
- if(all){const skillScope=tag==='全部Skills'||tag==='skills:all';const nodes=pool.filter(p=>p.isSkill===skillScope);const ids=new Set(nodes.map(p=>p.id));data={nodes:nodes.map(p=>({...p,inTag:true})),links:wikiLinks.filter(l=>ids.has(l.from)&&ids.has(l.to)),directCount:nodes.length};titleText=skillScope?'全部 Skills':'全部知识';}
- else if(domain){data=selectTagGraph(pool,wikiLinks,domainKey,!!state.graphContext,p=>p.isSkill?[]:(p.knowledgeDomains||[]).map(d=>d.id));titleText=store.knowledge?.worker_source?.domain_options?.[domainKey]||(domainKey==='_unmapped'?'待对齐知识域':domainKey);}
- else if(skill){data=selectTagGraph(pool,wikiLinks,domainKey,!!state.graphContext,p=>p.isSkill?[p.governance?.type||'unclassified']:[]);titleText='Skills · '+(skillTypeNames[domainKey]||domainKey);}
- else data=selectTagGraph(pool.filter(p=>!p.isSkill),wikiLinks,tag,!!state.graphContext,getWikiTags);
- const view=e('section','tag-graph-view');const toolbar=e('header','tag-graph-toolbar');const title=e('div','tag-graph-title');title.append(button('← 分类总览','text-button',()=>goTagOverview()),e('h2',null,(all||domain||skill?'':'# ')+titleText),e('small',null,data.nodes.length+' 篇 · '+data.links.length+' 条链接'));toolbar.append(title);
+ if(all){const skillScope=tag==='全部Skills'||tag==='skills:all';const nodes=pool.filter(p=>p.isSkill===skillScope);const ids=new Set(nodes.map(p=>p.id));data={nodes:nodes.map(p=>({...p,inTag:true})),links:graphLinks.filter(l=>ids.has(l.from)&&ids.has(l.to)),directCount:nodes.length};titleText=skillScope?'全部 Skills':'全部知识';}
+ else if(domain){data=selectTagGraph(pool,graphLinks,domainKey,!!state.graphContext,p=>p.isSkill?[]:(p.knowledgeDomains||[]).map(d=>d.id));titleText=store.knowledge?.worker_source?.domain_options?.[domainKey]||(domainKey==='_unmapped'?'待对齐知识域':domainKey);}
+ else if(skill){data=selectTagGraph(pool,graphLinks,domainKey,!!state.graphContext,p=>p.isSkill?[p.governance?.type||'unclassified']:[]);titleText='Skills · '+(skillTypeNames[domainKey]||domainKey);}
+ else data=selectTagGraph(pool.filter(p=>!p.isSkill),graphLinks,tag,!!state.graphContext,getWikiTags);
+ const view=e('section','tag-graph-view');const toolbar=e('header','tag-graph-toolbar');const title=e('div','tag-graph-title');title.append(button('← 分类总览','text-button',()=>goTagOverview()),e('h2',null,(all||domain||skill?'':'# ')+titleText),e('small',null,data.nodes.length+' 篇 · '+data.links.filter(l=>l.type!=='shared_tag').length+' 条引用 · '+data.links.filter(l=>l.type==='shared_tag').length+' 条同标签关联'));toolbar.append(title);
  const controls=e('div','tag-graph-controls');const search=makeSearch('查找当前图谱',()=>{syncKnowledgeGraphRoute();updateHighlight();});controls.append(search);
  if(!all){const label=e('label','context-switch');const input=e('input');input.type='checkbox';input.checked=!!state.graphContext;input.setAttribute('aria-label','显示一跳关联');input.onchange=()=>{state.graphContext=input.checked;syncKnowledgeGraphRoute();render();};label.append(input,document.createTextNode('一跳关联'));controls.append(label);}
  const pause=button('暂停布局','button',()=>{paused=!paused;pause.textContent=paused?'继续布局':'暂停布局';pause.setAttribute('aria-pressed',String(paused));if(!paused){layout.reheat();start();}else{cancelAnimationFrame(frame);frame=0;draw();}});pause.setAttribute('aria-pressed','false');controls.append(pause);
  const settings=e('details','graph-settings');settings.append(e('summary','button','图谱设置'));const settingsBody=e('div','graph-settings-body');settingsBody.append(e('h3',null,'布局与连线'));settings.append(settingsBody);controls.append(settings);toolbar.append(controls);
  const stage=e('div','tag-graph-stage');stage.tabIndex=0;stage.setAttribute('aria-label','知识图谱画布，拖动节点或背景，使用加减号缩放');stage.style.setProperty('--tag-color',tagColor(tag));
  const ns='http://www.w3.org/2000/svg';const svg=document.createElementNS(ns,'svg');svg.setAttribute('role','group');svg.setAttribute('aria-label',tag+'动态图谱');const layer=document.createElementNS(ns,'g');svg.append(layer);stage.append(svg);
- const legend=e('div','graph-legend');legend.append(append(e('span'),e('i','graph-key'),e('span',null,all?'知识条目 · 悬停或放大查看名称':'当前分类')));if(data.nodes.some(n=>!n.inTag))legend.append(append(e('span'),e('i','graph-key context'),e('span',null,'一跳关联')));stage.append(legend);
+ const legend=e('div','graph-legend');legend.append(append(e('span'),e('i','graph-key'),e('span',null,all?'知识条目 · 悬停或放大查看名称':'当前分类')));if(data.nodes.some(n=>!n.inTag))legend.append(append(e('span'),e('i','graph-key context'),e('span',null,'一跳关联')));if(data.links.some(l=>l.type==='shared_tag'))legend.append(append(e('span'),e('i','graph-key tag-link'),e('span',null,'同标签关联（虚线）')));if(data.links.some(l=>l.type!=='shared_tag'))legend.append(append(e('span'),e('i','graph-key reference-link'),e('span',null,'显式引用（实线）')));stage.append(legend);
  const hint=e('div','graph-hint',window.matchMedia('(pointer:coarse)').matches?'拖动节点 · 拖背景平移 · 双指缩放 · 轻点读正文':'拖动节点 · 滚轮缩放 · 拖背景平移 · 点击读正文');stage.append(hint);
  const searchEmpty=e('div','graph-search-empty','当前图谱没有匹配条目');searchEmpty.hidden=true;stage.append(searchEmpty);
  const zoomBar=e('div','graph-zoom');const zoomLabel=e('output',null,'100%');zoomLabel.setAttribute('aria-label','图谱缩放比例');zoomBar.append(button('−','',()=>zoomAt(zoom/1.2)),zoomLabel,button('＋','',()=>zoomAt(zoom*1.2)),button('适应','zoom-fit',()=>fit()));zoomBar.querySelector('button').setAttribute('aria-label','缩小图谱');zoomBar.querySelectorAll('button')[1].setAttribute('aria-label','放大图谱');stage.append(zoomBar);
@@ -69,10 +75,10 @@ function renderTagGraph(host,tag){
  const layout=createForceLayout(data.nodes,data.links);if(saved)layout.nodes.forEach(n=>{const old=saved.positions.get(n.id);if(old){n.x=old.x;n.y=old.y;}});
  let width=stage.clientWidth,height=stage.clientHeight,zoom=saved?.zoom||1,panX=saved?.panX||0,panY=saved?.panY||0,hover=null,frame=0,paused=false,destroyed=false;
  const reduced=window.matchMedia('(prefers-reduced-motion:reduce)');paused=reduced.matches||!!saved?.paused;pause.textContent=paused?'继续布局':'暂停布局';pause.setAttribute('aria-pressed',String(paused));
- const edgeElements=layout.edges.map(edge=>{const line=document.createElementNS(ns,'line');line.classList.add('force-edge');line.dataset.from=edge.from;line.dataset.to=edge.to;layer.append(line);return {edge,line};});
+ const edgeElements=layout.edges.map(edge=>{const line=document.createElementNS(ns,'line');line.classList.add('force-edge');if(edge.type==='shared_tag')line.classList.add('tag-association');const edgeTitle=document.createElementNS(ns,'title');edgeTitle.textContent=(edge.type==='shared_tag'?'同标签关联：':'显式引用：')+(edge.sources||[]).join('；');line.append(edgeTitle);line.dataset.from=edge.from;line.dataset.to=edge.to;layer.append(line);return {edge,line};});
  const nodeElements=layout.nodes.map(node=>{const g=document.createElementNS(ns,'g');g.classList.add('force-node');if(!node.inTag)g.classList.add('context');if(node.kind==='candidate')g.classList.add('candidate');if(node.id===state.wiki)g.classList.add('selected');g.dataset.nodeId=node.id;g.dataset.path=node.path;g.setAttribute('tabindex','0');g.setAttribute('role','button');g.setAttribute('aria-label','阅读 '+node.title);g.style.setProperty('--node-color',node.inTag?tagColor(tag):'#a7b3a1');
-  const hit=document.createElementNS(ns,'circle');hit.classList.add('node-hit');hit.setAttribute('r','24');const dot=document.createElementNS(ns,'circle');dot.classList.add('node-dot');const radius=7+Math.min(4,layout.edges.filter(l=>l.from===node.id||l.to===node.id).length);dot.setAttribute('r',String(radius));const text=document.createElementNS(ns,'text');text.textContent=graphLabel(node.title);text.setAttribute('y','29');const tooltip=document.createElementNS(ns,'title');tooltip.textContent=node.title+' · '+(node.inTag?'当前分类':'一跳关联')+' · 拖动或点击阅读';g.append(hit,dot,text,tooltip);
-  g.addEventListener('pointerenter',()=>{hover=node.id;updateHighlight();});g.addEventListener('pointerleave',()=>{hover=null;updateHighlight();});g.addEventListener('focus',()=>{hover=node.id;updateHighlight();});g.addEventListener('blur',()=>{hover=null;updateHighlight();});g.addEventListener('keydown',event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();openGraphArticle(node);}});layer.append(g);return {node,g,text,hit,dot,radius};});
+  const hit=document.createElementNS(ns,'circle');hit.classList.add('node-hit');hit.setAttribute('r','24');const dot=document.createElementNS(ns,'circle');dot.classList.add('node-dot');const radius=7+Math.min(4,layout.edges.filter(l=>l.from===node.id||l.to===node.id).length);dot.setAttribute('r',String(radius));const text=document.createElementNS(ns,'text');text.textContent=graphLabel(node.title);text.setAttribute('y','29');const tooltip=document.createElementNS(ns,'title');tooltip.textContent=node.title+' · '+(node.inTag?'当前分类':'一跳关联')+' · 拖动或点击阅读';const leader=document.createElementNS(ns,'line');leader.classList.add('force-label-leader');g.append(leader,hit,dot,text,tooltip);
+  g.addEventListener('pointerenter',()=>{hover=node.id;updateHighlight();});g.addEventListener('pointerleave',()=>{hover=null;updateHighlight();});g.addEventListener('focus',()=>{hover=node.id;updateHighlight();});g.addEventListener('blur',()=>{hover=null;updateHighlight();});g.addEventListener('keydown',event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();openGraphArticle(node);}});layer.append(g);return {node,g,text,hit,dot,radius,leader};});
  // Keep screen-size labels readable as real libraries grow. Every node remains
  // interactive; hover, keyboard focus and search take priority over other labels.
  function layoutLabels(){
@@ -83,7 +89,7 @@ function renderTagGraph(host,tag){
   const bounds=stage.getBoundingClientRect();
   for(const control of [legend,hint,zoomBar,searchEmpty]){if(control.hidden)continue;const r=control.getBoundingClientRect();obstacles.push({left:r.left-bounds.left-6,right:r.right-bounds.left+6,top:r.top-bounds.top-6,bottom:r.bottom-bounds.top+6});}
   const positions=graphLabelPositions(screen.filter(n=>n.matches),width,height,obstacles);
-  nodeElements.forEach(({node,text})=>{const p=positions.get(node.id);text.style.display=p?'':'none';if(p){text.setAttribute('x',String((p.x-width/2-panX)/zoom-node.x));text.setAttribute('y',String((p.y-height/2-panY)/zoom-node.y));}});
+  nodeElements.forEach(({node,text,leader})=>{const p=positions.get(node.id);text.style.display=p?'':'none';leader.style.display=p?'':'none';if(p){text.setAttribute('x',String((p.x-width/2-panX)/zoom-node.x));text.setAttribute('y',String((p.y-height/2-panY)/zoom-node.y));const n=screen.find(n=>n.id===node.id),line=graphLabelConnector(n,p);for(const end of ['1','2']){leader.setAttribute('x'+end,String((line['x'+end]-n.x)/zoom));leader.setAttribute('y'+end,String((line['y'+end]-n.y)/zoom));}}});
   svg.dataset.visibleLabels=String(positions.size);
  }
  function draw(){if(destroyed)return;layer.setAttribute('transform',`translate(${width/2+panX} ${height/2+panY}) scale(${zoom})`);edgeElements.forEach(({edge,line})=>{line.setAttribute('x1',edge.source.x);line.setAttribute('y1',edge.source.y);line.setAttribute('x2',edge.target.x);line.setAttribute('y2',edge.target.y);});nodeElements.forEach(({node,g,text,hit,dot,radius})=>{g.setAttribute('transform',`translate(${node.x} ${node.y})`);text.textContent=graphLabel(node.title,width<600?20:32);text.style.fontSize=14/zoom+'px';text.style.strokeWidth=4/zoom+'px';dot.setAttribute('r',String(Math.max(radius,5/zoom)));hit.setAttribute('r',String(Math.max(24/zoom,14)));});layoutLabels();zoomLabel.value=Math.round(zoom*100)+'%';zoomLabel.textContent=zoomLabel.value;svg.dataset.alpha=layout.alpha.toFixed(4);svg.dataset.moving=String(Boolean(frame)&&!paused);svg.dataset.zoom=zoom.toFixed(3);}
@@ -109,4 +115,4 @@ function renderTagGraph(host,tag){
  if(!saved){if(paused)layout.settle();else for(let i=0;i<28;i++)layout.step();fit();}else draw();start();updateHighlight();
  activeTagGraph={destroy(){tagGraphViews.set(key,{zoom,panX,panY,paused,positions:new Map(layout.nodes.map(n=>[n.id,{x:n.x,y:n.y}]))});destroyed=true;cancelAnimationFrame(frame);observer.disconnect();reduced.removeEventListener('change',onMotion);}};
 }
-if(typeof module!=='undefined'&&module.exports)module.exports={normalizeTag,collectTagGroups,matchesTag,selectTagGraph,graphLabelPositions};
+if(typeof module!=='undefined'&&module.exports)module.exports={normalizeTag,collectTagGroups,matchesTag,selectTagGraph,graphLabelPositions,graphLabelConnector};
