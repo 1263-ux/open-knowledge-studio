@@ -25,6 +25,25 @@ def test_activity_projects_real_receipts_without_writes(tmp_path, monkeypatch):
     assert before == {str(path): path.read_bytes() for path in tmp_path.rglob("*") if path.is_file()}
 
 
+def test_receipt_lifecycle_ignores_random_filename_order(tmp_path, monkeypatch):
+    monkeypatch.setenv("OKS_MACHINE_ID", "machine-a")
+    ids = iter(["evt_20261021T000000000000_ffff", "evt_20261021T000000000000_bbbb",
+                "evt_20261021T000000000000_aaaa"])
+    monkeypatch.setattr(mail, "_receipt_event_id", lambda: next(ids))
+    result = mail.write_message(tmp_path, sender="human", recipients="writer", body="confirm")
+    row = next(mail.iter_messages(tmp_path, "writer"))
+    mail.record_delivery(tmp_path, "s1", row, agent_id="writer", delivered=False)
+    mail.record_delivery(tmp_path, "s1", row, agent_id="writer", delivered=True)
+    mail.acknowledge_delivery(tmp_path, "s1", result["message_id"], agent_id="writer")
+    events = list(mail.iter_receipt_events(tmp_path, "s1", result["message_id"]))
+    assert [e["event_type"] for e in events] == ["injected", "presented", "acknowledged"]
+    # Event history must rebuild the snapshot even after its compatibility view is lost.
+    mail.receipt_path(tmp_path, "s1", result["message_id"]).unlink()
+    receipt = mail.acknowledge_delivery(tmp_path, "s1", result["message_id"], agent_id="writer")
+    assert receipt["status"] == "acknowledged"
+    assert len(list(mail.iter_receipt_events(tmp_path, "s1", result["message_id"]))) == 3
+
+
 def test_activity_excludes_private_messages_and_unrelated_receipts(tmp_path):
     public = mail.write_message(tmp_path, sender="human", recipients="writer", title="公开", body="可见")
     private = mail.write_message(tmp_path, sender="private-a", recipients="private-b", title="保密", body="secret")

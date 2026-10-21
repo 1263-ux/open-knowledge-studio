@@ -34,6 +34,13 @@ bundled `oks-mail` Skill and the same KB for these explicit local records:
    to human review; it is not acceptance, a receipt or Wiki promotion.
 
 Store the actual Thread and message IDs under `collaboration` in `result.json`.
+Before reporting an authorized collaborative workflow, run
+`oks ingest validate <run_id> --collaboration --review-owner <owner>`.
+For a standalone source intake use `oks ingest validate <run_id>` instead.
+Fix or explicitly report each validation error; do not report the workflow as
+complete when a required handoff is missing. The validator only reads facts:
+it does not send messages, execute Skills, confirm receipts or approve drafts.
+Grade-A candidates must carry `source_bundle_id` matching the committed Bundle.
 Read that Thread when resuming and reuse existing run-linked records instead of
 duplicating them. Before reporting an end-to-end workflow complete, verify the
 result and review request are visible in the owner's Mail projection. Report

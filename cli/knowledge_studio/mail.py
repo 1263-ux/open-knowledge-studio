@@ -199,14 +199,25 @@ def receipt_event_paths(root: Path, session_id: str, message_id: str) -> list[Pa
 
 
 def iter_receipt_events(root: Path, session_id: str, message_id: str) -> Iterable[dict[str, Any]]:
-    """Read immutable receipt transition events in deterministic order."""
+    """Read the monotonic receipt lifecycle, independent of clock/UUID order.
+
+    These events only advance injected -> presented -> acknowledged. Wall clocks
+    can tie or move backwards, and UUID suffixes do not record causal order.
+    Ordering by lifecycle also repairs legacy events without rewriting evidence.
+    """
+    events = []
     for path in receipt_event_paths(root, session_id, message_id):
         try:
             record = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             continue
         if isinstance(record, dict):
-            yield record
+            events.append(record)
+    stages = {"injected": 0, "presented": 1, "acknowledged": 2}
+    yield from sorted(events, key=lambda event: (
+        stages.get(str(event.get("event_type", "")), -1),
+        str(event.get("timestamp", "")), str(event.get("event_id", "")),
+    ))
 
 
 def _receipt_event_id() -> str:

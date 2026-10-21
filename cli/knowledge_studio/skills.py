@@ -289,11 +289,34 @@ def search(query: str, *, limit: int = 5, kind: str | None = None, category: str
     if category:
         category = validate_category(category)
         pages = [p for p in pages if p.get("skill_category") == category or str(p.get("skill_category", "")).startswith(category + "/")]
-    hits = _recall_knowledge_with_context(query=query, topic_id=None, limit=limit, scope="skills", goal_context=_resolve_goal_context("none", goal_boost=False), explain=True, type_filter=kind, candidate_pages=pages)
+    # Route by declared capability before incidental mentions in instructions.
+    # This vocabulary translates task terms, never selects a hard-coded Skill ID.
+    routed_query = query.lower()
+    translations = {
+        "知识提取": "ingestion extraction", "知识摄入": "ingestion extraction",
+        "知识查询": "recall retrieval", "知识检索": "recall retrieval",
+        "协作": "collaboration coordination", "通信": "mail", "通讯": "mail",
+        "邮件": "mail", "文档": "document documents", "提取": "extraction",
+    }
+    for term, translated in translations.items():
+        routed_query = routed_query.replace(term, translated)
+    routing_pages = [{**p, "body": " ".join(str(p.get(key) or "") for key in
+                      ("skill_id", "skill_description", "skill_category"))}
+                     for p in pages]
+    options = dict(topic_id=None, limit=limit, scope="skills",
+                   goal_context=_resolve_goal_context("none", goal_boost=False),
+                   explain=True, type_filter=kind)
+    # Retain original terms so Chinese-authored/custom capability metadata works.
+    search_query = f"{query} {routed_query}" if routed_query != query.lower() else query
+    hits = _recall_knowledge_with_context(query=search_query, candidate_pages=routing_pages, **options)
+    # Keep instruction-level discovery for specific terms not in task metadata.
+    if not hits and routed_query == query.lower():
+        hits = _recall_knowledge_with_context(query=query, candidate_pages=pages, **options)
     by_slug = {p["slug"]: p for p in pages}
     for hit in hits:
         hit.update({key: by_slug[hit["slug"]].get(key, "") for key in ("skill_id", "skill_version", "skill_category")})
         hit["load_command"] = f"oks skills load {hit['skill_id']} --version {hit['skill_version']}"
+        hit["body_preview"] = str(by_slug[hit["slug"]].get("skill_description") or hit["body_preview"])
     return hits
 
 

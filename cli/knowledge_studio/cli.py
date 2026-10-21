@@ -564,6 +564,25 @@ def security_sanitize_cmd(
     })
 
 
+@ingest_app.command("validate")
+def ingest_validate_cmd(
+    run_id: str = typer.Argument(..., help="Agent run identifier"),
+    collaboration: bool = typer.Option(False, "--collaboration", help="Require real owner-visible Mail handoffs"),
+    review_owner: str = typer.Option("human", "--review-owner"),
+):
+    """Check persisted extraction, candidate and optional Mail facts without writes."""
+    from knowledge_studio.ingest_workflow import validate_workflow
+
+    try:
+        result = validate_workflow(run_id, collaboration=collaboration, review_owner=review_owner)
+    except (ValueError, OSError) as exc:
+        _emit_json({"valid": False, "error": str(exc)})
+        raise typer.Exit(2)
+    _emit_json(result)
+    if not result["valid"]:
+        raise typer.Exit(2)
+
+
 @ingest_app.command("prepare")
 def ingest_prepare_cmd(
     source: str = typer.Argument(..., help="Local file or URL to prepare for ingestion"),

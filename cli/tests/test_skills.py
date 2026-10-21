@@ -330,6 +330,48 @@ def test_cli_import_list_search_load_review_lifecycle(kb, source):
     assert runner.invoke(app, ["skills", "unload", "sample", "--target", "agents"]).exit_code == 0
 
 
+@pytest.mark.parametrize("query,expected", [
+    ("协作 通信", "team-mail"), ("知识提取", "capture"),
+    ("知识查询", "lookup"), ("Word 文档", "office-doc"),
+])
+def test_chinese_task_search_uses_capability_descriptions(kb, tmp_path, query, expected):
+    descriptions = {
+        "team-mail": "Durable collaboration mail and coordination",
+        "capture": "Source ingestion and extraction to drafts",
+        "lookup": "Recall and retrieve reviewed knowledge",
+        "office-doc": "Create Word DOCX documents",
+        "setup": "Assess profile and configure goals",
+    }
+    for identity, description in descriptions.items():
+        folder = tmp_path / identity
+        folder.mkdir()
+        # Incidental mentions in long instructions must not become task identity.
+        (folder / "SKILL.md").write_text(
+            f"---\nname: {identity}\ndescription: {description}\n---\n"
+            + "协作 通信 知识提取 知识查询 Word 文档\n" * (40 if identity == "setup" else 1),
+            encoding="utf-8",
+        )
+        promote(skills.import_skill(folder))
+    hits = skills.search(query, limit=3)
+    assert hits and hits[0]["skill_id"] == expected
+    assert skills.search("火星地质标本") == []
+
+
+def test_specific_instruction_term_remains_discoverable(kb, source):
+    with (source / "SKILL.md").open("a", encoding="utf-8") as handle:
+        handle.write("\nUse quasar-protocol for the specialist operation.\n")
+    promote(skills.import_skill(source))
+    assert skills.search("quasar-protocol")[0]["skill_id"] == "sample"
+
+
+def test_chinese_authored_custom_skill_retains_original_task_terms(kb, source):
+    (source / "SKILL.md").write_text(
+        "---\nname: custom\ndescription: 多智能体协作与通信\n---\n\n"
+        "明确记录交接与结果，等待审核；仅处理获得授权的任务。\n", encoding="utf-8")
+    promote(skills.import_skill(source))
+    assert skills.search("协作 通信")[0]["skill_id"] == "custom"
+
+
 def test_batch_import_reports_partial_and_does_not_import_router(kb, tmp_path):
     collection = tmp_path / "collection"
     for name in ("good", "bad", "oks"):
