@@ -504,6 +504,30 @@ def knowledge_map(root: Path, limit: int = 400, *, worker_snapshot: dict | None 
             "metadata": {key: str(value) for key, value in parsed.items() if key not in {"file_path", "slug"}},
         })
 
+    # Resolve against all visible pages before pagination to reject ambiguity.
+    from knowledge_studio.ingest_workflow import _inside
+    origins: dict[str, list[dict]] = {}
+    for item in points:
+        item["source_candidates"] = []
+        meta = original_metadata[item["id"]]
+        values = meta.get("source_candidates")
+        if (item["kind"] != "wiki" or not meta.get("human_reviewed_at")
+                or meta.get("status") != "active" or meta.get("archived")
+                or not isinstance(values, list)):
+            continue
+        for value in set(v for v in values if isinstance(v, str)):
+            try:
+                path = _inside(root.resolve(), value, "drafts")
+            except ValueError:
+                continue
+            if path.suffix.lower() == ".md" and not path.exists():
+                origins.setdefault(value, []).append(item)
+    for value, matches in origins.items():
+        if len(matches) == 1:
+            matches[0]["source_candidates"].append(value)
+    for item in points:
+        item["source_candidates"].sort()
+
     by_id = {point["id"]: point for point in points}
     by_stem = {}
     by_title = {}

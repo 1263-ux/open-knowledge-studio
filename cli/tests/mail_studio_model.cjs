@@ -95,3 +95,18 @@ assert.equal(nav.defaultOrigin(sourceItem).knowledgeMode,'materials');
 assert.deepEqual(nav.scopeItems(materialVM.items,nav.defaultOrigin(sourceItem),()=>true,vm.matchesFields).map(p=>p.id),['wiki/s.md']);
 assert.deepEqual(nav.scopeItems(materialVM.items,{...nav.normalize(),graphTag:'全部知识'},()=>true,vm.matchesFields).map(p=>p.id),['wiki/n.md']);
 console.log('Source material navigation and knowledge counts passed');
+
+const promoted={id:'wiki/promoted.md',path:'wiki/promoted.md',kind:'wiki',status:'active',reviewed:true,source_candidates:['drafts/old.md']};
+const historical={path:'drafts/old.md',source_message_id:'old'},current={path:'wiki/promoted.md',source_message_id:'new'};
+assert.equal(vm.resolveKnowledgeRef(historical,[promoted]),promoted);
+assert.equal(vm.knowledgeRefs([historical,current],[promoted]).length,1);
+assert.deepEqual(vm.knowledgeRefs([historical,current],[promoted])[0].source_refs,[historical,current]);
+assert.equal(historical.path,'drafts/old.md','original message references remain unchanged');
+assert.equal(vm.resolveKnowledgeRef(historical,[{...promoted,reviewed:false}]),null);
+assert.equal(vm.resolveKnowledgeRef(historical,[promoted,{...promoted,path:'wiki/other.md'}]),null);
+const existingDraft={path:'drafts/old.md',kind:'candidate'};
+assert.equal(vm.resolveKnowledgeRef(historical,[promoted,existingDraft]),existingDraft);
+assert.equal(vm.knowledgeRefs([historical,current],[promoted,existingDraft]).length,2);
+assert.equal(vm.resolveKnowledgeRef({path:'drafts/../outside.md'},[{...promoted,source_candidates:['drafts/../outside.md']}]),null);
+assert.equal(vm.resolveKnowledgeRef({path:'drafts/a\\old.md'},[{...promoted,source_candidates:['drafts/a\\old.md']}]),null);
+console.log('Historical knowledge references reconcile without rewriting communication facts');

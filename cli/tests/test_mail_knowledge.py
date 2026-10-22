@@ -51,6 +51,29 @@ def test_three_levels_come_from_area_and_tags(kb):
     assert projection["counts"]["clusters"] == 3
 
 
+def test_promoted_origins_are_bounded_unique_missing_drafts(kb):
+    front = ('title: Promoted\narea: computing\nstatus: active\n'
+             'human_reviewed_at: 2026-10-22T00:00:00Z\n'
+             'source_candidates: [drafts/old.md, drafts/../outside.md, drafts/current.md]\n')
+    write(kb, "wiki/promoted.md", front)
+    write(kb, "drafts/current.md", "title: Current\nstatus: pending\n")
+    before = {p: p.read_bytes() for p in kb.rglob("*.md")}
+    data = mail_knowledge.knowledge_map(kb)
+    assert point(data, "wiki/promoted.md")["source_candidates"] == ["drafts/old.md"]
+    assert point(data, "drafts/current.md")["source_candidates"] == []
+    write(kb, "wiki/duplicate.md", front)
+    data = mail_knowledge.knowledge_map(kb)
+    assert point(data, "wiki/promoted.md")["source_candidates"] == []
+    assert point(data, "wiki/duplicate.md")["source_candidates"] == []
+    assert all(p.read_bytes() == payload for p, payload in before.items())
+
+
+@pytest.mark.parametrize("extra", ["", "human_reviewed_at: 2026-10-22T00:00:00Z\nstatus: provisional\n"])
+def test_unreviewed_or_inactive_page_has_no_historical_alias(kb, extra):
+    write(kb, "wiki/a.md", "title: A\narea: computing\nsource_candidates: [drafts/old.md]\n" + extra)
+    assert point(mail_knowledge.knowledge_map(kb), "wiki/a.md")["source_candidates"] == []
+
+
 def test_domain_tag_does_not_create_a_hairball(kb):
     for index in range(6):
         write(kb, f"wiki/e{index}.md", f'title: "E{index}"\narea: engineering\ntags: "engineering"\nstatus: active\n')

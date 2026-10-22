@@ -48,6 +48,19 @@ const MailViewModel=(()=>{
   return {items,links,tagLinks,truncated:!!map.scope?.truncated,total:map.scope?.points_total||items.length};
  }
  function resolveWikiLink(target,source,items){let raw=String(target||'').split('|')[0].split('#')[0].trim().replace(/\\/g,'/');try{raw=decodeURIComponent(raw);}catch{return null;}if(!raw||raw.startsWith('/')||/^[a-z][\w+.-]*:/i.test(raw))return null;const normalize=path=>{const parts=[];for(const p of path.split('/')){if(p==='..')parts.pop();else if(p&&p!=='.')parts.push(p);}return parts.join('/');};const candidates=[raw,normalize((source||'').split('/').slice(0,-1).join('/')+'/'+raw)].flatMap(p=>p.endsWith('.md')?[p]:[p,p+'.md']);const exact=items.find(p=>candidates.includes(p.path));if(exact)return exact;const name=raw.replace(/\.md$/,'').toLocaleLowerCase();const matches=items.filter(p=>p.title.toLocaleLowerCase()===name||p.path.split('/').at(-1).replace(/\.md$/,'').toLocaleLowerCase()===name);return !raw.includes('/')&&matches.length===1?matches[0]:null;}
+ function resolveKnowledgeRef(ref,items){
+  const exact=items.find(item=>item.path===ref.path);if(exact)return exact;
+  if(!/^drafts\/.+\.md$/.test(ref.path||'')||ref.path.split('/').some(p=>!p||p==='.'||p==='..')||/[\\:*?<>|]/.test(ref.path))return null;
+  const matches=items.filter(item=>item.kind==='wiki'&&item.status==='active'&&item.reviewed===true&&Array.isArray(item.source_candidates)&&item.source_candidates.includes(ref.path));
+  return matches.length===1?matches[0]:null;
+ }
+ function knowledgeRefs(refs,items){
+  const grouped=new Map();refs.filter(ref=>/^(wiki|drafts)\//.test(ref.path||'')).forEach(ref=>{
+   const item=resolveKnowledgeRef(ref,items),path=item?.path||ref.path;
+   if(!grouped.has(path))grouped.set(path,{...ref,path,source_refs:[]});
+   grouped.get(path).source_refs.push(ref);
+  });return [...grouped.values()];
+ }
  function matchesFields(item,filters={}){const active=Object.entries(filters).filter(([,v])=>v);if(!active.length)return true;const rows=item.workerRecords||[];if(!rows.length)return active.every(([,v])=>v==='__missing');return rows.some(r=>active.every(([key,value])=>value==='__missing'?!r.fields[key]:r.fields[key]===value));}
  function domainGroups(items){const groups=new Map();items.filter(p=>!p.isSkill&&!p.isMaterial).forEach(p=>(p.knowledgeDomains||[]).forEach(d=>{if(!groups.has(d.id))groups.set(d.id,{id:d.id,label:d.label,items:[]});const g=groups.get(d.id);if(!g.items.some(v=>v.id===p.id))g.items.push(p);}));return [...groups.values()].sort((a,b)=>(a.id==='_unmapped')-(b.id==='_unmapped')||b.items.length-a.items.length||a.label.localeCompare(b.label,'zh-CN'));}
  function sourceMaterialCollection(items=[]){
@@ -72,6 +85,6 @@ const MailViewModel=(()=>{
   if(active&&!values.includes(active))values.push(active);
   return values;
  }
-  return {agent,short,labels,keyKinds,overview,thread,knowledge,resolveWikiLink,matchesFields,domainGroups,sourceMaterialCollection,fieldLabels,threadSelection,fieldOptions,receiptFact,members};
+  return {agent,short,labels,keyKinds,overview,thread,knowledge,resolveWikiLink,resolveKnowledgeRef,knowledgeRefs,matchesFields,domainGroups,sourceMaterialCollection,fieldLabels,threadSelection,fieldOptions,receiptFact,members};
 })();
 if(typeof module!=='undefined'&&module.exports)module.exports=MailViewModel;
