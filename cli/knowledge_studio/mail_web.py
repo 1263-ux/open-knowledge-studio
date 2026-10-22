@@ -1028,7 +1028,7 @@ class Handler(BaseHTTPRequestHandler):
             raise ValueError("request body must be an object")
         return value
 
-    def _reject_post(self, status, message):
+    def _reject_post(self, status, message, **details):
         """Consume a bounded request body before sending a JSON rejection.
 
         Windows clients can see a connection reset when an HTTP/1.0 handler
@@ -1042,12 +1042,12 @@ class Handler(BaseHTTPRequestHandler):
                 self.rfile.read(length)
         except (ValueError, OSError):
             pass
-        self.send_json(status, {"error": message})
+        self.send_json(status, {"error": message, **details})
 
     def do_POST(self):
         allowed_origin = f"http://127.0.0.1:{self.server.server_port}"
         if self.headers.get('Host') != f'127.0.0.1:{self.server.server_port}' or self.headers.get('Origin', allowed_origin) != allowed_origin or self.headers.get('Content-Type', '').split(';')[0] != 'application/json':
-            self.send_json(403, {'error': 'same-origin JSON requests required'})
+            self._reject_post(403, 'same-origin JSON requests required')
             return
         route = self.path.split("?", 1)[0]
         # Reader mode rejects all writes. Legacy collaboration mode is an explicit
@@ -1057,17 +1057,7 @@ class Handler(BaseHTTPRequestHandler):
             self._reject_post(404, "unknown POST route")
             return
         if self.server.mode == "reader":
-            # Drain only a bounded body before closing the HTTP/1.0 connection.
-            # Closing with unread request bytes can reset the socket on Windows
-            # before the client receives the rejection. Never parse or act on it.
-            try:
-                length = int(self.headers.get("Content-Length", "0"))
-                self.connection.settimeout(1)
-                if 0 < length <= 65536:
-                    self.rfile.read(length)
-            except (ValueError, OSError):
-                pass
-            self.send_json(403, {"error": "reader mode does not permit writes", "mode": "reader"})
+            self._reject_post(403, "reader mode does not permit writes", mode="reader")
             return
         try:
             payload = self.read_json()

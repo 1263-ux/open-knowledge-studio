@@ -1,16 +1,18 @@
 """Reader-mode HTTP contracts: observation must never become a business write."""
 import json
+import io
 import threading
 from contextlib import contextmanager
 from html.parser import HTMLParser
 from urllib.error import HTTPError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
+from types import SimpleNamespace
 
 import pytest
 
 from knowledge_studio import mail, team_sync
-from knowledge_studio.mail_web import create_server, md_to_html
+from knowledge_studio.mail_web import Handler, create_server, md_to_html
 
 
 @pytest.fixture
@@ -46,6 +48,63 @@ def filesystem_snapshot(root):
         path.relative_to(root).as_posix(): (path.read_bytes(), path.stat().st_mtime_ns)
         for path in root.rglob("*") if path.is_file()
     }
+
+
+@pytest.mark.parametrize('headers,path,status', [
+    ({'Host': 'untrusted.example'}, '/api/mail/send', 403),
+    ({'Origin': 'https://untrusted.example'}, '/api/mail/send', 403),
+    ({'Content-Type': 'text/plain'}, '/api/mail/send', 403),
+    ({}, '/api/mail/removed', 404),
+    ({}, '/api/mail/send', 403),
+])
+def test_rejections_consume_bounded_body_before_reply(headers, path, status):
+    """Unread TCP input can discard the rejection on Windows when closing."""
+    handler = object.__new__(Handler)
+    body = b'{"push":true}'
+    handler.server = SimpleNamespace(server_port=3182, mode='reader')
+    handler.headers = {'Host': '127.0.0.1:3182', 'Content-Type': 'application/json',
+                       'Content-Length': str(len(body)), **headers}
+    handler.path = path
+    handler.connection = SimpleNamespace(settimeout=lambda timeout: None)
+    handler.rfile = io.BytesIO(body)
+    replies = []
+
+    def reply(code, payload):
+        assert handler.rfile.tell() == len(body), 'unread body can reset the response socket'
+        replies.append((code, payload))
+
+    handler.send_json = reply
+    handler.read_json = lambda: pytest.fail('Rejected bodies must not execute business parsing')
+    handler.do_POST()
+    assert replies[0][0] == status
+    assert 'error' in replies[0][1]
+
+
+@pytest.mark.parametrize('length', ['65537', '-1', 'invalid'])
+def test_rejection_does_not_drain_unbounded_or_invalid_body(length):
+    handler = object.__new__(Handler)
+    handler.headers = {'Content-Length': length}
+    handler.connection = SimpleNamespace(settimeout=lambda timeout: None)
+    handler.rfile = SimpleNamespace(read=lambda *args: pytest.fail('Do not read an unbounded body'))
+    replies = []
+    handler.send_json = lambda code, payload: replies.append((code, payload))
+    handler._reject_post(403, 'denied')
+    assert replies == [(403, {'error': 'denied'})]
+
+
+@pytest.mark.parametrize('headers', [{'Origin': 'https://untrusted.example'},
+                                    {'Content-Type': 'text/plain'}, {'Host': 'untrusted.example'}])
+def test_invalid_http_requests_return_json_without_business_writes(kb, headers):
+    before = filesystem_snapshot(kb)
+    with serving(kb) as (base, _):
+        request = Request(base + '/api/mail/send', data=b'x' * 8192,
+                          headers={'Content-Type': 'application/json', **headers})
+        with pytest.raises(HTTPError) as error:
+            urlopen(request, timeout=5)
+        with error.value as response:
+            assert response.code == 403
+            assert json.load(response)['error'] == 'same-origin JSON requests required'
+    assert filesystem_snapshot(kb) == before
 
 
 
