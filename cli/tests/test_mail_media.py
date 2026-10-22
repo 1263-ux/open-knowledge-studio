@@ -199,3 +199,50 @@ def test_http_image_requests_preserve_files_and_reject_writes_and_foreign_host(k
         assert before == {p: (p.read_bytes(), p.stat().st_mtime_ns) for p in kb.rglob("*") if p.is_file()}
     finally:
         stop(server, thread)
+
+
+@pytest.mark.parametrize("opening,inner,closing", [
+    ("~~~markdown", "```", "~~~"),
+    ("````markdown", "```", "````"),
+    ("~~~~markdown", "~~~", "~~~~~"),
+])
+def test_reader_preserves_fenced_examples_without_authorizing_their_images(kb, opening, inner, closing):
+    code = f"## Example\n{inner}\n![example](../raw/screen%20shot.png)\n<script>inert</script>"
+    body = f"{opening}\n{code}\n{closing}\n\nAfter the example."
+    write_note(kb, body)
+    before = (kb / "wiki/a.md").read_bytes()
+    markup = _memory_item(kb, "wiki/a.md")["body_html"]
+    assert markup.count("<pre><code>") == 1
+    assert f"<pre><code>{code.replace('<', '&lt;').replace('>', '&gt;')}</code></pre>" in markup
+    assert "<p>After the example.</p>" in markup
+    assert "<img " not in markup and "<script>" not in markup
+    with pytest.raises(FileNotFoundError):
+        mail_media.read_image(kb, "wiki/a.md", "raw/screen shot.png")
+    assert (kb / "wiki/a.md").read_bytes() == before
+
+
+@pytest.mark.parametrize("relative", ["../raw/screen shot.png", "raw/screen%20shot.png", "absolute"])
+def test_legacy_ocr_images_preserve_paths_transcript_and_fenced_headings(kb, relative):
+    target = (kb / "raw/screen shot.png").as_posix() if relative == "absolute" else relative
+    example = "## example.png\n原图：[example](../raw/screen%20shot.png)。"
+    body = (f"```markdown\n{example}\n```\n\n"
+            f"## external-assets/screen shot.png\n\n原图：[screen shot](<{target}>)。\n\n"
+            "书 写 语 法\nif(count\nalert(count);\n\n关联笔记：JavaScript。")
+    write_note(kb, body, "source_type: local-ocr-import\nocr_review_status: unreviewed\n")
+    item = _memory_item(kb, "wiki/a.md")
+    markup = item["body_html"]
+    assert markup.count('class="ocr-section"') == markup.count("<img ") == 1
+    assert f"<pre><code>{example}</code></pre>" in markup
+    assert "配图 1 · JavaScript" in markup
+    assert "书 写 语 法\nif(count\nalert(count);" in markup
+    assert item["body"].strip() == body
+
+
+def test_jpeg_application_trailer_is_preserved_after_end_marker(kb):
+    frame = b'\xff\xc0\x00\x0b\x08\x00\x01\x00\x01\x01\x01\x11\x00'
+    scan = b'\xff\xda\x00\x08\x01\x01\x00\x00\x3f\x00\x01\xff\xd9'
+    jpeg = b'\xff\xd8' + frame + scan + b'application trailer'
+    (kb / "raw/photo.jpg").write_bytes(jpeg)
+    write_note(kb, "![photo](../raw/photo.jpg)")
+    data, mime = mail_media.read_image(kb, "wiki/a.md", "raw/photo.jpg")
+    assert mime == "image/jpeg" and data == jpeg

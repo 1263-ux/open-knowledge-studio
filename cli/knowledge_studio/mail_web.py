@@ -632,11 +632,13 @@ def md_to_html(body: str, *, image_renderer=None) -> str:
         line = lines[index]
         stripped = line.strip()
 
-        if stripped.startswith("```"):
+        fence = re.match(r"^(`{3,}|~{3,})", stripped)
+        if fence:
             close_paragraph(); close_quote(); close_list()
             index += 1
             code: list[str] = []
-            while index < len(lines) and not lines[index].strip().startswith("```"):
+            closing = re.compile(re.escape(fence.group(1)[0]) + "{" + str(len(fence.group(1))) + r",}\s*")
+            while index < len(lines) and not closing.fullmatch(lines[index].strip()):
                 code.append(lines[index])
                 index += 1
             index += 1
