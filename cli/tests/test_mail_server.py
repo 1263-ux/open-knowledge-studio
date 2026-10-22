@@ -118,9 +118,56 @@ def test_runtime_state_symlink_cannot_redirect_writes(instance, tmp_path):
     assert list(outside.iterdir()) == []
 
 
+@pytest.mark.skipif(os.name != "nt" or sys.prefix == sys.base_prefix,
+                    reason="Windows virtual-environment redirector")
+def test_windows_worker_has_no_venv_wrapper_and_keeps_its_environment(instance, monkeypatch):
+    # A venv python.exe redirector creates its own KILL_ON_JOB_CLOSE Job,
+    # even when Popen has already requested breakaway from the outer host.
+    spawn = mail_server._spawn_windows
+    spawned = []
+
+    def capture(command, cwd, env):
+        child = spawn(command, cwd, env)
+        spawned.append((child, command, {"cwd": cwd, "env": env}))
+        return child
+
+    monkeypatch.setattr(mail_server, "_spawn_windows", capture)
+    port = free_port()
+    try:
+        result = mail_server.start_background(instance, port)
+        child, command, options = spawned[0]
+        assert result["pid"] == child.pid, "The server must be the detached process itself"
+        # Probe the exact interpreter/environment selected for the detached worker.
+        code = "import json,sys; print(json.dumps([sys.executable,sys.prefix,sys.base_prefix]))"
+        probe = subprocess.run([command[0], "-B", "-X", "utf8", "-c", code],
+                               cwd=options["cwd"], env=options["env"], capture_output=True,
+                               text=True, encoding="utf-8", timeout=10)
+        assert probe.returncode == 0, probe.stderr
+        assert json.loads(probe.stdout) == [sys.executable, sys.prefix, sys.base_prefix]
+        assert child.poll() is None
+    finally:
+        mail_server.stop_background(instance, port)
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows structured WMI launch")
+def test_windows_launch_treats_unicode_and_shell_characters_as_literal_paths(instance):
+    root = instance / "共享 空格 ' $(exit 99)"
+    for name in ["wiki", "drafts", "mail"]:
+        (root / name).mkdir(parents=True, exist_ok=True)
+    port = free_port()
+    try:
+        result = mail_server.start_background(root, port)
+        assert result["status"] == "running"
+        assert result["root"] == str(root.resolve())
+        assert mail_server.start_background(root, port)["reused"] is True
+    finally:
+        mail_server.stop_background(root, port)
+    assert mail_server.server_status(root, port)["status"] == "stopped"
+
+
 @pytest.mark.skipif(os.name != "nt", reason="Windows Job lifecycle")
-@pytest.mark.parametrize("breakaway", [False, True])
-def test_server_survives_actual_launcher_job_termination(instance, breakaway):
+@pytest.mark.parametrize("backend", ["direct-control", "wmi"])
+def test_server_survives_actual_launcher_job_termination(instance, backend):
     import ctypes
     from ctypes import wintypes
 
@@ -143,12 +190,18 @@ def test_server_survives_actual_launcher_job_termination(instance, breakaway):
     job = kernel.CreateJobObjectW(None, None)
     assert job
     limits = Extended()
-    limits.basic.flags = 0x2800  # KILL_ON_JOB_CLOSE | BREAKAWAY_OK, like the host.
+    limits.basic.flags = 0x2000  # KILL_ON_JOB_CLOSE, without permission to break away.
     assert kernel.SetInformationJobObject(job, 9, ctypes.byref(limits), ctypes.sizeof(limits))
     port = free_port()
     env = dict(os.environ, PYTHONPATH=str(Path(__file__).resolve().parents[1]), PYTHONDONTWRITEBYTECODE="1")
+    direct = ("def direct(command, cwd, env):\n"
+              f"    with open({str(instance / f'.oks/mail-web/{port}.log')!r}, 'ab') as log:\n"
+              "        return mail_server.subprocess.Popen(command, cwd=cwd, env=env, "
+              "stdin=mail_server.subprocess.DEVNULL, stdout=log, stderr=log, close_fds=True, "
+              "creationflags=mail_server.subprocess.DETACHED_PROCESS|mail_server.subprocess.CREATE_NEW_PROCESS_GROUP)\n"
+              "mail_server._spawn_windows=direct\n")
     script = ("import sys,json; from pathlib import Path; from knowledge_studio import mail_server; "
-              + ("mail_server.subprocess.CREATE_BREAKAWAY_FROM_JOB=0; " if not breakaway else "") +
+              + (f"exec({direct!r}); " if backend == "direct-control" else "") +
               "sys.stdin.readline(); "
               f"print(json.dumps(mail_server.start_background(Path({str(instance)!r}),{port})),flush=True); "
               "sys.stdin.readline(); print('UNEXPECTED_NORMAL_EXIT',flush=True)")
@@ -168,7 +221,7 @@ def test_server_survives_actual_launcher_job_termination(instance, breakaway):
         # Windows can report exit code 0 for Job-close termination. The blocked
         # launcher exited without executing its normal-exit sentinel instead.
         assert "UNEXPECTED_NORMAL_EXIT" not in launcher.stdout.read()
-        if breakaway:
+        if backend == "wmi":
             assert mail_server.server_status(instance, port)["status"] == "running"
         else:
             deadline = time.monotonic() + 3
@@ -184,3 +237,44 @@ def test_server_survives_actual_launcher_job_termination(instance, breakaway):
         for stream in [launcher.stdin, launcher.stdout, launcher.stderr]:
             stream.close()
         mail_server.stop_background(instance, port)
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows WMI bridge")
+@pytest.mark.parametrize("failure", ["timeout", "denied", "malformed"])
+def test_wmi_launch_failure_is_clear_and_does_not_echo_environment(instance, monkeypatch, failure):
+    from types import SimpleNamespace
+    monkeypatch.setenv("OKS_TEST_SECRET", "must-not-appear-in-errors")
+
+    def run(command, **options):
+        payload = json.loads(options["env"]["_OKS_MAIL_LAUNCH_SPEC"])
+        assert payload["env"]["OKS_TEST_SECRET"] == "must-not-appear-in-errors"
+        assert "must-not-appear-in-errors" not in " ".join(command)
+        assert "-WindowStyle" in command and "Hidden" in command
+        if failure == "timeout":
+            raise subprocess.TimeoutExpired(command, 15, stderr="must-not-appear-in-errors")
+        return SimpleNamespace(returncode=0 if failure == "malformed" else 1,
+                               stdout="not json", stderr="must-not-appear-in-errors")
+
+    monkeypatch.setattr(mail_server.subprocess, "run", run)
+    with pytest.raises(RuntimeError) as error:
+        mail_server.start_background(instance, free_port())
+    assert "foreground serve remains available" in str(error.value)
+    assert "must-not-appear-in-errors" not in str(error.value)
+    assert not list((instance / ".oks/mail-web").glob("*.json"))
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows executable search")
+def test_wmi_bridge_does_not_execute_a_shell_from_the_knowledge_directory(instance, monkeypatch):
+    from types import SimpleNamespace
+    (instance / "pwsh.exe").write_text("untrusted KB file", encoding="utf-8")
+    monkeypatch.chdir(instance)
+    monkeypatch.setenv("PATH", ".")
+
+    def run(command, **options):
+        assert Path(command[0]).is_absolute()
+        assert Path(command[0]).parent != instance
+        return SimpleNamespace(returncode=0, stdout='{"code":0,"pid":1234}', stderr="")
+
+    monkeypatch.setattr(mail_server.subprocess, "run", run)
+    monkeypatch.setattr(mail_server, "_WindowsWorker", lambda pid: pid)
+    assert mail_server._spawn_windows([sys.executable], instance, dict(os.environ)) == 1234

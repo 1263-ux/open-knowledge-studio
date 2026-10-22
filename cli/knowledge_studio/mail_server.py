@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import os
 from pathlib import Path
@@ -10,6 +11,7 @@ import socket
 import subprocess
 import sys
 import time
+import traceback
 from urllib.error import URLError
 from urllib.request import ProxyHandler, build_opener
 import uuid
@@ -89,17 +91,107 @@ def _remove_owned(root, port, files, server_id):
 
 
 def _spawn(root, port, mode, server_id, files):
-    options = {"creationflags": subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
-               | subprocess.CREATE_BREAKAWAY_FROM_JOB} if os.name == "nt" else {"start_new_session": True}
     package_parent = Path(__file__).resolve().parent.parent
     env = dict(os.environ, PYTHONPATH=str(package_parent), OKS_ROOT=str(root), PYTHONDONTWRITEBYTECODE="1")
-    command = [sys.executable, "-B", "-X", "utf8", "-m", "knowledge_studio.mail_server",
+    executable = sys.executable
+    if os.name == "nt" and sys.prefix != sys.base_prefix:
+        # CPython's venv redirector creates a new KILL_ON_JOB_CLOSE Job around
+        # the real interpreter. Bypass that wrapper, using its own path handoff
+        # so getpath still selects this venv's prefix and site-packages.
+        executable = sys._base_executable
+        if not Path(executable).is_file():
+            raise ValueError("The virtual environment's base Python is unavailable")
+        env["__PYVENV_LAUNCHER__"] = sys.executable
+    command = [executable, "-B", "-X", "utf8", "-m", "knowledge_studio.mail_server",
                "--root", str(root), "--port", str(port), "--mode", mode, "--server-id", server_id]
-    # No inherited terminal or pipes. A restricted Windows Job must fail clearly,
-    # never silently fall back to a child that will die with its launching host.
+    if os.name == "nt":
+        return _spawn_windows(command, package_parent, env)
+    # No inherited terminal or pipes.
     with files["log"].open("ab") as log:
         return subprocess.Popen(command, cwd=package_parent, env=env, stdin=subprocess.DEVNULL,
-                                stdout=log, stderr=log, close_fds=True, **options)
+                                stdout=log, stderr=log, close_fds=True, start_new_session=True)
+
+
+class _WindowsWorker:
+    """Poll the handle of the process WMI just created; never terminate by PID."""
+    def __init__(self, pid):
+        import ctypes
+        from ctypes import wintypes
+
+        self.pid = pid
+        self._kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+        self._kernel.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+        self._kernel.OpenProcess.restype = wintypes.HANDLE
+        self._kernel.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+        self._kernel.GetExitCodeProcess.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD)]
+        self._kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+        self._handle = self._kernel.OpenProcess(0x100000 | 0x1000, False, pid)
+
+    def poll(self):
+        import ctypes
+        from ctypes import wintypes
+
+        if not self._handle:
+            return 1  # It may have exited before OpenProcess, still bounded by readiness.
+        waited = self._kernel.WaitForSingleObject(self._handle, 0)
+        if waited == 258:  # WAIT_TIMEOUT: still running.
+            return None
+        code = wintypes.DWORD()
+        if waited != 0 or not self._kernel.GetExitCodeProcess(self._handle, ctypes.byref(code)):
+            raise OSError("Cannot query the newly launched Mail worker")
+        return code.value
+
+    def __del__(self):
+        if getattr(self, "_handle", None):
+            self._kernel.CloseHandle(self._handle)
+
+
+def _spawn_windows(command, cwd, env):
+    # WMI creates the process outside the caller's Job chain under the same user.
+    # CREATE_BREAKAWAY_FROM_JOB also avoids the provider's own resource Job.
+    # Use fixed PowerShell code and a private JSON environment value: paths and
+    # environment are never shell code or command-line arguments.
+    # Windows executable lookup can otherwise prepend the KB working directory.
+    # Search only absolute PATH entries, never an implicitly trusted ./pwsh.exe.
+    shell = next((Path(entry) / "pwsh.exe" for entry in os.get_exec_path()
+                  if Path(entry).is_absolute() and (Path(entry) / "pwsh.exe").is_file()),
+                 Path(os.environ["SystemRoot"]) / "System32/WindowsPowerShell/v1.0/powershell.exe")
+    script = r"""
+$ErrorActionPreference = 'Stop'
+$spec = $env:_OKS_MAIL_LAUNCH_SPEC | ConvertFrom-Json
+$startup = New-CimInstance -ClassName Win32_ProcessStartup -ClientOnly -Property @{
+    ShowWindow = [uint16]0
+    CreateFlags = [uint32]0x01000608
+    EnvironmentVariables = [string[]]@($spec.env.PSObject.Properties | ForEach-Object { $_.Name + '=' + [string]$_.Value })
+}
+$created = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{
+    CommandLine = [string]$spec.command
+    CurrentDirectory = [string]$spec.cwd
+    ProcessStartupInformation = $startup
+}
+@{ code = [int]$created.ReturnValue; pid = [int]$created.ProcessId } | ConvertTo-Json -Compress
+"""
+    payload = {"command": subprocess.list2cmdline(command), "cwd": str(cwd),
+               "env": {**env, "_OKS_MAIL_WMI_STDIO": "1"}}
+    try:
+        launched = subprocess.run([str(shell), "-NoLogo", "-NoProfile", "-NonInteractive",
+                                   "-WindowStyle", "Hidden", "-Command", script],
+                                  env={**os.environ, "_OKS_MAIL_LAUNCH_SPEC": json.dumps(payload, ensure_ascii=True)},
+                                  capture_output=True,
+                                  text=True, encoding="utf-8", errors="replace", timeout=15,
+                                  creationflags=subprocess.CREATE_NO_WINDOW)
+    except subprocess.TimeoutExpired:
+        raise RuntimeError("Windows WMI launch timed out; foreground serve remains available") from None
+    # PowerShell diagnostics can contain environment values; do not echo them.
+    if launched.returncode:
+        raise RuntimeError("Windows WMI could not launch Mail; foreground serve remains available")
+    try:
+        result = json.loads(launched.stdout.lstrip("\ufeff"))
+        if result["code"] != 0 or type(result["pid"]) is not int or result["pid"] <= 0:
+            raise ValueError("Process was not created")
+    except (ValueError, KeyError, TypeError):
+        raise RuntimeError("Windows WMI did not confirm a Mail process; foreground serve remains available") from None
+    return _WindowsWorker(result["pid"])
 
 
 def start_background(root: Path, port: int = 3182, *, mode: str = "reader", timeout: float = 10) -> dict:
@@ -124,7 +216,7 @@ def start_background(root: Path, port: int = 3182, *, mode: str = "reader", time
         _write(files, record)
         try:
             child = _spawn(root, port, mode, server_id, files)
-        except OSError:
+        except (OSError, ValueError, RuntimeError):
             _remove_owned(root, port, files, server_id)
             raise
         deadline = time.monotonic() + timeout
@@ -197,6 +289,16 @@ def main():
     parser.add_argument("--mode", choices=["reader", "collaboration"], required=True)
     parser.add_argument("--server-id", required=True)
     args = parser.parse_args()
+    if os.environ.get("_OKS_MAIL_WMI_STDIO") == "1":
+        _root, files = _paths(args.root, args.port)
+        with files["log"].open("a", encoding="utf-8", buffering=1) as log:
+            with contextlib.redirect_stdout(log), contextlib.redirect_stderr(log):
+                try:
+                    serve_worker(args.root, args.port, args.mode, args.server_id)
+                except Exception:
+                    traceback.print_exc()
+                    raise SystemExit(1) from None
+        return
     serve_worker(args.root, args.port, args.mode, args.server_id)
 
 
