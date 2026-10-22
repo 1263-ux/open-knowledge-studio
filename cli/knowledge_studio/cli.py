@@ -583,6 +583,28 @@ def ingest_validate_cmd(
         raise typer.Exit(2)
 
 
+@ingest_app.command("finalize")
+def ingest_finalize_cmd(
+    run_id: str = typer.Argument(..., help="Agent run identifier"),
+    source_only: bool = typer.Option(False, "--source-only", help="Explicit standalone intake without Mail handoffs"),
+    review_owner: str = typer.Option("human", "--review-owner"),
+):
+    """Check handoffs and atomically save pending/incomplete workflow state.
+
+    Does not acquire sources, send messages, approve drafts or promote to Wiki.
+    """
+    from knowledge_studio.ingest_workflow import finalize_workflow
+
+    try:
+        result = finalize_workflow(run_id, source_only=source_only, review_owner=review_owner)
+    except (ValueError, OSError) as exc:
+        _emit_json({"valid": False, "workflow_status": "incomplete", "error": str(exc)})
+        raise typer.Exit(2)
+    _emit_json(result)
+    if not result["valid"]:
+        raise typer.Exit(2)
+
+
 @ingest_app.command("prepare")
 def ingest_prepare_cmd(
     source: str = typer.Argument(..., help="Local file or URL to prepare for ingestion"),

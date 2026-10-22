@@ -13,7 +13,8 @@ oks ingest prepare <source>  →  SourceEnvelope + Manifest skeleton
 → Judge modality → Read Recipe → Query capability status → Select minimum sufficient provider set
 → Execute provider cluster (one execution → multiple evidence fragments)
 → Fill evidence_records  →  oks raw commit
-→ AgentObservation → CandidateDraft → drafts/{slug}.md → Report
+→ AgentObservation → CandidateDraft → drafts/{slug}.md → result.json
+→ oks ingest finalize <run_id> [--source-only] → Report checked state
 ```
 
 ## Collaboration checkpoints for an end-to-end workflow
@@ -35,11 +36,15 @@ bundled `oks-mail` Skill and the same KB for these explicit local records:
 
 Store the actual Thread and message IDs under `collaboration` in `result.json`.
 Before reporting an authorized collaborative workflow, run
-`oks ingest validate <run_id> --collaboration --review-owner <owner>`.
-For a standalone source intake use `oks ingest validate <run_id>` instead.
+`oks ingest finalize <run_id> --review-owner <owner>`.
+For a standalone source intake use `oks ingest finalize <run_id> --source-only` instead.
+Declare `workflow_mode: collaboration` or `source_only` when writing the result;
+an already-declared collaborative run cannot bypass handoffs using `--source-only`.
 Fix or explicitly report each validation error; do not report the workflow as
-complete when a required handoff is missing. The validator only reads facts:
-it does not send messages, execute Skills, confirm receipts or approve drafts.
+complete when a required handoff is missing. Finalization saves checked workflow
+state and validation errors atomically in the run result; it does not send messages,
+execute Skills, confirm receipts or approve drafts. `oks ingest validate` remains
+available for a read-only recheck; stored validation is only a point-in-time check.
 Grade-A candidates must carry `source_bundle_id` matching the committed Bundle.
 Read that Thread when resuming and reuse existing run-linked records instead of
 duplicating them. Before reporting an end-to-end workflow complete, verify the
@@ -508,6 +513,8 @@ MUST write `.oks/runs/{run_id}/result.json` before reporting to user.
 ```json
 {
   "status": "complete|partial",
+  "workflow_mode": "source_only",
+  "workflow_status": "incomplete",
   "source": "<source uri>",
   "providers_used": ["pdf-lite", "agent-runtime"],
   "capabilities_used": ["document.text.extract", "image.observe"],
@@ -537,6 +544,16 @@ MUST write `.oks/runs/{run_id}/result.json` before reporting to user.
 }
 ```
 
+Use `workflow_mode: collaboration` for the authorized end-to-end flow and include
+the actual `collaboration` Thread/message IDs. Start with `workflow_status: incomplete`;
+do not hand-write a successful workflow state. Once evidence, Candidates and authorized
+Mail handoffs exist, MUST run `oks ingest finalize <run_id> --review-owner <owner>`.
+Standalone intake MUST use `--source-only`. Check the exit code and returned errors.
+On failure, fix the missing facts or report the flow as incomplete. Finalization
+preserves extraction `status` (including `partial`, `failed` and `skipped`); a failed
+or skipped extraction cannot pass. It never promotes Candidates or records approval.
+On success, Candidates remain `awaiting_human_review`; grade B/C stays `source_only`.
+
 ### intake_grade fields
 
 - **intake_grade** (required): `A` | `B` | `C` — your Step 7 judgment
@@ -563,7 +580,10 @@ MUST write `.oks/runs/{run_id}/result.json` before reporting to user.
 
 ## Step 9: Report to User (Guided UX)
 
-MUST output the unified result card as the final user-facing message.
+MUST output the unified result card using the finalization result. If finalization
+fails, say “流程未完成” and name the missing handoff/evidence. If Candidates are
+pending, say “资料提取完成，等待人工审核” (or “资料部分提取，等待人工审核”
+for partial extraction); never imply Wiki entry or the whole workflow is complete.
 
 **All user-facing text MUST be in Chinese natural language.**
 **NEVER expose provider IDs, capability IDs, or schema names to the user.**
@@ -572,7 +592,7 @@ Translate everything into plain-language descriptions.
 ### Complete result:
 
 ```
-✅ 摄入完成
+✅ 资料提取完成，等待人工审核
 
 来源：{source_uri}
 
@@ -592,7 +612,7 @@ Translate everything into plain-language descriptions.
 ### Partial result (with guided recommendation):
 
 ```
-⚠️ 部分完成
+⚠️ 资料部分提取，等待人工审核
 
 来源：{source_uri}
 
@@ -634,11 +654,12 @@ Translate everything into plain-language descriptions.
 
 ### Card principles:
 
-- **摄入完成**: `complete` (all required evidence obtained), `partial` (some evidence missing, usable), `failed` (no usable evidence)
+- **提取状态**: `complete` (all required evidence obtained), `partial` (some evidence missing, usable), `failed` (no usable evidence). Report the separately checked workflow state; extraction completion alone is not workflow completion.
 - **已获得**: bullet list in plain Chinese — describe WHAT was obtained, not HOW (say "正文内容" not "web.extract via Firecrawl")
 - **缺失**: bullet list with impact explanation — always state what's affected
 - **推荐**: always provide a recommended next step, don't just list options
-- **下一步**: always points to `/promote` for human review
+- **下一步**: for grade A, point to `/promote` for human review; for grade B/C,
+  explain why only the source was retained and what additional evidence is needed
 - **Provider chain**: only shown internally (result.json), not in user-facing card
 
 ## Guided UX Principles
@@ -867,6 +888,7 @@ When using a Runtime Tool:
 - ALWAYS explain missing evidence in terms of user impact, not technical failure
 - ALWAYS recommend a default action when presenting choices to the user
 - MUST write result.json to `.oks/runs/{run_id}/result.json` before reporting to user
+- MUST run `oks ingest finalize <run_id>` (explicit `--source-only` for standalone intake), check its exit code, and report its checked workflow state before claiming a handoff is ready
 - MUST include `provider_selection` in result.json with chosen, candidates_considered, and rationale
 - MUST include `degradation_path` in provider_selection when fallback was activated
 - MUST output the unified result card as the final user-facing message (Step 9 format)

@@ -1,4 +1,4 @@
-"""Read-only validation of an Agent's ingestion handoff, never an executor."""
+"""Validate and finalize an Agent's persisted handoff, never execute ingestion."""
 from __future__ import annotations
 
 import json
@@ -36,18 +36,44 @@ def _bundle_paths(root: Path):
             yield _inside(root, (Path(parent) / "bundle.json").relative_to(root).as_posix(), "raw")
 
 
-def validate_workflow(run_id: str, *, collaboration: bool = False,
-                      review_owner: str = "human") -> dict:
-    """Verify persisted facts; do not send, acknowledge, approve or change state."""
+def _result_path(root: Path, run_id: str) -> Path:
     if not re.fullmatch(r"run-[a-zA-Z0-9_-]{1,100}", run_id):
         raise ValueError("Expected a run- identifier")
-    root = store.repo_root().resolve()
-    result_path = _inside(root, f".oks/runs/{run_id}/result.json", ".oks")
+    return _inside(root, f".oks/runs/{run_id}/result.json", ".oks")
+
+
+def _read_result(result_path: Path) -> dict:
     if result_path.stat().st_size > 2 * 1024 * 1024:
         raise ValueError("Run result exceeds the validation size limit")
     result = json.loads(result_path.read_text(encoding="utf-8"))
     if not isinstance(result, dict):
         raise ValueError("Run result must be an object")
+    return result
+
+
+def _requires_collaboration(result: dict) -> bool:
+    mode = result.get("workflow_mode")
+    if mode not in (None, "source_only", "collaboration"):
+        raise ValueError("workflow_mode must be source_only or collaboration")
+    collab = result.get("collaboration") or {}
+    if not isinstance(collab, dict):
+        raise ValueError("collaboration must be an object")
+    return (mode == "collaboration" or bool(collab.get("thread_id") or collab.get("messages"))
+            or collab.get("status") in ("recorded", "awaiting_authorization"))
+
+
+def validate_workflow(run_id: str, *, collaboration: bool = False,
+                      review_owner: str = "human") -> dict:
+    """Read facts; an already-declared collaboration cannot skip its handoffs."""
+    root = store.repo_root().resolve()
+    result = _read_result(_result_path(root, run_id))
+    return _validate_result(root, run_id, result, collaboration=collaboration,
+                            review_owner=review_owner)
+
+
+def _validate_result(root: Path, run_id: str, result: dict, *, collaboration: bool,
+                     review_owner: str) -> dict:
+    collaboration = _requires_collaboration(result) or collaboration
     errors, warnings = [], []
     status = result.get("status")
     if not isinstance(status, str):
@@ -162,3 +188,32 @@ def validate_workflow(run_id: str, *, collaboration: bool = False,
             "workflow_status": "incomplete" if errors else expected,
             "collaboration_checked": collaboration, "bundles": bundles,
             "candidate_paths": paths, "errors": errors, "warnings": warnings}
+
+
+def finalize_workflow(run_id: str, *, source_only: bool = False,
+                      review_owner: str = "human") -> dict:
+    """Persist checked workflow state, retaining extraction and human-review facts.
+
+    Defaults to the full collaborative handoff. Standalone ingestion must explicitly
+    opt out; it cannot downgrade an existing collaborative run. The per-run lock
+    serializes finalizers, not arbitrary external edits to evidence or result.json.
+    """
+    root = store.repo_root().resolve()
+    path = _result_path(root, run_id)
+    # Do not create a run or lock when there is no parseable result to finalize.
+    _read_result(path)
+    lock = _inside(root, f".oks/runs/{run_id}/.result.lock", ".oks")
+    with store._file_lock(lock):
+        result = _read_result(_result_path(root, run_id))
+        required = _requires_collaboration(result)
+        checked = _validate_result(root, run_id, result,
+                                   collaboration=not source_only, review_owner=review_owner)
+        if source_only and required:
+            checked["errors"].append("collaboration_downgrade_not_allowed")
+            checked.update(valid=False, workflow_status="incomplete")
+        result["workflow_mode"] = "collaboration" if required or not source_only else "source_only"
+        result["workflow_status"] = checked["workflow_status"]
+        result["workflow_validation"] = checked
+        store._atomic_write(_result_path(root, run_id),
+                            json.dumps(result, ensure_ascii=False, indent=2) + "\n")
+    return checked

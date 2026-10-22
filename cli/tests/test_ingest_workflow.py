@@ -9,7 +9,7 @@ from typer.testing import CliRunner
 
 from knowledge_studio import mail
 from knowledge_studio.cli import app
-from knowledge_studio.ingest_workflow import validate_workflow
+from knowledge_studio.ingest_workflow import finalize_workflow, validate_workflow
 
 
 @pytest.fixture
@@ -57,7 +57,7 @@ def test_complete_claim_does_not_substitute_for_missing_handoffs(workflow):
     root, result, save = workflow
     result["collaboration"] = {"status": "recorded", "thread_id": "absent"}
     save()
-    assert validate_workflow("run-example")["valid"]
+    assert not validate_workflow("run-example")["valid"]
     checked = validate_workflow("run-example", collaboration=True)
     assert not checked["valid"]
     assert "message_not_visible:review_request" in checked["errors"]
@@ -185,17 +185,13 @@ def test_isolated_skill_to_ingest_review_and_recall_lifecycle(tmp_path, monkeypa
     (root / "wiki").mkdir(parents=True)
     (root / "drafts").mkdir()
     monkeypatch.setenv("OKS_ROOT", str(root))
-    skill = tmp_path / "skill"
-    skill.mkdir()
-    (skill / "SKILL.md").write_text(
-        "---\nname: capture\ndescription: Source ingestion and extraction\n---\n\n"
-        "Prepare a source, commit evidence, propose a candidate, record authorized handoffs, "
-        "and validate. Await human review before promotion.\n", encoding="utf-8")
+    skill = Path(__file__).resolve().parents[2] / "assets/skills/ingest"
     imported = skills.import_skill(skill, category="knowledge/ingestion")
     store.promote_draft(imported["entry"]["slug"])
     hit = skills.search("知识提取")[0]
     loaded = skills.load(hit["skill_id"], version=hit["skill_version"])
     assert not loaded["executed"]
+    assert "oks ingest finalize" in json.dumps(loaded)
 
     source = tmp_path / "source.txt"
     source.write_text("Nebula memory records preserve task state outside a context window.\n", encoding="utf-8")
@@ -211,7 +207,9 @@ def test_isolated_skill_to_ingest_review_and_recall_lifecycle(tmp_path, monkeypa
         "read it back when needed. This fixture tests the review lifecycle.\n", encoding="utf-8")
     record_handoffs(root, result, run_id=prepared["run_id"])
     store._atomic_write(Path(prepared["workspace"]) / "result.json", json.dumps(result))
-    checked = validate_workflow(prepared["run_id"], collaboration=True)
+    finalized = CliRunner().invoke(app, ["ingest", "finalize", prepared["run_id"]])
+    assert finalized.exit_code == 0, finalized.output
+    checked = json.loads(finalized.output)
     assert checked["valid"], checked
     assert checked["workflow_status"] == "awaiting_human_review"
     assert not [p for p in store.list_wiki_pages() if p.get("area") == "computing"]
@@ -220,3 +218,131 @@ def test_isolated_skill_to_ingest_review_and_recall_lifecycle(tmp_path, monkeypa
     promoted = store.promote_draft("nebula-memory")
     found = recall("Nebula memory", knowledge_only=True, goal="none")["knowledge"]
     assert any(hit["slug"] == promoted and hit["human_reviewed_at"] for hit in found)
+
+
+def test_finalize_requires_real_handoffs_and_saves_incomplete(workflow):
+    root, result, _ = workflow
+    # Extraction claims complete, but no communication has taken place.
+    called = CliRunner().invoke(app, ["ingest", "finalize", "run-example"])
+    assert called.exit_code == 2, called.output
+    checked = json.loads(called.output)
+    assert checked["workflow_status"] == "incomplete"
+    assert "message_not_visible:review_request" in checked["errors"]
+    saved = json.loads((root / ".oks/runs/run-example/result.json").read_text("utf-8"))
+    assert saved["status"] == "complete"
+    assert saved["workflow_mode"] == "collaboration"
+    assert saved["workflow_validation"] == checked
+    assert saved["review_status"] == "pending"
+    assert not (root / "mail").exists()
+
+
+def test_finalize_real_handoff_is_idempotent_and_only_updates_run_state(workflow):
+    root, result, save = workflow
+    record_handoffs(root, result)
+    save()
+    before = {p: p.read_bytes() for bucket in ["raw", "drafts", "wiki", "mail"]
+              for p in (root / bucket).rglob("*") if p.is_file()}
+    first = finalize_workflow("run-example")
+    path = root / ".oks/runs/run-example/result.json"
+    first_bytes = path.read_bytes()
+    second = finalize_workflow("run-example")
+    assert first == second and first["valid"]
+    assert path.read_bytes() == first_bytes
+    saved = json.loads(first_bytes)
+    assert saved["workflow_status"] == "awaiting_human_review"
+    assert saved["status"] == "complete" and saved["review_status"] == "pending"
+    assert before == {p: p.read_bytes() for bucket in ["raw", "drafts", "wiki", "mail"]
+                      for p in (root / bucket).rglob("*") if p.is_file()}
+
+
+@pytest.mark.parametrize("status", ["complete", "partial", "failed", "skipped"])
+def test_standalone_finalization_preserves_extraction_state_without_mail(workflow, status):
+    root, result, save = workflow
+    result.update(status=status, intake_grade="B", candidate_path=None, review_status=None)
+    save()
+    called = CliRunner().invoke(app, ["ingest", "finalize", "run-example", "--source-only"])
+    assert called.exit_code == (0 if status in {"complete", "partial"} else 2), called.output
+    checked = json.loads(called.output)
+    saved = json.loads((root / ".oks/runs/run-example/result.json").read_text("utf-8"))
+    assert saved["status"] == checked["extraction_status"] == status
+    assert saved["workflow_status"] == ("source_only" if checked["valid"] else "incomplete")
+    assert not checked["collaboration_checked"]
+    assert not (root / "mail").exists()
+
+
+@pytest.mark.parametrize("declaration", ["mode", "recorded", "awaiting_authorization", "previous_attempt"])
+def test_collaborative_run_cannot_downgrade_to_skip_handoffs(workflow, declaration):
+    root, result, save = workflow
+    if declaration == "mode":
+        result["workflow_mode"] = "collaboration"
+    elif declaration == "previous_attempt":
+        finalize_workflow("run-example")
+    else:
+        result["collaboration"] = {"status": declaration}
+    if declaration != "previous_attempt":
+        save()
+    called = CliRunner().invoke(app, ["ingest", "finalize", "run-example", "--source-only"])
+    assert called.exit_code == 2, called.output
+    assert "collaboration_downgrade_not_allowed" in json.loads(called.output)["errors"]
+    saved = json.loads((root / ".oks/runs/run-example/result.json").read_text("utf-8"))
+    assert saved["workflow_mode"] == "collaboration"
+    assert saved["workflow_status"] == "incomplete"
+    assert not validate_workflow("run-example")["valid"]
+
+
+def test_finalize_rechecks_evidence_instead_of_trusting_old_validation(workflow):
+    root, result, save = workflow
+    record_handoffs(root, result)
+    save()
+    assert finalize_workflow("run-example")["valid"]
+    (root / result["candidate_path"]).unlink()
+    checked = finalize_workflow("run-example")
+    assert not checked["valid"]
+    assert "candidate_missing:drafts/takeaway.md" in checked["errors"]
+    assert checked["workflow_status"] == "incomplete"
+
+
+def test_finalize_custom_review_owner_is_not_replaced_by_default(workflow):
+    _, result, save = workflow
+    record_handoffs(workflow[0], result, recipient="owner")
+    save()
+    assert not finalize_workflow("run-example")["valid"]
+    assert finalize_workflow("run-example", review_owner="owner")["valid"]
+
+
+@pytest.mark.parametrize("relative", ["result.json", ".result.lock"])
+def test_finalize_rejects_linked_runtime_files_without_writing_target(workflow, tmp_path, relative):
+    root, _, _ = workflow
+    path = root / ".oks/runs/run-example" / relative
+    target = tmp_path / "external.json"
+    target.write_bytes(path.read_bytes() if path.is_file() else b"private")
+    path.unlink(missing_ok=True)
+    try:
+        path.symlink_to(target)
+    except OSError:
+        pytest.skip("Symlinks unavailable")
+    before = target.read_bytes()
+    called = CliRunner().invoke(app, ["ingest", "finalize", "run-example"])
+    assert called.exit_code == 2, called.output
+    assert json.loads(called.output)["workflow_status"] == "incomplete"
+    assert target.read_bytes() == before
+
+
+@pytest.mark.parametrize("value", [[], "not-a-mode"])
+def test_finalize_malformed_mode_is_a_structured_error_without_result_rewrite(workflow, value):
+    root, result, save = workflow
+    result["workflow_mode"] = value
+    save()
+    path = root / ".oks/runs/run-example/result.json"
+    before = path.read_bytes()
+    called = CliRunner().invoke(app, ["ingest", "finalize", "run-example"])
+    assert called.exit_code == 2, called.output
+    assert json.loads(called.output)["valid"] is False
+    assert path.read_bytes() == before
+
+
+def test_finalize_missing_run_does_not_create_workspace(workflow):
+    root, _, _ = workflow
+    called = CliRunner().invoke(app, ["ingest", "finalize", "run-missing"])
+    assert called.exit_code == 2
+    assert not (root / ".oks/runs/run-missing").exists()

@@ -460,7 +460,10 @@ def _next_step(text_ready: bool, run_id: str) -> str:
         return (
             "Protocol skeleton is complete.  Evidence is pre-filled for this text source. "
             f"Run: oks raw-commit .oks/runs/{run_id}/manifest/ "
-            "Then generate Candidate and proceed to /promote."
+            "Then judge intake grade, generate any Candidate and write result.json. "
+            f"Finalize the authorized collaborative workflow: oks ingest finalize {run_id}. "
+            "For standalone intake without Mail use --source-only. "
+            "Wait for human review before /promote."
         )
     return (
         "Protocol skeleton created. `notes.planned_capabilities` lists the "
@@ -468,7 +471,10 @@ def _next_step(text_ready: bool, run_id: str) -> str:
         "empty on purpose — author one real entry per provider you actually "
         "run, and persist each provider's raw output to "
         "work/<provider>/output.<ext>.  "
-        f"Then run: oks raw-commit .oks/runs/{run_id}/manifest/"
+        f"Then run: oks raw-commit .oks/runs/{run_id}/manifest/. "
+        "Judge intake grade, generate any Candidate and write result.json; "
+        f"run oks ingest finalize {run_id} (or --source-only for standalone intake). "
+        "Wait for human review before /promote."
     )
 
 

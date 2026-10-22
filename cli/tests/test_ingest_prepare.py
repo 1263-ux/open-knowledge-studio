@@ -5,6 +5,16 @@ from pathlib import Path
 from knowledge_studio.ingest_prepare import prepare_ingest
 
 
+def test_prepare_routes_both_source_modes_to_checked_finalization():
+    from knowledge_studio.ingest_prepare import _next_step
+
+    for text_ready in [True, False]:
+        step = _next_step(text_ready, "run-example")
+        assert "oks ingest finalize run-example" in step
+        assert "--source-only" in step
+        assert "human review" in step
+
+
 def _source_envelope(result: dict) -> dict:
     path = Path(result["manifest_dir"]) / "source-envelope.json"
     return json.loads(path.read_text(encoding="utf-8"))
