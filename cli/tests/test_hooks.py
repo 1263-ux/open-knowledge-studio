@@ -43,7 +43,7 @@ def _codex_commands(hooks, event):
 
 
 def _bash_command():
-    """Resolve a working bash on Windows.
+    r"""Resolve a working bash on Windows.
 
     CreateProcess searches System32 before PATH, so a bare ``"bash"`` fallback
     resolves to the WSL stub (``C:\Windows\System32\bash.exe``) when Git
