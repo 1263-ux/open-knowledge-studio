@@ -224,6 +224,60 @@ def test_promotion_keeps_legacy_score_defaults(monkeypatch, tmp_path):
     assert page["confidence"] == 0.8
 
 
+def test_promotion_preserves_candidate_summary_and_evidence(monkeypatch, tmp_path):
+    monkeypatch.setenv("OKS_ROOT", str(tmp_path))
+    fields = {
+        "summary": "Persist task state outside the context window.",
+        "source_url": "https://example.org/memory",
+        "source_bundle_id": "bundle:memory",
+        "source_raw_bundle": "raw/2026/10/22/memory",
+        "agent_observation": ".oks/runs/run-memory/agent-observation.json",
+        "claim_ids": ["memory-external"],
+        "evidence_refs": [{"artifact_id": "art-memory", "locator": {"kind": "document"}}],
+    }
+    _write_draft(tmp_path, "memory", "Read durable notes when resuming a task.",
+                 **fields, wiki_promoted=False, workflow_status="awaiting_human_review")
+
+    page = store.get_wiki_page(store.promote_draft("memory"))
+
+    assert {key: page.get(key) for key in fields} == fields
+    assert "wiki_promoted" not in page
+    assert "workflow_status" not in page
+    assert page["human_reviewed_at"]
+
+
+def test_dedup_promotion_keeps_conflicting_source_candidate(monkeypatch, tmp_path):
+    monkeypatch.setenv("OKS_ROOT", str(tmp_path))
+    body = "The same conclusion may come from different sources."
+    _write_draft(tmp_path, "first", body, source_bundle_id="bundle:first")
+    page = store.get_wiki_page(store.promote_draft("first"))
+    existing = Path(page["file_path"])
+    before = existing.read_bytes()
+    _write_draft(tmp_path, "second", body, source_bundle_id="bundle:second")
+
+    with pytest.raises(ValueError, match="source_bundle_id"):
+        store.promote_draft("second")
+
+    assert existing.read_bytes() == before
+    assert (tmp_path / "drafts/second.md").is_file()
+
+
+def test_dedup_promotion_retains_evidence_and_reviewed_summary(monkeypatch, tmp_path):
+    monkeypatch.setenv("OKS_ROOT", str(tmp_path))
+    body = "A body-identical draft with an explicit reviewed summary."
+    _write_draft(tmp_path, "first", body, source_bundle_id="bundle:first", summary="Old summary")
+    first = store.promote_draft("first")
+    refs = [{"artifact_id": "art-first"}]
+    _write_draft(tmp_path, "second", body, source_bundle_id="bundle:first",
+                 summary="Reviewed summary", evidence_refs=refs)
+
+    assert store.promote_draft("second") == first
+    page = store.get_wiki_page(first)
+    assert page["summary"] == "Reviewed summary"
+    assert page["evidence_refs"] == refs
+    assert page["source_bundle_id"] == "bundle:first"
+
+
 @pytest.mark.parametrize("field", ["importance", "confidence"])
 @pytest.mark.parametrize("value", [None, -0.1, 1.1, "0.4", True, float("nan"), float("inf")])
 def test_promotion_rejects_invalid_scores_without_side_effects(monkeypatch, tmp_path, field, value):

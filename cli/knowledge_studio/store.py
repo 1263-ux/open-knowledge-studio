@@ -578,6 +578,31 @@ def _merge_worker_records(file_path: Path, incoming: list[dict]) -> None:
     _locked_atomic_update(file_path, update)
 
 
+_CANDIDATE_EVIDENCE_FIELDS = (
+    "source_url", "source_bundle_id", "source_raw_bundle", "source_article_date",
+    "source_capture_id", "agent_observation", "claim_ids", "evidence_refs",
+)
+
+
+def _merge_candidate_metadata(current: dict, incoming: dict) -> dict:
+    merged = {}
+    for key in ("summary", *_CANDIDATE_EVIDENCE_FIELDS):
+        if key not in incoming:
+            continue
+        value = incoming[key]
+        if key == "summary":
+            if not isinstance(value, str):
+                raise ValueError("Candidate summary must be a string; candidate retained")
+        elif key in {"claim_ids", "evidence_refs"}:
+            if not isinstance(value, list) or not isinstance(current.get(key, []), list):
+                raise ValueError(f"Invalid {key}; candidate retained")
+            value = list(current.get(key, [])) + [item for item in value if item not in current.get(key, [])]
+        elif current.get(key) not in (None, "", value):
+            raise ValueError(f"Matching content has conflicting {key}; review its sources explicitly; candidate retained")
+        merged[key] = value
+    return merged
+
+
 def write_wiki_page(
     title: str,
     content: str,
@@ -601,7 +626,9 @@ def write_wiki_page(
     subdirectory: str | None = None,
     skill_metadata: dict | None = None,
     worker_records: list[dict] | None = None,
+    candidate_metadata: dict | None = None,
 ) -> Path:
+    candidate_metadata = _merge_candidate_metadata({}, candidate_metadata or {})
     for field, value in (("importance", importance), ("confidence", confidence)):
         if value is not None:
             _validate_score(field, value)
@@ -642,6 +669,15 @@ def write_wiki_page(
                 if (is_source_material(previous) or previous.get("area") != area
                         or TYPE_DIRS.get(previous.get("type")) != wiki_type):
                     raise ValueError("Matching content has a different classification or is source material; candidate retained. Review the existing page explicitly.")
+            # Reject conflicting provenance before changing review/score state.
+            # Merge only explicit candidate fields, never arbitrary draft state.
+            if candidate_metadata:
+                def merge_metadata(text):
+                    parts = text.split("---", 2)
+                    meta = yaml.safe_load(parts[1]) or {}
+                    meta.update(_merge_candidate_metadata(meta, candidate_metadata))
+                    return "---\n" + yaml.safe_dump(meta, allow_unicode=True, sort_keys=False) + "---\n" + parts[2]
+                _locked_atomic_update(existing, merge_metadata)
             # Dedup must not swallow what the caller newly established. A human
             # approving a draft whose body matches an existing page used to lose
             # the review, the active status and the declared A4 relationship —
@@ -720,6 +756,7 @@ def write_wiki_page(
     }
     if options:
         frontmatter["options"] = options
+    frontmatter.update(candidate_metadata)
     if human_reviewed:
         frontmatter["human_reviewed_at"] = now.isoformat()
         if enforce_classification:
@@ -981,6 +1018,7 @@ def _promote_draft(
         subdirectory=meta.get("skill_category") if meta.get("artifact_kind") == "skill" else None,
         skill_metadata=meta if meta.get("artifact_kind") == "skill" else None,
         worker_records=meta.get("worker_records"),
+        candidate_metadata={key: meta[key] for key in ("summary", *_CANDIDATE_EVIDENCE_FIELDS) if key in meta},
     )
 
     draft_path.unlink()

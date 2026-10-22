@@ -203,6 +203,8 @@ def test_isolated_skill_to_ingest_review_and_recall_lifecycle(tmp_path, monkeypa
     (root / result["candidate_path"]).write_text("---\n" + yaml.safe_dump({
         "title": "Nebula memory", "draft_type": "concept", "draft_area": "computing",
         "status": "pending", "source_bundle_id": committed["bundle_id"],
+        "summary": "Durable notes preserve task state.",
+        "source_raw_bundle": str(Path(committed["bundle_path"]).relative_to(root)).replace("\\", "/"),
     }) + "---\n\nNebula memory preserves durable task state outside a context window; "
         "read it back when needed. This fixture tests the review lifecycle.\n", encoding="utf-8")
     record_handoffs(root, result, run_id=prepared["run_id"])
@@ -216,6 +218,9 @@ def test_isolated_skill_to_ingest_review_and_recall_lifecycle(tmp_path, monkeypa
 
     # Simulate the explicit human review boundary, never do this to user data.
     promoted = store.promote_draft("nebula-memory")
+    page = store.get_wiki_page(promoted)
+    assert page["source_bundle_id"] == committed["bundle_id"]
+    assert page["summary"] == "Durable notes preserve task state."
     found = recall("Nebula memory", knowledge_only=True, goal="none")["knowledge"]
     assert any(hit["slug"] == promoted and hit["human_reviewed_at"] for hit in found)
 
