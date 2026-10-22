@@ -3159,9 +3159,26 @@ def mail_serve(
     path: Optional[str] = typer.Option(None, "--path", help="Knowledge base root"),
     port: int = typer.Option(3182, "--port", min=1, max=65535),
     mode: str = typer.Option("reader", "--mode", help="reader (read-only) or collaboration (legacy write API)"),
+    background: bool = typer.Option(False, "--background", help="Run independently of this terminal or host session"),
+    status: bool = typer.Option(False, "--status", help="Probe the managed server without writing files"),
+    stop: bool = typer.Option(False, "--stop", help="Stop only this instance's managed background server"),
 ) -> None:
     """Serve the real local Mail workspace for a human browser."""
     from knowledge_studio.mail_web import create_server
+
+    if sum((background, status, stop)) > 1:
+        raise typer.BadParameter("Choose only one of --background, --status or --stop")
+    if background or status or stop:
+        from knowledge_studio.mail_server import start_background, server_status, stop_background
+
+        operation = start_background if background else (server_status if status else stop_background)
+        try:
+            result = operation(_instance_root(path), port, **({"mode": mode} if background else {}))
+        except (ValueError, OSError, RuntimeError) as exc:
+            _emit_json({"error": str(exc)})
+            raise typer.Exit(2)
+        _emit_json(result)
+        return
 
     try:
         server = create_server(_instance_root(path), port, mode=mode)

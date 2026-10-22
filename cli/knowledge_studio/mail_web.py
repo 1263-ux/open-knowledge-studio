@@ -835,6 +835,8 @@ class Handler(BaseHTTPRequestHandler):
                 "knowledge_base": str(self.server.kb_root),
                 "knowledge_base_name": self.server.kb_root.name,
                 "wake_supported": False,
+                "server_id": getattr(self.server, "background_id", ""),
+                "server_pid": getattr(self.server, "background_pid", None),
             })
             return
         if route == "/api/mail/overview":

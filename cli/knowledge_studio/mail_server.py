@@ -1,0 +1,204 @@
+"""Opt-in managed Mail server detached from a terminal or Windows host Job."""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+from pathlib import Path
+import re
+import socket
+import subprocess
+import sys
+import time
+from urllib.error import URLError
+from urllib.request import ProxyHandler, build_opener
+import uuid
+
+from knowledge_studio import store
+
+
+def _paths(root: Path, port: int):
+    root = root.expanduser().resolve()
+    if not root.is_dir() or not 1 <= port <= 65535:
+        raise ValueError("Choose an existing instance and a port between 1 and 65535")
+    directory = root / ".oks/mail-web"
+    files = {key: directory / f"{port}.{key}" for key in ("json", "stop", "log", "lock")}
+    for path in [root / ".oks", directory, *files.values()]:
+        if path.is_symlink() or path.is_junction():
+            raise ValueError("Mail runtime path cannot be a symlink or junction")
+    return root, files
+
+
+def _record(root, port, files):
+    try:
+        if files["json"].stat().st_size > 4096:
+            raise ValueError("Mail runtime record exceeds size limit")
+        value = json.loads(files["json"].read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return None
+    if (not isinstance(value, dict) or value.get("root") != str(root) or value.get("port") != port
+            or not re.fullmatch(r"[0-9a-f]{32}", str(value.get("server_id", "")))
+            or value.get("mode") not in {"reader", "collaboration"}):
+        raise ValueError("Invalid or mismatched Mail runtime record")
+    return value
+
+
+def _probe(port):
+    try:
+        # Always connect directly to loopback, regardless of proxy environment.
+        with build_opener(ProxyHandler({})).open(
+                f"http://127.0.0.1:{port}/api/mail/capabilities", timeout=0.5) as response:
+            raw = response.read(65537)
+        value = json.loads(raw) if len(raw) <= 65536 else None
+        return value if isinstance(value, dict) else None
+    except (OSError, ValueError, URLError):
+        return None
+
+
+def _occupied(port):
+    try:
+        with socket.create_connection(("127.0.0.1", port), timeout=0.2):
+            return True
+    except OSError:
+        return False
+
+
+def server_status(root: Path, port: int = 3182) -> dict:
+    """Probe actual HTTP ownership without creating files or trusting a PID."""
+    root, files = _paths(root, port)
+    record, caps = _record(root, port, files), _probe(port)
+    managed = bool(record and caps and caps.get("server_id") == record["server_id"]
+                   and os.path.normcase(str(caps.get("knowledge_base"))) == os.path.normcase(str(root))
+                   and caps.get("mode") == record["mode"])
+    return {"status": "running" if managed else ("unmanaged" if _occupied(port) else "stopped"),
+            "url": f"http://127.0.0.1:{port}/", "root": str(root), "port": port,
+            "mode": record["mode"] if managed else None,
+            "pid": caps.get("server_pid") if managed else None,
+            "server_id": record["server_id"] if managed else None}
+
+
+def _write(files, record):
+    store._atomic_write(files["json"], json.dumps(record, ensure_ascii=True) + "\n")
+
+
+def _remove_owned(root, port, files, server_id):
+    current = _record(root, port, files)
+    if current and current["server_id"] == server_id:
+        files["json"].unlink(missing_ok=True)
+        files["stop"].unlink(missing_ok=True)
+
+
+def _spawn(root, port, mode, server_id, files):
+    options = {"creationflags": subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
+               | subprocess.CREATE_BREAKAWAY_FROM_JOB} if os.name == "nt" else {"start_new_session": True}
+    package_parent = Path(__file__).resolve().parent.parent
+    env = dict(os.environ, PYTHONPATH=str(package_parent), OKS_ROOT=str(root), PYTHONDONTWRITEBYTECODE="1")
+    command = [sys.executable, "-B", "-X", "utf8", "-m", "knowledge_studio.mail_server",
+               "--root", str(root), "--port", str(port), "--mode", mode, "--server-id", server_id]
+    # No inherited terminal or pipes. A restricted Windows Job must fail clearly,
+    # never silently fall back to a child that will die with its launching host.
+    with files["log"].open("ab") as log:
+        return subprocess.Popen(command, cwd=package_parent, env=env, stdin=subprocess.DEVNULL,
+                                stdout=log, stderr=log, close_fds=True, **options)
+
+
+def start_background(root: Path, port: int = 3182, *, mode: str = "reader", timeout: float = 10) -> dict:
+    from knowledge_studio.mail_setup import validate_root
+
+    if mode not in {"reader", "collaboration"}:
+        raise ValueError("Choose reader or collaboration mode")
+    root = validate_root(root)
+    root, files = _paths(root, port)
+    files["json"].parent.mkdir(parents=True, exist_ok=True)
+    with store._file_lock(files["lock"]):
+        state = server_status(root, port)
+        if state["status"] == "running":
+            if state["mode"] != mode:
+                raise ValueError("Managed server mode differs; stop it before restarting")
+            return {**state, "reused": True}
+        if state["status"] == "unmanaged":
+            raise ValueError("Port occupied by an unmanaged server; choose another port")
+        server_id = uuid.uuid4().hex
+        record = {"root": str(root), "port": port, "mode": mode, "server_id": server_id, "pid": None}
+        files["stop"].unlink(missing_ok=True)
+        _write(files, record)
+        try:
+            child = _spawn(root, port, mode, server_id, files)
+        except OSError:
+            _remove_owned(root, port, files, server_id)
+            raise
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            state = server_status(root, port)
+            if state["status"] == "running" and state["server_id"] == server_id:
+                record["pid"] = state["pid"]
+                _write(files, record)
+                return {**state, "reused": False}
+            if child.poll() is not None:
+                break
+            time.sleep(0.1)
+        store._atomic_write(files["stop"], server_id)
+        raise RuntimeError(f"Background Mail did not become ready; inspect {files['log']}")
+
+
+def stop_background(root: Path, port: int = 3182, *, timeout: float = 10) -> dict:
+    root, files = _paths(root, port)
+    if not files["json"].exists():
+        return server_status(root, port)
+    with store._file_lock(files["lock"]):
+        state = server_status(root, port)
+        if state["status"] != "running":
+            if state["status"] == "stopped":
+                record = _record(root, port, files)
+                if record:
+                    _remove_owned(root, port, files, record["server_id"])
+            return state
+        store._atomic_write(files["stop"], state["server_id"])
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            if not _probe(port):
+                _remove_owned(root, port, files, state["server_id"])
+                return {**state, "status": "stopped", "pid": None}
+            time.sleep(0.1)
+        raise RuntimeError("Managed Mail server has not stopped; no PID was killed")
+
+
+def serve_worker(root: Path, port: int, mode: str, server_id: str):
+    from knowledge_studio.mail_web import create_server
+
+    root, files = _paths(root, port)
+    record = _record(root, port, files)
+    if not record or record["server_id"] != server_id:
+        raise ValueError("Background launch record is no longer current")
+    server = None
+    try:
+        server = create_server(root, port, mode=mode)
+        server.background_id = server_id
+        server.background_pid = os.getpid()
+        server.timeout = 0.2
+        while True:
+            current = _record(root, port, files)
+            if not current or current["server_id"] != server_id:
+                break
+            if files["stop"].exists() and files["stop"].read_text(encoding="utf-8") == server_id:
+                break
+            server.handle_request()
+    finally:
+        if server:
+            server.server_close()
+        # Only the controlling CLI writes/removes the shared port record while
+        # holding its lock. A late old worker cannot overwrite a new launch.
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--root", type=Path, required=True)
+    parser.add_argument("--port", type=int, required=True)
+    parser.add_argument("--mode", choices=["reader", "collaboration"], required=True)
+    parser.add_argument("--server-id", required=True)
+    args = parser.parse_args()
+    serve_worker(args.root, args.port, args.mode, args.server_id)
+
+
+if __name__ == "__main__":
+    main()
