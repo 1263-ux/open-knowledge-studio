@@ -36,3 +36,4 @@
 .force-edge.tag-association{stroke:#879889;stroke-dasharray:4 5;opacity:.5}.force-edge.tag-association.active{opacity:.9}.force-edge.tag-association.dim{opacity:.06}
 .force-label-leader{stroke:var(--node-color);stroke-width:1;opacity:.6;vector-effect:non-scaling-stroke;pointer-events:none}.force-node.active .force-label-leader,.force-node:focus-visible .force-label-leader{stroke:var(--blue);opacity:1}
 .graph-key.tag-link,.graph-key.reference-link{width:19px;height:0;border-radius:0;background:none;border-top:1px solid #89978b}.graph-key.tag-link{border-top-style:dashed}
+.force-edge{pointer-events:none}.force-edge-hit{stroke:transparent;stroke-width:16;vector-effect:non-scaling-stroke;pointer-events:stroke;cursor:pointer}.force-relation:focus-visible{outline:none}.force-relation:focus-visible .force-edge{stroke:var(--blue);stroke-width:3;opacity:1}.graph-legend{flex-wrap:wrap;max-width:calc(100% - 40px)}

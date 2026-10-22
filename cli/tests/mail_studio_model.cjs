@@ -109,4 +109,9 @@ assert.equal(vm.resolveKnowledgeRef(historical,[promoted,existingDraft]),existin
 assert.equal(vm.knowledgeRefs([historical,current],[promoted,existingDraft]).length,2);
 assert.equal(vm.resolveKnowledgeRef({path:'drafts/../outside.md'},[{...promoted,source_candidates:['drafts/../outside.md']}]),null);
 assert.equal(vm.resolveKnowledgeRef({path:'drafts/a\\old.md'},[{...promoted,source_candidates:['drafts/a\\old.md']}]),null);
+const enrichment={a:'wiki/a.md',b:'wiki/b.md',type:'enriches',type_label:'补充',sources:['知识条目自己声明的关系'],declared_by:['wiki/b.md'],claims:[{from:'wiki/b.md',to:'wiki/a.md',source:'frontmatter relates_to + relationship',raw_type:'enriches'}]};
+const evolved=vm.knowledge({domains:[{clusters:[{points}]}],explicit_edges:[enrichment]});
+assert.equal(evolved.links[0].type_label,'补充');assert.deepEqual(evolved.links[0].claims,enrichment.claims);
+assert.equal(selectTagGraph(evolved.items,evolved.links,'Java',true).links[0].claims[0].from,'wiki/b.md');
+assert.equal(createForceLayout(evolved.items,evolved.links).edges[0].claims[0].to,'wiki/a.md');
 console.log('Historical knowledge references reconcile without rewriting communication facts');

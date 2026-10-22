@@ -102,6 +102,57 @@ def test_declared_relations_are_sourced_and_resolved(kb):
     assert edge["target_title"] == "目标知识"
 
 
+@pytest.mark.parametrize('kind,label', [('enriches', '补充'), ('confirms', '确认'),
+                                       ('challenges', '质疑'), ('supersedes', '更新 / 替代')])
+def test_evolution_relationships_reach_graph_with_direction_and_provenance(kb, kind, label):
+    write(kb, 'wiki/old.md', 'title: Old\narea: computing\n')
+    write(kb, 'wiki/new.md', f'title: New\narea: computing\nhuman_reviewed_at: 2026-10-22\n'
+          f'relates_to: old\nrelationship: {kind}\n')
+    before = {p: p.read_bytes() for p in kb.rglob('*.md')}
+    data = mail_knowledge.knowledge_map(kb)
+    edge, = data['explicit_edges']
+    assert edge['type'] == kind and edge['type_label'] == label
+    assert {edge['a'], edge['b']} == {'wiki/new.md', 'wiki/old.md'}
+    claim, = edge['claims']
+    assert (claim['from'], claim['to']) == ('wiki/new.md', 'wiki/old.md')
+    assert claim['source'] == 'frontmatter relates_to + relationship'
+    assert all(p.read_bytes() == body for p, body in before.items())
+
+
+def test_matching_relation_forms_keep_both_sources_on_one_edge(kb):
+    write(kb, 'wiki/old.md', 'title: Old\narea: computing\n')
+    write(kb, 'wiki/new.md', 'title: New\narea: computing\nrelates_to: old\nrelationship: enriches\n'
+          'relations:\n  - type: enriches\n    target: wiki/old.md\n    note: Extra context\n')
+    edge, = mail_knowledge.knowledge_map(kb)['explicit_edges']
+    assert {claim['source'] for claim in edge['claims']} == {
+        'frontmatter relations', 'frontmatter relates_to + relationship'}
+    assert any(claim['note'] == 'Extra context' for claim in edge['claims'])
+
+
+@pytest.mark.parametrize('target,reason', [('same', 'ambiguous'), ('Same title', 'ambiguous'),
+                                         ('wiki/missing/same.md', 'missing'), ('absent', 'missing')])
+def test_relation_targets_do_not_guess_between_names_or_missing_paths(kb, target, reason):
+    write(kb, 'wiki/one/same.md', 'title: Same title\narea: computing\n')
+    write(kb, 'wiki/two/same.md', 'title: Same title\narea: computing\n')
+    write(kb, 'wiki/source.md', f'title: Source\narea: computing\nrelates_to: {target}\nrelationship: enriches\n')
+    data = mail_knowledge.knowledge_map(kb)
+    relation, = point(data, 'wiki/source.md')['relations']
+    assert relation['resolved'] is False and relation['resolution'] == reason
+    assert data['explicit_edges'] == []
+    write(kb, 'wiki/source.md', 'title: Source\narea: computing\nrelates_to: wiki/two/same.md\nrelationship: enriches\n')
+    edge, = mail_knowledge.knowledge_map(kb)['explicit_edges']
+    assert edge['claims'][0]['to'] == 'wiki/two/same.md'
+
+
+def test_relation_name_conflict_between_title_and_slug_is_ambiguous(kb):
+    write(kb, 'wiki/a.md', 'title: b\narea: computing\n')
+    write(kb, 'wiki/b.md', 'title: B page\narea: computing\n')
+    write(kb, 'wiki/source.md', 'title: Source\narea: computing\nrelations: "supports: b"\n')
+    data = mail_knowledge.knowledge_map(kb)
+    assert data['explicit_edges'] == []
+    assert point(data, 'wiki/source.md')['relations'][0]['resolution'] == 'ambiguous'
+
+
 def test_unknown_relation_type_and_dangling_target_are_flagged_not_remapped(kb):
     write(
         kb,

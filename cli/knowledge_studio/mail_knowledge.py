@@ -8,9 +8,8 @@ The map answers one question at three zoom levels:
 
 Everything is derived from real files. Nothing is invented:
 
-* A relation edge exists only when the entry declares it in ``relations``, or
-  when two entries share a tag. Every edge carries ``source`` so the UI can show
-  where it came from.
+* A relation edge comes from ``relations``, ``relates_to`` + ``relationship``,
+  or a shared tag. Every edge carries provenance so the UI can show its source.
 * Concept / Strategy / Anti-Strategy are **governance attributes** of an entry,
   never a taxonomy of the Wiki. Grouping is always by domain.
 * Skill packaging state is derived from frontmatter and reported as such, with
@@ -32,7 +31,7 @@ from knowledge_studio.knowledge_policy import is_source_material, DOMAIN_LABELS 
 
 SCHEMA = "mail.knowledge-map.v1"
 
-#: Relation vocabulary allowed in phase 1 (design 03). Unknown declarations are
+#: Declared relation vocabulary, including A4 knowledge evolution. Unknown declarations are
 #: preserved verbatim and flagged instead of being silently remapped.
 #: ``color_key`` drives the legend/palette in the panel; it is stable per kind.
 RELATION_TYPES = {
@@ -42,6 +41,9 @@ RELATION_TYPES = {
     "contrast": "对比 / 冲突",
     "applies_to": "应用于",
     "supersedes": "更新 / 替代",
+    "enriches": "补充",
+    "confirms": "确认",
+    "challenges": "质疑",
 }
 
 #: Human labels for the knowledge domains seen in real knowledge bases. The
@@ -266,9 +268,13 @@ def _relations(meta: dict) -> list[dict]:
         except (ValueError, TypeError):
             raw = [item.strip() for item in re.split(r"[,\n]", raw) if item.strip()]
     if not isinstance(raw, (list, tuple)):
-        return []
+        raw = []
+    declarations = [(item, "frontmatter relations") for item in raw]
+    if meta.get("relates_to") and meta.get("relationship"):
+        declarations.append(({"target": meta["relates_to"], "type": meta["relationship"]},
+                             "frontmatter relates_to + relationship"))
     relations = []
-    for item in raw:
+    for item, source in declarations:
         if isinstance(item, dict):
             kind = str(item.get("type") or item.get("relation") or "related").strip().lower()
             target = str(item.get("target") or item.get("to") or item.get("path") or "").strip()
@@ -288,7 +294,7 @@ def _relations(meta: dict) -> list[dict]:
             "raw_type": kind,
             "target": target,
             "note": note,
-            "source": "frontmatter relations",
+            "source": source,
             "source_label": "知识条目自己声明的关系",
             "resolved": False,
         })
@@ -352,6 +358,7 @@ def _flat_edges(kept_ids: set[str], declared: list[tuple[str, dict]]) -> list[di
                 "color_key": relation["color_key"],
                 "sources": [],
                 "declared_by": [],
+                "claims": [],
             }
             merged[key] = edge
             order.append(key)
@@ -360,6 +367,11 @@ def _flat_edges(kept_ids: set[str], declared: list[tuple[str, dict]]) -> list[di
             edge["sources"].append(label)
         if source_id not in edge["declared_by"]:
             edge["declared_by"].append(source_id)
+        if relation.get("source", "").startswith("frontmatter "):
+            claim = {"from": source_id, "to": target_id,
+                     **{key: relation.get(key, "") for key in ("source", "raw_type", "note")}}
+            if claim not in edge["claims"]:
+                edge["claims"].append(claim)
     return [merged[key] for key in order]
 
 
@@ -529,21 +541,23 @@ def knowledge_map(root: Path, limit: int = 400, *, worker_snapshot: dict | None 
         item["source_candidates"].sort()
 
     by_id = {point["id"]: point for point in points}
-    by_stem = {}
-    by_title = {}
+    by_name: dict[str, set[str]] = {}
     for point in points:
-        by_stem.setdefault(Path(point["id"]).stem.lower(), point)
-        by_title.setdefault(point["title"].lower(), point)
+        for name in (Path(point["id"]).stem, point["title"]):
+            by_name.setdefault(name.casefold(), set()).add(point["id"])
 
     def resolve(target: str):
         raw = str(target or "").strip()
         if not raw:
-            return None
+            return None, "missing"
         if raw in by_id:
-            return by_id[raw]
-        if raw.lower() in by_title:
-            return by_title[raw.lower()]
-        return by_stem.get(Path(raw).stem.lower())
+            return by_id[raw], "resolved"
+        if "/" in raw or "\\" in raw:
+            return None, "missing"
+        matches = by_name.get(raw.casefold(), set()) | by_name.get(raw.removesuffix(".md").casefold(), set())
+        if len(matches) == 1:
+            return by_id[next(iter(matches))], "resolved"
+        return None, "ambiguous" if matches else "missing"
 
     # Tag index drives derived "shared tag" edges.  The domain tag is skipped:
     # grouping already expresses it, and letting it emit edges would connect
@@ -567,8 +581,9 @@ def knowledge_map(root: Path, limit: int = 400, *, worker_snapshot: dict | None 
         edges = []
         seen = set()
         for relation in point["relations"]:
-            match = resolve(relation["target"])
+            match, resolution = resolve(relation["target"])
             relation = dict(relation)
+            relation["resolution"] = resolution
             relation["resolved"] = match is not None
             if match:
                 relation["target_id"] = match["id"]
@@ -578,7 +593,8 @@ def knowledge_map(root: Path, limit: int = 400, *, worker_snapshot: dict | None 
                 relation["target_id"] = ""
                 relation["target_title"] = relation["target"]
                 relation["target_kind"] = "unresolved"
-            key = (relation["type"], relation["target_id"] or relation["target"])
+            key = (relation["type"], relation["target_id"] or relation["target"],
+                   relation["source"], relation["raw_type"], relation["note"])
             if key in seen:
                 continue
             seen.add(key)
@@ -755,7 +771,7 @@ def knowledge_map(root: Path, limit: int = 400, *, worker_snapshot: dict | None 
         "edges": relation_edges,
         "explicit_edges": _flat_edges(knowledge_ids, [
             (source, relation) for source, relation in declared
-            if relation.get("source") == "frontmatter relations"
+            if relation.get("source", "").startswith("frontmatter ")
         ]),
         "shared_tag_edges": _flat_edges(knowledge_ids, [
             (source, relation) for source, relation in declared
