@@ -225,6 +225,44 @@ def test_overview_rejects_bad_queries(kb):
             assert error.value.code == 400
 
 
+def test_promoted_candidate_history_opens_reviewed_wiki_without_writes(kb, monkeypatch):
+    from knowledge_studio import store
+    monkeypatch.setenv("OKS_ROOT", str(kb))
+    draft = kb / "drafts/memory.md"
+    draft.write_text("---\ntitle: Durable memory\ndraft_type: concept\ndraft_area: computing\nsource_bundle_id: bundle:memory\n---\nRead notes when resuming.", encoding="utf-8")
+    slug = store.promote_draft("memory")
+    before = filesystem_snapshot(kb)
+    with serving(kb) as (base, _):
+        item = get_json(base, "/api/mail/memory/item?path=drafts/memory.md")
+        assert item["path"].startswith("wiki/")
+        assert slug in item["path"]
+        assert item["metadata"]["source_bundle_id"] == "bundle:memory"
+        with urlopen(base + "/wiki-page?path=drafts/memory.md", timeout=5) as response:
+            assert "Read notes when resuming" in response.read().decode()
+    assert filesystem_snapshot(kb) == before
+
+
+@pytest.mark.parametrize("status,reviewed", [("provisional", True), ("active", False)])
+def test_missing_candidate_cannot_resolve_to_unreviewed_page(kb, status, reviewed):
+    (kb / "wiki/memory.md").write_text(
+        f"---\ntitle: Memory\nstatus: {status}\nsource_candidates: [drafts/memory.md]\nhuman_reviewed_at: {'2026-10-22' if reviewed else 'null'}\n---\nBody", encoding="utf-8")
+    with serving(kb) as (base, _):
+        with pytest.raises(HTTPError) as error:
+            get_json(base, "/api/mail/memory/item?path=drafts/memory.md")
+        assert error.value.code == 404
+
+
+def test_candidate_redirect_refuses_ambiguous_and_unbounded_paths(kb):
+    for name in ["first", "second"]:
+        (kb / f"wiki/{name}.md").write_text(
+            "---\ntitle: Memory\nstatus: active\nsource_candidates: [drafts/memory.md]\nhuman_reviewed_at: 2026-10-22\n---\nBody", encoding="utf-8")
+    with serving(kb) as (base, _):
+        for path in ["drafts/memory.md", "drafts/../private.md", "drafts/missing.md"]:
+            with pytest.raises(HTTPError) as error:
+                get_json(base, "/api/mail/memory/item?" + urlencode({"path": path}))
+            assert error.value.code in {400, 404}
+
+
 def test_memory_cannot_escape_through_symlink(kb, tmp_path):
     outside = tmp_path / "private"
     outside.mkdir()

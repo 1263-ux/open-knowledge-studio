@@ -466,6 +466,32 @@ def _memory_item(root: Path, relative: str, *, full: bool = False) -> dict:
         raise ValueError("memory path must be a relative wiki/ or drafts/ path")
     candidate = (root / relative).resolve()
     allowed = [(root / "wiki").resolve(), (root / "drafts").resolve()]
+    if not candidate.exists() and relative.startswith("drafts/"):
+        from knowledge_studio.ingest_workflow import _inside
+        import os
+        _inside(root.resolve(), relative, "drafts")
+        matches = []
+        for parent, dirs, names in os.walk(root / "wiki", followlinks=False):
+            dirs[:] = [name for name in dirs if not (Path(parent) / name).is_symlink()
+                       and not (Path(parent) / name).is_junction()]
+            for name in names:
+                if not name.endswith(".md"):
+                    continue
+                path = Path(parent) / name
+                if path.is_symlink() or path.is_junction():
+                    continue
+                try:
+                    _inside(root.resolve(), path.relative_to(root).as_posix(), "wiki")
+                except ValueError:
+                    continue
+                meta = store.parse_wiki_file(path) or {}
+                origins = meta.get("source_candidates", [])
+                if (isinstance(origins, list) and relative in origins
+                        and meta.get("human_reviewed_at") and meta.get("status") == "active"
+                        and not meta.get("archived")):
+                    matches.append(path.resolve())
+        if len(matches) == 1:
+            candidate = matches[0]
     if (not candidate.is_relative_to(root.resolve()) or candidate.suffix.lower() != ".md"
             or not candidate.is_file() or not any(candidate.is_relative_to(base) for base in allowed)):
         raise FileNotFoundError("memory item not found")

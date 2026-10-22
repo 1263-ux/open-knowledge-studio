@@ -120,17 +120,28 @@ def _validate_result(root: Path, run_id: str, result: dict, *, collaboration: bo
         errors.append("candidate_required")
     if grade in {"B", "C"} and paths:
         errors.append("candidate_not_expected")
+    promoted = {}
+    wiki_pages = store.list_wiki_pages() if paths else []
     for relative in paths:
         path = _inside(root, relative, "drafts")
         meta = store.parse_wiki_file(path) if path.is_file() else None
         if not meta:
-            errors.append(f"candidate_missing:{relative}")
+            matches = [page for page in wiki_pages if isinstance(page.get("source_candidates"), list)
+                       and relative in page["source_candidates"]
+                       and page.get("source_bundle_id") == bundle_id
+                       and page.get("human_reviewed_at") and page.get("status") == "active"
+                       and not page.get("archived")]
+            if len(matches) == 1:
+                wiki_path = _inside(root, Path(matches[0]["file_path"]).relative_to(root).as_posix(), "wiki")
+                promoted[relative] = wiki_path.relative_to(root).as_posix()
+            else:
+                errors.append(f"candidate_missing:{relative}")
         elif (meta.get("human_reviewed_at") or not isinstance(meta.get("status"), str)
               or meta.get("status") not in {"pending", "draft"}):
             errors.append(f"candidate_not_pending:{relative}")
         elif meta.get("source_bundle_id") != bundle_id:
             errors.append(f"candidate_bundle_mismatch:{relative}")
-    if paths and result.get("review_status") != "pending":
+    if paths and len(promoted) != len(paths) and result.get("review_status") != "pending":
         errors.append("review_status_not_pending")
 
     collab = result.get("collaboration") or {}
@@ -180,14 +191,14 @@ def _validate_result(root: Path, run_id: str, result: dict, *, collaboration: bo
         if collab.get("retrospective"):
             warnings.append("collaboration_recorded_retrospectively")
 
-    expected = "awaiting_human_review" if paths else "source_only"
-    if paths and result.get("workflow_status") in {"complete", "completed", "success"}:
+    expected = ("complete" if len(promoted) == len(paths) else "awaiting_human_review") if paths else "source_only"
+    if paths and expected != "complete" and result.get("workflow_status") in {"complete", "completed", "success"}:
         errors.append("premature_workflow_completion")
     return {"schema_version": "ingest.workflow-validation.v1", "run_id": run_id,
             "valid": not errors, "extraction_status": status,
             "workflow_status": "incomplete" if errors else expected,
             "collaboration_checked": collaboration, "bundles": bundles,
-            "candidate_paths": paths, "errors": errors, "warnings": warnings}
+            "candidate_paths": paths, "promoted_pages": promoted, "errors": errors, "warnings": warnings}
 
 
 def finalize_workflow(run_id: str, *, source_only: bool = False,
@@ -214,6 +225,10 @@ def finalize_workflow(run_id: str, *, source_only: bool = False,
         result["workflow_mode"] = "collaboration" if required or not source_only else "source_only"
         result["workflow_status"] = checked["workflow_status"]
         result["workflow_validation"] = checked
+        result["promoted_pages"] = checked["promoted_pages"]
+        if checked["valid"] and checked["candidate_paths"]:
+            result["wiki_promoted"] = checked["workflow_status"] == "complete"
+            result["review_status"] = "approved" if result["wiki_promoted"] else "pending"
         store._atomic_write(_result_path(root, run_id),
                             json.dumps(result, ensure_ascii=False, indent=2) + "\n")
     return checked

@@ -581,6 +581,7 @@ def _merge_worker_records(file_path: Path, incoming: list[dict]) -> None:
 _CANDIDATE_EVIDENCE_FIELDS = (
     "source_url", "source_bundle_id", "source_raw_bundle", "source_article_date",
     "source_capture_id", "agent_observation", "claim_ids", "evidence_refs",
+    "source_candidates",
 )
 
 
@@ -593,7 +594,7 @@ def _merge_candidate_metadata(current: dict, incoming: dict) -> dict:
         if key == "summary":
             if not isinstance(value, str):
                 raise ValueError("Candidate summary must be a string; candidate retained")
-        elif key in {"claim_ids", "evidence_refs"}:
+        elif key in {"claim_ids", "evidence_refs", "source_candidates"}:
             if not isinstance(value, list) or not isinstance(current.get(key, []), list):
                 raise ValueError(f"Invalid {key}; candidate retained")
             value = list(current.get(key, [])) + [item for item in value if item not in current.get(key, [])]
@@ -1018,7 +1019,8 @@ def _promote_draft(
         subdirectory=meta.get("skill_category") if meta.get("artifact_kind") == "skill" else None,
         skill_metadata=meta if meta.get("artifact_kind") == "skill" else None,
         worker_records=meta.get("worker_records"),
-        candidate_metadata={key: meta[key] for key in ("summary", *_CANDIDATE_EVIDENCE_FIELDS) if key in meta},
+        candidate_metadata={**{key: meta[key] for key in ("summary", *_CANDIDATE_EVIDENCE_FIELDS) if key in meta},
+                            "source_candidates": [draft_path.relative_to(repo_root()).as_posix()]},
     )
 
     draft_path.unlink()

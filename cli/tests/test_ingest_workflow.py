@@ -223,6 +223,27 @@ def test_isolated_skill_to_ingest_review_and_recall_lifecycle(tmp_path, monkeypa
     assert page["summary"] == "Durable notes preserve task state."
     found = recall("Nebula memory", knowledge_only=True, goal="none")["knowledge"]
     assert any(hit["slug"] == promoted and hit["human_reviewed_at"] for hit in found)
+    closed = finalize_workflow(prepared["run_id"])
+    assert closed["valid"], closed
+    assert closed["workflow_status"] == "complete"
+    assert closed["promoted_pages"][result["candidate_path"]] == Path(page["file_path"]).relative_to(root).as_posix()
+    assert finalize_workflow(prepared["run_id"]) == closed
+
+
+@pytest.mark.parametrize("field,value", [("source_bundle_id", "bundle:wrong"),
+    ("source_candidates", ["drafts/other.md"]), ("human_reviewed_at", None),
+    ("status", "provisional"), ("archived", True)])
+def test_finalization_rejects_unproven_promotion(workflow, field, value):
+    from knowledge_studio import store
+    root, result, save = workflow
+    record_handoffs(root, result)
+    save()
+    page = store.get_wiki_page(store.promote_draft("takeaway"))
+    store._update_frontmatter_field(Path(page["file_path"]), field, value)
+    checked = finalize_workflow("run-example")
+    assert not checked["valid"]
+    assert checked["workflow_status"] == "incomplete"
+    assert checked["promoted_pages"] == {}
 
 
 def test_finalize_requires_real_handoffs_and_saves_incomplete(workflow):
