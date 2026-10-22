@@ -216,6 +216,13 @@ def test_publish_candidate_requires_raw_and_writes_visible_review_state(monkeypa
     )
     source = tmp_path / "base-review-candidate.md"
     source.write_text(candidate_document(), encoding="utf-8")
+    meta, body = worker.parse_candidate_document(source.read_text(encoding="utf-8"))
+    source_identity = {"base_token_hash": __import__('hashlib').sha256(b'base').hexdigest()[:12], "table_id": "table"}
+    meta["worker_records"] = [
+        {"source": {**source_identity, "record_id": "rec_other"}, "observed_at": "2026-01-01", "fields": {"知识域": "science"}},
+        {"source": {**source_identity, "record_id": "rec_1"}, "observed_at": "2026-01-01", "fields": {"重点问题（可选）": "已有问题"}},
+    ]
+    source.write_text(worker.render_candidate_document(meta, body), encoding="utf-8")
     config = worker.WorkerConfig("base", "table", tmp_path / "lark.exe", tmp_path, tmp_path / "python.exe", tmp_path)
     updates = []
     monkeypatch.setattr(
@@ -223,7 +230,9 @@ def test_publish_candidate_requires_raw_and_writes_visible_review_state(monkeypa
         "get_record",
         lambda *_: {
             "record_id": "rec_1",
-            "fields": {"运行状态": "Raw就绪", "Raw Bundle": str(raw), "运行ID": "run_1"},
+            "fields": {"运行状态": "Raw就绪", "Raw Bundle": str(raw), "运行ID": "run_1",
+                       "知识域": ["computing", "science"], "评级": "A", "质量状态": "partial",
+                       "思考": "保留原始思考", "租约所有者": "DO-NOT-COPY"},
         },
     )
     monkeypatch.setattr(worker, "update_record", lambda _c, _r, patch: updates.append(patch) or {})
@@ -250,6 +259,14 @@ def test_publish_candidate_requires_raw_and_writes_visible_review_state(monkeypa
         (tmp_path / state["candidate_path"]).read_text(encoding="utf-8")
     )
     execution_trace = metadata["traces"][0]
+    assert {r["source"]["record_id"] for r in metadata["worker_records"]} == {"rec_1", "rec_other"}
+    observed = next(r for r in metadata["worker_records"] if r["source"]["record_id"] == "rec_1")
+    assert observed["fields"]["知识域"] == ["computing", "science"]
+    assert observed["fields"]["质量状态"] == "partial"
+    assert observed["fields"]["思考"] == "保留原始思考"
+    assert observed["fields"]["重点问题（可选）"] == "已有问题"
+    assert observed["source"]["record_id"] == "rec_1"
+    assert "租约所有者" not in observed["fields"]
     assert execution_trace == {
         "kind": "execution",
         "id": "run_1",
@@ -996,11 +1013,23 @@ def test_accept_review_promotes_exact_base_content(monkeypatch, tmp_path):
     monkeypatch.setattr(worker, "update_record", lambda _c, _r, patch: updates.append(patch) or {})
     config = worker.WorkerConfig("base", "table", tmp_path / "lark.exe", tmp_path, tmp_path / "python.exe", tmp_path)
 
+    # Optional source entrypoints must reach the existing promotion bootstrap
+    # without requiring the installable core package in the caller's sys.path.
+    import builtins
+    original_import = builtins.__import__
+    def no_core_before_promotion(name, *args, **kwargs):
+        if name.startswith('knowledge_studio'):
+            raise ModuleNotFoundError(name)
+        return original_import(name, *args, **kwargs)
+    monkeypatch.setattr(builtins, '__import__', no_core_before_promotion)
     result = worker.review_candidate(config, {"record_id": "rec_2", "fields": fields})
 
     assert result["action"] == "accept"
     assert promoted[0][1] == accepted_body
     assert promoted[0][2]["lesson"] == "验收通过。"
+    observed, _ = worker.parse_candidate_document(candidate.read_text(encoding="utf-8"))
+    assert observed["worker_records"][0]["fields"]["审核动作"] == "accept"
+    assert observed["worker_records"][0]["fields"]["审核意见"] == "验收通过。"
     assert updates[-1]["运行状态"] == "已晋升"
     assert updates[-1]["Wiki状态"] == "promoted"
     assert updates[-1]["Wiki路径"] == "wiki/computing/strategies/accepted.md"
