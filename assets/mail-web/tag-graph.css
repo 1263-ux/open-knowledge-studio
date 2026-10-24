@@ -37,3 +37,23 @@
 .force-label-leader{stroke:var(--node-color);stroke-width:1;opacity:.6;vector-effect:non-scaling-stroke;pointer-events:none}.force-node.active .force-label-leader,.force-node:focus-visible .force-label-leader{stroke:var(--blue);opacity:1}
 .graph-key.tag-link,.graph-key.reference-link{width:19px;height:0;border-radius:0;background:none;border-top:1px solid #89978b}.graph-key.tag-link{border-top-style:dashed}
 .force-edge{pointer-events:none}.force-edge-hit{stroke:transparent;stroke-width:16;vector-effect:non-scaling-stroke;pointer-events:stroke;cursor:pointer}.force-relation:focus-visible{outline:none}.force-relation:focus-visible .force-edge{stroke:var(--blue);stroke-width:3;opacity:1}.graph-legend{flex-wrap:wrap;max-width:calc(100% - 40px)}
+
+/* Quiet canvas and small, stable dots keep the document connections readable. */
+.tag-graph-stage{background:var(--canvas)}
+.force-edge{stroke:#88929e;stroke-width:1;opacity:.6}
+.force-edge.tag-association{stroke:#9da8b2;stroke-width:.8;stroke-dasharray:3 5;opacity:.4}
+.force-edge.active,.force-edge.tag-association.active{stroke:var(--blue);stroke-width:1.7;opacity:.9}
+.force-edge.dim,.force-edge.tag-association.dim{opacity:.07}
+.force-node .node-dot{stroke-width:1.5}
+.force-node text{font-size:12px;font-weight:400;fill:var(--secondary)}
+.force-node.dim{opacity:.18}
+.force-node.selected .node-dot{stroke:var(--blue);stroke-width:2.5}
+.force-node.active text,.force-node.selected text{fill:var(--ink);font-weight:600}
+.force-label-leader{opacity:.35;stroke-width:.7}
+.graph-settings-body label.graph-display-option{display:flex;align-items:center;gap:8px}
+.graph-display-option input{accent-color:var(--blue)}
+.graph-focus-info{position:absolute;left:20px;bottom:45px;max-width:min(450px,calc(100% - 250px));padding:10px 13px;border:1px solid var(--line);border-radius:6px;background:var(--surface);pointer-events:none}
+.graph-focus-info strong{display:block;font-size:12px;line-height:1.6;overflow-wrap:anywhere}
+.graph-focus-info span{display:block;margin-top:3px;font-size:10px;color:var(--secondary)}
+.graph-legend [hidden],.graph-focus-info[hidden]{display:none}
+@media(max-width:760px){.graph-focus-info{left:15px;bottom:90px;max-width:calc(100% - 30px)}.graph-legend{max-width:calc(100% - 30px)}}

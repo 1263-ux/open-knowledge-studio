@@ -6,6 +6,10 @@
   const nodes=items.map((item,i)=>{const angle=items.length>6?i*2.399963:i*2*Math.PI/Math.max(1,items.length)-Math.PI/2;const radius=items.length>6?55*Math.sqrt(i):150;return {...item,x:items.length===1?0:Math.cos(angle)*radius,y:items.length===1?0:Math.sin(angle)*radius,vx:0,vy:0,fx:null,fy:null};});
   const byId=new Map(nodes.map(n=>[n.id,n]));
   const edges=links.filter(l=>byId.has(l.from)&&byId.has(l.to)).map(l=>({...l,source:byId.get(l.from),target:byId.get(l.to)}));
+  // Tag similarity is weaker than a written link. Normalise dense tag groups so
+  // a popular tag cannot pull the whole library into one overlapping bundle.
+  const tagDegrees=new Map();edges.filter(e=>e.type==='shared_tag').forEach(e=>{for(const id of [e.from,e.to])tagDegrees.set(id,(tagDegrees.get(id)||0)+1);});
+  const strength=edge=>edge.type==='shared_tag'?.3/Math.sqrt(Math.max(tagDegrees.get(edge.from),tagDegrees.get(edge.to))):1;
   let alpha=1,steps=0,quiet=0;
   function step(){
    nodes.forEach(n=>{n.vx-=n.x*config.center*alpha;n.vy-=n.y*config.center*alpha;});
@@ -18,7 +22,7 @@
     const x=dx/distance*(force+collision),y=dy/distance*(force+collision);
     a.vx-=x;a.vy-=y;b.vx+=x;b.vy+=y;
    }
-   edges.forEach(({source:a,target:b})=>{const dx=b.x-a.x,dy=b.y-a.y,d=Math.max(.1,Math.hypot(dx,dy));const f=(d-config.distance)*config.link*alpha;const x=dx/d*f,y=dy/d*f;a.vx+=x;a.vy+=y;b.vx-=x;b.vy-=y;});
+   edges.forEach(edge=>{const {source:a,target:b}=edge;const dx=b.x-a.x,dy=b.y-a.y,d=Math.max(.1,Math.hypot(dx,dy));const f=(d-config.distance)*config.link*strength(edge)*alpha;const x=dx/d*f,y=dy/d*f;a.vx+=x;a.vy+=y;b.vx-=x;b.vy-=y;});
    let speed=0;
    nodes.forEach(n=>{if(n.fx!==null){n.x=n.fx;n.y=n.fy;n.vx=0;n.vy=0;}else{n.vx*=.78;n.vy*=.78;n.x+=n.vx;n.y+=n.vy;speed=Math.max(speed,Math.hypot(n.vx,n.vy));}});
    alpha*=.978;steps++;quiet=speed<.025?quiet+1:0;
