@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import faulthandler
 import json
 import os
 from pathlib import Path
@@ -256,6 +257,9 @@ def stop_background(root: Path, port: int = 3182, *, timeout: float = 10) -> dic
 
 
 def serve_worker(root: Path, port: int, mode: str, server_id: str):
+    # A detached startup can block before HTTP is available. Preserve its stack
+    # in the worker log rather than leaving the controller with an empty log.
+    faulthandler.dump_traceback_later(5)
     from knowledge_studio.mail_web import create_server
 
     root, files = _paths(root, port)
@@ -265,6 +269,7 @@ def serve_worker(root: Path, port: int, mode: str, server_id: str):
     server = None
     try:
         server = create_server(root, port, mode=mode)
+        faulthandler.cancel_dump_traceback_later()
         server.background_id = server_id
         server.background_pid = os.getpid()
         server.timeout = 0.2
@@ -276,6 +281,7 @@ def serve_worker(root: Path, port: int, mode: str, server_id: str):
                 break
             server.handle_request()
     finally:
+        faulthandler.cancel_dump_traceback_later()
         if server:
             server.server_close()
         # Only the controlling CLI writes/removes the shared port record while
