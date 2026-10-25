@@ -28,7 +28,11 @@ def instance(tmp_path):
     (tmp_path / "wiki").mkdir()
     (tmp_path / "drafts").mkdir()
     (tmp_path / "mail").mkdir()
-    return tmp_path
+    yield tmp_path
+    # Pytest captures this output unless a test fails. Keep detached-worker
+    # diagnostics from this synthetic instance available on CI failures.
+    for log in (tmp_path / ".oks" / "mail-web").glob("*.log"):
+        print(f"\nDetached Mail log ({log.name}):\n{log.read_text(encoding='utf-8', errors='replace')[-8000:]}")
 
 
 def test_detached_server_survives_launcher_exit_and_stops(instance):

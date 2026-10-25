@@ -1409,15 +1409,20 @@ def test_shared_resolver_uses_path_lookup_when_no_env_var(monkeypatch, tmp_path)
     monkeypatch.delenv("LARK_CLI_EXE", raising=False)
     lark = tmp_path / "lark-cli"
     lark.write_text("")
-    # On actual Windows, the resolver checks .cmd/.exe; on POSIX, "lark-cli".
-    # Test the actual OS path without patching os.name.
+    # Exercise PATH resolution against a controlled result. A real npm install
+    # can resolve its lark-cli symlink to run.js, which is a valid executable.
+    calls = []
+
+    def locate(name):
+        calls.append(name)
+        return str(lark)
+
+    monkeypatch.setattr("_lark_cli.shutil.which", locate)
     from _lark_cli import resolve_lark_cli
-    try:
-        resolved = resolve_lark_cli()
-    except RuntimeError:
-        # CLI not installed — skip assertion, path lookup was attempted
-        return
-    assert resolved.name.startswith("lark-cli")
+    resolved = resolve_lark_cli()
+    assert calls
+    assert calls[0] in {"lark-cli", "lark-cli.cmd"}
+    assert resolved == lark.resolve()
 
 
 # ── Fix 3: Token redaction in Feishu setup ──────────────────────────
