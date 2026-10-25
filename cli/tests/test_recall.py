@@ -212,6 +212,77 @@ def test_backend_skips_stale_slug_and_keeps_valid_hit_uri(kb_root, monkeypatch, 
     assert str(kb_root) not in caplog.text
 
 
+@pytest.mark.parametrize("backend", ["native", "fts5"])
+def test_backend_state_and_type_admission_before_limit(tmp_path, monkeypatch, backend):
+    from knowledge_studio.recall import recall
+
+    monkeypatch.setenv("OKS_ROOT", str(tmp_path))
+    wiki = tmp_path / "wiki" / "computing" / "concepts"
+    wiki.mkdir(parents=True)
+    states = [
+        ("dropped", {"status": "dropped"}),
+        ("superseded", {"status": "superseded"}),
+        ("archived", {"status": "active", "archived": True}),
+        ("active", {"status": "active"}),
+        ("provisional", {"status": "provisional"}),
+        ("stale", {"status": "stale"}),
+        ("legacy", {}),
+        ("string-false-archive", {"status": "active", "archived": "false"}),
+    ]
+    for slug, state in states:
+        fm = {"title": "Quasar ledger", "type": "strategy", "area": "computing", **state}
+        _atomic_write(wiki / f"{slug}.md", f"---\n{yaml.safe_dump(fm)}---\nquasar ledger policy")
+    _atomic_write(wiki / "wrong-type.md", "---\ntitle: Quasar ledger\ntype: concept\narea: computing\n---\nquasar ledger")
+    hits = recall("quasar ledger", goal="none", limit=5, type_filter=" Strategy ", search_backend=backend)["knowledge"]
+    assert {h["slug"] for h in hits} == {
+        "active", "provisional", "stale", "legacy", "string-false-archive"
+    }
+    assert all(h["type"] == "strategy" for h in hits)
+    assert next(h for h in hits if h["slug"] == "string-false-archive")["archived"] is False
+    assert [h["rank"] for h in hits] == [1, 2, 3, 4, 5]
+
+
+def test_connector_ignoring_filters_is_gated_and_refilled(kb_root, monkeypatch):
+    from knowledge_studio import search
+    from knowledge_studio.recall import recall
+    from knowledge_studio.search import SearchHit
+    from knowledge_studio.store import _update_frontmatter_field
+
+    _update_frontmatter_field(kb_root / "wiki/computing/concepts/git-branching.md", "status", "dropped")
+    calls = []
+
+    class FakeBackend:
+        def search(self, query, *, limit, scope, **kwargs):
+            calls.append(limit)
+            return [
+                SearchHit("git-branching", "Dropped", 9.0),
+                SearchHit("no-tests", "Wrong type", 8.0),
+                SearchHit("docker-deployment", "Valid", 7.0),
+            ][:limit]
+
+    monkeypatch.setattr(search, "get_backend", lambda name, root: FakeBackend())
+    hits = recall("deployment", limit=1, goal="none", type_filter="strategy", search_backend="fake")["knowledge"]
+    assert [(h["slug"], h["relevance"]) for h in hits] == [("docker-deployment", 7.0)]
+    assert calls[0] == 1 and calls[-1] >= 3
+
+
+def test_connector_refill_is_bounded_for_nonconforming_results(kb_root, monkeypatch):
+    from knowledge_studio import search
+    from knowledge_studio.recall import recall
+    from knowledge_studio.search import SearchHit
+
+    calls = []
+
+    class FakeBackend:
+        def search(self, query, *, limit, **kwargs):
+            calls.append(limit)
+            return [SearchHit("missing-page", "Missing", 9.0)] * limit
+
+    monkeypatch.setattr(search, "get_backend", lambda name, root: FakeBackend())
+    assert recall("quasar", limit=1, search_backend="fake")["knowledge"] == []
+    assert calls == [1, 2, 3]
+
+
 def test_recall_knowledge_anti_pattern_boosted(kb_root):
     from knowledge_studio.recall import recall_knowledge
     results = recall_knowledge("deployment", limit=5)
