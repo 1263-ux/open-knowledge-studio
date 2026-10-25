@@ -24,6 +24,8 @@ def parse_args() -> argparse.Namespace:
         default=None,
     )
     subcommands = parser.add_subparsers(dest="command", required=True)
+    panel = subcommands.add_parser("knowledge-panel", help="Serve the local read-only Studio with a Feishu field source.")
+    panel.add_argument("--port", type=int, default=3186)
     enqueue = subcommands.add_parser("enqueue", help="Create one pending capture row.")
     enqueue.add_argument("content")
     enqueue.add_argument("--thought", default="")

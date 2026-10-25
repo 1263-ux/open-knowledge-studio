@@ -225,12 +225,12 @@ def _ensure_windows_lock_file(lock_path: Path) -> None:
             seed.flush()
 
 
-def _atomic_write(path: Path, content: str) -> None:
+def _atomic_write(path: Path, content: str | bytes) -> None:
     """Write a snapshot with fsync + atomic replace + directory fsync."""
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp = tempfile.mkstemp(dir=str(path.parent), suffix=".tmp", prefix=path.stem)
     try:
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
+        with os.fdopen(fd, "wb" if isinstance(content, bytes) else "w", **({} if isinstance(content, bytes) else {"encoding": "utf-8"})) as f:
             f.write(content)
             f.flush()
             os.fsync(f.fileno())
@@ -561,6 +561,49 @@ def _validate_score(field: str, value: object) -> None:
         raise ValueError(f"{field} must be a number between 0 and 1, got {value!r}")
 
 
+def _merge_worker_records(file_path: Path, incoming: list[dict]) -> None:
+    from knowledge_studio.worker_records import merge_records
+
+    def update(text: str) -> str:
+        parts = text.split("---", 2)
+        if len(parts) != 3:
+            raise ValueError("Cannot preserve Worker sources without valid frontmatter")
+        meta = yaml.safe_load(parts[1].strip()) or {}
+        if not isinstance(meta, dict):
+            raise ValueError("Cannot preserve Worker sources in invalid frontmatter")
+        meta["worker_records"] = merge_records(meta.get("worker_records"), incoming)
+        front = yaml.safe_dump(meta, default_flow_style=False, allow_unicode=True, sort_keys=False)
+        return f"---\n{front}---{parts[2]}"
+
+    _locked_atomic_update(file_path, update)
+
+
+_CANDIDATE_EVIDENCE_FIELDS = (
+    "source_url", "source_bundle_id", "source_raw_bundle", "source_article_date",
+    "source_capture_id", "agent_observation", "claim_ids", "evidence_refs",
+    "source_candidates",
+)
+
+
+def _merge_candidate_metadata(current: dict, incoming: dict) -> dict:
+    merged = {}
+    for key in ("summary", *_CANDIDATE_EVIDENCE_FIELDS):
+        if key not in incoming:
+            continue
+        value = incoming[key]
+        if key == "summary":
+            if not isinstance(value, str):
+                raise ValueError("Candidate summary must be a string; candidate retained")
+        elif key in {"claim_ids", "evidence_refs", "source_candidates"}:
+            if not isinstance(value, list) or not isinstance(current.get(key, []), list):
+                raise ValueError(f"Invalid {key}; candidate retained")
+            value = list(current.get(key, [])) + [item for item in value if item not in current.get(key, [])]
+        elif current.get(key) not in (None, "", value):
+            raise ValueError(f"Matching content has conflicting {key}; review its sources explicitly; candidate retained")
+        merged[key] = value
+    return merged
+
+
 def write_wiki_page(
     title: str,
     content: str,
@@ -580,22 +623,62 @@ def write_wiki_page(
     human_reviewed: bool = False,
     confidence: float | None = None,
     default_importance: float = 0.5,
+    enforce_classification: bool = False,
+    subdirectory: str | None = None,
+    skill_metadata: dict | None = None,
+    worker_records: list[dict] | None = None,
+    candidate_metadata: dict | None = None,
 ) -> Path:
+    candidate_metadata = _merge_candidate_metadata({}, candidate_metadata or {})
     for field, value in (("importance", importance), ("confidence", confidence)):
         if value is not None:
             _validate_score(field, value)
     _validate_score("default_importance", default_importance)
+    if enforce_classification:
+        from knowledge_studio.knowledge_policy import validate_classification
+        area, wiki_type = validate_classification(
+            area, wiki_type, skill=bool(skill_metadata and skill_metadata.get("artifact_kind") == "skill")
+        )
+    from knowledge_studio.worker_records import clean_records
+    worker_records = clean_records(worker_records)
     if not re.fullmatch(r"[a-z][a-z0-9-]*", area):
         raise ValueError(
             f"Invalid area name: {area!r}. "
             "Area must be a lowercase identifier (letters, digits, hyphens only)."
         )
+    if skill_metadata is not None:
+        from knowledge_studio.skills import validate_skill_metadata, _inside, SKILL_FIELDS
+        validate_skill_metadata(skill_metadata)
+        if area != "skills" or subdirectory != skill_metadata["skill_category"]:
+            raise ValueError("Skill knowledge requires its independent area and category")
+        _inside(repo_root().resolve(), f"wiki/{area}/{wiki_type}/{subdirectory}")
     fp = _fingerprint(content)
     fp_index = _load_fingerprint_index()
     existing_slug = fp_index.get(fp)
     if existing_slug:
         existing = _find_file_by_slug(existing_slug)
         if existing:
+            if skill_metadata is not None:
+                old = parse_wiki_file(existing) or {}
+                expected_dir = wiki_dir() / area / wiki_type / subdirectory
+                if existing.parent != expected_dir or any(old.get(key) != skill_metadata.get(key)
+                        for key in ("artifact_kind", "skill_id", "skill_version", "skill_category")):
+                    raise ValueError("Skill content matches another Wiki identity; keep classifications distinct")
+            if enforce_classification:
+                from knowledge_studio.knowledge_policy import is_source_material, TYPE_DIRS
+                previous = parse_wiki_file(existing) or {}
+                if (is_source_material(previous) or previous.get("area") != area
+                        or TYPE_DIRS.get(previous.get("type")) != wiki_type):
+                    raise ValueError("Matching content has a different classification or is source material; candidate retained. Review the existing page explicitly.")
+            # Reject conflicting provenance before changing review/score state.
+            # Merge only explicit candidate fields, never arbitrary draft state.
+            if candidate_metadata:
+                def merge_metadata(text):
+                    parts = text.split("---", 2)
+                    meta = yaml.safe_load(parts[1]) or {}
+                    meta.update(_merge_candidate_metadata(meta, candidate_metadata))
+                    return "---\n" + yaml.safe_dump(meta, allow_unicode=True, sort_keys=False) + "---\n" + parts[2]
+                _locked_atomic_update(existing, merge_metadata)
             # Dedup must not swallow what the caller newly established. A human
             # approving a draft whose body matches an existing page used to lose
             # the review, the active status and the declared A4 relationship —
@@ -613,18 +696,35 @@ def write_wiki_page(
                     existing, "human_reviewed_at", datetime.now(UTC).isoformat()
                 )
                 _update_frontmatter_field(existing, "status", "active")
+                if enforce_classification:
+                    _update_frontmatter_field(existing, "classification_version", 1)
             if supersedes and not relates_to:
                 relates_to, relationship = supersedes, "supersedes"
             _apply_relationship(relates_to or "", relationship or "", existing_slug)
+            if worker_records:
+                _merge_worker_records(existing, worker_records)
             return existing
 
     wd = wiki_dir()
     now = datetime.now(UTC)
     date_str = now.strftime("%Y%m%d")
     type_dir = wd / area / wiki_type
+    if subdirectory:
+        from knowledge_studio.skills import validate_category
+        subdirectory = validate_category(subdirectory)
+        type_dir = type_dir / subdirectory
+        if not type_dir.resolve().is_relative_to(wd.resolve()):
+            raise ValueError("Wiki subdirectory escapes the knowledge base")
     type_dir.mkdir(parents=True, exist_ok=True)
 
-    slug = make_slug(slug_hint or title, fallback="untitled")
+    if skill_metadata is not None:
+        # Put a digest first: make_slug's length bound must not erase version/category
+        # identity, and slugs must stay unique across nested Wiki directories.
+        identity = f"{skill_metadata['skill_id']}:{skill_metadata['skill_version']}:{wiki_type}:{subdirectory}"
+        unique = hashlib.sha256(identity.encode()).hexdigest()[:16]
+        slug = make_slug(f"skill-{unique}-{skill_metadata['skill_id']}")
+    else:
+        slug = make_slug(slug_hint or title, fallback="untitled")
     slug = f"{date_str}-{slug}"
 
     file_path = type_dir / f"{slug}.md"
@@ -632,12 +732,14 @@ def write_wiki_page(
     while file_path.exists():
         file_path = type_dir / f"{slug}-{counter}.md"
         counter += 1
+    slug = file_path.stem
 
     if supersedes and not relates_to:
         relates_to = supersedes
         relationship = "supersedes"
 
-    _apply_relationship(relates_to or "", relationship or "", slug)
+    if skill_metadata is None:
+        _apply_relationship(relates_to or "", relationship or "", slug)
 
     frontmatter: dict = {
         "title": title,
@@ -655,20 +757,31 @@ def write_wiki_page(
     }
     if options:
         frontmatter["options"] = options
+    frontmatter.update(candidate_metadata)
     if human_reviewed:
         frontmatter["human_reviewed_at"] = now.isoformat()
+        if enforce_classification:
+            frontmatter["classification_version"] = 1
     if traces:
         frontmatter["traces"] = traces
     if review:
         frontmatter["review"] = review
+    if worker_records:
+        frontmatter["worker_records"] = worker_records
     if human_note:
         frontmatter["human_note"] = human_note
     if relates_to and relationship:
         frontmatter["relates_to"] = relates_to
         frontmatter["relationship"] = relationship
+    if skill_metadata is not None:
+        frontmatter.update({key: skill_metadata[key] for key in SKILL_FIELDS if key in skill_metadata})
 
     fm_str = yaml.dump(frontmatter, default_flow_style=False, allow_unicode=True, sort_keys=False)
     _atomic_write(file_path, f"---\n{fm_str}---\n\n{content}")
+    if skill_metadata is not None:
+        # Keep the last usable approved version active if writing its replacement
+        # fails. The replacement must exist before the old card is superseded.
+        _apply_relationship(relates_to or "", relationship or "", slug)
 
     # Re-read under the lock rather than saving the snapshot loaded before the
     # page was written. Two writers racing here would each save their pre-race
@@ -758,8 +871,8 @@ def list_drafts() -> list[dict]:
         drafts.append({
             "slug": meta["slug"],
             "title": meta.get("title", meta["slug"]),
-            "draft_type": meta.get("draft_type", "concept"),
-            "draft_area": meta.get("draft_area", "computing"),
+            "draft_type": meta.get("draft_type") or "待确认",
+            "draft_area": meta.get("draft_area") or "待确认",
             "source_pages": meta.get("source_pages", []),
             "drafted_at": meta.get("drafted_at", ""),
             "status": meta.get("status", "draft"),
@@ -802,6 +915,24 @@ def promote_draft(
     tags: list[str] | None = None,
     slug_hint: str | None = None,
 ) -> str:
+    # Serialize Skill review with import/load/compaction. Ordinary draft behavior
+    # is unchanged. Re-read the draft inside the lock before committing a review.
+    meta = parse_wiki_file(_draft_path(slug)) or {}
+    if meta.get("artifact_kind") == "skill":
+        from knowledge_studio.skills import _inside, _root
+        with _file_lock(_inside(_root(), ".oks/locks/skills.lock")):
+            return _promote_draft(slug, title, wiki_type, area, tags, slug_hint)
+    return _promote_draft(slug, title, wiki_type, area, tags, slug_hint)
+
+
+def _promote_draft(
+    slug: str,
+    title: str | None = None,
+    wiki_type: str | None = None,
+    area: str | None = None,
+    tags: list[str] | None = None,
+    slug_hint: str | None = None,
+) -> str:
     draft_path = _draft_path(slug)
     if not draft_path.exists():
         raise FileNotFoundError(f"Draft not found: {slug}")
@@ -822,19 +953,38 @@ def promote_draft(
         )
 
     final_title = title or meta.get("title", slug)
-    requested_type = wiki_type or meta.get("draft_type", "concept")
-    _type_dirs = {
-        "concept": "concepts", "concepts": "concepts",
-        "strategy": "strategies", "strategies": "strategies",
-        "anti-pattern": "anti-patterns", "anti-patterns": "anti-patterns",
-    }
-    final_type = _type_dirs.get(requested_type)
-    if final_type is None:
-        raise ValueError(f"Unsupported Wiki type: {requested_type}")
-    final_area = area or meta.get("draft_area", "computing")
+    from knowledge_studio.knowledge_policy import is_source_material, validate_classification
+    if is_source_material(meta):
+        raise ValueError("Source material cannot be promoted directly. Distill a separate Candidate with source references, then review it; candidate retained.")
+    final_area, final_type = validate_classification(
+        area if area is not None else meta.get("draft_area"),
+        wiki_type if wiki_type is not None else meta.get("draft_type"),
+        skill=meta.get("artifact_kind") == "skill",
+    )
     for field in ("importance", "confidence"):
         if field in meta:
             _validate_score(field, meta[field])
+    if meta.get("artifact_kind") == "skill":
+        if final_area != "skills":
+            raise ValueError("Skill knowledge belongs under the independent skills area")
+        from knowledge_studio.skills import entries
+        # Several candidates may have been imported against the same old version.
+        # Link to the active reviewed baseline at approval time, not import time.
+        canonical_type = {"concepts": "concept", "strategies": "strategy", "anti-patterns": "anti-pattern"}[final_type]
+        if meta.get("relationship") == "supersedes":
+            meta.pop("relates_to", None)
+            meta.pop("relationship", None)
+        meta.pop("supersedes", None)
+        baseline = [p for p in entries(include_drafts=False)
+                    if p.get("skill_id") == meta.get("skill_id")
+                    and p.get("type") == canonical_type
+                    and p.get("skill_category") == meta.get("skill_category")
+                    and p.get("skill_version") != meta.get("skill_version")
+                    and p.get("status") == "active" and p.get("human_reviewed_at")]
+        if len(baseline) > 1:
+            raise ValueError("Multiple active Skill baselines; review and resolve them before promotion")
+        if baseline:
+            meta.update(relates_to=baseline[0]["slug"], relationship="supersedes")
     human_note = meta.get("source_note") or None
 
     draft_tags = meta.get("tags", [])
@@ -860,11 +1010,17 @@ def promote_draft(
         # A3: reaching here means a human approved the draft. Recording it is
         # what lets recall label the page [verified] honestly.
         human_reviewed=True,
+        enforce_classification=True,
         # A4: carry the declared relationship through, otherwise the superseded
         # page stays active and both versions get recalled side by side.
         supersedes=meta.get("supersedes"),
         relates_to=meta.get("relates_to"),
         relationship=meta.get("relationship"),
+        subdirectory=meta.get("skill_category") if meta.get("artifact_kind") == "skill" else None,
+        skill_metadata=meta if meta.get("artifact_kind") == "skill" else None,
+        worker_records=meta.get("worker_records"),
+        candidate_metadata={**{key: meta[key] for key in ("summary", *_CANDIDATE_EVIDENCE_FIELDS) if key in meta},
+                            "source_candidates": [draft_path.relative_to(repo_root()).as_posix()]},
     )
 
     draft_path.unlink()

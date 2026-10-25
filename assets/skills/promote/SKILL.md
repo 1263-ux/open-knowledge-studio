@@ -29,9 +29,15 @@ List drafts in `drafts/`, let user review, promote accepted ones to `wiki/` or r
   records the review. An explicit draft `confidence` replaces the existing
   assessment without a reconfirmation boost. Without that field, the existing
   reconfirmation rule applies.
-- Use `draft_type` and `draft_area` in Candidate frontmatter; `type` and `area`
-  do not select the promotion destination. Missing fields default to `concept`
-  and `computing`; `--type` and `--area` override those choices during review.
+- Require explicit `draft_type` and `draft_area`, or review overrides `--type`
+  and `--area`. Use canonical domains from `oks wiki domains`. Missing or
+  unknown classification stops promotion and leaves the Candidate intact.
+- A matching body with a different domain or type is a classification conflict.
+  Review the existing page explicitly; the Candidate is not consumed.
+- Source material (`content_role: source_material`, including legacy
+  `source_type: local-ocr-import`) cannot promote directly. Keep OCR in Raw;
+  distill a separate Candidate with evidence references for human review.
+
 - If a draft carries a `source_note` (human intake comment), promote copies it
   verbatim onto the wiki page as `human_note` — the human's judgement survives.
 - Rejected drafts leave the pending queue; OKS preserves a review receipt under `drafts/rejected/`

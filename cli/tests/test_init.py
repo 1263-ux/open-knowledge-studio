@@ -95,6 +95,29 @@ def test_skills_install_adds_workbuddy_skill_to_existing_instances(tmp_path, mon
     assert not (target / ".codebuddy" / "skills" / "promote").exists()
 
 
+def test_asset_materialization_and_legacy_install_skip_generated_bytecode(tmp_path, monkeypatch):
+    base = tmp_path / "packaged-assets"
+    skill = base / "skills" / "sample"
+    cache = skill / "scripts/__pycache__"
+    cache.mkdir(parents=True)
+    (cache / "run.cpython-314.pyc").write_bytes(b"generated cache")
+    (skill / "SKILL.md").write_text("# Sample", encoding="utf-8")
+    (skill / "scripts/run.py").write_text("print('sample')", encoding="utf-8")
+    monkeypatch.setattr(cli_module, "_asset_source", lambda: base)
+    target = tmp_path / "kb"
+    assert runner.invoke(app, ["init", str(target), "--no-git", "--no-set-default"]).exit_code == 0
+    for host in (".agents", ".claude", ".qoder"):
+        installed = target / host / "skills/sample"
+        assert (installed / "scripts/run.py").exists()
+        assert not (installed / "scripts/__pycache__").exists()
+    other = tmp_path / "legacy-kb"
+    (other / "wiki").mkdir(parents=True)
+    monkeypatch.chdir(other)
+    assert runner.invoke(app, ["skills-install"]).exit_code == 0
+    assert (other / ".agents/skills/sample/scripts/run.py").exists()
+    assert not (other / ".agents/skills/sample/scripts/__pycache__").exists()
+
+
 def test_workbuddy_skill_requires_read_only_cli_recall(tmp_path):
     target = tmp_path / "kb"
     assert runner.invoke(app, ["init", str(target), "--no-git", "--no-set-default"]).exit_code == 0

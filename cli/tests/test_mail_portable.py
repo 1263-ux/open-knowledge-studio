@@ -74,7 +74,7 @@ def test_independent_skill_sessions_roundtrip(kb, tmp_path):
 
 
 def test_web_generic_recipient_and_origin(kb):
-    server = create_server(kb, 0)
+    server = create_server(kb, 0, mode="collaboration")
     worker = threading.Thread(target=server.serve_forever, daemon=True)
     worker.start()
     base = f"http://127.0.0.1:{server.server_port}"
@@ -90,7 +90,7 @@ def test_web_generic_recipient_and_origin(kb):
         # Phase 1 面板：收件人概念依旧通用 —— 身份一律由 API 投影提供，页面里不写死任何收件人。
         # （旧断言 `b"recipient" in page` 依赖旧版英文文案，随 Phase 1 重做作废；
         #   这里守的是同一个不变量，换成对当前实现的断言。）
-        assert "协作时间线".encode() in page
+        assert "协作主线".encode() in page
         assert b"reviewer" not in page
         assert b"custom-agent" not in page
         with request("/favicon.svg") as response:
@@ -202,7 +202,7 @@ def test_web_memory_projection_is_readable_and_path_safe(kb):
         "---\n\n候选补充。\n",
         encoding="utf-8",
     )
-    server = create_server(kb, 0)
+    server = create_server(kb, 0, mode="collaboration")
     worker = threading.Thread(target=server.serve_forever, daemon=True)
     worker.start()
     base = f"http://127.0.0.1:{server.server_port}"
@@ -216,7 +216,8 @@ def test_web_memory_projection_is_readable_and_path_safe(kb):
         item = next(row for row in snapshot["recent"] if row["path"] == "wiki/engineering/repro.md")
         assert item["title"] == "可复现性检查清单"
         assert item["kind"] == "wiki"
-        assert item["kind_label"] == "已审核 Wiki"
+        assert item["kind_label"] == "Wiki · 审核记录未知"
+        assert item["review"]["state"] == "unknown"
         assert item["area"] == "engineering"
         assert snapshot["facets"]["areas"]["engineering"] == 1
         assert "固定环境" in item["summary"]
@@ -271,7 +272,7 @@ def test_web_memory_projection_uses_durable_time_and_hides_inactive(kb):
         "---\n\n不应出现在可复用列表。\n",
         encoding="utf-8",
     )
-    server = create_server(kb, 0)
+    server = create_server(kb, 0, mode="collaboration")
     worker = threading.Thread(target=server.serve_forever, daemon=True)
     worker.start()
     try:
@@ -289,7 +290,7 @@ def test_web_memory_projection_uses_durable_time_and_hides_inactive(kb):
         worker.join(timeout=5)
 
 
-def test_web_empty_state_actions_use_presence_checks():
+def test_web_empty_state_actions_use_presence_checks(kb):
     """面板不提供自己做不到的动作（原则②：移交而非代办）。
 
     旧版是在空状态里摆「发起协作 / 创建 / 刷新记忆 / 团队同步」按钮，靠 presence 检查决定显不显示。
@@ -305,15 +306,29 @@ def test_web_empty_state_actions_use_presence_checks():
         assert removed not in app, f"面板不得重新长出 {removed} 入口"
     for removed in ("newIntent", "agentChoices", "发起协作"):
         assert removed not in html, f"面板不得重新长出 {removed} 入口"
-    # 接入这件事没被删，只是改成「生成 prompt 交给宿主对话区去执行」
-    assert "复制接入说明" in html
-    assert "交给宿主对话区" in html
+    # Guidance remains a read-only handoff to the host, even with an empty KB.
+    server = create_server(kb, 0)
+    worker = threading.Thread(target=server.serve_forever, daemon=True)
+    worker.start()
+    base = f"http://127.0.0.1:{server.server_port}"
+    try:
+        with urlopen(base + "/api/connection-guide", timeout=5) as response:
+            guide = json.load(response)
+        assert guide["guide"].strip()
+        with urlopen(base + "/api/mail/capabilities", timeout=5) as response:
+            capabilities = json.load(response)
+        assert capabilities["read_only"] is True
+        assert capabilities["wake_supported"] is False
+    finally:
+        server.shutdown()
+        server.server_close()
+        worker.join(timeout=5)
     # 零写入口
     assert "<form" not in html
 
 
 def test_web_connection_status_and_mail_verification(kb):
-    server = create_server(kb, 0)
+    server = create_server(kb, 0, mode="collaboration")
     worker = threading.Thread(target=server.serve_forever, daemon=True)
     worker.start()
     base = f"http://127.0.0.1:{server.server_port}"
@@ -438,7 +453,7 @@ def test_web_archive_roundtrip_for_canonical_and_legacy(kb):
     canonical = mail.write_message(
         kb, sender="canonical-agent", recipients="human", title="新格式", body="新格式消息"
     )
-    server = create_server(kb, 0)
+    server = create_server(kb, 0, mode="collaboration")
     worker = threading.Thread(target=server.serve_forever, daemon=True)
     worker.start()
     base = f"http://127.0.0.1:{server.server_port}"
@@ -505,14 +520,14 @@ def test_web_session_id_is_stable_for_bound_port(kb):
     with socket.socket() as probe:
         probe.bind(("127.0.0.1", 0))
         port = probe.getsockname()[1]
-    first = create_server(kb, port)
+    first = create_server(kb, port, mode="collaboration")
     try:
         first_session = first.session_id
         session_path = mail.sessions_dir(kb) / f"{first_session}.json"
         first_record = json.loads(session_path.read_text(encoding="utf-8"))
     finally:
         first.server_close()
-    second = create_server(kb, port)
+    second = create_server(kb, port, mode="collaboration")
     try:
         token = hashlib.sha256("portable-test-machine".encode("utf-8")).hexdigest()[:12]
         assert second.session_id == f"mail-ui-{port}-{token}"
@@ -528,11 +543,11 @@ def test_web_session_id_separates_machines(kb, monkeypatch):
     with socket.socket() as probe:
         probe.bind(("127.0.0.1", 0))
         port = probe.getsockname()[1]
-    first = create_server(kb, port)
+    first = create_server(kb, port, mode="collaboration")
     first_id = first.session_id
     first.server_close()
     monkeypatch.setenv("OKS_MACHINE_ID", "another-portable-machine")
-    second = create_server(kb, port)
+    second = create_server(kb, port, mode="collaboration")
     try:
         assert second.session_id != first_id
         assert len(list(mail.sessions_dir(kb).glob("mail-ui-*.json"))) == 2

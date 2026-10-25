@@ -107,7 +107,8 @@ def evolve_knowledge(config: dict | None = None) -> dict:
         if f.name == "INDEX.md":
             continue
         meta = parse_wiki_file(f)
-        if not meta or meta.get("archived"):
+        from knowledge_studio.knowledge_policy import is_source_material
+        if not meta or meta.get("archived") or is_source_material(meta):
             continue
         if meta.get("status") == "dropped":
             continue

@@ -37,6 +37,7 @@ from knowledge_studio.recall import (
 )
 from knowledge_studio.vfs import FS_RESPONSE_SCHEMA, VfsError, VfsService
 from knowledge_studio.workbuddy import inspect_workbuddy_adapter
+from knowledge_studio.skills_cli import app as skills_app
 
 # ── ingest: connector is a regular PyPI dependency (oks-connector>=0.2.0) ──
 from oks_connector.raw_bundle_adapter import (
@@ -224,6 +225,7 @@ ingest_app = typer.Typer(
     cls=_LegacyIngestGroup,
 )
 app.add_typer(wiki_app, name="wiki")
+app.add_typer(skills_app, name="skills")
 app.add_typer(drafts_app, name="drafts")
 app.add_typer(config_app, name="config")
 app.add_typer(hook_app, name="hook")
@@ -560,6 +562,47 @@ def security_sanitize_cmd(
         "changed": True,
         "redaction_count": redaction_count,
     })
+
+
+@ingest_app.command("validate")
+def ingest_validate_cmd(
+    run_id: str = typer.Argument(..., help="Agent run identifier"),
+    collaboration: bool = typer.Option(False, "--collaboration", help="Require real owner-visible Mail handoffs"),
+    review_owner: str = typer.Option("human", "--review-owner"),
+):
+    """Check persisted extraction, candidate and optional Mail facts without writes."""
+    from knowledge_studio.ingest_workflow import validate_workflow
+
+    try:
+        result = validate_workflow(run_id, collaboration=collaboration, review_owner=review_owner)
+    except (ValueError, OSError) as exc:
+        _emit_json({"valid": False, "error": str(exc)})
+        raise typer.Exit(2)
+    _emit_json(result)
+    if not result["valid"]:
+        raise typer.Exit(2)
+
+
+@ingest_app.command("finalize")
+def ingest_finalize_cmd(
+    run_id: str = typer.Argument(..., help="Agent run identifier"),
+    source_only: bool = typer.Option(False, "--source-only", help="Explicit standalone intake without Mail handoffs"),
+    review_owner: str = typer.Option("human", "--review-owner"),
+):
+    """Check handoffs and atomically save pending/incomplete workflow state.
+
+    Does not acquire sources, send messages, approve drafts or promote to Wiki.
+    """
+    from knowledge_studio.ingest_workflow import finalize_workflow
+
+    try:
+        result = finalize_workflow(run_id, source_only=source_only, review_owner=review_owner)
+    except (ValueError, OSError) as exc:
+        _emit_json({"valid": False, "workflow_status": "incomplete", "error": str(exc)})
+        raise typer.Exit(2)
+    _emit_json(result)
+    if not result["valid"]:
+        raise typer.Exit(2)
 
 
 @ingest_app.command("prepare")
@@ -1095,11 +1138,19 @@ def wiki_get(
     ))
 
 
+@wiki_app.command("domains")
+def wiki_domains():
+    """List canonical knowledge domain IDs and display labels."""
+    from knowledge_studio.knowledge_policy import DOMAIN_LABELS
+    for key, label in DOMAIN_LABELS.items():
+        typer.echo(f"{key}\t{label}")
+
+
 @wiki_app.command("create")
 def wiki_create(
     title: str = typer.Option(..., "--title", help="Page title"),
     page_type: str = typer.Option("concept", "--type", help="concept/strategy/anti-pattern"),
-    area: str = typer.Option("computing", "--area", help="Knowledge domain"),
+    area: str = typer.Option(..., "--area", help="Canonical domain ID; see oks wiki domains"),
     importance: float = typer.Option(0.5, "--importance", help="0.0-1.0"),
     content: str = typer.Option("", "--content", help="Page body (or pipe via stdin)"),
 ):
@@ -1108,26 +1159,16 @@ def wiki_create(
     if not content and not sys.stdin.isatty():
         content = sys.stdin.read()
 
-    type_map = {
-        "concept": "concepts", "concepts": "concepts",
-        "strategy": "strategies", "strategies": "strategies",
-        "anti-pattern": "anti-patterns", "anti-patterns": "anti-patterns",
-    }
-    wiki_type = type_map.get(page_type)
-    if wiki_type is None:
-        console.print(
-            f"[yellow]Unknown --type '{page_type}' — using 'concept'. "
-            f"Valid: concept, strategy, anti-pattern.[/yellow]"
-        )
-        wiki_type = "concepts"
-
+    from knowledge_studio.knowledge_policy import validate_classification
     try:
+        area, wiki_type = validate_classification(area, page_type)
         path = store.write_wiki_page(
             title=title,
             content=content,
             wiki_type=wiki_type,
             area=area,
             importance=importance,
+            enforce_classification=True,
         )
     except ValueError as e:
         console.print(f"[red]{e}[/red]")
@@ -2056,6 +2097,10 @@ def _materialize_assets(root: Path, base: Path, overwrite: bool) -> list[str]:
         """
         wrote = False
         for item in sorted(src.rglob("*")):
+            # pip compiles Python files inside packaged assets on installation.
+            # Those caches are runtime noise, not part of a reusable Skill.
+            if "__pycache__" in item.relative_to(src).parts or item.suffix in {".pyc", ".pyo"}:
+                continue
             target = dest / item.relative_to(src)
             if item.is_dir():
                 target.mkdir(parents=True, exist_ok=True)
@@ -2583,6 +2628,8 @@ def skills_install(
         src = base / "skills"
         if src.is_dir():
             for item in sorted(src.rglob("*")):
+                if "__pycache__" in item.relative_to(src).parts or item.suffix in {".pyc", ".pyo"}:
+                    continue
                 if skill_names and item.relative_to(src).parts[0] not in skill_names:
                     continue
                 target = dest / item.relative_to(src)
@@ -3133,12 +3180,30 @@ def mail_setup(
 def mail_serve(
     path: Optional[str] = typer.Option(None, "--path", help="Knowledge base root"),
     port: int = typer.Option(3182, "--port", min=1, max=65535),
+    mode: str = typer.Option("reader", "--mode", help="reader (read-only) or collaboration (legacy write API)"),
+    background: bool = typer.Option(False, "--background", help="Run independently of this terminal or host session"),
+    status: bool = typer.Option(False, "--status", help="Probe the managed server without writing files"),
+    stop: bool = typer.Option(False, "--stop", help="Stop only this instance's managed background server"),
 ) -> None:
     """Serve the real local Mail workspace for a human browser."""
     from knowledge_studio.mail_web import create_server
 
+    if sum((background, status, stop)) > 1:
+        raise typer.BadParameter("Choose only one of --background, --status or --stop")
+    if background or status or stop:
+        from knowledge_studio.mail_server import start_background, server_status, stop_background
+
+        operation = start_background if background else (server_status if status else stop_background)
+        try:
+            result = operation(_instance_root(path), port, **({"mode": mode} if background else {}))
+        except (ValueError, OSError, RuntimeError) as exc:
+            _emit_json({"error": str(exc)})
+            raise typer.Exit(2)
+        _emit_json(result)
+        return
+
     try:
-        server = create_server(_instance_root(path), port)
+        server = create_server(_instance_root(path), port, mode=mode)
     except (ValueError, OSError) as exc:
         console.print(f"[red]{exc}[/red]")
         raise typer.Exit(2)

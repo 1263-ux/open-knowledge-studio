@@ -264,18 +264,8 @@ def raw_message(
 # ── Candidate promotion ──────────────────────────────────────────────────
 
 
-def promote_candidate_document(
-    candidate_path: Path,
-    reviewed_body: str,
-    review: dict[str, Any],
-    *,
-    root: Path,
-    knowledge_root: Path | None = None,
-) -> Path:
-    metadata, _body = parse_candidate_document(candidate_path.read_text(encoding="utf-8"))
-    metadata["status"] = "draft"
-    metadata["review"] = review
-    atomic_write_text(candidate_path, render_candidate_document(metadata, reviewed_body))
+def _load_studio_store():
+    """Support both installed Studio and the optional worker's source entrypoint."""
     try:
         store = importlib.import_module("knowledge_studio.store")
     except ImportError as first_error:
@@ -302,6 +292,22 @@ def promote_candidate_document(
             raise RuntimeError(
                 "knowledge_studio is not installed and no source checkout CLI was found"
             ) from first_error
+    return store
+
+
+def promote_candidate_document(
+    candidate_path: Path,
+    reviewed_body: str,
+    review: dict[str, Any],
+    *,
+    root: Path,
+    knowledge_root: Path | None = None,
+) -> Path:
+    metadata, _body = parse_candidate_document(candidate_path.read_text(encoding="utf-8"))
+    metadata["status"] = "draft"
+    metadata["review"] = review
+    atomic_write_text(candidate_path, render_candidate_document(metadata, reviewed_body))
+    store = _load_studio_store()
 
     previous_root = os.environ.get("OKS_ROOT")
     if knowledge_root is not None:
@@ -386,6 +392,12 @@ def review_candidate(
         reviewed_body = str(fields.get("候选内容") or "").strip()
         if len(reviewed_body) < 50:
             raise RuntimeError("Accepted Candidate content is empty or too short")
+        from feishu_worker.knowledge_reader import snapshot_record, merge_observation
+        metadata, existing_body = parse_candidate_document(candidate_path.read_text(encoding="utf-8"))
+        metadata["worker_records"] = merge_observation(
+            metadata.get("worker_records"), snapshot_record(config, record_id, fields)
+        )
+        atomic_write_text(candidate_path, render_candidate_document(metadata, existing_body))
         wiki_path = _promote(
             candidate_path,
             reviewed_body,

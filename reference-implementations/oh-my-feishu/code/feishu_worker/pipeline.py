@@ -359,6 +359,8 @@ def process_record(
         declared_capability, _ = attachment_capability(Path(attachment_descriptors[0]["name"]))
     run = initial_run(run_id, capture, declared_capability)
     atomic_write_json(run_dir / "capture-envelope.json", capture)
+    from feishu_worker.knowledge_reader import snapshot_record
+    atomic_write_json(run_dir / "intake-fields.json", snapshot_record(config, record_id, fields))
     atomic_write_json(run_dir / "processing-run.json", run)
     _update(
         config,

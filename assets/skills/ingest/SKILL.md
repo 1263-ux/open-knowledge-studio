@@ -13,8 +13,53 @@ oks ingest prepare <source>  →  SourceEnvelope + Manifest skeleton
 → Judge modality → Read Recipe → Query capability status → Select minimum sufficient provider set
 → Execute provider cluster (one execution → multiple evidence fragments)
 → Fill evidence_records  →  oks raw commit
-→ AgentObservation → CandidateDraft → drafts/{slug}.md → Report
+→ AgentObservation → CandidateDraft → drafts/{slug}.md → result.json
+→ oks ingest finalize <run_id> [--source-only] → Report checked state
 ```
+
+## Collaboration checkpoints for an end-to-end workflow
+
+When the user requests an end-to-end ingestion workflow with collaboration,
+Mail is part of the handoff, not an optional decoration after drafting. Use the
+bundled `oks-mail` Skill and the same KB for these explicit local records:
+
+1. Before acquisition, read an existing task Thread or create one Agent-authored
+   `goal` record describing the requested source, outcome and review owner.
+   Reuse this Thread throughout the run. The Agent must not impersonate the human.
+2. At a meaningful blocker, record `blocked` with its actual limitation and what
+   is needed. Keep evidence status `partial`, `failed` and `skipped` unchanged.
+3. Once outputs exist and have been checked, reply with `result`, referencing the
+   run and Raw Bundle by ID and each existing Candidate by its KB-relative path.
+4. For grade A, reply with `review_request` to the authorized review owner, linking
+   the Candidates and stating what remains unverified. This is the actual handoff
+   to human review; it is not acceptance, a receipt or Wiki promotion.
+
+Store the actual Thread and message IDs under `collaboration` in `result.json`.
+Before reporting an authorized collaborative workflow, run
+`oks ingest finalize <run_id> --review-owner <owner>`.
+For a standalone source intake use `oks ingest finalize <run_id> --source-only` instead.
+Declare `workflow_mode: collaboration` or `source_only` when writing the result;
+an already-declared collaborative run cannot bypass handoffs using `--source-only`.
+Fix or explicitly report each validation error; do not report the workflow as
+complete when a required handoff is missing. Finalization saves checked workflow
+state and validation errors atomically in the run result; it does not send messages,
+execute Skills, confirm receipts or approve drafts. `oks ingest validate` remains
+available for a read-only recheck; stored validation is only a point-in-time check.
+Grade-A candidates must carry `source_bundle_id` matching the committed Bundle.
+Read that Thread when resuming and reuse existing run-linked records instead of
+duplicating them. Before reporting an end-to-end workflow complete, verify the
+result and review request are visible in the owner's Mail projection. Report
+evidence completion and pending human review separately.
+
+Communication still requires user authorization. A source-only extraction or
+standalone `prepare`/`raw-commit` invocation must not silently send messages.
+When authorization is absent, prepare the result and proposed handoff first;
+leave `collaboration.status` as `not_requested` or `awaiting_authorization`.
+Local recording does not authorize Git sync, external delivery or host wake.
+
+If a completed run lacks Mail records, label any later records as retrospective
+and use their real creation time. Never backdate a goal, invent another Agent's
+work, or manufacture human approval or delivery receipts to fill the timeline.
 
 ## Pre-flight: Search before adding
 
@@ -438,9 +483,17 @@ On success: bundle_id returned.  On rejection: read error_code, do NOT retry bli
    ```
 
    **The field names must be `draft_type` and `draft_area`.** `oks drafts
-   promote` reads only those; writing `type:` / `area:` falls back to
-   `concept` / `computing`, so a strategy about science lands silently in
-   `wiki/computing/concepts/` with no error.
+   promote` requires both fields (or explicit review overrides `--type` and
+   `--area`). Missing or unknown classification stops promotion and preserves
+   the Candidate. Select a canonical domain ID from `oks wiki domains`; do not
+   guess a default when the subject is uncertain.
+
+   OCR is extraction evidence: retain original images, transcripts, source
+   hashes and locators in the Raw Bundle. Do not create OCR compilations in
+   `wiki/`. Distill a separate Candidate citing that evidence, then request
+   human review. Re-extraction should retain evidence already cited by Wiki.
+   `raw-commit --overwrite` explicitly replaces a bundle and does not provide
+   permanent version history; it never replaces a reviewed Wiki body.
 
    Set `importance` and `confidence` as YAML numbers in `[0, 1]` based on the
    Candidate's value and evidence. Promotion preserves explicit scores,
@@ -460,6 +513,8 @@ MUST write `.oks/runs/{run_id}/result.json` before reporting to user.
 ```json
 {
   "status": "complete|partial",
+  "workflow_mode": "source_only",
+  "workflow_status": "incomplete",
   "source": "<source uri>",
   "providers_used": ["pdf-lite", "agent-runtime"],
   "capabilities_used": ["document.text.extract", "image.observe"],
@@ -489,6 +544,16 @@ MUST write `.oks/runs/{run_id}/result.json` before reporting to user.
 }
 ```
 
+Use `workflow_mode: collaboration` for the authorized end-to-end flow and include
+the actual `collaboration` Thread/message IDs. Start with `workflow_status: incomplete`;
+do not hand-write a successful workflow state. Once evidence, Candidates and authorized
+Mail handoffs exist, MUST run `oks ingest finalize <run_id> --review-owner <owner>`.
+Standalone intake MUST use `--source-only`. Check the exit code and returned errors.
+On failure, fix the missing facts or report the flow as incomplete. Finalization
+preserves extraction `status` (including `partial`, `failed` and `skipped`); a failed
+or skipped extraction cannot pass. It never promotes Candidates or records approval.
+On success, Candidates remain `awaiting_human_review`; grade B/C stays `source_only`.
+
 ### intake_grade fields
 
 - **intake_grade** (required): `A` | `B` | `C` — your Step 7 judgment
@@ -515,7 +580,10 @@ MUST write `.oks/runs/{run_id}/result.json` before reporting to user.
 
 ## Step 9: Report to User (Guided UX)
 
-MUST output the unified result card as the final user-facing message.
+MUST output the unified result card using the finalization result. If finalization
+fails, say “流程未完成” and name the missing handoff/evidence. If Candidates are
+pending, say “资料提取完成，等待人工审核” (or “资料部分提取，等待人工审核”
+for partial extraction); never imply Wiki entry or the whole workflow is complete.
 
 **All user-facing text MUST be in Chinese natural language.**
 **NEVER expose provider IDs, capability IDs, or schema names to the user.**
@@ -524,7 +592,7 @@ Translate everything into plain-language descriptions.
 ### Complete result:
 
 ```
-✅ 摄入完成
+✅ 资料提取完成，等待人工审核
 
 来源：{source_uri}
 
@@ -544,7 +612,7 @@ Translate everything into plain-language descriptions.
 ### Partial result (with guided recommendation):
 
 ```
-⚠️ 部分完成
+⚠️ 资料部分提取，等待人工审核
 
 来源：{source_uri}
 
@@ -586,11 +654,12 @@ Translate everything into plain-language descriptions.
 
 ### Card principles:
 
-- **摄入完成**: `complete` (all required evidence obtained), `partial` (some evidence missing, usable), `failed` (no usable evidence)
+- **提取状态**: `complete` (all required evidence obtained), `partial` (some evidence missing, usable), `failed` (no usable evidence). Report the separately checked workflow state; extraction completion alone is not workflow completion.
 - **已获得**: bullet list in plain Chinese — describe WHAT was obtained, not HOW (say "正文内容" not "web.extract via Firecrawl")
 - **缺失**: bullet list with impact explanation — always state what's affected
 - **推荐**: always provide a recommended next step, don't just list options
-- **下一步**: always points to `/promote` for human review
+- **下一步**: for grade A, point to `/promote` for human review; for grade B/C,
+  explain why only the source was retained and what additional evidence is needed
 - **Provider chain**: only shown internally (result.json), not in user-facing card
 
 ## Guided UX Principles
@@ -819,6 +888,7 @@ When using a Runtime Tool:
 - ALWAYS explain missing evidence in terms of user impact, not technical failure
 - ALWAYS recommend a default action when presenting choices to the user
 - MUST write result.json to `.oks/runs/{run_id}/result.json` before reporting to user
+- MUST run `oks ingest finalize <run_id>` (explicit `--source-only` for standalone intake), check its exit code, and report its checked workflow state before claiming a handoff is ready
 - MUST include `provider_selection` in result.json with chosen, candidates_considered, and rationale
 - MUST include `degradation_path` in provider_selection when fallback was activated
 - MUST output the unified result card as the final user-facing message (Step 9 format)
