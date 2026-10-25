@@ -3999,18 +3999,35 @@ def test_package_routed_source_uses_shared_run_or_validate():
     )
 
 
-def test_source_router_package_public_web_uses_extractors_web():
-    """source_router.package_public_web imports from extractors.web, not experiments/."""
-    import inspect
+@pytest.mark.parametrize("valid", [True, False])
+def test_source_router_package_public_web_uses_packaged_connector(monkeypatch, tmp_path, valid):
+    """The installed Connector receives the source and failed validation is rejected."""
+    import sys
+    import types
+    import subprocess
     from feishu_worker import source_router as sr
+    from feishu_worker.config import WorkerConfig
 
-    source = inspect.getsource(sr.package_public_web)
-    assert "extractors.web" in source, (
-        f"package_public_web must import from extractors.web:\n{source}"
-    )
-    assert "experiments" not in source, (
-        f"package_public_web must not reference experiments/:\n{source}"
-    )
+    calls = []
+    web = types.ModuleType("oks_connector.extractors.web")
+    web.package_web = lambda url, output, **kwargs: calls.append((url, output, kwargs))
+    monkeypatch.setitem(sys.modules, "oks_connector.extractors.web", web)
+    monkeypatch.setattr(sr, "_connector_binary", lambda root: ["oks-connector"])
+
+    def validate(argv, **kwargs):
+        assert argv == ["oks-connector", "validate", str(tmp_path / "bundle")]
+        assert kwargs["cwd"] == tmp_path
+        return subprocess.CompletedProcess(argv, 0, json.dumps({"valid": valid}), "")
+
+    monkeypatch.setattr(sr.subprocess, "run", validate)
+    config = WorkerConfig("base", "table", tmp_path / "lark", tmp_path)
+    if valid:
+        result = sr.package_public_web(config, "https://example.com", tmp_path / "bundle", "user note", root=tmp_path)
+        assert result["valid"] is True
+    else:
+        with pytest.raises(RuntimeError, match="Raw Bundle validation failed"):
+            sr.package_public_web(config, "https://example.com", tmp_path / "bundle", "user note", root=tmp_path)
+    assert calls == [("https://example.com", tmp_path / "bundle", {"human_context": "user note"})]
 
 
 def test_source_router_module_has_no_experiment_import():
