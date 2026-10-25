@@ -76,6 +76,14 @@ def test_invalid_candidate_evidence_path_is_rejected(tmp_path):
         )
 
 
+@pytest.mark.parametrize("kind", ["goal", "review_request", "acknowledgement"])
+def test_collaboration_fact_kinds_are_writable_and_roundtrip(tmp_path, kind):
+    message = mail.write_message(tmp_path, sender="human", recipients="reviewer",
+                                 body="Explicit communication fact, not execution state", record_kind=kind)
+    assert mail.parse_message(message["path"])["meta"]["record_kind"] == kind
+    assert mail.snapshot_data(tmp_path, "reviewer")["threads"][0]["messages"][0]["record_kind"] == kind
+
+
 def test_legacy_date_organized_inbox_remains_readable(tmp_path):
     path = tmp_path / "mail" / "inbox" / "2026" / "09" / "11" / "legacy.md"
     path.parent.mkdir(parents=True)
@@ -83,6 +91,36 @@ def test_legacy_date_organized_inbox_remains_readable(tmp_path):
     messages = list(mail.iter_messages(tmp_path, "reviewer"))
     assert len(messages) == 1
     assert messages[0]["title"] == "Legacy"
+
+
+def test_snapshot_participants_cover_the_whole_thread(tmp_path):
+    first = _message(tmp_path, sender="writer", to="human")
+    _message(tmp_path, sender="reviewer", to="human", thread_id=first["thread_id"])
+
+    thread = mail.snapshot_data(tmp_path, "human")["threads"][0]
+    assert set(thread["participants"]) == {"@writer", "@reviewer", "@human"}
+
+
+def test_snapshot_orders_threads_by_latest_message_not_iterator_order(tmp_path):
+    old = _message(tmp_path, sender="writer", to="human")
+    _message(tmp_path, sender="reviewer", to="human")
+    _message(tmp_path, sender="writer", to="human", thread_id=old["thread_id"])
+
+    threads = mail.snapshot_data(tmp_path, "human")["threads"]
+    assert threads[0]["thread_id"] == old["thread_id"]
+
+
+def test_thread_detail_uses_snapshot_fallback_for_legacy_empty_thread_id(tmp_path):
+    path = tmp_path / "mail" / "inbox" / "legacy-empty.md"
+    path.parent.mkdir(parents=True)
+    path.write_text(
+        "---\nmessage_id: legacy-empty\nthread_id: \nfrom: writer\nto: human\n---\n\n"
+        "# Older record\n\nFull body\n", encoding="utf-8",
+    )
+
+    thread = mail.snapshot_data(tmp_path, "human")["threads"][0]
+    assert thread["thread_id"] == "legacy-empty"
+    assert [row["body"] for row in mail.thread_messages(tmp_path, thread["thread_id"], "human")] == ["Full body"]
 
 
 def test_all_expands_from_session_registry_without_profile_registry(tmp_path):

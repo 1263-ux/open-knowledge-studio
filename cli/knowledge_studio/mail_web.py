@@ -9,7 +9,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 from knowledge_studio import identity, mail, store
-from knowledge_studio import mail_knowledge, mail_timeline, team_sync
+from knowledge_studio import mail_knowledge, mail_timeline, mail_observation, team_sync
 from knowledge_studio.mail_activity import activity_data, delivery_records
 from knowledge_studio.mail_setup import asset_root, validate_root, agent_id
 
@@ -76,23 +76,25 @@ def reply_recipients(root, thread_id):
     return recipients, latest
 
 
-def _mail_verification(root):
+def _mail_verification(root, viewer=None):
     """Derive Mail verification only from an observed lifecycle, never a heartbeat.
 
-    Evidence is KB-wide: an Agent proves itself by acknowledging one delivery
-    or by authoring a reply inside a Thread, whether or not the human can see
-    that Thread.  Presence still never implies online or executable.
+    Evidence is restricted to the viewer when supplied. Acknowledgement or an
+    explicit reply proves an observed lifecycle, never online availability or
+    task acceptance. Internal callers may omit the viewer for KB-wide evidence.
     """
-    messages = list(mail.iter_messages(root))
+    messages = list(mail.iter_messages(root, viewer))
+    by_id = {str(row["meta"]["message_id"]): row for row in messages}
     deliveries = delivery_records(root, messages)
     verified = {}
     for row in messages:
         meta = row["meta"]
         message_id = str(meta.get("message_id", ""))
         sender = mail._normalise_agent(str(meta.get("from", "")))
-        # A reply inside a Thread is lifecycle evidence for its author.
-        if str(meta.get("reply_to", "") or "") and sender not in {"@human", "@unknown"}:
-            verified.setdefault(sender, {"message_id": message_id, "evidence": "reply"})
+        # Require the actual visible parent; a dangling/private/cross-Thread
+        # reply_to string cannot establish an observed communication lifecycle.
+        if mail.visible_reply_parent(row, by_id) and sender not in {"@human", "@unknown"}:
+            verified.setdefault(sender, {"message_id": message_id, "thread_id": meta.get("thread_id") or message_id, "evidence": "reply"})
         for recipient in meta.get("to", []):
             agent = mail._normalise_agent(str(recipient))
             if agent in {"@human", "@all", "@unknown"}:
@@ -101,7 +103,7 @@ def _mail_verification(root):
             sessions = recipient_delivery.get("sessions", []) if recipient_delivery else []
             ack = next((session for session in sessions if session.get("acknowledged_at")), None)
             if ack:
-                verified[agent] = {"message_id": message_id, "session_id": ack.get("session_id"), "evidence": "acknowledged"}
+                verified[agent] = {"message_id": message_id, "thread_id": meta.get("thread_id") or message_id, "session_id": ack.get("session_id"), "evidence": "acknowledged"}
     return verified
 
 
@@ -117,12 +119,41 @@ def _verification_state(agent, verification, traced):
     return "observed" if agent in traced else "unverified"
 
 
-def connection_status(root):
+def connection_status(root, viewer=None):
     """Return observed provenance plus explicit Mail lifecycle verification."""
     sessions = []
     agents = {}
     machines = set()
-    verification = _mail_verification(root)
+    verification = _mail_verification(root, viewer)
+    visible_rows = list(mail.iter_messages(root, viewer))
+    visible_sessions = set()
+    visible_times = {}
+    visible_machines = {}
+    if viewer is not None:
+        for row in visible_rows:
+            meta = row["meta"]
+            session_id = str(meta.get("origin_session_id") or "")
+            if session_id:
+                pair = (mail._normalise_agent(str(meta.get("from") or "")), session_id)
+                visible_sessions.add(pair)
+                visible_times[pair] = max(visible_times.get(pair, ""), str(meta.get("timestamp") or ""))
+                machine = str(meta.get("origin_machine_id") or "")
+                if machine and machine != "unknown":
+                    visible_machines[pair] = machine
+        for deliveries in delivery_records(root, visible_rows).values():
+            for delivery in deliveries:
+                for receipt in delivery["sessions"]:
+                    session_id = str(receipt.get("session_id") or "")
+                    pair = (delivery["agent_id"], session_id)
+                    visible_sessions.add(pair)
+                    visible_times[pair] = max(
+                        visible_times.get(pair, ""),
+                        *(str(receipt.get(key) or "") for key in ("injected_at", "delivered_at", "acknowledged_at")),
+                    )
+                    machine = str(receipt.get("machine_id") or "")
+                    if machine and machine != "unknown":
+                        visible_machines[pair] = machine
+                        machines.add(machine)
     # 「有投递痕迹」：这个身份在某条消息里发过言、或被人投递过。
     # 它与「有回执证据」是两件事——痕迹只说明双方通过消息接触过，
     # 不说明对方确认读到了。所以得先把全库的消息扫完，再统一判状态。
@@ -130,10 +161,9 @@ def connection_status(root):
 
     # 消息先扫：它同时提供「这个身份存在过」和「有过投递痕迹」两份信息，
     # 而 Session 档案只提供前者。顺序反过来就算不出未验证。
-    # 视野必须是全库而不是 human 视角：回执证据（_mail_verification）本身就是
-    # 全库口径，痕迹若只看局部的收件箱，两者不可比——别人之间的交接会被算成
-    # 没发生过，本该「已观察到」的身份会掉进「未验证」。
-    for message in mail.iter_messages(root):
+    # Verification, provenance and Session summaries use the same viewer scope.
+    # A private conversation must not leak through counts or the member roster.
+    for message in visible_rows:
         sender = mail._normalise_agent(str(message["meta"].get("from", "")))
         if sender not in {"@human", "@unknown"}:
             traced.add(sender)
@@ -150,9 +180,22 @@ def connection_status(root):
             peer = mail._normalise_agent(str(recipient))
             if peer not in {"@human", "@all", "@unknown"}:
                 traced.add(peer)
+                if viewer is not None:
+                    agents.setdefault(peer, {
+                        "agent_id": peer, "session_count": 0,
+                        "machine_ids": set(), "last_observed_at": "",
+                    })
         machine = str(message["meta"].get("origin_machine_id", "") or "")
         if machine and machine != "unknown":
             machines.add(machine)
+
+    if viewer is not None:
+        # Session summaries may be backed by a registry row, but their machine
+        # identity must come from the visible snapshot rather than that row.
+        for (agent, _session_id), machine in visible_machines.items():
+            summary = agents.get(agent)
+            if summary:
+                summary["machine_ids"].add(machine)
 
     directory = mail.sessions_dir(root)
     if directory.is_dir():
@@ -165,15 +208,20 @@ def connection_status(root):
                 continue
             agent = mail._normalise_agent(str(record.get("agent_id", "@unknown")))
             session_id = str(record.get("session_id", path.stem))
+            if viewer is not None and (agent, session_id) not in visible_sessions:
+                continue
             machine = str(record.get("machine_id", "unknown") or "unknown")
             last_seen = str(record.get("last_seen_at", "") or "")
+            if viewer is not None:
+                last_seen = visible_times.get((agent, session_id), "")
+                machine = visible_machines.get((agent, session_id), "unknown")
             item = {
                 "session_id": session_id,
                 "agent_id": agent,
                 "machine_id": machine,
                 "verification_status": _verification_state(agent, verification, traced),
                 "last_observed_at": last_seen,
-                "scope": str(record.get("scope", "") or ""),
+                "scope": "" if viewer is not None else str(record.get("scope", "") or ""),
             }
             if agent in verification:
                 item["verification_evidence"] = verification[agent]
@@ -214,7 +262,7 @@ def connection_status(root):
         "sync": {
             "transport": "git",
             "state": "local-files",
-            "message": "Mail 文件通过 Git 在机器之间交换；成员页可显式一键同步，不会后台 push/pull。",
+            "message": "Mail 文件通过团队 Git 流程交换；观察面板不执行同步。",
         },
     }
 
@@ -741,6 +789,21 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(403, {"error": "loopback Host required"})
             return
         route = self.path.split("?", 1)[0]
+        if route == "/api/mail/overview":
+            query = parse_qs(urlsplit(self.path).query)
+            try:
+                result = mail_observation.overview_data(
+                    self.server.kb_root, UI_AGENT,
+                    filter_kind=query.get("filter", ["all"])[0],
+                    query=query.get("q", [""])[0],
+                    limit=int(query.get("limit", ["50"])[0]),
+                    cursor=query.get("cursor", [""])[0],
+                )
+            except ValueError as exc:
+                self.send_json(400, {"error": str(exc)})
+                return
+            self.send_json(200, result)
+            return
         if route == "/api/mail/activity":
             self.send_json(200, activity_data(self.server.kb_root, UI_AGENT))
             return
@@ -759,10 +822,11 @@ class Handler(BaseHTTPRequestHandler):
                                  "deliveries": deliveries.get(str(meta.get("message_id")), [])})
             self.send_json(200, {"thread_id": thread_id, "messages": messages,
                                  "title": rows[0].get("title", "未命名对话"),
+                                 "observation": mail_observation.thread_observation(self.server.kb_root, rows),
                                  "state": "archived" if all((row.get("state") or {}).get("archived_at") for row in rows) else "open"})
             return
         if route == "/api/mail/status":
-            self.send_json(200, connection_status(self.server.kb_root))
+            self.send_json(200, connection_status(self.server.kb_root, UI_AGENT))
             return
         if route == "/api/mail/team":
             self.send_json(200, team_sync.status(self.server.kb_root))

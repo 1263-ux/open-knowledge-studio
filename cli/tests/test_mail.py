@@ -11,6 +11,19 @@ import pytest
 from typer.testing import CliRunner
 
 
+@pytest.mark.parametrize("kind", ["goal", "review_request", "acknowledgement"])
+def test_cli_supports_explicit_collaboration_facts(tmp_path, monkeypatch, kind):
+    from knowledge_studio import cli, mail
+    monkeypatch.setenv("OKS_ROOT", str(tmp_path))
+    monkeypatch.setenv("OKS_AGENT_ID", "human")
+    result = CliRunner().invoke(cli.app, ["mail", "send", "--to", "reviewer",
+                                            "--body", "Explicit fact", "--record-kind", kind, "--format", "json"])
+    assert result.exit_code == 0, result.stdout
+    data = json.loads(result.stdout)
+    assert data["record_kind"] == kind
+    assert mail.thread_messages(tmp_path, data["thread_id"], "reviewer")[0]["meta"]["record_kind"] == kind
+
+
 def test_message_has_recipient_state_and_independent_session_receipts(tmp_path):
     from knowledge_studio import mail
 
