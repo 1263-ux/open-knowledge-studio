@@ -6,6 +6,7 @@ import re
 from datetime import date, datetime, time, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from socketserver import TCPServer
 from urllib.parse import parse_qs, urlsplit
 
 from knowledge_studio import identity, mail, mail_media, store
@@ -1230,11 +1231,19 @@ class Handler(BaseHTTPRequestHandler):
         except (ValueError, json.JSONDecodeError) as exc:
             self.send_json(400, {"error": str(exc)})
 
+class _LoopbackHTTPServer(ThreadingHTTPServer):
+    def server_bind(self):
+        # HTTPServer's reverse DNS can block macOS detached startup. This
+        # service only binds loopback and needs no externally resolved name.
+        TCPServer.server_bind(self)
+        self.server_name, self.server_port = self.server_address[:2]
+
+
 def create_server(root: Path, port: int = 3182, *, mode: str = "reader", knowledge_source=None) -> ThreadingHTTPServer:
     if mode not in {"reader", "collaboration"}:
         raise ValueError("Mail mode must be reader or collaboration")
     root = validate_root(root)
-    server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+    server = _LoopbackHTTPServer(("127.0.0.1", port), Handler)
     server.kb_root = root
     server.mode = mode
     server.knowledge_source = knowledge_source

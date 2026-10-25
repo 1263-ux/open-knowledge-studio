@@ -76,6 +76,19 @@ def test_foreign_foreground_server_is_never_adopted_or_stopped(instance, tmp_pat
         thread.join(timeout=3)
 
 
+def test_loopback_startup_does_not_require_reverse_dns(instance, monkeypatch):
+    def unavailable(_host):
+        raise RuntimeError("Reverse DNS is unavailable")
+
+    monkeypatch.setattr(socket, "getfqdn", unavailable)
+    server = create_server(instance, 0)
+    try:
+        assert server.server_name == "127.0.0.1"
+        assert server.server_port == server.server_address[1]
+    finally:
+        server.server_close()
+
+
 def test_other_instance_cannot_reuse_or_stop_owner(instance, tmp_path):
     other = tmp_path / "other"
     (other / "wiki").mkdir(parents=True)
