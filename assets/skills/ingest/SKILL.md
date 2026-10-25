@@ -442,6 +442,12 @@ On success: bundle_id returned.  On rejection: read error_code, do NOT retry bli
    `concept` / `computing`, so a strategy about science lands silently in
    `wiki/computing/concepts/` with no error.
 
+   Set `importance` and `confidence` as YAML numbers in `[0, 1]` based on the
+   Candidate's value and evidence. Promotion preserves explicit scores,
+   including `0`; human approval alone does not raise confidence. For legacy
+   drafts without scores, newly promoted pages default to `importance: 0.7`
+   and `confidence: 0.8`.
+
    **Important:** Candidate is a draft Markdown document written to `drafts/{slug}.md`.
    Candidate is NOT an OKS protocol schema object.
    Do NOT call `oks schema show candidate` — it does not exist as a schema.

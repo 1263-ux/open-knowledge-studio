@@ -193,6 +193,90 @@ def _write_draft(root: Path, name: str, body: str, **fields) -> None:
     (drafts / f"{name}.md").write_text(f"---\n{front}---\n\n{body}\n", encoding="utf-8")
 
 
+@pytest.mark.parametrize("importance, confidence", [(0.3, 0.4), (0, 0), (1, 1)])
+def test_promotion_preserves_declared_scores(monkeypatch, tmp_path, importance, confidence):
+    monkeypatch.setenv("OKS_ROOT", str(tmp_path))
+    _write_draft(
+        tmp_path, "scored", "A source with explicitly reviewed scores.",
+        draft_type="strategy", draft_area="science",
+        importance=importance, confidence=confidence,
+    )
+
+    page = store.get_wiki_page(store.promote_draft("scored"))
+
+    assert page["importance"] == importance
+    assert page["confidence"] == confidence
+    assert page["type"] == "strategy"
+    assert page["area"] == "science"
+    assert Path(page["file_path"]).parent == tmp_path / "wiki/science/strategies"
+    assert page["status"] == "active"
+    assert page["human_reviewed_at"]
+    assert not (tmp_path / "drafts/scored.md").exists()
+
+
+def test_promotion_keeps_legacy_score_defaults(monkeypatch, tmp_path):
+    monkeypatch.setenv("OKS_ROOT", str(tmp_path))
+    _write_draft(tmp_path, "legacy", "A legacy draft without scores.")
+
+    page = store.get_wiki_page(store.promote_draft("legacy"))
+
+    assert page["importance"] == 0.7
+    assert page["confidence"] == 0.8
+
+
+@pytest.mark.parametrize("field", ["importance", "confidence"])
+@pytest.mark.parametrize("value", [None, -0.1, 1.1, "0.4", True, float("nan"), float("inf")])
+def test_promotion_rejects_invalid_scores_without_side_effects(monkeypatch, tmp_path, field, value):
+    monkeypatch.setenv("OKS_ROOT", str(tmp_path))
+    old = store.write_wiki_page("Old note", "Existing reviewed knowledge.", human_reviewed=True)
+    before = old.read_bytes()
+    _write_draft(
+        tmp_path, "invalid", "A replacement with an invalid score.",
+        relates_to=old.stem, relationship="supersedes", **{field: value},
+    )
+    draft = tmp_path / "drafts/invalid.md"
+    draft_before = draft.read_bytes()
+
+    with pytest.raises(ValueError, match=field):
+        store.promote_draft("invalid")
+
+    assert draft.read_bytes() == draft_before
+    assert old.read_bytes() == before
+    assert list((tmp_path / "wiki").rglob("*.md")) == [old]
+
+
+def test_dedup_promotion_preserves_declared_scores(monkeypatch, tmp_path):
+    monkeypatch.setenv("OKS_ROOT", str(tmp_path))
+    body = "A second-hand claim with limited evidence."
+    existing = store.write_wiki_page("Existing note", body)
+    _write_draft(tmp_path, "reviewed", body, importance=0.3, confidence=0.4)
+
+    slug = store.promote_draft("reviewed")
+    page = store.get_wiki_page(slug)
+
+    assert slug == existing.stem
+    assert page["importance"] == 0.3
+    assert page["confidence"] == 0.4
+    assert page["status"] == "active"
+    assert page["human_reviewed_at"]
+    assert len(list((tmp_path / "wiki").rglob("*.md"))) == 1
+
+
+def test_legacy_dedup_promotion_keeps_existing_importance(monkeypatch, tmp_path):
+    monkeypatch.setenv("OKS_ROOT", str(tmp_path))
+    existing = store.write_wiki_page(
+        "Existing note", "A body from an earlier review.", importance=0.3,
+    )
+    _write_draft(tmp_path, "legacy-duplicate", existing.read_text(encoding="utf-8").split("---", 2)[2].strip())
+
+    slug = store.promote_draft("legacy-duplicate")
+    page = store.get_wiki_page(slug)
+
+    assert page["importance"] == 0.3
+    assert page["confidence"] > 0.8
+    assert page["status"] == "active"
+
+
 def test_dedup_hit_still_records_the_human_review(monkeypatch, tmp_path):
     """Promoting a body-identical draft used to silently discard the approval.
 
