@@ -892,12 +892,13 @@ def eval_compare(
     baseline: Path = typer.Argument(help="Baseline run JSON"),
     candidate: Path = typer.Argument(help="Candidate run JSON"),
     output: Optional[Path] = typer.Option(None, "--output", "-o", help="Optional comparison JSON"),
+    vary: Optional[list[str]] = typer.Option(None, "--vary", help="Intentional experiment variable: code or backend; repeat for both"),
 ):
-    """Compare two runs produced from the same dataset snapshot."""
+    """Compare runs with matching dataset, knowledge and configuration snapshots."""
     from knowledge_studio.evaluation import compare_runs
 
     try:
-        result = compare_runs(baseline, candidate, output)
+        result = compare_runs(baseline, candidate, output, vary=vary or ())
     except (OSError, ValueError, KeyError) as e:
         console.print(f"[red]{e}[/red]")
         raise typer.Exit(1)

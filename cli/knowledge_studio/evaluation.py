@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import re
 import subprocess
 import time
 from datetime import UTC, datetime
@@ -13,12 +14,16 @@ from typing import Any
 
 import yaml
 
-from knowledge_studio.recall import recall_knowledge
+from knowledge_studio.recall import load_recall_params, recall_knowledge
 from knowledge_studio.store import _atomic_write, repo_root
 
 DATASET_SCHEMA = "recall-case/v1"
 RUN_SCHEMA = "recall-eval-run/v1"
 COMPARISON_SCHEMA = "recall-eval-comparison/v1"
+CONTEXT_SCHEMA = "recall-eval-context/v1"
+EXPERIMENT_VARIABLES = {"code": "code_sha256", "backend": "backend"}
+QUALITY_METRICS = {"recall_at_1", "recall_at_3", "recall_at_5", "mrr", "ndcg_at_5", "no_result", "stale_leakage"}
+RUN_METRICS = QUALITY_METRICS | {"latency_p50_ms", "latency_p95_ms", "case_count"}
 
 
 def _utc_now() -> str:
@@ -55,6 +60,28 @@ def _kb_commit(root: Path) -> str | None:
         ).stdout.strip()
     except (OSError, subprocess.CalledProcessError):
         return None
+
+
+def _files_snapshot(root: Path, pattern: str) -> str:
+    files = [(p.relative_to(root).as_posix(), _sha256(p))
+             for p in sorted(root.rglob(pattern), key=lambda p: p.relative_to(root).as_posix()) if p.is_file()]
+    return hashlib.sha256(json.dumps(files, ensure_ascii=False).encode("utf-8")).hexdigest()
+
+
+def _comparison_context(root: Path, backend: str | None) -> dict[str, str]:
+    params = dict(load_recall_params(root=root))
+    selected = backend or params.pop("search_backend", "native")
+    params.pop("search_backend", None)
+    return {
+        "schema_version": CONTEXT_SCHEMA,
+        "settings_sha256": _files_snapshot(root / "settings", "*"),
+        "parameters_sha256": hashlib.sha256(
+            json.dumps(params, sort_keys=True, allow_nan=False).encode("utf-8")
+        ).hexdigest(),
+        # Content identity works for installed wheels and dirty source trees too.
+        "code_sha256": _files_snapshot(Path(__file__).resolve().parent, "*.py"),
+        "backend": "native" if selected == "legacy" else selected,
+    }
 
 
 def _code_version() -> str | None:
@@ -124,6 +151,13 @@ def run_evaluation(dataset_path: str | Path, output_path: str | Path, *, limit: 
     output_path = Path(output_path).expanduser().resolve()
     dataset = load_dataset(dataset_path)
     root = repo_root()
+    if output_path == dataset_path or any(
+        output_path.is_relative_to((root / bucket).resolve())
+        for bucket in ("wiki", "drafts", "raw", "profiles", "settings")
+    ):
+        raise ValueError("Evaluation output must not overwrite the dataset or persistent KB inputs")
+    dataset_sha = _sha256(dataset_path)
+    context = _comparison_context(root, search_backend)
     before = _kb_snapshot(root)
     cases: list[dict[str, Any]] = []
     latencies: list[float] = []
@@ -134,7 +168,7 @@ def run_evaluation(dataset_path: str | Path, output_path: str | Path, *, limit: 
             query=str(case["query"]), limit=limit,
             scope=case.get("scope"), goal=str(case.get("goal", "none")),
             explain=True, type_filter=case.get("type_filter"),
-            search_backend=search_backend,
+            search_backend=context["backend"],
         )
         latency_ms = (time.perf_counter() - started) * 1000
         latencies.append(latency_ms)
@@ -150,10 +184,11 @@ def run_evaluation(dataset_path: str | Path, output_path: str | Path, *, limit: 
     after = _kb_snapshot(root)
     if before != after:
         raise RuntimeError("Recall evaluation mutated persistent knowledge-base state")
-    metric_names = ("recall_at_1", "recall_at_3", "recall_at_5", "mrr", "ndcg_at_5", "no_result", "stale_leakage")
+    if dataset_sha != _sha256(dataset_path) or context != _comparison_context(root, search_backend):
+        raise RuntimeError("Evaluation dataset, configuration or code changed during the run")
     aggregate = {
         name: round(sum(case["metrics"][name] for case in cases) / len(cases), 6)
-        for name in metric_names
+        for name in sorted(QUALITY_METRICS)
     }
     aggregate.update({
         "latency_p50_ms": round(_percentile(latencies, 0.50), 3),
@@ -167,13 +202,14 @@ def run_evaluation(dataset_path: str | Path, output_path: str | Path, *, limit: 
             "code_version": _code_version(),
             "kb_commit": _kb_commit(root),
             "dataset_path": str(dataset_path),
-            "dataset_sha256": _sha256(dataset_path),
+            "dataset_sha256": dataset_sha,
             "dataset_id": dataset["dataset_id"],
             "dataset_version": str(dataset["version"]),
             "limit": limit,
             "goal_modes": sorted({str(case.get("goal", "none")) for case in dataset["cases"]}),
             "kb_snapshot_before": before,
             "kb_snapshot_after": after,
+            "comparison_context": context,
         },
         "metrics": aggregate,
         "cases": cases,
@@ -183,21 +219,100 @@ def run_evaluation(dataset_path: str | Path, output_path: str | Path, *, limit: 
     return result
 
 
-def compare_runs(baseline_path: str | Path, candidate_path: str | Path, output_path: str | Path | None = None) -> dict[str, Any]:
+def _validate_run(run: dict[str, Any]) -> list[str]:
+    manifest, metrics, cases = run.get("manifest"), run.get("metrics"), run.get("cases")
+    if not isinstance(manifest, dict) or not isinstance(metrics, dict) or not isinstance(cases, list) or not cases:
+        raise ValueError("Run requires a manifest, metrics and non-empty cases")
+    for key in ("dataset_sha256", "kb_snapshot_before", "kb_snapshot_after"):
+        if not isinstance(manifest.get(key), str) or not re.fullmatch(r"[0-9a-f]{64}", manifest[key]):
+            raise ValueError(f"Run missing or invalid {key}")
+    if manifest["kb_snapshot_before"] != manifest["kb_snapshot_after"]:
+        raise ValueError("Cannot compare a run that mutated its knowledge base")
+    if type(manifest.get("limit")) is not int or manifest["limit"] < 5:
+        raise ValueError("Run limit must be an integer >= 5")
+    ids = [case.get("case_id") if isinstance(case, dict) else None for case in cases]
+    if any(not isinstance(cid, str) or not cid.strip() for cid in ids) or len(set(ids)) != len(ids):
+        raise ValueError("Run has missing or duplicate case IDs")
+    if type(metrics.get("case_count")) is not int or metrics["case_count"] != len(ids):
+        raise ValueError("Run case_count does not match its cases")
+    if metrics.keys() != RUN_METRICS:
+        raise ValueError("Run must contain the complete recall-eval-run/v1 metric set")
+    try:
+        valid_numbers = all(type(v) in (int, float) and math.isfinite(v) for v in metrics.values())
+    except OverflowError:
+        valid_numbers = False
+    if not valid_numbers:
+        raise ValueError("Run metrics must contain finite numeric measurements")
+    if any(not 0 <= metrics[key] <= 1 for key in QUALITY_METRICS) or any(
+        metrics[key] < 0 for key in ("latency_p50_ms", "latency_p95_ms")
+    ):
+        raise ValueError("Run metric values are outside their valid ranges")
+    context = manifest.get("comparison_context")
+    if "comparison_context" in manifest:
+        if not isinstance(context, dict) or context.get("schema_version") != CONTEXT_SCHEMA:
+            raise ValueError("Invalid comparison context schema")
+        for key in ("settings_sha256", "parameters_sha256", "code_sha256"):
+            if not isinstance(context.get(key), str) or not re.fullmatch(r"[0-9a-f]{64}", context[key]):
+                raise ValueError(f"Invalid comparison context {key}")
+        if not isinstance(context.get("backend"), str) or not context["backend"].strip():
+            raise ValueError("Invalid comparison context backend")
+    return ids
+
+
+def compare_runs(baseline_path: str | Path, candidate_path: str | Path, output_path: str | Path | None = None,
+                 *, vary: list[str] | tuple[str, ...] = ()) -> dict[str, Any]:
+    """Compare recorded controls, requiring explicit code/backend experiments.
+
+    Legacy v1 runs lack configuration/code context: their deltas are retained,
+    but flagged limited. Matching records does not establish causal improvement
+    or control clocks, filesystem timestamps, dependencies or external backends.
+    """
+    unknown = set(vary) - EXPERIMENT_VARIABLES.keys()
+    if unknown:
+        raise ValueError(f"Unknown experiment variable: {', '.join(sorted(unknown))}")
     baseline = json.loads(Path(baseline_path).read_text(encoding="utf-8"))
     candidate = json.loads(Path(candidate_path).read_text(encoding="utf-8"))
-    if baseline.get("schema_version") != RUN_SCHEMA or candidate.get("schema_version") != RUN_SCHEMA:
+    if any(not isinstance(run, dict) or run.get("schema_version") != RUN_SCHEMA for run in (baseline, candidate)):
         raise ValueError("Both inputs must use recall-eval-run/v1")
-    if baseline["manifest"]["dataset_sha256"] != candidate["manifest"]["dataset_sha256"]:
+    left, right = baseline.get("manifest"), candidate.get("manifest")
+    if not isinstance(left, dict) or not isinstance(right, dict):
+        raise ValueError("Both runs require a manifest")
+    if left.get("dataset_sha256") != right.get("dataset_sha256"):
         raise ValueError("Cannot compare runs from different dataset snapshots")
-    if baseline["manifest"].get("limit") != candidate["manifest"].get("limit"):
+    if left.get("limit") != right.get("limit"):
         raise ValueError("Cannot compare runs evaluated with different limits")
-    keys = sorted(set(baseline["metrics"]) & set(candidate["metrics"]) - {"case_count"})
+    left_ids, right_ids = _validate_run(baseline), _validate_run(candidate)
+    if left["kb_snapshot_before"] != right["kb_snapshot_before"]:
+        raise ValueError("Cannot compare runs from different knowledge-base snapshots")
+    if left_ids != right_ids:
+        raise ValueError("Cannot compare runs with different cases or case ordering")
+    if baseline["metrics"].keys() != candidate["metrics"].keys():
+        raise ValueError("Cannot compare runs with different metric coverage")
+    a, b = left.get("comparison_context"), right.get("comparison_context")
+    warnings, variables = [], {}
+    if a is None or b is None:
+        warnings.append("Legacy run lacks comparison context; settings, parameters, code and backend equality are unverified")
+    else:
+        for key in ("settings_sha256", "parameters_sha256"):
+            if a[key] != b[key]:
+                raise ValueError(f"Cannot compare runs with different {key}")
+        for variable, field in EXPERIMENT_VARIABLES.items():
+            if a[field] != b[field] and variable not in vary:
+                raise ValueError(f"Changed {variable}; declare --vary {variable} for an intentional experiment")
+    for variable in sorted(set(vary)):
+        field = EXPERIMENT_VARIABLES[variable]
+        variables[variable] = {"baseline": a[field] if a else None, "candidate": b[field] if b else None}
+    keys = sorted(set(baseline["metrics"]) - {"case_count"})
     result = {
         "schema_version": COMPARISON_SCHEMA,
         "generated_at": _utc_now(),
         "baseline": str(Path(baseline_path).resolve()),
         "candidate": str(Path(candidate_path).resolve()),
+        "comparability": {
+            "status": "limited" if warnings else "matched",
+            "warnings": warnings, "variables": variables,
+            "not_controlled": ["clock", "filesystem_timestamps", "runtime_dependencies", "external_backend_state"],
+        },
         "deltas": {key: round(candidate["metrics"][key] - baseline["metrics"][key], 6) for key in keys},
     }
     result["goal_lift"] = {
@@ -207,6 +322,8 @@ def compare_runs(baseline_path: str | Path, candidate_path: str | Path, output_p
     }
     if output_path:
         path = Path(output_path).expanduser().resolve()
+        if path in (Path(baseline_path).resolve(), Path(candidate_path).resolve()):
+            raise ValueError("Comparison output must not overwrite its input runs")
         path.parent.mkdir(parents=True, exist_ok=True)
         _atomic_write(path, json.dumps(result, ensure_ascii=False, indent=2) + "\n")
     return result
